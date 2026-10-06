@@ -19,11 +19,11 @@ class DesktopPlatformTest {
         assertFalse("With no window open, this launch carries on", SingleInstance(paths).forward("imago://auth/callback?code=1"))
         val received = java.util.concurrent.LinkedBlockingQueue<String>()
         SingleInstance(paths).use { first ->
-            first.listen { received.put(it ?: "<foco>") }
+            first.listen { received.put(it ?: "<focus>") }
             assertTrue(SingleInstance(paths).forward("imago://auth/callback?code=1"))
             assertEquals("imago://auth/callback?code=1", received.poll(2, java.util.concurrent.TimeUnit.SECONDS))
             assertTrue(SingleInstance(paths).forward(null))
-            assertEquals("<foco>", received.poll(2, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals("<focus>", received.poll(2, java.util.concurrent.TimeUnit.SECONDS))
         }
         assertFalse("Once the window is closed, there is no one to hand over to", SingleInstance(paths).forward(null))
     }

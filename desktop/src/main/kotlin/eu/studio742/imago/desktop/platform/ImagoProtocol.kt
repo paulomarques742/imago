@@ -46,8 +46,9 @@ object ImagoProtocol {
 
     internal fun launchCommand(paths: AppPaths): String? {
         val executable = ProcessHandle.current().info().command().orElse(null)?.let(Path::of) ?: return null
-        val name = executable.fileName.toString().lowercase()
-        if (name != "java.exe" && name != "javaw.exe") return "\"$executable\" \"%1\""
+        // Without ".exe" too, so the development path is the same wherever the tests run.
+        val name = executable.fileName.toString().lowercase().removeSuffix(".exe")
+        if (name != "java" && name != "javaw") return "\"$executable\" \"%1\""
         // In development: javaw, so the link does not also open a console.
         val launcher = executable.resolveSibling("javaw.exe").takeIf(Files::exists) ?: executable
         val arguments = paths.root.resolve("launch.args")
