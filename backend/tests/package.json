@@ -1,0 +1,12 @@
+{
+  "name": "imago-backend-tests",
+  "private": true,
+  "type": "module",
+  "description": "Tests of the Supabase sync migrations, on an in-memory Postgres (PGlite).",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
+  }
+}

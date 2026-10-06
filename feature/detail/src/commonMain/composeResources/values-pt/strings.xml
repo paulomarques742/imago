@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Português europeu. -->
+<resources>
+    <string name="detail_back_to_library">Voltar à biblioteca</string>
+    <string name="detail_unfavorite">Remover das favoritas</string>
+    <string name="detail_favorite">Marcar como favorita</string>
+    <string name="detail_more_options">Mais opções</string>
+    <string name="detail_info">Informações</string>
+    <string name="detail_delete_video_question">Eliminar vídeo?</string>
+    <string name="detail_delete_photo_question">Eliminar fotografia?</string>
+    <string name="detail_delete_device_body">“%1$s” vai para o lixo do dispositivo. O Android irá pedir confirmação.</string>
+    <string name="detail_delete_server_body">“%1$s” vai para o lixo do servidor de origem. Pode recuperá-lo antes de o lixo ser esvaziado.</string>
+    <string name="detail_delete">Eliminar</string>
+    <string name="detail_cancel">Cancelar</string>
+    <string name="detail_zoom_fit">Ajustada ao ecrã</string>
+    <string name="detail_zoom_level">Ampliada %1$s vezes</string>
+    <string name="detail_zoom_fit_action">Ajustar ao ecrã</string>
+    <string name="detail_unavailable">Conteúdo indisponível. Verifique a biblioteca de origem e as permissões.</string>
+    <string name="detail_share">Partilhar</string>
+    <string name="detail_edit">Editar</string>
+    <string name="detail_compose">Compor</string>
+    <string name="detail_info_file">Ficheiro</string>
+    <string name="detail_info_date">Data</string>
+    <string name="detail_info_lens">Objetiva</string>
+    <string name="detail_info_aperture">Abertura</string>
+    <string name="detail_info_shutter">Tempo</string>
+    <string name="detail_info_focal_length">Distância focal</string>
+    <string name="detail_info_camera">Câmara</string>
+    <string name="detail_close">Fechar</string>
+    <string name="detail_favorite_failed">Não foi possível alterar a favorita.</string>
+    <string name="detail_deleting">A eliminar…</string>
+    <string name="detail_delete_failed">Não foi possível eliminar.</string>
+    <string name="detail_preparing_share">A preparar a partilha…</string>
+    <string name="detail_share_failed">Não foi possível preparar a partilha.</string>
+    <string name="detail_video_open_failed">Não foi possível abrir o vídeo.</string>
+    <string name="detail_play_in_windows">Reproduzir no Windows</string>
+    <string name="detail_video_play">Reproduzir</string>
+    <string name="detail_video_pause">Pausa</string>
+    <string name="detail_video_replay">Ver de novo</string>
+    <string name="detail_video_back">Recuar 10 segundos</string>
+    <string name="detail_video_forward">Avançar 10 segundos</string>
+    <string name="detail_video_position">Posição no vídeo</string>
+    <string name="detail_video_position_state">%1$s de %2$s</string>
+    <string name="detail_date_pattern">d 'de' MMM 'de' yyyy</string>
+    <string name="detail_load_failed">Não foi possível abrir esta fotografia.</string>
+</resources>

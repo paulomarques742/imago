@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        This theme overrides the one in values/ from Android 12 on and only adds the splash. The
+        bar colours are left out for the same reason as there: they are handled by
+        enableEdgeToEdge() and ignored on Android 15 with targetSdk 35.
+    -->
+    <style name="Theme.ImmichRoom" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:colorAccent">#E6E6E3</item>
+        <item name="android:windowBackground">#0B0D0F</item>
+        <item name="android:windowSplashScreenBackground">#0D0D0F</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash</item>
+        <item name="android:windowSplashScreenAnimationDuration">650</item>
+    </style>
+</resources>

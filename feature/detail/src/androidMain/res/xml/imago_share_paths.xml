@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Only the cache's share folder is exposed. The downloaded original is written there and nothing
+    else of the app's storage is reachable by the Intent's recipient.
+-->
+<paths>
+    <cache-path name="imago-share" path="share/" />
+</paths>

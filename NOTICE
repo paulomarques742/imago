@@ -1,0 +1,33 @@
+IMAGO
+Copyright (C) 2026 Paulo Marques
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU Affero General Public License as published by the Free Software Foundation, version 3 of the
+License, with the additional permission below. The full text of the licence is in LICENSE.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+Affero General Public License for more details.
+
+
+Additional permission under GNU AGPL version 3 section 7
+
+If you modify this Program, or any covered work, by linking or combining it with a library that
+the operator of an application store (such as Google Play or the Microsoft Store) provides for
+selling within, checking the licence of, or updating applications distributed through that store
+(or a modified version of such a library), containing parts covered by the terms under which that
+operator distributes the library, the licensors of this Program grant you additional permission to
+convey the resulting work.
+
+
+Sample photographs
+
+The photographs in feature/editor/src/commonMain/resources/recipe_samples/ are by Paulo Marques
+and are licensed under the Creative Commons Attribution 4.0 International licence (CC BY 4.0),
+https://creativecommons.org/licenses/by/4.0/. You may use them for any purpose, provided you
+credit "Paulo Marques" as their author.
+
+
+Name and logo
+
+The licence above does not cover the name IMAGO or its logo and icons. See TRADEMARKS.md.

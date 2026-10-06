@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Português europeu. -->
+<resources>
+    <string name="library_device_name">Dispositivo</string>
+    <string name="library_manage_access">Gerir acesso a fotos e vídeos</string>
+    <string name="library_open_android_permissions">Abrir permissões do Android</string>
+    <string name="library_tagline">Revele cada imagem.</string>
+    <string name="library_connect_intro">Ligue-se à sua biblioteca Immich. As fotografias permanecem entre este dispositivo e o seu servidor.</string>
+    <string name="library_server_url">URL do servidor</string>
+    <string name="library_api_key">Chave API</string>
+    <string name="library_hide_key">Ocultar chave</string>
+    <string name="library_show_key">Mostrar chave</string>
+    <string name="library_connect_immich">Ligar ao Immich</string>
+    <string name="library_key_encrypted">A chave é guardada de forma cifrada neste dispositivo.</string>
+    <string name="library_fill_url_key">Preencha o URL do servidor e a chave API.</string>
+    <string name="library_validation_failed">Não foi possível validar a ligação.</string>
+    <string name="library_fast_scroll">Rolagem rápida</string>
+    <string name="library_nav_more">Mais</string>
+    <string name="library_settings">Definições</string>
+    <string name="library_refresh">Atualizar biblioteca</string>
+    <string name="library_nav_library">Biblioteca</string>
+    <string name="library_nav_albums">Álbuns</string>
+    <string name="library_nav_recipes">Receitas</string>
+    <string name="library_nav_compose">Compor</string>
+    <string name="library_add">Adicionar</string>
+    <string name="library_jump">Saltar</string>
+    <string name="library_cancel">Cancelar</string>
+    <string name="library_jump_to_date">Saltar para data</string>
+    <string name="library_filter_all">Todas</string>
+    <string name="library_filter_recent">Recentes</string>
+    <string name="library_filter_favorites">Favoritas</string>
+    <string name="library_filter_edited">Editadas</string>
+    <string name="library_search">Pesquisar</string>
+    <string name="library_more_options">Mais opções</string>
+    <string name="library_end_selection">Terminar seleção</string>
+    <string name="library_file_name">Nome do ficheiro</string>
+    <string name="library_close_search">Fechar pesquisa</string>
+    <string name="library_back_to_albums">Voltar aos álbuns</string>
+    <string name="library_clear_selection">Limpar seleção</string>
+    <string name="library_show_timeline">Ver a cronologia</string>
+    <string name="library_show_albums">Ver os álbuns</string>
+    <string name="library_clear_date_filter">Limpar filtro de data</string>
+    <string name="library_load_more_failed">Não foi possível carregar mais fotografias.</string>
+    <string name="library_try_again">Tentar de novo</string>
+    <string name="library_no_albums">Ainda não existem álbuns nesta biblioteca.</string>
+    <string name="library_open_album">Abrir álbum %1$s</string>
+    <string name="library_shared_album">Álbum partilhado</string>
+    <string name="library_asset_selected">%1$s, selecionada</string>
+    <string name="library_select_asset">Selecionar %1$s</string>
+    <string name="library_asset_open">%1$s, aberta</string>
+    <string name="library_play_asset">Reproduzir %1$s</string>
+    <string name="library_open_asset">Abrir %1$s</string>
+    <string name="library_unfavorite">Remover das favoritas</string>
+    <string name="library_favorite">Marcar como favorita</string>
+    <string name="library_has_local_edit">Tem edição local</string>
+    <string name="library_edited_in_immich">Editada no Immich</string>
+    <string name="library_refreshing">A atualizar a biblioteca…</string>
+    <string name="library_syncing_timeline">A sincronizar a cronologia · %1$s de %2$s meses</string>
+    <string name="library_load_failed">Não foi possível carregar a biblioteca.</string>
+    <string name="library_retry">Tentar novamente</string>
+    <string name="library_no_match">Nada com “%1$s” no nome.</string>
+    <string name="library_no_favorites">Ainda não há favoritas.</string>
+    <string name="library_no_edits">Ainda não editou nenhuma fotografia.</string>
+    <string name="library_no_recent">Não há nada dos últimos 30 dias.</string>
+    <string name="library_empty_view">Não há nada nesta vista.</string>
+    <string name="library_saved">Biblioteca guardada.</string>
+    <string name="library_save_failed">Não foi possível guardar a biblioteca.</string>
+    <string name="library_connection_ok">Ligação disponível · Immich %1$s</string>
+    <string name="library_connect_failed">Não foi possível ligar.</string>
+    <string name="library_address_added">Endereço acrescentado · Immich %1$s</string>
+    <string name="library_address_add_failed">Não foi possível acrescentar o endereço.</string>
+    <string name="library_libraries_selected">Bibliotecas · %1$s</string>
+    <string name="library_selected_single">Selecionada</string>
+    <string name="library_back">Voltar</string>
+    <string name="library_add_immich_server">Adicionar servidor Immich</string>
+    <string name="library_edit_library">Editar biblioteca</string>
+    <string name="library_libraries">Bibliotecas</string>
+    <string name="library_name">Nome</string>
+    <string name="library_verify_save">Validar e guardar</string>
+    <string name="library_addresses_count">%1$s endereços · usa o primeiro que responder</string>
+    <string name="library_disconnected">Desligada · edições e projetos preservados</string>
+    <string name="library_unnamed">Biblioteca por ligar · %1$s</string>
+    <string name="library_edit">Editar</string>
+    <string name="library_connect">Ligar</string>
+    <string name="library_test">Testar</string>
+    <string name="library_remove">Remover</string>
+    <string name="library_remove_question">Remover %1$s?</string>
+    <string name="library_remove_body">As credenciais serão removidas. As edições e composições ficam guardadas e os conteúdos desta biblioteca ficam indisponíveis até voltar a ligá-la.</string>
+    <string name="library_addresses">Endereços</string>
+    <string name="library_addresses_hint">A app usa o primeiro que responder, por esta ordem. Os endereços ficam só neste aparelho.</string>
+    <string name="library_address_active_no_response">Em uso · sem resposta no último teste</string>
+    <string name="library_address_active">Em uso</string>
+    <string name="library_address_responded">Respondeu no último teste</string>
+    <string name="library_address_no_response">Sem resposta no último teste</string>
+    <string name="library_address_untested">Por testar</string>
+    <string name="library_move_up">Subir %1$s</string>
+    <string name="library_move_down">Descer %1$s</string>
+    <string name="library_remove_address">Remover %1$s</string>
+    <string name="library_new_address">Novo endereço</string>
+    <string name="library_add_address">Acrescentar endereço</string>
+    <string name="library_test_addresses">Testar endereços</string>
+    <string name="library_connect_server_hint">Ligue um servidor nas Definições para enviar para o Immich.</string>
+    <string name="library_destination">Destino: %1$s ▾</string>
+    <string name="library_refresh_failed">Não foi possível atualizar a biblioteca.</string>
+    <string name="library_favorite_failed">Não foi possível alterar a favorita.</string>
+    <string name="library_add_folder_failed">Não foi possível juntar a pasta.</string>
+    <string name="library_device_name_desktop">Este computador</string>
+    <string name="library_remove_folder">Tirar a pasta da biblioteca</string>
+    <string name="library_add_folder">Juntar pasta…</string>
+    <plurals name="library_selected">
+        <item quantity="one">%1$d selecionada</item>
+        <item quantity="other">%1$d selecionadas</item>
+    </plurals>
+    <plurals name="library_add_to_composition">
+        <item quantity="one">Adicionar a composição</item>
+        <item quantity="other">Adicionar %1$d a composição</item>
+    </plurals>
+    <plurals name="library_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d itens</item>
+    </plurals>
+    <!-- Boas-vindas, no primeiro arranque -->
+    <string name="library_welcome_question">Onde estão as suas fotografias?</string>
+    <string name="library_welcome_device_title">Só este aparelho</string>
+    <string name="library_welcome_device_body">Edite as fotografias e os vídeos guardados neste aparelho. A seguir, o IMAGO pede acesso à galeria.</string>
+    <string name="library_welcome_computer_title">Só este computador</string>
+    <string name="library_welcome_computer_body">Edite fotografias de pastas deste computador. A seguir, escolha a primeira pasta.</string>
+    <string name="library_welcome_immich_title">Ligar um servidor Immich</string>
+    <string name="library_welcome_immich_body">Explore a sua biblioteca Immich e envie-lhe de volta as suas edições. As fotografias ficam no seu servidor.</string>
+    <string name="library_welcome_later">Pode juntar a outra opção mais tarde, nas Definições.</string>
+    <!-- As permissões da chave de API do Immich -->
+    <string name="library_key_permissions_title">Que permissões dar à chave?</string>
+    <string name="library_key_permissions_where">Crie a chave no Immich, nas definições da sua conta, na secção das chaves de API, e marque estas permissões.</string>
+    <string name="library_key_permissions_read">Para mostrar a biblioteca</string>
+    <string name="library_key_permissions_write">Para guardar no servidor</string>
+    <string name="library_key_permissions_all">Escolher “all” também funciona, mas dá à chave mais acesso do que o IMAGO usa.</string>
+    <string name="library_permission_user_read">Confirma de que conta é a chave, para a mesma biblioteca não entrar duas vezes</string>
+    <string name="library_permission_asset_read">Lista a cronologia, pesquisa e lê os detalhes de cada fotografia</string>
+    <string name="library_permission_asset_view">Carrega as miniaturas e as pré-visualizações, e reproduz os vídeos</string>
+    <string name="library_permission_asset_download">Abre o original em resolução total para editar e exportar</string>
+    <string name="library_permission_album_read">Mostra os seus álbuns</string>
+    <string name="library_permission_asset_upload">Envia para o servidor as fotografias e as composições exportadas, e o que partilhar com o IMAGO</string>
+    <string name="library_permission_stack_create">Empilha cada edição exportada com o original</string>
+    <string name="library_permission_asset_update">Marca e desmarca favoritos</string>
+    <string name="library_permission_asset_delete">Apaga as fotografias que mandar apagar</string>
+    <!-- Partilhar de outras apps para o Immich -->
+    <string name="library_share_title">Enviar para o Immich</string>
+    <string name="library_share_preparing">A preparar %1$d de %2$d</string>
+    <string name="library_share_unreadable">Nada para enviar. O IMAGO envia fotografias e vídeos para o Immich.</string>
+    <string name="library_share_send">Enviar</string>
+    <string name="library_share_close">Fechar</string>
+    <string name="library_share_done">Concluído</string>
+    <string name="library_share_background">Pode fechar. O envio continua em segundo plano.</string>
+    <string name="library_share_waiting">À espera para enviar</string>
+    <string name="library_share_channel">Envios para o Immich</string>
+    <string name="library_share_sending">A enviar para %1$s</string>
+    <string name="library_share_finished">Envio concluído</string>
+    <string name="library_share_failed">Não foi possível enviar para o Immich</string>
+    <plurals name="library_share_photos">
+        <item quantity="one">%1$d fotografia</item>
+        <item quantity="other">%1$d fotografias</item>
+    </plurals>
+    <plurals name="library_share_videos">
+        <item quantity="one">%1$d vídeo</item>
+        <item quantity="other">%1$d vídeos</item>
+    </plurals>
+    <plurals name="library_share_media">
+        <item quantity="one">%1$d fotografia ou vídeo</item>
+        <item quantity="other">%1$d fotografias e vídeos</item>
+    </plurals>
+    <plurals name="library_share_progress">
+        <item quantity="one">%1$d de %2$d</item>
+        <item quantity="other">%1$d de %2$d</item>
+    </plurals>
+    <plurals name="library_share_result_sent">
+        <item quantity="one">%1$d ficheiro enviado para %2$s</item>
+        <item quantity="other">%1$d ficheiros enviados para %2$s</item>
+    </plurals>
+    <plurals name="library_share_result_duplicates">
+        <item quantity="one">%1$d já lá estava</item>
+        <item quantity="other">%1$d já lá estavam</item>
+    </plurals>
+    <plurals name="library_share_result_failed">
+        <item quantity="one">%1$d não foi enviado</item>
+        <item quantity="other">%1$d não foram enviados</item>
+    </plurals>
+</resources>

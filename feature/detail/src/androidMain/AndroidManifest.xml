@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Sharing requires handing a file to another app, and since Android 7 a `file://` out of the
+    process is illegal. The FileProvider is declared here, and not in the `app` module, because this
+    screen is what needs it; the manifest merge does the rest.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.share"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/imago_share_paths" />
+        </provider>
+    </application>
+</manifest>

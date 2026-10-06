@@ -1,0 +1,19 @@
+# Copy to local.properties (it is ignored by git). Every line is optional.
+
+# Android SDK, if ANDROID_HOME is not set.
+# sdk.dir=/path/to/android-sdk
+
+# Supabase project for sync in debug builds and in the desktop app. Use the publishable key
+# (sb_publishable_...), never the secret key: whatever is here ends up inside the app.
+# SUPABASE_URL=https://<project-ref>.supabase.co
+# SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+
+# Supabase project for release builds.
+# SUPABASE_RELEASE_URL=https://<project-ref>.supabase.co
+# SUPABASE_RELEASE_PUBLISHABLE_KEY=sb_publishable_...
+
+# Release signing. Release builds refuse to run without it.
+# RELEASE_STORE_FILE=/path/to/upload-keystore.jks
+# RELEASE_STORE_PASSWORD=
+# RELEASE_KEY_ALIAS=
+# RELEASE_KEY_PASSWORD=

@@ -1,0 +1,96 @@
+package eu.studio742.imago.core.data
+
+import androidx.paging.PagingData
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+import eu.studio742.imago.core.model.ImmichAsset
+import eu.studio742.imago.core.model.ImmichAlbum
+import eu.studio742.imago.core.model.ImmichAssetDetail
+import eu.studio742.imago.core.model.ImmichTimeBucket
+import eu.studio742.imago.core.model.LibraryFilter
+import java.io.File
+
+/**
+ * How the sync of the timeline skeleton is going.
+ *
+ * It counts months, not photos, because the month is the unit of the request: each one arrives
+ * whole in a single request.
+ */
+data class CatalogSyncState(
+    val syncing: Boolean = false,
+    val done: Int = 0,
+    val total: Int = 0,
+)
+
+interface LibraryRepository {
+    fun assets(
+        filter: LibraryFilter,
+        month: String? = null,
+        albumId: String? = null,
+        query: String? = null,
+    ): Flow<PagingData<ImmichAsset>>
+    suspend fun albums(): List<ImmichAlbum>
+    suspend fun timeBuckets(): List<ImmichTimeBucket>
+
+    /** How the skeleton sync is going, so the library can say. */
+    val catalogSync: StateFlow<CatalogSyncState>
+
+    /**
+     * Brings the whole timeline into the local catalogue, month by month.
+     *
+     * Metadata only — not a single image — and only the months whose count changed since last time.
+     * This is what lets the grid have its true size and fast scrolling land on any year: without the
+     * rows, a 2015 month is a number on the map and nothing else.
+     */
+    suspend fun syncCatalog()
+
+    /**
+     * Brings a single month, without waiting for the whole sync.
+     *
+     * It is what jumping to a date uses when the destination is not in the catalogue yet: one
+     * request, the month is there, and the grid has somewhere to scroll to.
+     */
+    suspend fun loadMonth(month: String)
+
+    /**
+     * The index, in this view, of the first photo of this date or earlier.
+     *
+     * Null when there is none. It is a count in SQL and not a scan of the loaded list: with the whole
+     * catalogue in Room, the loaded list is a window and the jump's destination is almost always
+     * outside it.
+     */
+    /**
+     * The index of a photo in this view, or null if it is not in the catalogue.
+     *
+     * It is what puts the grid back where it was when coming back from the detail.
+     */
+    suspend fun indexOfAsset(
+        assetId: String,
+        filter: LibraryFilter,
+        month: String? = null,
+        query: String? = null,
+    ): Int?
+
+    suspend fun indexOfDate(
+        date: java.time.LocalDate,
+        filter: LibraryFilter,
+        month: String? = null,
+        query: String? = null,
+    ): Int?
+    fun thumbnailUrl(assetId: String): String
+    fun previewUrl(assetId: String): String
+
+    /** The video stream, for the detail to play it without downloading the original. */
+    fun videoPlaybackUrl(assetId: String): String
+    fun apiKey(assetId: String): String
+
+    /** The detail with EXIF, for the photo screen. */
+    suspend fun assetDetail(assetId: String): ImmichAssetDetail
+
+    /** Writes to Immich and to the local catalogue, so the grid reacts without a refetch. */
+    suspend fun setFavorite(assetId: String, isFavorite: Boolean)
+    suspend fun deleteAsset(assetId: String)
+
+    /** The original file, for sharing. */
+    suspend fun downloadOriginal(assetId: String, destination: File)
+}

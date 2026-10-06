@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Splash icon. The geometry of the brand symbol, at 36 of the 64 units to fit the area the
+    splash mask leaves visible.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <group
+        android:scaleX="0.75"
+        android:scaleY="0.75"
+        android:translateX="14"
+        android:translateY="14">
+        <path
+            android:fillColor="#E6E6E3"
+            android:pathData="M0,0h5v48H0zM5,0h43v5H5zM43,5h5v25h-5zM5,43h25v5H5z" />
+        <path
+            android:fillColor="#E6E6E3"
+            android:pathData="M36,36h12v12H36z" />
+    </group>
+</vector>

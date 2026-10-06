@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Texts common to the whole app. This folder, without a qualifier, is the base language: English.
+  Translations live in values-<language>/ with the same keys.
+-->
+<resources>
+    <!-- Auto-save (AutoSaveStatus) -->
+    <string name="autosave_saving">Saving…</string>
+    <string name="autosave_saved">✓ Saved</string>
+
+    <!-- Sync state (SyncIndicator) -->
+    <string name="sync_running">Syncing…</string>
+    <!-- Names sync writes into the data (AppSyncTexts): the copy of a project that lost a conflict, and a device whose name is not known. -->
+    <string name="sync_conflict_copy_name">%1$s (conflict · %2$s)</string>
+    <string name="sync_unknown_device">another device</string>
+    <string name="message_sync_failed">Sync failed.</string>
+    <string name="message_sync_change_rejected">The account server rejected a change.</string>
+    <string name="message_library_name_required">Enter a name for the library.</string>
+    <string name="message_key_other_account">This key belongs to another account. Add a new library.</string>
+    <string name="message_library_already_configured">This library is already set up.</string>
+    <string name="message_library_reconnect">Reconnect this library in Settings.</string>
+    <string name="message_address_already_in_library">This address is already part of the library.</string>
+    <string name="message_address_wrong_server">This address belongs to another server or another Immich account.</string>
+    <string name="message_library_needs_address">A library needs at least one address.</string>
+    <string name="message_library_disconnected">The library %1$s is disconnected. Reconnect it in Settings.</string>
+    <string name="message_choose_folder">Choose a folder.</string>
+    <string name="message_composition_unavailable">This composition is no longer available.</string>
+    <string name="message_edit_needs_newer_app">This edit needs a newer version of the app.</string>
+    <string name="message_immich_invalid_url">Enter a valid http:// or https:// URL.</string>
+    <string name="message_immich_key_rejected">The Immich server rejected the API key.</string>
+    <string name="message_immich_version_unsupported">The server runs Immich %1$s. Version %2$s or later is required.</string>
+    <string name="message_immich_server_error">The Immich server responded with error %1$s.</string>
+    <string name="message_immich_unreachable">Couldn’t reach the server. Check the URL, the network and the HTTPS certificate.</string>
+    <string name="message_device_access_full">Access to photos and videos</string>
+    <string name="message_device_access_selected">Access to selected photos and videos</string>
+    <string name="message_device_access_one_type">Access limited to one type of content</string>
+    <string name="message_device_access_none">Allow access to photos and videos</string>
+    <string name="message_folders_none">No folder chosen</string>
+    <string name="message_folders_one">1 folder: %1$s</string>
+    <plurals name="sync_pending_offline">
+        <item quantity="one">%1$d to send · offline</item>
+        <item quantity="other">%1$d to send · offline</item>
+    </plurals>
+    <plurals name="sync_pending">
+        <item quantity="one">%1$d to send</item>
+        <item quantity="other">%1$d to send</item>
+    </plurals>
+    <string name="sync_offline">Offline</string>
+    <string name="sync_failed">Error · tap to see</string>
+    <string name="sync_done">Synced</string>
+
+    <!-- App language -->
+    <string name="language_title">Language</string>
+    <string name="language_system">System</string>
+    <string name="language_english">English</string>
+    <string name="language_portuguese">Português</string>
+
+
+    <!-- Messages born outside the interface (core/model UserMessage) -->
+    <string name="error_generic">Something went wrong. Please try again.</string>
+    <string name="message_operation_cancelled">Cancelled.</string>
+    <string name="message_file_unavailable">The file is no longer available. Check that the app can still access the library.</string>
+    <string name="message_folder_file_unavailable">The file is no longer available. Check the library folder.</string>
+    <string name="message_trash_failed">Couldn’t move it to the Recycle Bin.</string>
+    <string name="message_address_other_account">This address doesn’t accept this library’s key: it belongs to another server or another account.</string>
+    <string name="message_account_unconfirmed">Couldn’t confirm this library’s account at the current address. Try again when it’s available.</string>
+    <string name="message_library_not_linked">Some photos come from a library that isn’t linked to the account yet.</string>
+    <string name="message_configuration_not_saved">Couldn’t save the settings.</string>
+    <plurals name="message_folders_many">
+        <item quantity="one">%1$s folder</item>
+        <item quantity="other">%1$s folders</item>
+    </plurals>
+</resources>

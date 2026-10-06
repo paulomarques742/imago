@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The monochrome layer is ignored below Android 13, so it needs no folder of its own: the old
+    mipmap-anydpi-v33 was an exact copy of this one and was removed.
+
+    Lint warns that the v26 qualifier is unnecessary with minSdk 28 and suggests merging this into
+    mipmap-anydpi. That does not work in this project: AAPT2 versions everything that uses
+    adaptive-icon back to v26, the base configuration is left without a candidate and the
+    manifest's @mipmap/ic_launcher stops resolving. The advice assumes the fallback PNGs a normal
+    project has, which this one, being vectors only, does not.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/imago_brand_black" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

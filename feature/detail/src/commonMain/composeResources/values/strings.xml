@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Base language: English. Translations live in values-<language>/ with the same keys. -->
+<resources>
+    <string name="detail_back_to_library">Back to library</string>
+    <string name="detail_unfavorite">Remove from favorites</string>
+    <string name="detail_favorite">Add to favorites</string>
+    <string name="detail_more_options">More options</string>
+    <string name="detail_info">Info</string>
+    <string name="detail_delete_video_question">Delete video?</string>
+    <string name="detail_delete_photo_question">Delete photo?</string>
+    <string name="detail_delete_device_body">“%1$s” will go to the device’s trash. Android will ask you to confirm.</string>
+    <string name="detail_delete_server_body">“%1$s” will go to the source server’s trash. You can restore it until the trash is emptied.</string>
+    <string name="detail_delete">Delete</string>
+    <string name="detail_cancel">Cancel</string>
+    <string name="detail_zoom_fit">Fit to screen</string>
+    <string name="detail_zoom_level">Zoomed %1$s times</string>
+    <string name="detail_zoom_fit_action">Fit to screen</string>
+    <string name="detail_unavailable">Content unavailable. Check the source library and permissions.</string>
+    <string name="detail_share">Share</string>
+    <string name="detail_edit">Edit</string>
+    <string name="detail_compose">Compose</string>
+    <string name="detail_info_file">File</string>
+    <string name="detail_info_date">Date</string>
+    <string name="detail_info_lens">Lens</string>
+    <string name="detail_info_aperture">Aperture</string>
+    <string name="detail_info_shutter">Shutter speed</string>
+    <string name="detail_info_focal_length">Focal length</string>
+    <string name="detail_info_camera">Camera</string>
+    <string name="detail_close">Close</string>
+    <string name="detail_favorite_failed">Couldn’t change the favorite.</string>
+    <string name="detail_deleting">Deleting…</string>
+    <string name="detail_delete_failed">Couldn’t delete.</string>
+    <string name="detail_preparing_share">Preparing to share…</string>
+    <string name="detail_share_failed">Couldn’t prepare the share.</string>
+    <string name="detail_video_open_failed">Couldn’t open the video.</string>
+    <string name="detail_play_in_windows">Play in Windows</string>
+    <string name="detail_video_play">Play</string>
+    <string name="detail_video_pause">Pause</string>
+    <string name="detail_video_replay">Play again</string>
+    <string name="detail_video_back">Back 10 seconds</string>
+    <string name="detail_video_forward">Forward 10 seconds</string>
+    <string name="detail_video_position">Video position</string>
+    <string name="detail_video_position_state">%1$s of %2$s</string>
+    <string name="detail_date_pattern">MMM d, yyyy</string>
+    <string name="detail_load_failed">Couldn’t open this photo.</string>
+</resources>

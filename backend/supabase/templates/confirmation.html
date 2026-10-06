@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<!--
+  IMAGO account confirmation (Supabase → Authentication → Email Templates → Confirm signup).
+  Subject: Confirm your IMAGO account
+
+  Written for email clients, not browsers: tables, inline styles and hex colours, no rgba or
+  variables. The symbol is drawn with table cells on the brand's 48-unit grid, at 1 px per unit —
+  Gmail shows neither SVG nor data: images, and there was no published site to host a PNG. For the
+  same reason there is no wordmark: the brand forbids composing it with live text.
+
+  The link is PKCE: it confirms the email anywhere, but only signs in on the device where the
+  account was created. The text says the same as account_confirm_email_body in the app.
+-->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="format-detection" content="telephone=no, date=no, address=no, email=no, url=no">
+  <meta name="color-scheme" content="dark">
+  <meta name="supported-color-schemes" content="dark">
+  <title>Confirm your IMAGO account</title>
+  <!--[if mso]>
+  <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+  <style>td, a, p, h1 { font-family: "Segoe UI", Arial, sans-serif !important; }</style>
+  <![endif]-->
+  <style>
+    :root { color-scheme: dark; supported-color-schemes: dark; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+    a { text-decoration: none; }
+    @media (max-width: 600px) {
+      .gutter { padding-left: 16px !important; padding-right: 16px !important; }
+      .card-pad { padding: 32px 24px !important; }
+      .title { font-size: 26px !important; line-height: 32px !important; }
+      .button, .button tbody, .button tr, .button td, .button a { display: block !important; width: 100% !important; box-sizing: border-box; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background-color:#0b0d0f;" bgcolor="#0b0d0f">
+
+  <!-- Inbox preview; the characters after it stop the body from filling it in. -->
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#0b0d0f;opacity:0;">
+    One step left: confirm your email to finish creating your IMAGO account.
+    &#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0b0d0f" style="background-color:#0b0d0f;">
+    <tr>
+      <td align="center" class="gutter" style="padding:48px 24px 40px;">
+
+        <!--[if mso]><table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td><![endif]-->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;margin:0 auto;">
+
+          <!-- Symbol: columns 0–5, 5–30, 30–36, 36–43, 43–48, and the rows with the same cuts. -->
+          <tr>
+            <td style="padding:0 0 32px 4px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="48" style="width:48px;border-collapse:collapse;" aria-label="IMAGO">
+                <tr>
+                  <td width="5" height="5" bgcolor="#e6e6e3" style="width:5px;height:5px;background-color:#e6e6e3;font-size:1px;line-height:5px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="25" height="5" bgcolor="#e6e6e3" style="width:25px;height:5px;background-color:#e6e6e3;font-size:1px;line-height:5px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="6" height="5" bgcolor="#e6e6e3" style="width:6px;height:5px;background-color:#e6e6e3;font-size:1px;line-height:5px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="7" height="5" bgcolor="#e6e6e3" style="width:7px;height:5px;background-color:#e6e6e3;font-size:1px;line-height:5px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="5" height="5" bgcolor="#e6e6e3" style="width:5px;height:5px;background-color:#e6e6e3;font-size:1px;line-height:5px;mso-line-height-rule:exactly;">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td width="5" height="25" bgcolor="#e6e6e3" style="width:5px;height:25px;background-color:#e6e6e3;font-size:1px;line-height:25px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="25" height="25" style="width:25px;height:25px;font-size:1px;line-height:25px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="6" height="25" style="width:6px;height:25px;font-size:1px;line-height:25px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="7" height="25" style="width:7px;height:25px;font-size:1px;line-height:25px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="5" height="25" bgcolor="#e6e6e3" style="width:5px;height:25px;background-color:#e6e6e3;font-size:1px;line-height:25px;mso-line-height-rule:exactly;">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td width="5" height="6" bgcolor="#e6e6e3" style="width:5px;height:6px;background-color:#e6e6e3;font-size:1px;line-height:6px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="25" height="6" style="width:25px;height:6px;font-size:1px;line-height:6px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="6" height="6" style="width:6px;height:6px;font-size:1px;line-height:6px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="7" height="6" style="width:7px;height:6px;font-size:1px;line-height:6px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="5" height="6" style="width:5px;height:6px;font-size:1px;line-height:6px;mso-line-height-rule:exactly;">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td width="5" height="7" bgcolor="#e6e6e3" style="width:5px;height:7px;background-color:#e6e6e3;font-size:1px;line-height:7px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="25" height="7" style="width:25px;height:7px;font-size:1px;line-height:7px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="6" height="7" style="width:6px;height:7px;font-size:1px;line-height:7px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="7" height="7" bgcolor="#e6e6e3" style="width:7px;height:7px;background-color:#e6e6e3;font-size:1px;line-height:7px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="5" height="7" bgcolor="#e6e6e3" style="width:5px;height:7px;background-color:#e6e6e3;font-size:1px;line-height:7px;mso-line-height-rule:exactly;">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td width="5" height="5" bgcolor="#e6e6e3" style="width:5px;height:5px;background-color:#e6e6e3;font-size:1px;line-height:5px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="25" height="5" bgcolor="#e6e6e3" style="width:25px;height:5px;background-color:#e6e6e3;font-size:1px;line-height:5px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="6" height="5" style="width:6px;height:5px;font-size:1px;line-height:5px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="7" height="5" bgcolor="#e6e6e3" style="width:7px;height:5px;background-color:#e6e6e3;font-size:1px;line-height:5px;mso-line-height-rule:exactly;">&nbsp;</td>
+                  <td width="5" height="5" bgcolor="#e6e6e3" style="width:5px;height:5px;background-color:#e6e6e3;font-size:1px;line-height:5px;mso-line-height-rule:exactly;">&nbsp;</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Card -->
+          <tr>
+            <td bgcolor="#111417" style="background-color:#111417;border:1px solid #242729;border-radius:20px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td class="card-pad" style="padding:44px 44px 40px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+
+                    <p style="margin:0 0 20px;font-family:'JetBrains Mono',ui-monospace,'Cascadia Mono',Consolas,Menlo,monospace;font-size:12px;line-height:16px;letter-spacing:2px;text-transform:uppercase;color:#7e8082;">
+                      IMAGO account
+                    </p>
+
+                    <h1 class="title" style="margin:0 0 20px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:30px;line-height:36px;font-weight:500;letter-spacing:-0.5px;color:#f5f5f2;">
+                      Confirm your email
+                    </h1>
+
+                    <p style="margin:0 0 16px;font-size:16px;line-height:26px;color:#b3b4b5;">
+                      You&rsquo;re one step away. Confirm
+                      <span style="color:#f5f5f2;">{{ .Email }}</span>
+                      to finish creating your IMAGO account.
+                    </p>
+
+                    <p style="margin:0 0 32px;font-size:16px;line-height:26px;color:#b3b4b5;">
+                      With an account, your edits, presets, templates, brand kit and compositions
+                      follow you across devices. Your photos, and the keys to your photo services,
+                      never leave your devices.
+                    </p>
+
+                    <!-- Button: the background goes on the td for Outlook, which ignores the link's padding. -->
+                    <table role="presentation" class="button" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" bgcolor="#e6e6e3" style="background-color:#e6e6e3;border-radius:12px;mso-padding-alt:16px 32px;">
+                          <a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:16px 32px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:20px;font-weight:600;color:#0b0d0f;text-decoration:none;border-radius:12px;">Confirm email</a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="margin:28px 0 0;font-size:14px;line-height:22px;color:#b3b4b5;">
+                      Open the link on the device where you created the account, and IMAGO will sign
+                      you in. Opened it somewhere else? Your email is confirmed all the same &mdash;
+                      go back to IMAGO and sign in with your email and password.
+                    </p>
+
+                    <!-- Linha -->
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr><td height="33" style="height:33px;font-size:1px;line-height:33px;border-bottom:1px solid #242729;">&nbsp;</td></tr>
+                      <tr><td height="24" style="height:24px;font-size:1px;line-height:24px;">&nbsp;</td></tr>
+                    </table>
+
+                    <p style="margin:0 0 8px;font-size:13px;line-height:20px;color:#7e8082;">
+                      Button not working? Paste this link into your browser, on the same device:
+                    </p>
+                    <p style="margin:0;font-family:'JetBrains Mono',ui-monospace,'Cascadia Mono',Consolas,Menlo,monospace;font-size:12px;line-height:18px;word-break:break-all;">
+                      <a href="{{ .ConfirmationURL }}" target="_blank" style="color:#b3b4b5;text-decoration:underline;">{{ .ConfirmationURL }}</a>
+                    </p>
+
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:28px 4px 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:20px;color:#7e8082;">
+              <p style="margin:0 0 12px;">
+                Didn&rsquo;t create an IMAGO account? You can ignore this email. Nothing happens
+                until the address is confirmed.
+              </p>
+              <p style="margin:0 0 24px;">
+                Questions? Write to
+                <a href="mailto:hello@742studio.eu" style="color:#b3b4b5;text-decoration:underline;">hello@742studio.eu</a>.
+              </p>
+              <p style="margin:0;font-family:'JetBrains Mono',ui-monospace,'Cascadia Mono',Consolas,Menlo,monospace;font-size:11px;line-height:16px;letter-spacing:2px;text-transform:uppercase;color:#56595c;">
+                IMAGO &middot; 742 Studio
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!--[if mso]></td></tr></table><![endif]-->
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

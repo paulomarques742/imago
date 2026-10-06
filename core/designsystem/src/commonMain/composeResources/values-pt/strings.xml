@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Português europeu. As mesmas chaves de values/strings.xml. -->
+<resources>
+    <!-- Guardado automático (AutoSaveStatus) -->
+    <string name="autosave_saving">A guardar…</string>
+    <string name="autosave_saved">✓ Guardado</string>
+
+    <!-- Estado da sincronização (SyncIndicator) -->
+    <string name="sync_running">A sincronizar…</string>
+    <string name="sync_conflict_copy_name">%1$s (conflito · %2$s)</string>
+    <string name="sync_unknown_device">outro aparelho</string>
+    <string name="message_sync_failed">A sincronização falhou.</string>
+    <string name="message_sync_change_rejected">O servidor da conta recusou uma alteração.</string>
+    <string name="message_library_name_required">Indique um nome para a biblioteca.</string>
+    <string name="message_key_other_account">Esta chave pertence a outra conta. Adicione uma nova biblioteca.</string>
+    <string name="message_library_already_configured">Esta biblioteca já está configurada.</string>
+    <string name="message_library_reconnect">Volte a ligar esta biblioteca nas Definições.</string>
+    <string name="message_address_already_in_library">Este endereço já faz parte da biblioteca.</string>
+    <string name="message_address_wrong_server">Este endereço pertence a outro servidor ou a outra conta Immich.</string>
+    <string name="message_library_needs_address">Uma biblioteca precisa de pelo menos um endereço.</string>
+    <string name="message_library_disconnected">A biblioteca %1$s está desligada. Volte a ligá-la nas Definições.</string>
+    <string name="message_choose_folder">Escolha uma pasta.</string>
+    <string name="message_composition_unavailable">A composição deixou de estar disponível.</string>
+    <string name="message_edit_needs_newer_app">Esta edição precisa de uma versão mais recente da app.</string>
+    <string name="message_immich_invalid_url">Introduza um URL http:// ou https:// válido.</string>
+    <string name="message_immich_key_rejected">A chave API foi recusada pelo servidor Immich.</string>
+    <string name="message_immich_version_unsupported">O servidor usa Immich %1$s. É necessária a versão %2$s ou superior.</string>
+    <string name="message_immich_server_error">O servidor Immich respondeu com o erro %1$s.</string>
+    <string name="message_immich_unreachable">Não foi possível contactar o servidor. Confirme o URL, a rede e o certificado HTTPS.</string>
+    <string name="message_device_access_full">Acesso a fotografias e vídeos</string>
+    <string name="message_device_access_selected">Acesso às fotografias e vídeos selecionados</string>
+    <string name="message_device_access_one_type">Acesso limitado a um tipo de conteúdo</string>
+    <string name="message_device_access_none">Permita o acesso às fotografias e vídeos</string>
+    <string name="message_folders_none">Nenhuma pasta escolhida</string>
+    <string name="message_folders_one">1 pasta: %1$s</string>
+    <plurals name="sync_pending_offline">
+        <item quantity="one">%1$d por enviar · sem ligação</item>
+        <item quantity="other">%1$d por enviar · sem ligação</item>
+    </plurals>
+    <plurals name="sync_pending">
+        <item quantity="one">%1$d por enviar</item>
+        <item quantity="other">%1$d por enviar</item>
+    </plurals>
+    <string name="sync_offline">Sem ligação</string>
+    <string name="sync_failed">Erro · tocar para ver</string>
+    <string name="sync_done">Sincronizado</string>
+
+    <!-- Língua da app -->
+    <string name="language_title">Idioma</string>
+    <string name="language_system">Sistema</string>
+    <string name="language_english">English</string>
+    <string name="language_portuguese">Português</string>
+
+
+    <!-- Mensagens que nascem fora da interface (core/model UserMessage) -->
+    <string name="error_generic">Alguma coisa correu mal. Tente de novo.</string>
+    <string name="message_operation_cancelled">Operação cancelada.</string>
+    <string name="message_file_unavailable">O ficheiro deixou de estar disponível. Verifique o acesso à biblioteca.</string>
+    <string name="message_folder_file_unavailable">O ficheiro deixou de estar disponível. Verifique a pasta da biblioteca.</string>
+    <string name="message_trash_failed">Não foi possível mover para a Reciclagem.</string>
+    <string name="message_address_other_account">Este endereço não aceita a chave desta biblioteca: pertence a outro servidor ou a outra conta.</string>
+    <string name="message_account_unconfirmed">Não foi possível confirmar a conta desta biblioteca pelo endereço atual. Tente quando ele estiver disponível.</string>
+    <string name="message_library_not_linked">Há fotografias de uma biblioteca que ainda não está ligada à conta.</string>
+    <string name="message_configuration_not_saved">Não foi possível guardar a configuração.</string>
+    <plurals name="message_folders_many">
+        <item quantity="one">%1$s pasta</item>
+        <item quantity="other">%1$s pastas</item>
+    </plurals>
+</resources>

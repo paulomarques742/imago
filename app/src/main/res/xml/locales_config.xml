@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The languages IMAGO is translated into, for the per-app language on Android 13+.
+  Must follow AppLanguage (core/designsystem/i18n) and the resources' values-* folders.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="pt-PT" />
+</locale-config>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        The bar colours are handled by enableEdgeToEdge() and ignored on Android 15 with
+        targetSdk 35; declaring them here would only create the illusion that they still apply.
+    -->
+    <style name="Theme.ImmichRoom" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:colorAccent">#E6E6E3</item>
+        <item name="android:windowBackground">#0B0D0F</item>
+    </style>
+
+    <!-- Sharing opens on top of the app it came from: only the upload sheet, the rest shows behind it. -->
+    <style name="Theme.ImmichRoom.Share">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+</resources>

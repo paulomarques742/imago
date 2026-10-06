@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Foreground layer of the adaptive icon, with the geometry of the brand symbol.
+
+    The symbol takes 44 of the 108 units, centred. The mark is a square frame, so its extremes are
+    at the corners: to survive the 66-unit circular mask whole, its side cannot exceed
+    66/√2 ≈ 46.7. The store icon uses 60 because there is no mask there.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.9166667"
+        android:scaleY="0.9166667"
+        android:translateX="32"
+        android:translateY="32">
+        <path
+            android:fillColor="#E6E6E3"
+            android:pathData="M0,0h5v48H0zM5,0h43v5H5zM43,5h5v25h-5zM5,43h25v5H5z" />
+        <path
+            android:fillColor="#E6E6E3"
+            android:pathData="M36,36h12v12H36z" />
+    </group>
+</vector>

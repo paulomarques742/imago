@@ -1,0 +1,7 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+*.pfx
+runtime/
+hs_err_pid*.log
