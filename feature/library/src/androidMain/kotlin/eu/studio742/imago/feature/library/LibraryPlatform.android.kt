@@ -119,7 +119,8 @@ actual val DeviceFolderAlbums: Boolean get() = true
 
 /**
  * Read again on every return to the app: it is given in the system's settings, outside it. The
- * media location goes first — without it a write request still shows the dialog.
+ * media location goes first — without it a write request still shows the dialog. Android gives it
+ * without asking to an app that already has the photos.
  */
 @Composable
 actual fun rememberMediaManagement(): MediaManagement? {

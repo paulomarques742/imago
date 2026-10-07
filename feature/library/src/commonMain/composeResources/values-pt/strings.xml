@@ -308,7 +308,7 @@
     <string name="library_media_management_change">Alterar</string>
     <string name="library_media_management_skip">Agora não</string>
     <string name="library_media_management_offer_title">Mover e eliminar sem confirmar de cada vez?</string>
-    <string name="library_media_management_offer_body">O Android pede confirmação sempre que uma app move ou elimina fotografias que não criou. Como app de gestão de multimédia, o IMAGO deixa de ter de pedir: o que eliminar continua a ir para o lixo do dispositivo, de onde se recupera. Antes, o Android pede acesso à localização das fotografias, de que mover precisa.</string>
+    <string name="library_media_management_offer_body">O Android pede confirmação sempre que uma app move ou elimina fotografias que não criou. Como app de gestão de multimédia, o IMAGO deixa de ter de pedir: o que eliminar continua a ir para o lixo do dispositivo, de onde se recupera.</string>
     <string name="library_media_management_later">Pode mudar isto mais tarde nas Definições.</string>
     <string name="library_selection_delete_device_body_managed">As que estão no dispositivo vão para o lixo dele.</string>
     <plurals name="library_album_delete_folder_body_managed">

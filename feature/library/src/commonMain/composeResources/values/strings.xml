@@ -308,7 +308,7 @@
     <string name="library_media_management_change">Change</string>
     <string name="library_media_management_skip">Not now</string>
     <string name="library_media_management_offer_title">Move and delete without confirming each time?</string>
-    <string name="library_media_management_offer_body">Android asks for confirmation whenever an app moves or deletes photos it didn’t create. As a media management app, IMAGO no longer has to ask: what you delete still goes to the device’s trash, where it can be restored. First Android asks for access to the photos’ location, which moving them needs.</string>
+    <string name="library_media_management_offer_body">Android asks for confirmation whenever an app moves or deletes photos it didn’t create. As a media management app, IMAGO no longer has to ask: what you delete still goes to the device’s trash, where it can be restored.</string>
     <string name="library_media_management_later">You can change this later in Settings.</string>
     <string name="library_selection_delete_device_body_managed">The ones on this device will go to its trash.</string>
     <plurals name="library_album_delete_folder_body_managed">
