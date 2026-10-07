@@ -317,4 +317,12 @@
     </plurals>
     <string name="library_open_failed">This file can’t be opened.</string>
     <string name="library_open_close">Close</string>
+    <!-- Choosing for another app -->
+    <string name="library_pick_title_one">Choose a photo</string>
+    <string name="library_pick_title_many">Choose photos</string>
+    <string name="library_pick_for">For %1$s</string>
+    <string name="library_pick_confirm">Choose</string>
+    <string name="library_pick_which_question">Send which versions?</string>
+    <string name="library_pick_which_body">Some of these photos have edits in IMAGO. The originals go as they are; the edited versions are rendered at full resolution, which takes a few seconds each. Photos without edits go as they are.</string>
+    <string name="library_pick_failed">Couldn’t prepare the photos.</string>
 </resources>

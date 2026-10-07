@@ -321,6 +321,8 @@ fun LibraryPickerRoute(
     subtitle: String? = null,
     /** A page background does not accept videos; an element does. */
     allowsVideo: Boolean = true,
+    /** Another app asking for videos only does not accept photos. */
+    allowsPhotos: Boolean = true,
     /** With a single choice, tapping decides and closes: there is nothing to confirm afterwards. */
     multiple: Boolean = true,
     confirmLabel: String = stringResource(Res.string.library_add),
@@ -336,6 +338,7 @@ fun LibraryPickerRoute(
             title = title,
             subtitle = subtitle,
             allowsVideo = allowsVideo,
+            allowsPhotos = allowsPhotos,
             multiple = multiple,
             confirmLabel = confirmLabel,
             onConfirm = { chosen ->
@@ -363,6 +366,7 @@ internal data class PickerMode(
     val title: String,
     val subtitle: String?,
     val allowsVideo: Boolean,
+    val allowsPhotos: Boolean = true,
     val multiple: Boolean,
     val confirmLabel: String,
     val onConfirm: (List<AssetUiModel>) -> Unit,
@@ -1315,7 +1319,7 @@ private fun AssetGrid(
                     showsSelection = selectionVisible,
                     // A video stays in view where it cannot be chosen — dimmed, and not responding to
                     // taps. Hiding it would make the picker's grid not match the library it came from.
-                    enabled = picker == null || picker.allowsVideo || !asset.isVideo,
+                    enabled = picker == null || (if (asset.isVideo) picker.allowsVideo else picker.allowsPhotos),
                     // In the middle of a selection, tapping is choosing: opening the photo would force
                     // leaving and starting over because of a tap on the wrong thumbnail.
                     onClick = {

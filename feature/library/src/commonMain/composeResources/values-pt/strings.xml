@@ -317,4 +317,12 @@
     </plurals>
     <string name="library_open_failed">Não foi possível abrir este ficheiro.</string>
     <string name="library_open_close">Fechar</string>
+    <!-- Escolher para outra app -->
+    <string name="library_pick_title_one">Escolher uma fotografia</string>
+    <string name="library_pick_title_many">Escolher fotografias</string>
+    <string name="library_pick_for">Para %1$s</string>
+    <string name="library_pick_confirm">Escolher</string>
+    <string name="library_pick_which_question">Que versões enviar?</string>
+    <string name="library_pick_which_body">Algumas destas fotografias têm edições no IMAGO. Os originais vão tal como estão; as versões editadas são geradas em resolução máxima, o que demora uns segundos cada. As que não têm edições vão como estão.</string>
+    <string name="library_pick_failed">Não foi possível preparar as fotografias.</string>
 </resources>
