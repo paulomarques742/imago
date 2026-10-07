@@ -320,6 +320,41 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun listsTheTrashWithPhotosAndVideosAlike() = runTest {
+        server.enqueue(MockResponse().setBody("""{"assets":{"items":[],"nextPage":null}}"""))
+
+        api.trashedAssets(connection(), page = 1, pageSize = 500)
+
+        val request = server.takeRequest()
+        assertEquals("/api/search/metadata", request.path)
+        val body = request.body.readUtf8()
+        assertTrue(body, body.contains("\"withDeleted\":true"))
+        assertTrue(body, body.contains("\"trashedAfter\":\"1970-01-01T00:00:00.000Z\""))
+        // No type: the trash holds videos too.
+        assertFalse(body, body.contains("\"type\""))
+    }
+
+    @Test
+    fun restoresAndEmptiesTheTrashAndReadsHowLongItIsKept() = runTest {
+        server.enqueue(MockResponse().setBody("""{"count":2}"""))
+        server.enqueue(MockResponse().setBody("""{"count":5}"""))
+        server.enqueue(MockResponse().setBody("""{"trashDays":30,"oauthButtonText":"x"}"""))
+
+        api.restoreFromTrash(connection(), listOf("a1", "a2"))
+        api.emptyTrash(connection())
+
+        assertEquals(30, api.trashDays(connection()))
+        val restore = server.takeRequest()
+        assertEquals("POST", restore.method)
+        assertEquals("/api/trash/restore/assets", restore.path)
+        assertEquals("""{"ids":["a1","a2"]}""", restore.body.readUtf8())
+        val empty = server.takeRequest()
+        assertEquals("POST", empty.method)
+        assertEquals("/api/trash/empty", empty.path)
+        assertEquals("/api/server/config", server.takeRequest().path)
+    }
+
+    @Test
     fun forbiddenAlbumCreationNamesItsPermission() = runTest {
         server.enqueue(MockResponse().setResponseCode(403))
 

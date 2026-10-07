@@ -201,6 +201,8 @@ fun LibraryRoute(
     onOpenRecipes: () -> Unit,
     onOpenComposer: () -> Unit,
     onOpenSettings: () -> Unit,
+    /** Null where the library has no trash to show. */
+    onOpenTrash: (() -> Unit)? = null,
     /**
      * The photos chosen on their way to a composition.
      *
@@ -247,6 +249,7 @@ fun LibraryRoute(
             onOpenRecipes = onOpenRecipes,
             onOpenComposer = onOpenComposer,
             onOpenSettings = onOpenSettings,
+            onOpenTrash = onOpenTrash,
             onComposeSelection = { selected -> onComposeSelection(selected, viewModel::clearSelection) },
             albumEditing = AlbumEditing(
                 onNewAlbum = { name -> albumPick = AlbumPick.New(name) },
@@ -391,6 +394,8 @@ private fun LibraryHost(
     onOpenRecipes: () -> Unit,
     onOpenComposer: () -> Unit,
     onOpenSettings: () -> Unit,
+    /** Null where the library has no trash to show. */
+    onOpenTrash: (() -> Unit)? = null,
     onComposeSelection: (List<AssetUiModel>) -> Unit,
     albumEditing: AlbumEditing? = null,
 ) {
@@ -402,6 +407,7 @@ private fun LibraryHost(
     val catalogSync by viewModel.catalogSync.collectAsStateWithLifecycle()
     var retriedDateNavigation by remember { mutableStateOf(false) }
     LaunchedEffect(uiState.gridRevision) { if (uiState.gridRevision > 0) assets.refresh() }
+    val hasTrash = remember(sourceId) { viewModel.hasTrash }
 
     LaunchedEffect(assets.loadState.refresh, assets.itemCount, uiState.isLoadingNavigation) {
         if (
@@ -462,6 +468,7 @@ private fun LibraryHost(
                 viewModel.syncCatalog()
             },
             onOpenSettings = onOpenSettings,
+            onOpenTrash = onOpenTrash?.takeIf { hasTrash },
         )
     }
 }
@@ -504,6 +511,8 @@ private fun LibraryScreen(
     onConsumeActionError: () -> Unit,
     onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
+    /** Null where the library has no trash to show. */
+    onOpenTrash: (() -> Unit)? = null,
 ) {
     // The order is that of priorities, and it is the opposite of what it looks like: the dispatcher
     // calls what was registered last first. In a picker, leaving it is the last resort — before that
@@ -614,6 +623,7 @@ private fun LibraryScreen(
                         onOpenDatePicker = { datePicker = true },
                         onRefresh = onRefresh,
                         onOpenSettings = onOpenSettings,
+                        onOpenTrash = onOpenTrash,
                     )
                 }
                 // The chips slice the timeline. Inside an album, or in the album list, they have
@@ -787,6 +797,8 @@ private fun LibraryTopBar(
     onOpenDatePicker: () -> Unit,
     onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
+    /** Null where the library has no trash to show. */
+    onOpenTrash: (() -> Unit)? = null,
 ) {
     var moreExpanded by remember { mutableStateOf(false) }
     Row(
@@ -844,6 +856,13 @@ private fun LibraryTopBar(
                         leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
                         onClick = { moreExpanded = false; onOpenSettings() },
                     )
+                    if (onOpenTrash != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.library_trash)) },
+                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                            onClick = { moreExpanded = false; onOpenTrash() },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text(stringResource(Res.string.library_refresh)) },
                         leadingIcon = { Icon(Icons.Outlined.Refresh, contentDescription = null) },

@@ -82,6 +82,9 @@ val generateImmichContract by tasks.registering {
             "removeAssetFromAlbum",
             "updateAlbumInfo",
             "deleteAlbum",
+            "restoreAssets",
+            "emptyTrash",
+            "getServerConfig",
             "getMyApiKey",
         )
 
@@ -94,6 +97,7 @@ val generateImmichContract by tasks.registering {
         val optionalOperationIds = setOf(
             "getAllAlbums", "uploadAsset", "createStack", "updateAsset", "updateAssets", "deleteAssets",
             "createAlbum", "addAssetsToAlbum", "removeAssetFromAlbum", "updateAlbumInfo", "deleteAlbum",
+            "restoreAssets", "emptyTrash",
         )
         check(operationIds.containsAll(optionalOperationIds))
         validatedDocuments.forEach { validatedDocument ->
@@ -147,6 +151,10 @@ val generateImmichContract by tasks.registering {
         check(propertiesOf("UpdateAlbumDto").contains("albumName"))
         check(propertiesOf("AlbumResponseDto").contains("albumUsers"))
         check(propertiesOf("AlbumUserResponseDto").containsAll(setOf("role", "user")))
+        // The trash: listed through the search, restored and emptied by its own endpoints.
+        check(propertiesOf("MetadataSearchDto").containsAll(setOf("withDeleted", "trashedAfter")))
+        check(propertiesOf("TrashResponseDto").contains("count"))
+        check(propertiesOf("ServerConfigDto").contains("trashDays"))
         check(
             propertiesOf("AlbumResponseDto").containsAll(
                 setOf("id", "albumName", "albumThumbnailAssetId", "assetCount", "description", "shared"),
@@ -187,6 +195,8 @@ val generateImmichContract by tasks.registering {
             check(validatedProperties("UpdateAlbumDto").contains("albumName"))
             check(validatedProperties("AlbumResponseDto").contains("albumUsers"))
             check(validatedProperties("AlbumUserResponseDto").containsAll(setOf("role", "user")))
+            check(validatedProperties("MetadataSearchDto").containsAll(setOf("withDeleted", "trashedAfter")))
+            check(validatedProperties("ServerConfigDto").contains("trashDays"))
             check(validatedProperties("AssetBulkDeleteDto").containsAll(setOf("ids", "force")))
         }
 
@@ -280,6 +290,9 @@ val generateImmichContract by tasks.registering {
             |    const val REMOVE_ASSET_FROM_ALBUM = "${pathFor("removeAssetFromAlbum")}"
             |    const val UPDATE_ALBUM_INFO = "${pathFor("updateAlbumInfo")}"
             |    const val DELETE_ALBUM = "${pathFor("deleteAlbum")}"
+            |    const val RESTORE_ASSETS = "${pathFor("restoreAssets")}"
+            |    const val EMPTY_TRASH = "${pathFor("emptyTrash")}"
+            |    const val GET_SERVER_CONFIG = "${pathFor("getServerConfig")}"
             |    const val GET_MY_API_KEY = "${pathFor("getMyApiKey")}"
             |}
             |

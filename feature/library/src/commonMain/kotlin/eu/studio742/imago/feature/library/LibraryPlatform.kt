@@ -25,6 +25,9 @@ expect fun librarySettingsViewModel(): LibrarySettingsViewModel
 expect fun albumPickerViewModel(): AlbumPickerViewModel
 
 @Composable
+expect fun trashViewModel(): TrashViewModel
+
+@Composable
 expect fun configurationViewModel(): ConfigurationViewModel
 
 /**

@@ -57,6 +57,12 @@ actual fun albumPickerViewModel(): AlbumPickerViewModel {
 }
 
 @Composable
+actual fun trashViewModel(): TrashViewModel {
+    val graph = LocalDesktopDataGraph.current
+    return viewModel { TrashViewModel(graph.library) }
+}
+
+@Composable
 actual fun configurationViewModel(): ConfigurationViewModel {
     val graph = LocalDesktopDataGraph.current
     return viewModel { ConfigurationViewModel(graph.configuration) }

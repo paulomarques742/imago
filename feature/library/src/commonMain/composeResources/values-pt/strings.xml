@@ -325,4 +325,36 @@
     <string name="library_pick_which_question">Que versões enviar?</string>
     <string name="library_pick_which_body">Algumas destas fotografias têm edições no IMAGO. Os originais vão tal como estão; as versões editadas são geradas em resolução máxima, o que demora uns segundos cada. As que não têm edições vão como estão.</string>
     <string name="library_pick_failed">Não foi possível preparar as fotografias.</string>
+    <!-- Lixo -->
+    <string name="library_trash">Lixo</string>
+    <string name="library_trash_more">Opções do lixo</string>
+    <string name="library_back_to_library">Voltar à biblioteca</string>
+    <string name="library_trash_empty_view">O lixo está vazio.</string>
+    <string name="library_trash_device_note">Cada item é eliminado de vez quando os dias acabam.</string>
+    <string name="library_trash_restore">Restaurar</string>
+    <string name="library_trash_delete_forever">Eliminar de vez</string>
+    <string name="library_trash_empty_action">Esvaziar lixo</string>
+    <string name="library_trash_delete_body">Não se pode desfazer.</string>
+    <string name="library_trash_empty_question">Esvaziar o lixo?</string>
+    <string name="library_trash_failed">Não foi possível alterar o lixo.</string>
+    <plurals name="library_trash_server_kept">
+        <item quantity="one">O servidor elimina o que está aqui há mais de %1$d dia.</item>
+        <item quantity="other">O servidor elimina o que está aqui há mais de %1$d dias.</item>
+    </plurals>
+    <plurals name="library_trash_days_left">
+        <item quantity="one">%1$d dia</item>
+        <item quantity="other">%1$d dias</item>
+    </plurals>
+    <plurals name="library_trash_delete_question">
+        <item quantity="one">Eliminar %1$d item de vez?</item>
+        <item quantity="other">Eliminar %1$d itens de vez?</item>
+    </plurals>
+    <plurals name="library_trash_empty_body">
+        <item quantity="one">O item que lá está é eliminado de vez. Não se pode desfazer.</item>
+        <item quantity="other">Os %1$d itens que lá estão são eliminados de vez. Não se pode desfazer.</item>
+    </plurals>
+    <plurals name="library_trash_restored">
+        <item quantity="one">Restaurado.</item>
+        <item quantity="other">%1$d restaurados.</item>
+    </plurals>
 </resources>

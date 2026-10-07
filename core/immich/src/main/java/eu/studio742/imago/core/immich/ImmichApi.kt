@@ -75,6 +75,19 @@ interface ImmichApi {
     /** The album goes; its photos stay in the library. */
     suspend fun deleteAlbum(connection: ImmichConnection, albumId: String): Unit =
         error("Albums cannot be deleted here")
+
+    /** What is in the trash, photos and videos, the most recently trashed first. */
+    suspend fun trashedAssets(connection: ImmichConnection, page: Int, pageSize: Int): AssetPage =
+        error("This server has no trash here")
+
+    /** How many days the server keeps the trash before deleting it; null when it does not say. */
+    suspend fun trashDays(connection: ImmichConnection): Int? = null
+
+    suspend fun restoreFromTrash(connection: ImmichConnection, assetIds: List<String>): Unit =
+        error("This server has no trash here")
+
+    /** Everything in the trash, deleted for good. */
+    suspend fun emptyTrash(connection: ImmichConnection): Unit = error("This server has no trash here")
     suspend fun getTimeBuckets(connection: ImmichConnection): List<ImmichTimeBucket>
 
     /**

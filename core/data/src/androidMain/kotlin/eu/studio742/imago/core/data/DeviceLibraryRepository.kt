@@ -171,6 +171,53 @@ class DeviceLibraryRepository @Inject constructor(
     }
     override val openedFiles = OpenedFileLibrary(context)
 
+    override val hasTrash: Boolean get() = true
+
+    /** The phone's trash, the soonest to go first; each item says when it goes. */
+    override suspend fun trash(): TrashContents = withContext(Dispatchers.IO) {
+        val items = mutableListOf<TrashedAsset>()
+        for ((collection, type) in listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI to AssetType.IMAGE,
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI to AssetType.VIDEO)) {
+            val columns = arrayOf("_id", "_display_name", MediaStore.Images.ImageColumns.DATE_TAKEN, "date_added", "width", "height",
+                "mime_type", "volume_name", MediaStore.MediaColumns.DATE_EXPIRES) +
+                if (type == AssetType.VIDEO) arrayOf("duration") else emptyArray()
+            val args = android.os.Bundle().apply { putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_ONLY) }
+            runCatching { resolver.query(collection, columns, args, null) }.getOrNull()?.use { cursor ->
+                fun str(name: String) = cursor.getColumnIndex(name).takeIf { it >= 0 }?.let { cursor.getString(it) }
+                fun number(name: String) = str(name)?.toLongOrNull()
+                while (cursor.moveToNext()) {
+                    val volume = str("volume_name") ?: MediaStore.VOLUME_EXTERNAL_PRIMARY
+                    val itemCollection = if (type == AssetType.VIDEO) MediaStore.Video.Media.getContentUri(volume) else MediaStore.Images.Media.getContentUri(volume)
+                    val id = ContentUris.withAppendedId(itemCollection, number("_id") ?: continue).toString()
+                    val time = number(MediaStore.Images.ImageColumns.DATE_TAKEN)?.takeIf { it > 0 } ?: ((number("date_added") ?: 0) * 1000)
+                    val instant = Instant.ofEpochMilli(time)
+                    // MediaStore keeps the trashed file's name with a ".trashed-<expiry>-" prefix.
+                    val name = str("_display_name").orEmpty().replace(Regex("""^\.trashed-\d+-"""), "")
+                    val asset = ImmichAsset(id, "", name,
+                        java.time.format.DateTimeFormatterBuilder().appendInstant(3).toFormatter().format(instant),
+                        instant.atZone(ZoneId.systemDefault()).toLocalDateTime().toString(), number("width"), number("height"),
+                        isFavorite = false, isEdited = false, type = type, mimeType = str("mime_type"),
+                        durationMs = number("duration").takeIf { type == AssetType.VIDEO })
+                    val expires = number(MediaStore.MediaColumns.DATE_EXPIRES)?.let { Instant.ofEpochSecond(it).toString() }
+                    items += TrashedAsset(asset, expires)
+                }
+            }
+        }
+        TrashContents(items.sortedBy { it.expiresAt ?: "" })
+    }
+
+    override suspend fun restoreFromTrash(assetIds: List<String>) {
+        if (assetIds.isEmpty()) return
+        request(MediaStore.createTrashRequest(resolver, assetIds.map(Uri::parse), false), assetIds)
+    }
+
+    override suspend fun deleteForever(assetIds: List<String>) {
+        if (assetIds.isEmpty()) return
+        consent(MediaStore.createDeleteRequest(resolver, assetIds.map(Uri::parse)))
+    }
+
+    override suspend fun emptyTrash() = deleteForever(trash().items.map { it.asset.id })
+
     override suspend fun openFromOtherApp(uris: List<String>, neighbours: Boolean): OpenedView? {
         val parsed = uris.map(Uri::parse)
         // A single photo of the gallery opens among its album, as the gallery would show it.

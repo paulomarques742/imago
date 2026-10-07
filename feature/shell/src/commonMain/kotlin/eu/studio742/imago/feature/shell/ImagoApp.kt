@@ -143,6 +143,7 @@ sealed interface AppDestination {
     data object Settings : AppDestination
     data class Account(val signUp: Boolean = false) : AppDestination
     data object Recipes : AppDestination
+    data object Trash : AppDestination
     data object Compositions : AppDestination
     data class Composer(val projectId: String) : AppDestination
     data class Photo(
@@ -246,6 +247,10 @@ private fun ImagoAppContent(viewModel: ShellViewModel, onLeaveViewer: (() -> Uni
             onBack = {
                 destination = if (viewModel.welcomeCompleted.value) AppDestination.Settings else AppDestination.Welcome
             },
+        )
+
+        current is AppDestination.Trash -> eu.studio742.imago.feature.library.TrashRoute(
+            onBack = { destination = AppDestination.Library() },
         )
 
         current is AppDestination.Recipes -> RecipeLibraryRoute(
@@ -370,6 +375,7 @@ private fun LibraryPane(
                     )
                 },
                 onOpenSettings = { onDestination(AppDestination.Settings) },
+                onOpenTrash = { onDestination(AppDestination.Trash) },
                 onOpenRecipes = { onDestination(AppDestination.Recipes) },
                 onOpenComposer = { onDestination(AppDestination.Compositions) },
                 onComposeSelection = { selected, onAdded ->

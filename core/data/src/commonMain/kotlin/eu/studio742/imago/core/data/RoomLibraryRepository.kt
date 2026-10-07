@@ -138,6 +138,31 @@ class RoomLibraryRepository @Inject constructor(
     override suspend fun renameAlbum(albumId: String, name: String) = api.renameAlbum(requireConnection(), albumId, name)
 
     override suspend fun deleteAlbum(albumId: String) = api.deleteAlbum(requireConnection(), albumId)
+
+    override val hasTrash: Boolean get() = true
+
+    /** Page after page, up to a limit a phone screen can still show at once. */
+    override suspend fun trash(): TrashContents {
+        val connection = requireConnection()
+        val items = mutableListOf<TrashedAsset>()
+        var page: Int? = 1
+        while (page != null && items.size < TRASH_LIMIT) {
+            val result = api.trashedAssets(connection, page, TRASH_PAGE)
+            items += result.items.map { TrashedAsset(it) }
+            page = result.nextPage
+        }
+        return TrashContents(items, api.trashDays(connection))
+    }
+
+    /** Restored photos are back in their months: the catalogue reads the ones that changed. */
+    override suspend fun restoreFromTrash(assetIds: List<String>) {
+        api.restoreFromTrash(requireConnection(), assetIds)
+        runCatching { syncCatalog() }
+    }
+
+    override suspend fun deleteForever(assetIds: List<String>) = api.deleteAssets(requireConnection(), assetIds, force = true)
+
+    override suspend fun emptyTrash() = api.emptyTrash(requireConnection())
     override suspend fun timeBuckets(): List<ImmichTimeBucket> {
         val connection = requireConnection()
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
@@ -361,6 +386,8 @@ class RoomLibraryRepository @Inject constructor(
 
     private companion object {
         const val PAGE_SIZE = 100
+        const val TRASH_PAGE = 500
+        const val TRASH_LIMIT = 5_000
 
         /** "2024-05" — enough to identify the month, whether the bucket comes with a date or an instant. */
         const val MONTH_PREFIX = 7

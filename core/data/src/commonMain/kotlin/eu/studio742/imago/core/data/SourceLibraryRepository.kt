@@ -78,6 +78,19 @@ class SourceLibraryRepository @Inject constructor(
         return provider(id).createFolderAlbum(name, localIdsIn(id, assetIds), transfer).encodedFor(id)
     }
 
+    override val hasTrash: Boolean
+        get() = runCatching { provider(configuration.selectedLibraryId.value).hasTrash }.getOrDefault(false)
+
+    override suspend fun trash(): TrashContents {
+        val id = configuration.selectedLibraryId.value
+        val contents = provider(id).trash()
+        return contents.copy(items = contents.items.map { it.copy(asset = it.asset.copy(id = AssetReference(id, it.asset.id).encode())) })
+    }
+
+    override suspend fun restoreFromTrash(assetIds: List<String>) = byLibrary(assetIds) { ids -> restoreFromTrash(ids) }
+    override suspend fun deleteForever(assetIds: List<String>) = byLibrary(assetIds) { ids -> deleteForever(ids) }
+    override suspend fun emptyTrash() = provider(configuration.selectedLibraryId.value).emptyTrash()
+
     /** An album lives in one library: a photo of another one could never go into it. */
     private fun localIdsIn(libraryId: String, assetIds: List<String>): List<String> =
         assetIds.map(AssetReference::parse).filter { it.libraryId == libraryId }.map { it.localId }

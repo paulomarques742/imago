@@ -123,6 +123,18 @@ interface LibraryRepository {
     /** The album goes. A server's keeps its photos; a folder's go to the device's trash. */
     suspend fun deleteAlbum(albumId: String): Unit = error("This library cannot delete albums")
 
+    /** Whether this library has a trash IMAGO can show; the computer's folders do not. */
+    val hasTrash: Boolean get() = false
+
+    suspend fun trash(): TrashContents = error("This library has no trash here")
+
+    suspend fun restoreFromTrash(assetIds: List<String>): Unit = error("This library has no trash here")
+
+    /** Out of the trash, for good. */
+    suspend fun deleteForever(assetIds: List<String>): Unit = error("This library has no trash here")
+
+    suspend fun emptyTrash(): Unit = error("This library has no trash here")
+
     /** Into a folder album, moved or copied. */
     suspend fun fileIntoAlbum(albumId: String, assetIds: List<String>, transfer: FolderTransfer): AlbumAddition =
         error("This library has no folder albums")

@@ -56,6 +56,9 @@ class HiltAlbumPickerViewModel @Inject constructor(library: LibraryRepository, d
     AlbumPickerViewModel(library, device)
 
 @HiltViewModel
+class HiltTrashViewModel @Inject constructor(library: LibraryRepository) : TrashViewModel(library)
+
+@HiltViewModel
 class HiltConfigurationViewModel @Inject constructor(repository: ConfigurationRepository) : ConfigurationViewModel(repository)
 
 @Composable
@@ -66,6 +69,9 @@ actual fun librarySettingsViewModel(): LibrarySettingsViewModel = hiltViewModel<
 
 @Composable
 actual fun albumPickerViewModel(): AlbumPickerViewModel = hiltViewModel<HiltAlbumPickerViewModel>()
+
+@Composable
+actual fun trashViewModel(): TrashViewModel = hiltViewModel<HiltTrashViewModel>()
 
 @Composable
 actual fun configurationViewModel(): ConfigurationViewModel = hiltViewModel<HiltConfigurationViewModel>()

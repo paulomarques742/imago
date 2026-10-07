@@ -325,4 +325,36 @@
     <string name="library_pick_which_question">Send which versions?</string>
     <string name="library_pick_which_body">Some of these photos have edits in IMAGO. The originals go as they are; the edited versions are rendered at full resolution, which takes a few seconds each. Photos without edits go as they are.</string>
     <string name="library_pick_failed">Couldn’t prepare the photos.</string>
+    <!-- Trash -->
+    <string name="library_trash">Trash</string>
+    <string name="library_trash_more">Trash options</string>
+    <string name="library_back_to_library">Back to the library</string>
+    <string name="library_trash_empty_view">The trash is empty.</string>
+    <string name="library_trash_device_note">Each item is deleted for good when its days run out.</string>
+    <string name="library_trash_restore">Restore</string>
+    <string name="library_trash_delete_forever">Delete forever</string>
+    <string name="library_trash_empty_action">Empty trash</string>
+    <string name="library_trash_delete_body">This can’t be undone.</string>
+    <string name="library_trash_empty_question">Empty the trash?</string>
+    <string name="library_trash_failed">Couldn’t change the trash.</string>
+    <plurals name="library_trash_server_kept">
+        <item quantity="one">The server deletes what has been here for more than %1$d day.</item>
+        <item quantity="other">The server deletes what has been here for more than %1$d days.</item>
+    </plurals>
+    <plurals name="library_trash_days_left">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <plurals name="library_trash_delete_question">
+        <item quantity="one">Delete %1$d item forever?</item>
+        <item quantity="other">Delete %1$d items forever?</item>
+    </plurals>
+    <plurals name="library_trash_empty_body">
+        <item quantity="one">The item in it is deleted forever. This can’t be undone.</item>
+        <item quantity="other">The %1$d items in it are deleted forever. This can’t be undone.</item>
+    </plurals>
+    <plurals name="library_trash_restored">
+        <item quantity="one">Restored.</item>
+        <item quantity="other">%1$d restored.</item>
+    </plurals>
 </resources>

@@ -166,6 +166,59 @@ class OkHttpImmichApi(
         )
     }
 
+    override suspend fun trashedAssets(connection: ImmichConnection, page: Int, pageSize: Int): AssetPage = withContext(Dispatchers.IO) {
+        val payload = MetadataSearchDto(
+            page = page,
+            size = pageSize,
+            // Photos and videos alike: without a type the search does not filter by one.
+            type = null,
+            withDeleted = true,
+            trashedAfter = "1970-01-01T00:00:00.000Z",
+        )
+        val response = executeJson<SearchResponseDto>(
+            request = Request.Builder()
+                .url(endpoint(connection, ImmichContract.SEARCH_ASSETS))
+                .post(json.encodeToString(payload).toRequestBody(JSON_MEDIA_TYPE))
+                .build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.SEARCH_ASSETS,
+        )
+        AssetPage(
+            items = response.assets.items.map(AssetResponseDto::toDomain).filter { it.type == AssetType.IMAGE || it.type == AssetType.VIDEO },
+            nextPage = response.assets.nextPage?.toIntOrNull(),
+        )
+    }
+
+    override suspend fun trashDays(connection: ImmichConnection): Int? = withContext(Dispatchers.IO) {
+        runCatching {
+            executeJson<ServerConfigDto>(
+                request = Request.Builder().url(endpoint(connection, ImmichContract.GET_SERVER_CONFIG)).get().build(),
+                apiKey = connection.apiKey,
+                permission = null,
+            ).trashDays
+        }.getOrNull()
+    }
+
+    override suspend fun restoreFromTrash(connection: ImmichConnection, assetIds: List<String>): Unit = withContext(Dispatchers.IO) {
+        if (assetIds.isEmpty()) return@withContext
+        execute(
+            request = Request.Builder()
+                .url(endpoint(connection, ImmichContract.RESTORE_ASSETS))
+                .post(json.encodeToString(BulkIdsDto(assetIds)).toRequestBody(JSON_MEDIA_TYPE))
+                .build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.RESTORE_ASSETS,
+        ).close()
+    }
+
+    override suspend fun emptyTrash(connection: ImmichConnection): Unit = withContext(Dispatchers.IO) {
+        execute(
+            request = Request.Builder().url(endpoint(connection, ImmichContract.EMPTY_TRASH)).post(ByteArray(0).toRequestBody(null)).build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.EMPTY_TRASH,
+        ).close()
+    }
+
     override suspend fun getAlbums(connection: ImmichConnection): List<ImmichAlbum> = withContext(Dispatchers.IO) {
         fun load(shared: Boolean?): List<AlbumResponseDto> {
             val url = endpoint(connection, ImmichContract.GET_ALBUMS).newBuilder().apply {
@@ -572,7 +625,13 @@ private data class MetadataSearchDto(
     val takenAfter: String? = null,
     val takenBefore: String? = null,
     val originalFileName: String? = null,
+    /** With [trashedAfter], what the trash holds; trashed assets are left out otherwise. */
+    val withDeleted: Boolean? = null,
+    val trashedAfter: String? = null,
 )
+
+@Serializable
+private data class ServerConfigDto(val trashDays: Int? = null)
 
 @Serializable
 private data class UpdateAssetDto(val isFavorite: Boolean)

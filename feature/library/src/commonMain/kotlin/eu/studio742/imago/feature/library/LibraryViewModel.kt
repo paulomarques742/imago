@@ -451,6 +451,9 @@ open class LibraryViewModel(
 
     fun rememberTransfer(transfer: FolderTransfer?) = device.rememberTransfer(transfer)
 
+    /** Whether the open library has a trash to show — a server's, the phone's; not the computer's folders. */
+    val hasTrash: Boolean get() = library.hasTrash
+
     /** Whether the open library is this device's. */
     val isDeviceLibrary: Boolean get() = configuration.selectedLibraryId.value == eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 
