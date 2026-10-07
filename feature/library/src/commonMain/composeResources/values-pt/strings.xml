@@ -315,4 +315,6 @@
         <item quantity="one">A fotografia ou vídeo deste álbum vai para o lixo do dispositivo.</item>
         <item quantity="other">As %1$d fotografias e vídeos deste álbum vão para o lixo do dispositivo.</item>
     </plurals>
+    <string name="library_open_failed">Não foi possível abrir este ficheiro.</string>
+    <string name="library_open_close">Fechar</string>
 </resources>

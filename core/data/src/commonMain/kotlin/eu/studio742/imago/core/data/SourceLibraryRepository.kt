@@ -26,6 +26,7 @@ class SourceLibraryRepository @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Synchronized private fun provider(id: String): LibraryRepository {
         if (id == DEVICE_LIBRARY_ID) return device
+        if (id == OPENED_LIBRARY_ID) return checkNotNull(device.openedFiles) { "Nothing opens files here" }
         val source = configuration.source(id)
         requireUser(source.isConnected, UserMessage.LIBRARY_DISCONNECTED, source.messageName())
         return providers.getOrPut(source) {

@@ -46,6 +46,39 @@
             </intent-filter>
         </activity>
 
+        <!-- Photos and videos other apps open with IMAGO: "Open with", the camera's last photo (also
+             over the lock screen, view only) and "Edit with". Back returns to the app that asked. -->
+        <activity
+            android:name=".ViewerActivity"
+            android:exported="true"
+            android:theme="@style/Theme.ImmichRoom">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.provider.action.REVIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.provider.action.REVIEW_SECURE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
+
         <!-- Photos and videos shared from other apps, to Immich. -->
         <activity
             android:name=".ShareActivity"

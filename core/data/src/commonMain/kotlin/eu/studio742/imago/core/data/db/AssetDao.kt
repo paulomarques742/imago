@@ -30,6 +30,14 @@ interface AssetDao {
     )
     suspend fun folders(libraryKey: String): List<FolderSummary>
 
+    /** A gallery row by the end of its `Uri` (`%/media/123`): the volume in the middle varies by who asks. */
+    @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey AND id LIKE :suffix LIMIT 1")
+    suspend fun byIdSuffix(libraryKey: String, suffix: String): AssetEntity?
+
+    /** A folder's photos in grid order. */
+    @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey AND folderId = :folderId ORDER BY fileCreatedAt DESC, id DESC")
+    suspend fun inFolder(libraryKey: String, folderId: String): List<AssetEntity>
+
     @Query("SELECT id FROM assets WHERE libraryKey = :libraryKey AND folderId = :folderId")
     suspend fun idsInFolder(libraryKey: String, folderId: String): List<String>
 

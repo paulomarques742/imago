@@ -57,6 +57,25 @@ class DeviceLibraryRepositoryTest {
             assertTrue(database.assetDao().asset(DEVICE_LIBRARY_ID, photo.id)!!.hasLocalRecipe)
         } finally { database.close() }
     }
+    @Test fun aGalleryPhotoOpenedByAnotherAppOpensAmongItsAlbum() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        ShadowContentResolver.registerProviderInternal("media", TestMediaProvider())
+        val database = Room.inMemoryDatabaseBuilder(context, ImmichRoomDatabase::class.java).allowMainThreadQueries().build()
+        val repo = DeviceLibraryRepository(context, database)
+        try {
+            repo.syncCatalog()
+            // The camera says "external"; the catalogue keeps the volume, "external_primary".
+            val view = checkNotNull(repo.openFromOtherApp(listOf("content://media/external/images/media/1"), neighbours = true))
+
+            assertEquals(2, view.assets.size)
+            val opened = view.assets[view.index]
+            assertEquals(AssetReference(DEVICE_LIBRARY_ID, "content://media/external_primary/images/media/1").encode(), opened.id)
+
+            // Over the lock screen only what was sent.
+            val alone = checkNotNull(repo.openFromOtherApp(listOf("content://media/external/images/media/1"), neighbours = false))
+            assertEquals(listOf(opened.id), alone.assets.map { it.id })
+        } finally { database.close() }
+    }
     @Test fun distinguishesDeniedPartialAndFullAccess() {
         val context = RuntimeEnvironment.getApplication()
         val database = Room.inMemoryDatabaseBuilder(context, ImmichRoomDatabase::class.java).build()

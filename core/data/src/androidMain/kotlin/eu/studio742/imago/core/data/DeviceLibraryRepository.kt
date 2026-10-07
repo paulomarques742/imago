@@ -169,6 +169,51 @@ class DeviceLibraryRepository @Inject constructor(
     override suspend fun deleteAssets(assetIds: List<String>) {
         if (assetIds.isNotEmpty()) request(MediaStore.createTrashRequest(resolver, assetIds.map(Uri::parse), true), assetIds)
     }
+    override val openedFiles = OpenedFileLibrary(context)
+
+    override suspend fun openFromOtherApp(uris: List<String>, neighbours: Boolean): OpenedView? {
+        val parsed = uris.map(Uri::parse)
+        // A single photo of the gallery opens among its album, as the gallery would show it.
+        if (neighbours && parsed.size == 1) {
+            catalogRowFor(parsed.single())?.let { row ->
+                val album = row.folderId?.let { database.assetDao().inFolder(DEVICE_LIBRARY_ID, it) }.orEmpty()
+                val index = album.indexOfFirst { it.id == row.id }
+                if (index >= 0) {
+                    // A WhatsApp folder can hold tens of thousands; the detail only needs some on each side.
+                    val window = album.subList((index - NEIGHBOURS).coerceAtLeast(0), (index + NEIGHBOURS + 1).coerceAtMost(album.size))
+                    return OpenedView(window.map { it.toDomain().withLibrary(DEVICE_LIBRARY_ID) }, window.indexOfFirst { it.id == row.id })
+                }
+            }
+        }
+        val assets = parsed.mapNotNull { uri ->
+            catalogRowFor(uri)?.toDomain()?.withLibrary(DEVICE_LIBRARY_ID)
+                ?: openedFiles.describe(uri)?.withLibrary(OPENED_LIBRARY_ID)
+        }
+        return assets.takeIf { it.isNotEmpty() }?.let { OpenedView(it, 0) }
+    }
+
+    private fun ImmichAsset.withLibrary(libraryId: String) = copy(id = AssetReference(libraryId, id).encode())
+
+    /**
+     * The catalogue row of a photo of the gallery, whichever way it came: a MediaStore `Uri` (the
+     * camera), or a document of the files app that MediaStore also knows. Read on the spot if the
+     * catalogue does not have it yet — a photo just taken. Null when it is not in the gallery, or the
+     * gallery cannot be read.
+     */
+    private suspend fun catalogRowFor(uri: Uri): AssetEntity? = withContext(Dispatchers.IO) {
+        val media = when {
+            uri.authority == MediaStore.AUTHORITY -> uri
+            android.provider.DocumentsContract.isDocumentUri(context, uri) -> runCatching { MediaStore.getMediaUri(context, uri) }.getOrNull()
+            else -> null
+        } ?: return@withContext null
+        val mediaId = runCatching { ContentUris.parseId(media) }.getOrNull()?.takeIf { it >= 0 } ?: return@withContext null
+        val suffix = "%/media/$mediaId"
+        database.assetDao().byIdSuffix(DEVICE_LIBRARY_ID, suffix) ?: run {
+            refreshRows(listOf(media.toString()))
+            database.assetDao().byIdSuffix(DEVICE_LIBRARY_ID, suffix)
+        }
+    }
+
     override fun rememberTransfer(transfer: FolderTransfer?) {
         preferences.edit().apply { if (transfer == null) remove(TRANSFER_KEY) else putString(TRANSFER_KEY, transfer.name) }.apply()
         rememberedTransfer.value = transfer
@@ -282,6 +327,7 @@ class DeviceLibraryRepository @Inject constructor(
 
     private companion object {
         const val PREFERENCES = "imago-gallery"
+        const val NEIGHBOURS = 300
         const val TRANSFER_KEY = "folder-transfer"
     }
 }

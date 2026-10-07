@@ -5,6 +5,9 @@ import kotlinx.serialization.Transient
 import java.util.Base64
 
 const val DEVICE_LIBRARY_ID = "device"
+
+/** Files another app opened with IMAGO that are not in any library: each one's id is its `Uri`. */
+const val OPENED_LIBRARY_ID = "opened"
 const val GLOBAL_LIBRARY_ID = "application"
 
 /**

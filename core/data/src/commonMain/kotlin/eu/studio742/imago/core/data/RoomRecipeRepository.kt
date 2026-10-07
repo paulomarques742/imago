@@ -10,6 +10,7 @@ import eu.studio742.imago.core.data.db.ImmichRoomDatabase
 import eu.studio742.imago.core.data.db.RecipeEntity
 import eu.studio742.imago.core.data.db.SyncState
 import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
+import eu.studio742.imago.core.model.OPENED_LIBRARY_ID
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.RecipeConflictVersion
 import java.time.Instant
@@ -29,8 +30,16 @@ class RoomRecipeRepository @Inject constructor(
     private val media = MediaResolver(database, hashes)
     private val remote = RemoteRecipeStore(database, media, ReferenceTranslator(database, media))
 
+    /**
+     * A file opened from another app belongs to no library and links to no account: its edits live
+     * while it is open, and the export is what keeps them. In the table they would wait forever for a
+     * hash and block the sync as "a photo from an unlinked library".
+     */
+    private val openedRecipes = java.util.concurrent.ConcurrentHashMap<String, EditRecipe>()
+
     override suspend fun get(assetId: String): EditRecipe? {
         val ref = AssetReference.parse(assetId)
+        if (ref.libraryId == OPENED_LIBRARY_ID) return openedRecipes[assetId]
         if (ref.isRemote) return null
         // Without a recipe here, there may be one from another device waiting for this photo.
         val entity = database.recipeDao().get(ref.libraryId, ref.localId)
@@ -57,6 +66,10 @@ class RoomRecipeRepository @Inject constructor(
      */
     override suspend fun save(recipe: EditRecipe) {
         val ref = AssetReference.parse(recipe.assetId)
+        if (ref.libraryId == OPENED_LIBRARY_ID) {
+            openedRecipes[recipe.assetId] = recipe
+            return
+        }
         val recipeJson = json.encodeToString(recipe)
         val sha1 = hashes.cached(recipe.assetId)
         val hints = if (ref.libraryId == DEVICE_LIBRARY_ID) {

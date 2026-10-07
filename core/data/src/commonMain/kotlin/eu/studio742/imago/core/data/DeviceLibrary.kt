@@ -1,6 +1,7 @@
 package eu.studio742.imago.core.data
 
 import eu.studio742.imago.core.model.FolderTransfer
+import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.UserText
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +29,19 @@ interface DeviceLibrary : LibraryRepository {
     val rememberedTransfer: StateFlow<FolderTransfer?> get() = NeverRemembered
 
     fun rememberTransfer(transfer: FolderTransfer?) = Unit
+
+    /** The files other apps open with IMAGO, as a library; null where nothing opens it. */
+    val openedFiles: LibraryRepository? get() = null
+
+    /**
+     * What another app asked IMAGO to show, ready for the detail: a photo of this device's gallery
+     * with its album around it (only it when [neighbours] is false), or the files themselves. The
+     * ids are already library references. Null when none of them can be read.
+     */
+    suspend fun openFromOtherApp(uris: List<String>, neighbours: Boolean): OpenedView? = null
 }
+
+/** The photos to show and which one is first. */
+data class OpenedView(val assets: List<ImmichAsset>, val index: Int)
 
 private val NeverRemembered: StateFlow<FolderTransfer?> = MutableStateFlow(null)

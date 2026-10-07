@@ -90,6 +90,33 @@ data class AlbumUiModel(
     val isFolder: Boolean = false,
 )
 
+/**
+ * A photo of [library] as the screens show it: the grid, the detail, the editor's strip. [recipe] is
+ * its local recipe, when it changes the image. The ids are the routed library's references.
+ */
+fun ImmichAsset.toAssetUiModel(library: LibraryRepository, recipe: EditRecipe?): AssetUiModel {
+    val isVideo = type == AssetType.VIDEO
+    return AssetUiModel(
+        id = id,
+        checksum = checksum,
+        fileName = originalFileName,
+        date = localDateTime.ifBlank { fileCreatedAt },
+        fileCreatedAt = fileCreatedAt,
+        width = width,
+        height = height,
+        isFavorite = isFavorite,
+        isEdited = isEdited,
+        hasLocalRecipe = hasLocalRecipe,
+        thumbnailUrl = library.thumbnailUrl(id),
+        previewUrl = library.previewUrl(id),
+        apiKey = library.apiKey(id),
+        isVideo = isVideo,
+        durationMs = durationMs,
+        videoUrl = if (isVideo) library.videoPlaybackUrl(id) else null,
+        recipe = recipe,
+    )
+}
+
 data class MonthUiModel(val value: String, val assetCount: Int)
 
 enum class LibrarySection { TIMELINE, ALBUMS }
@@ -172,30 +199,7 @@ open class LibraryViewModel(
                 query = query.takeIf(String::isNotEmpty),
             )
         }
-        .map { pagingData ->
-            pagingData.map { asset ->
-                val isVideo = asset.type == AssetType.VIDEO
-                AssetUiModel(
-                    id = asset.id,
-                    checksum = asset.checksum,
-                    fileName = asset.originalFileName,
-                    date = asset.localDateTime.ifBlank { asset.fileCreatedAt },
-                    fileCreatedAt = asset.fileCreatedAt,
-                    width = asset.width,
-                    height = asset.height,
-                    isFavorite = asset.isFavorite,
-                    isEdited = asset.isEdited,
-                    hasLocalRecipe = asset.hasLocalRecipe,
-                    thumbnailUrl = library.thumbnailUrl(asset.id),
-                    previewUrl = library.previewUrl(asset.id),
-                    apiKey = library.apiKey(asset.id),
-                    isVideo = isVideo,
-                    durationMs = asset.durationMs,
-                    videoUrl = if (isVideo) library.videoPlaybackUrl(asset.id) else null,
-                    recipe = asset.localRecipe(),
-                )
-            }
-        }
+        .map { pagingData -> pagingData.map { asset -> asset.toAssetUiModel(library, asset.localRecipe()) } }
         .cachedIn(viewModelScope)
 
     /** How the timeline sync is going, so the bar can say. */

@@ -117,6 +117,18 @@ class SyncStateTest {
         assertTrue(edited.editedAt > "2026-09-01T00:00:00Z")
     }
 
+    @Test fun aFileOpenedFromAnotherAppKeepsItsEditsOutOfTheTableAndTheSync() = runBlocking {
+        val recipes = RoomRecipeRepository(database, configuration, hashes)
+        val id = AssetReference(OPENED_LIBRARY_ID, "content://com.whatsapp.provider/media/1").encode()
+        val recipe = EditRecipe(assetId = id, originalChecksum = "", createdAt = "2026-10-07", updatedAt = "2026-10-07", tone = Tone(exposure = 0.5f))
+
+        recipes.save(recipe)
+
+        assertEquals(recipe, recipes.get(id))
+        assertNull(database.recipeDao().getAny(OPENED_LIBRARY_ID, "content://com.whatsapp.provider/media/1"))
+        assertEquals(emptyList<RecipeEntity>(), database.recipeDao().withoutSha1())
+    }
+
     @Test fun deviceRecipeCarriesHintsAndGetsItsHashInTheBackground() = runBlocking {
         val recipes = RoomRecipeRepository(database, configuration, hashes)
         val localId = "content://media/external/images/media/7"

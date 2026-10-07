@@ -92,6 +92,14 @@ open class ShellViewModel(private val configuration: ConfigurationRepository) : 
 
     /** An account link (confirmation, recovery) opens the account, where the outcome is shown. */
     fun openAccount() { destinationState.value = AppDestination.Account() }
+
+    /** What another app opened: the shell starts on the photo, or in its editor for "Edit with". */
+    fun openViewer(assets: List<AssetUiModel>, index: Int, editing: Boolean) {
+        destinationState.value = AppDestination.Photo(assets, index, editing)
+    }
+
+    /** Whether a viewer already has its photo — after a rotation it must not be opened again. */
+    val showsViewer: Boolean get() = destinationState.value is AppDestination.Photo
 }
 
 /** This platform's [ShellViewModel]: through Hilt on Android, through the app's data layer on desktop. */
@@ -156,17 +164,22 @@ fun ImagoApp(
     viewModel: ShellViewModel = shellViewModel(),
     /** The sync state for the indicator; null in an app without an account. */
     syncIndicator: kotlinx.coroutines.flow.Flow<eu.studio742.imago.core.designsystem.SyncIndicatorState?>? = null,
+    /**
+     * Set when the app is a viewer another app opened, already on the photo: going back past it
+     * closes the viewer and returns to that app, instead of opening the library.
+     */
+    onLeaveViewer: (() -> Unit)? = null,
 ) {
     val source = androidx.compose.runtime.remember(syncIndicator) {
         syncIndicator?.let { eu.studio742.imago.core.designsystem.SyncIndicatorSource(it) { viewModel.openAccount() } }
     }
     CompositionLocalProvider(eu.studio742.imago.core.designsystem.LocalSyncIndicator provides source) {
-        ImagoAppContent(viewModel)
+        ImagoAppContent(viewModel, onLeaveViewer)
     }
 }
 
 @Composable
-private fun ImagoAppContent(viewModel: ShellViewModel) {
+private fun ImagoAppContent(viewModel: ShellViewModel, onLeaveViewer: (() -> Unit)?) {
     // The state lives in the ViewModel to survive rotation; this is just the delegate that reads and writes it.
     var destination by viewModel.destinationState
     val selectedLibrary by viewModel.selectedLibrary.collectAsStateWithLifecycle()
@@ -177,10 +190,15 @@ private fun ImagoAppContent(viewModel: ShellViewModel) {
     var composerRequest by viewModel.composerRequestState
     val window = LocalImagoWindow.current
     val current = destination
+    if (onLeaveViewer != null && (current is AppDestination.Library || current is AppDestination.Welcome)) {
+        LaunchedEffect(current) { onLeaveViewer() }
+        return
+    }
     val libraryState = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
     // With width to spare, the photo opens beside the grid instead of over it. Editing is the
     // exception: the editor still wants the whole screen until it has a side rail of its own.
-    val sideBySide = window.prefersSidePanel && current is AppDestination.Photo && !current.editing
+    // A viewer opened by another app has no library to sit beside.
+    val sideBySide = onLeaveViewer == null && window.prefersSidePanel && current is AppDestination.Photo && !current.editing
 
     when {
         // A single condition, not two branches, because `LibraryPane` must always be the same
@@ -284,7 +302,8 @@ private fun ImagoAppContent(viewModel: ShellViewModel) {
     }
 
     val news by viewModel.newsState
-    if (news.isNotEmpty()) WhatsNewDialog(news, onDismiss = viewModel::newsSeen)
+    // A viewer is a moment inside another app; the news wait for the app itself.
+    if (news.isNotEmpty() && onLeaveViewer == null) WhatsNewDialog(news, onDismiss = viewModel::newsSeen)
 
     // The sheet is composed here, not inside each screen, because the library and the detail make
     // the same request of it and it is at this level that we know where to go next: choosing the

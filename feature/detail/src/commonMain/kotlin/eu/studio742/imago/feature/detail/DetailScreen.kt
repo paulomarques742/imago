@@ -5,6 +5,8 @@ package eu.studio742.imago.feature.detail
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.model.AssetReference
 import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
+import eu.studio742.imago.core.model.OPENED_LIBRARY_ID
+import eu.studio742.imago.core.designsystem.LocalActionGate
 import eu.studio742.imago.feature.library.AddToAlbumSheet
 import eu.studio742.imago.feature.library.DeviceFolderAlbums
 import eu.studio742.imago.feature.library.rememberMediaManagement
@@ -220,6 +222,10 @@ private fun DetailScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showVersionChoice by remember { mutableStateOf(false) }
     var showAlbums by remember { mutableStateOf(false) }
+    // A file another app opened is not IMAGO's: it is seen, edited, shared and copied, never marked,
+    // filed, composed or deleted.
+    val isOpenedFile = runCatching { AssetReference.parse(asset.id).libraryId == OPENED_LIBRARY_ID }.getOrDefault(false)
+    val gate = LocalActionGate.current
     // As a media management app, Android no longer confirms a delete: the dialog must not promise it.
     val managesMedia = rememberMediaManagement()?.granted == true
     // The device's albums are its folders, which only the phone changes from here.
@@ -284,7 +290,7 @@ private fun DetailScreen(
                     isCurrent = isCurrent,
                     playback = if (isCurrent) playback else null,
                     onZoomedChange = { if (isCurrent) zoomed = it },
-                    onFavorite = onFavorite,
+                    onFavorite = { if (!isOpenedFile) gate.run(onFavorite) },
                     onToggleChrome = { chromeVisible = !chromeVisible },
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -309,11 +315,13 @@ private fun DetailScreen(
                         onClick = onBack,
                     )
                     Spacer(Modifier.weight(1f))
-                    GlassIconButton(
-                        icon = if (state.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = if (state.isFavorite) stringResource(Res.string.detail_unfavorite) else stringResource(Res.string.detail_favorite),
-                        onClick = onToggleFavorite,
-                    )
+                    if (!isOpenedFile) {
+                        GlassIconButton(
+                            icon = if (state.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = if (state.isFavorite) stringResource(Res.string.detail_unfavorite) else stringResource(Res.string.detail_favorite),
+                            onClick = { gate.run(onToggleFavorite) },
+                        )
+                    }
                     Box(Modifier.padding(start = ImagoSpacing.Sm)) {
                         GlassIconButton(
                             icon = Icons.Outlined.MoreHoriz,
@@ -329,13 +337,13 @@ private fun DetailScreen(
                                     showInfo = true
                                 },
                             )
-                            if (canFileIntoAlbum) {
+                            if (canFileIntoAlbum && !isOpenedFile) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(Res.string.detail_add_to_album)) },
                                     leadingIcon = { Icon(Icons.Outlined.PhotoAlbum, contentDescription = null) },
                                     onClick = {
                                         showMenu = false
-                                        showAlbums = true
+                                        gate.run { showAlbums = true }
                                     },
                                 )
                             }
@@ -345,11 +353,13 @@ private fun DetailScreen(
                                     leadingIcon = { Icon(Icons.Outlined.Download, contentDescription = null) },
                                     onClick = {
                                         showMenu = false
-                                        when (deviceCopy) {
-                                            DeviceCopy.ORIGINAL -> onSaveOriginal(asset)
-                                            DeviceCopy.EDITED -> onSaveEdited(asset)
-                                            DeviceCopy.ORIGINAL_OR_EDITED -> showVersionChoice = true
-                                            DeviceCopy.NONE -> Unit
+                                        gate.run {
+                                            when (deviceCopy) {
+                                                DeviceCopy.ORIGINAL -> onSaveOriginal(asset)
+                                                DeviceCopy.EDITED -> onSaveEdited(asset)
+                                                DeviceCopy.ORIGINAL_OR_EDITED -> showVersionChoice = true
+                                                DeviceCopy.NONE -> Unit
+                                            }
                                         }
                                     },
                                 )
@@ -417,11 +427,12 @@ private fun DetailScreen(
                         // The editor works on bitmaps: a video has nothing to do there, and a button that
                         // opened a useless editor would be worse than not being there.
                         canEdit = !asset.isVideo,
-                        onShare = { onShare(asset, shareFile) },
-                        onEdit = onEdit,
-                        onCompose = onAddToComposition,
+                        ownsFile = !isOpenedFile,
+                        onShare = { gate.run { onShare(asset, shareFile) } },
+                        onEdit = { gate.run(onEdit) },
+                        onCompose = { gate.run(onAddToComposition) },
                         onInfo = { showInfo = true },
-                        onDelete = { onRequestDelete { showDeleteConfirmation = true } },
+                        onDelete = { gate.run { onRequestDelete { showDeleteConfirmation = true } } },
                     )
                 }
             }
@@ -949,6 +960,8 @@ private fun Filmstrip(
 @Composable
 private fun DetailActionBar(
     canEdit: Boolean,
+    /** False for a file another app opened: composing and deleting are for the library's own. */
+    ownsFile: Boolean,
     onShare: () -> Unit,
     onEdit: () -> Unit,
     onCompose: () -> Unit,
@@ -965,9 +978,9 @@ private fun DetailActionBar(
         DetailAction(Icons.Outlined.Share, stringResource(Res.string.detail_share), onShare)
         if (canEdit) DetailAction(Icons.Outlined.Tune, stringResource(Res.string.detail_edit), onEdit)
         // For videos too: a composition accepts them, unlike the editor.
-        DetailAction(Icons.Outlined.ViewCarousel, stringResource(Res.string.detail_compose), onCompose)
+        if (ownsFile) DetailAction(Icons.Outlined.ViewCarousel, stringResource(Res.string.detail_compose), onCompose)
         DetailAction(Icons.Outlined.Info, stringResource(Res.string.detail_info), onInfo)
-        DetailAction(Icons.Outlined.Delete, stringResource(Res.string.detail_delete), onDelete, tint = ImagoColors.Danger)
+        if (ownsFile) DetailAction(Icons.Outlined.Delete, stringResource(Res.string.detail_delete), onDelete, tint = ImagoColors.Danger)
     }
 }
 

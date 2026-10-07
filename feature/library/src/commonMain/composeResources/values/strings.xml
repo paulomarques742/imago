@@ -315,4 +315,6 @@
         <item quantity="one">The photo or video in this album will go to the device’s trash.</item>
         <item quantity="other">The %1$d photos and videos in this album will go to the device’s trash.</item>
     </plurals>
+    <string name="library_open_failed">This file can’t be opened.</string>
+    <string name="library_open_close">Close</string>
 </resources>
