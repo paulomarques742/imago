@@ -104,3 +104,6 @@ private fun localVideo(url: String, apiKey: String): File {
     }
     return target
 }
+
+@Composable
+actual fun HideSystemBars(hidden: Boolean) = Unit

@@ -182,3 +182,19 @@ private class ExoVideoPlayback(val player: ExoPlayer) : VideoPlayback {
         player.release()
     }
 }
+
+@Composable
+actual fun HideSystemBars(hidden: Boolean) {
+    val view = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(view, hidden) {
+        val window = generateSequence(view.context) { (it as? android.content.ContextWrapper)?.baseContext }
+            .filterIsInstance<android.app.Activity>().firstOrNull()?.window
+        val controller = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, view) }
+        val bars = androidx.core.view.WindowInsetsCompat.Type.systemBars()
+        if (hidden) {
+            controller?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller?.hide(bars)
+        }
+        onDispose { if (hidden) controller?.show(bars) }
+    }
+}

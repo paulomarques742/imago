@@ -30,3 +30,10 @@ expect fun rememberVideoPlayback(url: String?, apiKey: String): VideoPlayback?
 /** The open page's video: [playback]'s image, or, without it, whatever the platform does with [url]. */
 @Composable
 expect fun DetailVideoPlayer(playback: VideoPlayback?, url: String, apiKey: String, modifier: Modifier = Modifier)
+
+/**
+ * Hides the system bars while [hidden], and gives them back when it stops or the screen leaves. A
+ * swipe from the edge still shows them for a moment. Nothing to hide on desktop.
+ */
+@Composable
+expect fun HideSystemBars(hidden: Boolean)

@@ -11,7 +11,10 @@ import eu.studio742.imago.core.render.libraryAuth
 import eu.studio742.imago.core.render.withRecipe
 import coil3.request.crossfade
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -211,6 +214,10 @@ private fun DetailScreen(
     // Zoomed in, the photo gets the whole finger: the drag becomes its own and not the pager's.
     // Without this, pulling a zoomed photo sideways jumped to the next one.
     var zoomed by remember { mutableStateOf(false) }
+    // A tap on the photo or the video hides everything on top of it, system bars included, to see it
+    // whole; another tap brings it back. It lasts while swiping, as in a gallery.
+    var chromeVisible by remember { mutableStateOf(true) }
+    HideSystemBars(hidden = !chromeVisible)
 
     LaunchedEffect(state.message, state.error) {
         val message = state.error ?: state.message ?: return@LaunchedEffect
@@ -263,122 +270,135 @@ private fun DetailScreen(
                     playback = if (isCurrent) playback else null,
                     onZoomedChange = { if (isCurrent) zoomed = it },
                     onFavorite = onFavorite,
+                    onToggleChrome = { chromeVisible = !chromeVisible },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
 
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = ImagoSpacing.Lg, vertical = ImagoSpacing.Md),
-                verticalAlignment = Alignment.CenterVertically,
+            AnimatedVisibility(
+                visible = chromeVisible,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter),
             ) {
-                GlassIconButton(
-                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = stringResource(Res.string.detail_back_to_library),
-                    onClick = onBack,
-                )
-                Spacer(Modifier.weight(1f))
-                GlassIconButton(
-                    icon = if (state.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = if (state.isFavorite) stringResource(Res.string.detail_unfavorite) else stringResource(Res.string.detail_favorite),
-                    onClick = onToggleFavorite,
-                )
-                Box(Modifier.padding(start = ImagoSpacing.Sm)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = ImagoSpacing.Lg, vertical = ImagoSpacing.Md),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     GlassIconButton(
-                        icon = Icons.Outlined.MoreHoriz,
-                        contentDescription = stringResource(Res.string.detail_more_options),
-                        onClick = { showMenu = true },
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = stringResource(Res.string.detail_back_to_library),
+                        onClick = onBack,
                     )
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(Res.string.detail_info)) },
-                            leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) },
-                            onClick = {
-                                showMenu = false
-                                showInfo = true
-                            },
+                    Spacer(Modifier.weight(1f))
+                    GlassIconButton(
+                        icon = if (state.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = if (state.isFavorite) stringResource(Res.string.detail_unfavorite) else stringResource(Res.string.detail_favorite),
+                        onClick = onToggleFavorite,
+                    )
+                    Box(Modifier.padding(start = ImagoSpacing.Sm)) {
+                        GlassIconButton(
+                            icon = Icons.Outlined.MoreHoriz,
+                            contentDescription = stringResource(Res.string.detail_more_options),
+                            onClick = { showMenu = true },
                         )
-                        if (deviceCopy != DeviceCopy.NONE) {
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
-                                text = { Text(stringResource(SaveToDeviceLabel)) },
-                                leadingIcon = { Icon(Icons.Outlined.Download, contentDescription = null) },
+                                text = { Text(stringResource(Res.string.detail_info)) },
+                                leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) },
                                 onClick = {
                                     showMenu = false
-                                    when (deviceCopy) {
-                                        DeviceCopy.ORIGINAL -> onSaveOriginal(asset)
-                                        DeviceCopy.EDITED -> onSaveEdited(asset)
-                                        DeviceCopy.ORIGINAL_OR_EDITED -> showVersionChoice = true
-                                        DeviceCopy.NONE -> Unit
-                                    }
+                                    showInfo = true
                                 },
                             )
+                            if (deviceCopy != DeviceCopy.NONE) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(SaveToDeviceLabel)) },
+                                    leadingIcon = { Icon(Icons.Outlined.Download, contentDescription = null) },
+                                    onClick = {
+                                        showMenu = false
+                                        when (deviceCopy) {
+                                            DeviceCopy.ORIGINAL -> onSaveOriginal(asset)
+                                            DeviceCopy.EDITED -> onSaveEdited(asset)
+                                            DeviceCopy.ORIGINAL_OR_EDITED -> showVersionChoice = true
+                                            DeviceCopy.NONE -> Unit
+                                        }
+                                    },
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    // The gradient is what keeps the text readable whatever the photo; without it, a
-                    // light sky swallowed the date and the EXIF line.
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.82f), Color.Black),
+            AnimatedVisibility(
+                visible = chromeVisible,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // The gradient is what keeps the text readable whatever the photo; without it, a
+                        // light sky swallowed the date and the EXIF line.
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, Color.Black.copy(alpha = 0.82f), Color.Black),
+                            ),
+                        )
+                        .navigationBarsPadding(),
+                ) {
+                    // Immich's caption, when there is one, is the best title the photo has; otherwise the
+                    // file name stays. It is not editable here: Immich does not expose renaming, and
+                    // editing the caption would be promising one thing by doing another.
+                    Text(
+                        text = state.description?.takeIf(String::isNotBlank) ?: asset.fileName,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = ImagoColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(
+                            start = ImagoSpacing.Lg,
+                            end = ImagoSpacing.Lg,
+                            top = ImagoSpacing.Xxxl,
                         ),
                     )
-                    .navigationBarsPadding(),
-            ) {
-                // Immich's caption, when there is one, is the best title the photo has; otherwise the
-                // file name stays. It is not editable here: Immich does not expose renaming, and
-                // editing the caption would be promising one thing by doing another.
-                Text(
-                    text = state.description?.takeIf(String::isNotBlank) ?: asset.fileName,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = ImagoColors.TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(
-                        start = ImagoSpacing.Lg,
-                        end = ImagoSpacing.Lg,
-                        top = ImagoSpacing.Xxxl,
-                    ),
-                )
-                Text(
-                    text = formatTakenAt(asset.date.ifBlank { asset.fileCreatedAt }),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ImagoColors.TextTertiary,
-                    modifier = Modifier.padding(horizontal = ImagoSpacing.Lg, vertical = ImagoSpacing.Xs),
-                )
-                ExifStrip(
-                    exif = state.exif,
-                    isLoading = state.isLoading,
-                    modifier = Modifier.padding(top = ImagoSpacing.Sm, bottom = ImagoSpacing.Md),
-                )
-                // In the middle of a swipe, the player is still the page's we left.
-                if (playback != null && settledAsset?.id == asset.id) {
-                    VideoControls(playback, Modifier.padding(bottom = ImagoSpacing.Sm))
+                    Text(
+                        text = formatTakenAt(asset.date.ifBlank { asset.fileCreatedAt }),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ImagoColors.TextTertiary,
+                        modifier = Modifier.padding(horizontal = ImagoSpacing.Lg, vertical = ImagoSpacing.Xs),
+                    )
+                    ExifStrip(
+                        exif = state.exif,
+                        isLoading = state.isLoading,
+                        modifier = Modifier.padding(top = ImagoSpacing.Sm, bottom = ImagoSpacing.Md),
+                    )
+                    // In the middle of a swipe, the player is still the page's we left.
+                    if (playback != null && settledAsset?.id == asset.id) {
+                        VideoControls(playback, Modifier.padding(bottom = ImagoSpacing.Sm))
+                    }
+                    Filmstrip(
+                        assets = assets,
+                        selectedIndex = selectedIndex,
+                        listState = filmstripState,
+                        onSelect = onSelectIndex,
+                    )
+                    DetailActionBar(
+                        // The editor works on bitmaps: a video has nothing to do there, and a button that
+                        // opened a useless editor would be worse than not being there.
+                        canEdit = !asset.isVideo,
+                        onShare = { onShare(asset, shareFile) },
+                        onEdit = onEdit,
+                        onCompose = onAddToComposition,
+                        onInfo = { showInfo = true },
+                        onDelete = { onRequestDelete { showDeleteConfirmation = true } },
+                    )
                 }
-                Filmstrip(
-                    assets = assets,
-                    selectedIndex = selectedIndex,
-                    listState = filmstripState,
-                    onSelect = onSelectIndex,
-                )
-                DetailActionBar(
-                    // The editor works on bitmaps: a video has nothing to do there, and a button that
-                    // opened a useless editor would be worse than not being there.
-                    canEdit = !asset.isVideo,
-                    onShare = { onShare(asset, shareFile) },
-                    onEdit = onEdit,
-                    onCompose = onAddToComposition,
-                    onInfo = { showInfo = true },
-                    onDelete = { onRequestDelete { showDeleteConfirmation = true } },
-                )
             }
 
             if (state.isBusy) {
@@ -467,6 +487,7 @@ private fun DetailPage(
     playback: VideoPlayback?,
     onZoomedChange: (Boolean) -> Unit,
     onFavorite: () -> Unit,
+    onToggleChrome: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (asset.isVideo && isCurrent && asset.videoUrl != null) {
@@ -477,15 +498,14 @@ private fun DetailPage(
                 apiKey = asset.apiKey,
                 modifier = Modifier.fillMaxSize(),
             )
-            // A tap on the video pauses or resumes. Only the tap: the drag still belongs to the pager,
-            // to move to the next video.
+            // A tap on the video shows or hides what is on top of it, as on a photo; pausing is the
+            // controls' button. Only the tap: the drag still belongs to the pager, to move to the next
+            // video. Without a player of our own (desktop) the page is a button, and keeps its clicks.
             if (playback != null) {
                 Box(
                     Modifier
                         .matchParentSize()
-                        .pointerInput(playback) {
-                            detectTapGestures { if (playback.isPlaying) playback.pause() else playback.play() }
-                        },
+                        .pointerInput(Unit) { detectTapGestures { onToggleChrome() } },
                 )
             }
         }
@@ -498,6 +518,7 @@ private fun DetailPage(
             isCurrent = isCurrent,
             onZoomedChange = onZoomedChange,
             onFavorite = onFavorite,
+            onToggleChrome = onToggleChrome,
         )
         if (asset.isVideo) {
             Icon(
@@ -530,6 +551,7 @@ private fun ZoomablePhoto(
     isCurrent: Boolean,
     onZoomedChange: (Boolean) -> Unit,
     onFavorite: () -> Unit,
+    onToggleChrome: () -> Unit,
 ) {
     val context = LocalPlatformContext.current
     val haptics = LocalHapticFeedback.current
@@ -684,6 +706,9 @@ private fun ZoomablePhoto(
             }
             .pointerInput(asset.id) {
                 detectTapGestures(
+                    // It waits out the double tap's window first, so a favourite does not also flash
+                    // the controls away.
+                    onTap = { onToggleChrome() },
                     onDoubleTap = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         if (transform.isFit) {
