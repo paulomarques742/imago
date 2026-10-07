@@ -1,5 +1,6 @@
 package eu.studio742.imago.feature.composer
 
+import eu.studio742.imago.core.model.DEVICE_ALBUM_NAME
 import eu.studio742.imago.core.designsystem.i18n.LocalizedException
 import eu.studio742.imago.core.designsystem.i18n.appString
 import eu.studio742.imago.core.designsystem.i18n.uiText
@@ -404,7 +405,7 @@ class CompositionStaticExporter @Inject constructor(
                     put(MediaStore.Images.Media.DISPLAY_NAME, name)
                     put(MediaStore.Images.Media.MIME_TYPE, format.mimeType)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/ImmichRoom")
+                        put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/$DEVICE_ALBUM_NAME")
                         put(MediaStore.Images.Media.IS_PENDING, 1)
                     }
                 }

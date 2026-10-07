@@ -14,8 +14,13 @@ import kotlinx.coroutines.launch
 import eu.studio742.imago.core.data.LibraryRepository
 import eu.studio742.imago.core.data.RecipeRepository
 import eu.studio742.imago.core.model.AssetExif
+import eu.studio742.imago.core.model.AssetReference
+import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.render.changesTheImage
+import eu.studio742.imago.feature.editor.EditorAsset
+import eu.studio742.imago.feature.editor.EditorExporter
+import eu.studio742.imago.feature.editor.saveEditedToDevice
 import java.io.File
 
 /** What the detail screen receives from the library — photo or video. */
@@ -41,6 +46,33 @@ data class DetailAsset(
      */
     val recipe: EditRecipe? = null,
 )
+
+/** What saving to the device offers for the open asset. */
+enum class DeviceCopy {
+    /** Nothing: the asset is already on the device and has no edits. */
+    NONE,
+    ORIGINAL,
+    EDITED,
+    /** An edited photo from a server: the user chooses between the original and the edit. */
+    ORIGINAL_OR_EDITED,
+}
+
+/**
+ * [recipe] is the asset's local recipe, already filtered to the ones that change the image.
+ *
+ * An asset from the device (the gallery, or the folders on desktop) is already there as it is: only the
+ * edit is new. A video never carries a recipe the copy could apply — the editor works on bitmaps.
+ */
+fun deviceCopyFor(asset: DetailAsset, recipe: EditRecipe?): DeviceCopy {
+    val onDevice = runCatching { AssetReference.parse(asset.id).libraryId == DEVICE_LIBRARY_ID }.getOrDefault(false)
+    val edited = recipe != null && !asset.isVideo
+    return when {
+        onDevice && edited -> DeviceCopy.EDITED
+        onDevice -> DeviceCopy.NONE
+        edited -> DeviceCopy.ORIGINAL_OR_EDITED
+        else -> DeviceCopy.ORIGINAL
+    }
+}
 
 data class DetailUiState(
     val assetId: String? = null,
@@ -68,12 +100,15 @@ data class DetailUiState(
 )
 
 /**
+ * @param exporter where a copy saved "on this device" goes, and how an edit is rendered for it — the
+ *   editor's own export.
  * @param shareDirectory where the original is downloaded for sharing — the app cache on Android, a
  *   temporary folder on desktop. It is cleared on every share.
  */
 open class DetailViewModel(
     private val library: LibraryRepository,
     private val recipes: RecipeRepository,
+    private val exporter: EditorExporter,
     private val shareDirectory: File,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(DetailUiState())
@@ -223,6 +258,49 @@ open class DetailViewModel(
                             busyLabel = null,
                             error = error.toUiText(Res.string.detail_share_failed),
                         )
+                    }
+                }
+        }
+    }
+
+    /** The original as the library serves it — the only way a server video reaches the gallery. */
+    fun saveOriginalToDevice(asset: DetailAsset) = saveToDevice(uiText(Res.string.detail_downloading)) {
+        val file = File.createTempFile("download-", ".asset", shareDirectory.apply { mkdirs() })
+        try {
+            library.downloadOriginal(asset.id, file)
+            exporter.saveOriginalToDevice(file, asset.fileName, asset.isVideo, asset.fileCreatedAt)
+        } finally {
+            file.delete()
+        }
+    }
+
+    /** The photo with its recipe, at full resolution, exactly as the editor's "Save to gallery" makes it. */
+    fun saveEditedToDevice(asset: DetailAsset) {
+        val current = mutableState.value
+        val recipe = (if (current.assetId == asset.id) current.recipe else asset.recipe) ?: return
+        val target = EditorAsset(
+            id = asset.id,
+            checksum = asset.checksum,
+            fileName = asset.fileName,
+            previewUrl = asset.previewUrl,
+            apiKey = asset.apiKey,
+            fileCreatedAt = asset.fileCreatedAt,
+        )
+        saveToDevice(uiText(Res.string.detail_preparing_edit)) {
+            exporter.saveEditedToDevice(target, recipe) { phase -> mutableState.update { it.copy(busyLabel = phase) } }
+        }
+    }
+
+    private fun saveToDevice(label: UiText, block: suspend () -> UiText?) {
+        if (mutableState.value.isBusy) return
+        mutableState.update { it.copy(isBusy = true, busyLabel = label) }
+        viewModelScope.launch {
+            runCatching { block() }
+                // A null message is the save dialog closed on desktop: nothing happened, nothing to say.
+                .onSuccess { message -> mutableState.update { it.copy(isBusy = false, busyLabel = null, message = message) } }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(isBusy = false, busyLabel = null, error = error.toUiText(Res.string.detail_save_failed))
                     }
                 }
         }

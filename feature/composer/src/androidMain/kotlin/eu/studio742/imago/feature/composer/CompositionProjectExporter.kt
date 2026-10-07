@@ -1,5 +1,6 @@
 package eu.studio742.imago.feature.composer
 
+import eu.studio742.imago.core.model.DEVICE_ALBUM_NAME
 import eu.studio742.imago.core.designsystem.i18n.appString
 import eu.studio742.imago.feature.composer.resources.*
 import android.content.ContentValues
@@ -75,7 +76,7 @@ class CompositionProjectExporter @Inject constructor(
                     put(MediaStore.MediaColumns.MIME_TYPE, page.mimeType)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         val root = if (isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
-                        put(MediaStore.MediaColumns.RELATIVE_PATH, "$root/ImmichRoom")
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, "$root/$DEVICE_ALBUM_NAME")
                         put(MediaStore.MediaColumns.IS_PENDING, 1)
                     }
                 }

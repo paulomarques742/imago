@@ -43,4 +43,13 @@
     <string name="detail_video_position_state">%1$s of %2$s</string>
     <string name="detail_date_pattern">MMM d, yyyy</string>
     <string name="detail_load_failed">Couldn’t open this photo.</string>
+    <string name="detail_save_to_gallery">Save to gallery</string>
+    <string name="detail_save_copy">Save copy…</string>
+    <string name="detail_downloading">Downloading…</string>
+    <string name="detail_preparing_edit">Preparing the edited version…</string>
+    <string name="detail_save_failed">Couldn’t save the copy.</string>
+    <string name="detail_save_which_question">Save which version?</string>
+    <string name="detail_save_which_body">This photo has edits. The original is the file as it is on the server; the edited version is rendered at full resolution.</string>
+    <string name="detail_save_original">Original</string>
+    <string name="detail_save_edited">Edited</string>
 </resources>

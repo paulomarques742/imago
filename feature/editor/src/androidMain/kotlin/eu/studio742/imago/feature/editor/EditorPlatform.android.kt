@@ -41,6 +41,11 @@ class AndroidEditorExporter @Inject constructor(
         gallery.saveJpeg(jpeg, fileName, createdAt)
         return uiText(Res.string.editor_saved_to_gallery)
     }
+
+    override suspend fun saveOriginalToDevice(file: File, fileName: String, isVideo: Boolean, createdAt: String): UiText {
+        gallery.saveOriginal(file, fileName, isVideo, createdAt)
+        return uiText(Res.string.editor_original_saved_to_gallery)
+    }
 }
 
 @Module

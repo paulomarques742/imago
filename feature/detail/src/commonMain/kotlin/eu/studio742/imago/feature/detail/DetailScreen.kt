@@ -50,6 +50,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MoreHoriz
@@ -171,6 +172,8 @@ fun DetailRoute(
         onRequestDelete = { confirm -> viewModel.requestDelete(asset.id, confirm) },
         onDelete = { viewModel.delete(asset.id) { onDeleted(asset.id) } },
         onShare = viewModel::share,
+        onSaveOriginal = viewModel::saveOriginalToDevice,
+        onSaveEdited = viewModel::saveEditedToDevice,
         onConsumeMessage = viewModel::consumeMessage,
     )
 }
@@ -191,6 +194,8 @@ private fun DetailScreen(
     onRequestDelete: (confirm: () -> Unit) -> Unit,
     onDelete: () -> Unit,
     onShare: (DetailAsset, (java.io.File, String) -> Unit) -> Unit,
+    onSaveOriginal: (DetailAsset) -> Unit,
+    onSaveEdited: (DetailAsset) -> Unit,
     onConsumeMessage: () -> Unit,
 ) {
     val shareFile = rememberShareFile()
@@ -201,6 +206,8 @@ private fun DetailScreen(
     var showInfo by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showVersionChoice by remember { mutableStateOf(false) }
+    val deviceCopy = deviceCopyFor(asset, if (state.assetId == asset.id) state.recipe else asset.recipe)
     // Zoomed in, the photo gets the whole finger: the drag becomes its own and not the pager's.
     // Without this, pulling a zoomed photo sideways jumped to the next one.
     var zoomed by remember { mutableStateOf(false) }
@@ -294,6 +301,21 @@ private fun DetailScreen(
                                 showInfo = true
                             },
                         )
+                        if (deviceCopy != DeviceCopy.NONE) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(SaveToDeviceLabel)) },
+                                leadingIcon = { Icon(Icons.Outlined.Download, contentDescription = null) },
+                                onClick = {
+                                    showMenu = false
+                                    when (deviceCopy) {
+                                        DeviceCopy.ORIGINAL -> onSaveOriginal(asset)
+                                        DeviceCopy.EDITED -> onSaveEdited(asset)
+                                        DeviceCopy.ORIGINAL_OR_EDITED -> showVersionChoice = true
+                                        DeviceCopy.NONE -> Unit
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -381,6 +403,29 @@ private fun DetailScreen(
 
     if (showInfo) {
         InfoDialog(asset = asset, exif = state.exif, onDismiss = { showInfo = false })
+    }
+    if (showVersionChoice) {
+        AlertDialog(
+            onDismissRequest = { showVersionChoice = false },
+            title = { Text(stringResource(Res.string.detail_save_which_question)) },
+            text = { Text(stringResource(Res.string.detail_save_which_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showVersionChoice = false
+                        onSaveEdited(asset)
+                    },
+                ) { Text(stringResource(Res.string.detail_save_edited)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showVersionChoice = false
+                        onSaveOriginal(asset)
+                    },
+                ) { Text(stringResource(Res.string.detail_save_original)) }
+            },
+        )
     }
     if (showDeleteConfirmation) {
         AlertDialog(

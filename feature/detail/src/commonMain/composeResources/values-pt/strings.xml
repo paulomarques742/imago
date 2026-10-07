@@ -43,4 +43,13 @@
     <string name="detail_video_position_state">%1$s de %2$s</string>
     <string name="detail_date_pattern">d 'de' MMM 'de' yyyy</string>
     <string name="detail_load_failed">Não foi possível abrir esta fotografia.</string>
+    <string name="detail_save_to_gallery">Guardar na galeria</string>
+    <string name="detail_save_copy">Guardar cópia…</string>
+    <string name="detail_downloading">A descarregar…</string>
+    <string name="detail_preparing_edit">A preparar a versão editada…</string>
+    <string name="detail_save_failed">Não foi possível guardar a cópia.</string>
+    <string name="detail_save_which_question">Que versão guardar?</string>
+    <string name="detail_save_which_body">Esta fotografia tem edições. O original é o ficheiro tal como está no servidor; a versão editada é gerada em resolução máxima.</string>
+    <string name="detail_save_original">Original</string>
+    <string name="detail_save_edited">Editada</string>
 </resources>

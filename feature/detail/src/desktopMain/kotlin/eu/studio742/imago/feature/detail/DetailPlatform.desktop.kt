@@ -3,7 +3,9 @@ package eu.studio742.imago.feature.detail
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.designsystem.i18n.resolve
 import eu.studio742.imago.core.designsystem.i18n.toUiText
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import eu.studio742.imago.feature.editor.DesktopEditorExporter
 import eu.studio742.imago.feature.detail.resources.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,9 +40,11 @@ import java.nio.file.StandardCopyOption
 actual fun detailViewModel(): DetailViewModel {
     val graph = LocalDesktopDataGraph.current
     return viewModel {
-        DetailViewModel(graph.library, graph.recipes, Files.createTempDirectory("imago-share").toFile())
+        DetailViewModel(graph.library, graph.recipes, DesktopEditorExporter(graph.library), Files.createTempDirectory("imago-share").toFile())
     }
 }
+
+actual val SaveToDeviceLabel: StringResource get() = Res.string.detail_save_copy
 
 /** On desktop, sharing is saving a copy of the original where the user chooses. */
 @Composable

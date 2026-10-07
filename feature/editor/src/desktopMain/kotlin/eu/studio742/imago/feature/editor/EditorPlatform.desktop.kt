@@ -54,6 +54,12 @@ class DesktopEditorExporter(private val library: LibraryRepository) : EditorExpo
         return uiText(Res.string.editor_export_saved_to, destination.fileName.toString())
     }
 
+    override suspend fun saveOriginalToDevice(file: File, fileName: String, isVideo: Boolean, createdAt: String): UiText? {
+        val destination = NativeDialogs.saveFile(fileName) ?: return null
+        withContext(Dispatchers.IO) { Files.copy(file.toPath(), destination, StandardCopyOption.REPLACE_EXISTING) }
+        return uiText(Res.string.editor_original_saved_to, destination.fileName.toString())
+    }
+
     private fun readWithImageIo(file: File): PixelBuffer? = runCatching {
         ImageIO.read(file)?.let { image -> PixelBuffer(image.width, image.height, image.getRGB(0, 0, image.width, image.height, null, 0, image.width)) }
     }.getOrNull()

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Português europeu. -->
 <resources>
-    <string name="editor_saved_to_gallery">Exportação guardada em Pictures/ImmichRoom.</string>
+    <string name="editor_saved_to_gallery">Exportação guardada em Pictures/IMAGO.</string>
     <string name="editor_save_to_gallery">Guardar na galeria</string>
     <string name="editor_phase_reading">A ler o original…</string>
     <string name="editor_phase_decoding">A descodificar a resolução integral…</string>
@@ -231,6 +231,8 @@
     <string name="editor_phase_writing">A gravar o JPEG…</string>
     <string name="editor_export_saved_to">Exportação guardada em %1$s.</string>
     <string name="editor_save_as">Guardar como…</string>
+    <string name="editor_original_saved_to_gallery">Original guardado em Pictures/IMAGO.</string>
+    <string name="editor_original_saved_to">Original guardado em %1$s.</string>
     <string name="editor_today_at">Hoje, %1$s</string>
     <string name="editor_history_date_pattern">d MMM</string>
     <string name="editor_builtin_golden_hour">Golden Hour</string>

@@ -1,5 +1,11 @@
 package eu.studio742.imago.core.model
 
+/**
+ * The folder, under Pictures (and Movies, for the composer's videos), where the app saves to the
+ * device; the gallery shows it as an album with this name.
+ */
+const val DEVICE_ALBUM_NAME = "IMAGO"
+
 /** The suffix the app stamps on every file it exports. */
 const val IMMICH_ROOM_EXPORT_SUFFIX = "_ImmichRoom.jpg"
 

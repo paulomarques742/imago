@@ -2,6 +2,7 @@ package eu.studio742.imago.feature.detail
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import org.jetbrains.compose.resources.StringResource
 import java.io.File
 
 /** The detail's ViewModel: through Hilt on Android, through the app's data layer on desktop. */
@@ -14,6 +15,9 @@ expect fun detailViewModel(): DetailViewModel
  */
 @Composable
 expect fun rememberShareFile(): (file: File, mimeType: String) -> Unit
+
+/** The menu entry that saves a copy: "Save to gallery" on the phone, "Save copy…" on the computer. */
+expect val SaveToDeviceLabel: StringResource
 
 /**
  * The player of the open video, for the detail's controls to drive it; `null` with a null [url], or

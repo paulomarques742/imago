@@ -50,7 +50,6 @@ import eu.studio742.imago.core.model.ColorWheel
 import eu.studio742.imago.core.model.HslBand
 import eu.studio742.imago.core.model.ToneCurve
 import eu.studio742.imago.core.model.SavedRecipe
-import eu.studio742.imago.core.model.immichRoomExportFileName
 import eu.studio742.imago.core.immich.ImmichApi
 import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
 import eu.studio742.imago.core.immich.requirePermission
@@ -1372,10 +1371,6 @@ open class EditorViewModel(
 
     fun consumeExportResult() = mutableState.update { it.copy(exportMessage = null, exportError = null) }
     fun reportExportError(message: UiText) = mutableState.update { it.copy(exportError = message) }
-
-    /** The export's file name; an original without a name gets one in the app language. */
-    private suspend fun exportFileName(asset: EditorAsset): String =
-        immichRoomExportFileName(asset.fileName, appString(Res.string.editor_export_untitled))
 
     private fun export(
         before: suspend () -> Unit = {},

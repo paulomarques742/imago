@@ -27,6 +27,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import eu.studio742.imago.core.data.LibraryRepository
 import eu.studio742.imago.core.data.RecipeRepository
+import eu.studio742.imago.feature.detail.resources.*
+import eu.studio742.imago.feature.editor.EditorExporter
+import org.jetbrains.compose.resources.StringResource
 import java.io.File
 import kotlinx.coroutines.delay
 import javax.inject.Inject
@@ -36,10 +39,13 @@ class HiltDetailViewModel @Inject constructor(
     @ApplicationContext context: Context,
     library: LibraryRepository,
     recipes: RecipeRepository,
-) : DetailViewModel(library, recipes, File(context.cacheDir, "share"))
+    exporter: EditorExporter,
+) : DetailViewModel(library, recipes, exporter, File(context.cacheDir, "share"))
 
 @Composable
 actual fun detailViewModel(): DetailViewModel = hiltViewModel<HiltDetailViewModel>()
+
+actual val SaveToDeviceLabel: StringResource get() = Res.string.detail_save_to_gallery
 
 /** The Android share menu, with the file served by this module's FileProvider. */
 @Composable
