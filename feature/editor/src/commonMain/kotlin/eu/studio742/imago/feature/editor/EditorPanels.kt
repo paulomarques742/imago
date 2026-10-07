@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.outlined.Adjust
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BookmarkAdd
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.ContentPaste
@@ -406,6 +407,8 @@ fun EditorToolBar(
     canExport: Boolean,
     onSelect: (EditorTool) -> Unit,
     modifier: Modifier = Modifier,
+    tools: List<EditorTool> = editorTools(recipeMode = false),
+    canSaveEdits: Boolean = false,
 ) {
     ImagoNavBarSurface(modifier) {
         Row(
@@ -416,7 +419,7 @@ fun EditorToolBar(
             horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            EditorTool.entries.forEach { tool ->
+            tools.forEach { tool ->
                 val active = when (tool) {
                     EditorTool.COMPARE -> isComparing
                     else -> selected == tool
@@ -424,6 +427,7 @@ fun EditorToolBar(
                 val enabled = when (tool) {
                     EditorTool.PASTE_RECIPE -> canPasteRecipe
                     EditorTool.EXPORT -> canExport
+                    EditorTool.SAVE_EDITS -> canSaveEdits
                     else -> true
                 }
                 EditorToolButton(
@@ -495,6 +499,7 @@ private fun EditorTool.label() = when (this) {
     EditorTool.COPY_RECIPE -> stringResource(Res.string.editor_tool_copy)
     EditorTool.PASTE_RECIPE -> stringResource(Res.string.editor_tool_paste)
     EditorTool.SAVE_RECIPE -> stringResource(Res.string.editor_tool_save)
+    EditorTool.SAVE_EDITS -> stringResource(Res.string.editor_tool_save)
 }
 
 private fun EditorTool.vector(): ImageVector = when (this) {
@@ -507,4 +512,5 @@ private fun EditorTool.vector(): ImageVector = when (this) {
     EditorTool.COPY_RECIPE -> Icons.Outlined.ContentCopy
     EditorTool.PASTE_RECIPE -> Icons.Outlined.ContentPaste
     EditorTool.SAVE_RECIPE -> Icons.Outlined.BookmarkAdd
+    EditorTool.SAVE_EDITS -> Icons.Outlined.Save
 }

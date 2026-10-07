@@ -11,13 +11,43 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+/**
+ * The app version, from `imago.version` in gradle.properties, as a constant the shared code reads on
+ * both platforms. Android's BuildConfig only exists in the app module, and the desktop has none.
+ */
+val generateAppVersion by tasks.registering {
+    val version = providers.gradleProperty("imago.version")
+    val output = layout.buildDirectory.dir("generated/appVersion/kotlin")
+    inputs.property("version", version)
+    outputs.dir(output)
+    doLast {
+        val file = output.get().file("eu/studio742/imago/feature/shell/AppVersion.kt").asFile
+        file.parentFile.mkdirs()
+        file.writeText(
+            listOf(
+                "package eu.studio742.imago.feature.shell",
+                "",
+                "/** The installed version, MAJOR.MINOR.PATCH. Generated from imago.version. */",
+                "internal const val APP_VERSION = \"${version.get()}\"",
+                "",
+            ).joinToString("\n"),
+        )
+    }
+}
+
 kotlin {
     jvmToolchain(17)
     androidTarget()
     jvm("desktop")
 
     sourceSets {
+        commonMain {
+            kotlin.srcDir(generateAppVersion)
+        }
         commonMain.dependencies {
+            // This module's texts, in composeResources.
+            implementation(compose.components.resources)
+            implementation(compose.materialIconsExtended)
             api(project(":feature:library"))
             api(project(":feature:detail"))
             api(project(":feature:editor"))
@@ -29,11 +59,19 @@ kotlin {
             implementation(libs.jetbrains.lifecycle.runtime.compose)
             implementation(libs.kotlinx.coroutines.core)
         }
+        getByName("desktopTest").dependencies {
+            implementation(libs.junit4)
+        }
         androidMain.dependencies {
             implementation(libs.hilt.android)
             implementation(libs.hilt.navigation.compose)
         }
     }
+}
+
+compose.resources {
+    packageOfResClass = "eu.studio742.imago.feature.shell.resources"
+    publicResClass = false
 }
 
 android {

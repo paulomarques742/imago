@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -44,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -119,9 +121,9 @@ fun List<SavedRecipe>.toCards(): List<RecipeCard> = map {
  * The recipe library.
  *
  * It serves two contexts: opened from the editor it shows each recipe already applied to the photo
- * at hand, and applying it is one tap; opened from the bottom bar there is no photo at all, and so it
- * is only for management — hence [onApply] being optional. The previews exist in both cases: without
- * an open photo, [assetId] carries a sample.
+ * at hand, and [onSelect] applies it; opened from the bottom bar there is no photo at all, and
+ * [onSelect] opens the recipe itself for editing. The previews exist in both cases: without an open
+ * photo, [assetId] carries a sample.
  */
 @Composable
 fun RecipeLibraryScreen(
@@ -130,15 +132,19 @@ fun RecipeLibraryScreen(
     isLoading: Boolean,
     assetId: String?,
     onBack: () -> Unit,
-    onApply: ((RecipeCard) -> Unit)?,
+    onSelect: (RecipeCard) -> Unit,
     onToggleFavorite: (RecipeCard) -> Unit,
     onRename: (RecipeCard) -> Unit,
     onDelete: (RecipeCard) -> Unit,
     onCreate: (() -> Unit)?,
+    onDuplicate: ((RecipeCard) -> Unit)? = null,
+    createLabel: String = stringResource(Res.string.editor_create_recipe),
+    createHint: String = stringResource(Res.string.editor_create_recipe_hint),
     bottomBar: @Composable () -> Unit = {},
 ) {
-    var tab by remember { mutableStateOf(if (saved.isEmpty()) RecipeTab.BUILT_IN else RecipeTab.SAVED) }
-    var group by remember(tab) { mutableStateOf(ALL_GROUPS) }
+    // Saveable, so that coming back from editing a recipe finds the same tab and the same filter.
+    var tab by rememberSaveable { mutableStateOf(if (saved.isEmpty()) RecipeTab.BUILT_IN else RecipeTab.SAVED) }
+    var group by rememberSaveable(tab) { mutableStateOf(ALL_GROUPS) }
 
     val visible = when (tab) {
         RecipeTab.SAVED -> saved
@@ -218,15 +224,16 @@ fun RecipeLibraryScreen(
                         RecipeTile(
                             card = card,
                             assetId = assetId,
-                            onApply = onApply,
+                            onSelect = { onSelect(card) },
                             onToggleFavorite = { onToggleFavorite(card) },
                             onRename = { onRename(card) },
+                            onDuplicate = onDuplicate?.let { { it(card) } },
                             onDelete = { onDelete(card) },
                         )
                     }
                 }
             }
-            onCreate?.let { CreateRecipeRow(onClick = it) }
+            onCreate?.let { CreateRecipeRow(label = createLabel, hint = createHint, onClick = it) }
         }
     }
 }
@@ -235,9 +242,10 @@ fun RecipeLibraryScreen(
 private fun RecipeTile(
     card: RecipeCard,
     assetId: String?,
-    onApply: ((RecipeCard) -> Unit)?,
+    onSelect: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRename: () -> Unit,
+    onDuplicate: (() -> Unit)?,
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -246,13 +254,7 @@ private fun RecipeTile(
         modifier = Modifier
             .clip(RoundedCornerShape(ImagoRadii.Medium))
             .background(ImagoColors.Surface)
-            .then(
-                if (onApply != null) {
-                    Modifier.clickable(role = Role.Button) { onApply(card) }
-                } else {
-                    Modifier
-                },
-            ),
+            .clickable(role = Role.Button, onClick = onSelect),
     ) {
         Box(
             Modifier
@@ -342,6 +344,16 @@ private fun RecipeTile(
                                 onRename()
                             },
                         )
+                        onDuplicate?.let { duplicate ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.editor_duplicate)) },
+                                leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    duplicate()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text(stringResource(Res.string.editor_delete), color = ImagoColors.Danger) },
                             leadingIcon = {
@@ -360,7 +372,7 @@ private fun RecipeTile(
 }
 
 @Composable
-private fun CreateRecipeRow(onClick: () -> Unit) {
+private fun CreateRecipeRow(label: String, hint: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -380,12 +392,12 @@ private fun CreateRecipeRow(onClick: () -> Unit) {
         )
         Column(Modifier.weight(1f).padding(horizontal = ImagoSpacing.Md)) {
             Text(
-                text = stringResource(Res.string.editor_create_recipe),
+                text = label,
                 style = MaterialTheme.typography.titleSmall,
                 color = ImagoColors.TextPrimary,
             )
             Text(
-                text = stringResource(Res.string.editor_create_recipe_hint),
+                text = hint,
                 style = MaterialTheme.typography.bodySmall,
                 color = ImagoColors.TextTertiary,
             )

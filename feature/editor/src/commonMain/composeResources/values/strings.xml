@@ -256,4 +256,14 @@
     <string name="editor_category_urban">Urban</string>
     <string name="editor_category_monochrome">Black and white</string>
     <string name="editor_category_cinematic">Cinematic</string>
+    <string name="editor_duplicate">Duplicate</string>
+    <string name="editor_recipe_copy_name">%1$s (copy)</string>
+    <string name="editor_recipe_duplicated">Recipe “%1$s” created.</string>
+    <string name="editor_new_recipe">New recipe</string>
+    <string name="editor_new_recipe_hint">Start from scratch on a sample photo.</string>
+    <string name="editor_back_to_recipes">Back to recipes</string>
+    <string name="editor_unsaved_recipe_title">Save the changes to this recipe?</string>
+    <string name="editor_unsaved_recipe_body">If you leave without saving, the changes are lost.</string>
+    <string name="editor_discard">Discard</string>
+    <string name="editor_unsaved_marker">Unsaved changes</string>
 </resources>

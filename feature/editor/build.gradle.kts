@@ -39,6 +39,7 @@ kotlin {
         getByName("desktopTest").dependencies {
             // Skia's native library, which in a Compose app comes with the window; desktop is Windows.
             implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.9.4.2")
+            implementation(libs.kotlinx.coroutines.test)
         }
         androidMain.dependencies {
             implementation(libs.androidx.core.ktx)

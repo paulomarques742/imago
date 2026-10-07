@@ -13,7 +13,8 @@ plugins {
 }
 
 group = "eu.studio742.imago"
-version = "0.1.0"
+// The same version as the Android app, from gradle.properties.
+version = providers.gradleProperty("imago.version").get()
 kotlin { jvmToolchain(17) }
 
 dependencies {
@@ -64,7 +65,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "IMAGO"
-            packageVersion = "0.1.0"
+            packageVersion = project.version.toString()
             description = "IMAGO — Develop every image."
             vendor = "742 Studio"
             modules("java.sql", "java.naming", "jdk.crypto.ec", "java.management")

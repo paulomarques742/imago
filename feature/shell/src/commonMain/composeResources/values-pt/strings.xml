@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Português europeu. -->
+<resources>
+    <string name="shell_about_title">Sobre</string>
+    <string name="shell_about_version">Versão %1$s</string>
+    <string name="shell_news_title">Novidades</string>
+    <string name="shell_news_version">Versão %1$s</string>
+    <string name="shell_news_close">Continuar</string>
+    <string name="shell_news_0_11_0_1">As Definições mostram agora a versão instalada e o que mudou nela.</string>
+</resources>

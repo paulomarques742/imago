@@ -54,7 +54,7 @@ import eu.studio742.imago.feature.library.WelcomeRoute
  * exceed the Binder transaction limit; the cost of losing it on a cold start is far smaller than
  * the app crashing.
  */
-open class ShellViewModel(configuration: ConfigurationRepository) : ViewModel() {
+open class ShellViewModel(private val configuration: ConfigurationRepository) : ViewModel() {
     val selectedLibrary = configuration.selectedLibraryId
 
     private var lastLibraryId = selectedLibrary.value
@@ -73,6 +73,22 @@ open class ShellViewModel(configuration: ConfigurationRepository) : ViewModel() 
 
     /** The batch waiting for a composition, while the picker sheet is open. */
     internal val composerRequestState: MutableState<ComposerRequest?> = mutableStateOf(null)
+
+    /**
+     * What changed since the version last seen, shown once after an update; empty when there is
+     * nothing to tell. With nothing to tell, the installed version is recorded right away — a new
+     * install included — so that the next update knows where it came from.
+     */
+    internal val newsState: MutableState<List<Release>> = mutableStateOf(
+        unseenReleases(configuration.lastSeenAppVersion, welcomeCompleted.value).also { unseen ->
+            if (unseen.isEmpty()) configuration.lastSeenAppVersion = InstalledVersion.toString()
+        },
+    )
+
+    internal fun newsSeen() {
+        configuration.lastSeenAppVersion = InstalledVersion.toString()
+        newsState.value = emptyList()
+    }
 
     /** An account link (confirmation, recovery) opens the account, where the outcome is shown. */
     fun openAccount() { destinationState.value = AppDestination.Account() }
@@ -202,6 +218,7 @@ private fun ImagoAppContent(viewModel: ShellViewModel) {
         current is AppDestination.Settings -> LibrarySettingsRoute(
             onBack = { destination = AppDestination.Library() },
             accountSection = { AccountSettingsCard(onOpenAccount = { signUp -> destination = AppDestination.Account(signUp) }) },
+            aboutSection = { AboutSettingsCard() },
         )
 
         current is AppDestination.Account -> AccountRoute(
@@ -265,6 +282,9 @@ private fun ImagoAppContent(viewModel: ShellViewModel) {
             )
         }
     }
+
+    val news by viewModel.newsState
+    if (news.isNotEmpty()) WhatsNewDialog(news, onDismiss = viewModel::newsSeen)
 
     // The sheet is composed here, not inside each screen, because the library and the detail make
     // the same request of it and it is at this level that we know where to go next: choosing the

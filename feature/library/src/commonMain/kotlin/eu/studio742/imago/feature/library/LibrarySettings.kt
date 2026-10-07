@@ -140,6 +140,8 @@ fun LibrarySettingsRoute(
     onBack: () -> Unit,
     /** The account section, put in by whoever assembles the app: this feature does not know the account. */
     accountSection: @Composable () -> Unit = {},
+    /** The app version and what changed in it, last on the page; also from whoever assembles the app. */
+    aboutSection: @Composable () -> Unit = {},
     viewModel: LibrarySettingsViewModel = librarySettingsViewModel(),
 ) {
     val requestAccess = rememberRequestMediaAccess(viewModel)
@@ -249,6 +251,7 @@ fun LibrarySettingsRoute(
                         Icon(Icons.Outlined.Add, null, Modifier.size(18.dp))
                         Text(stringResource(Res.string.library_add_immich_server), Modifier.padding(start = ImagoSpacing.Sm))
                     }
+                    aboutSection()
                 }
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 message?.let { Text(it.resolve(), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary) }

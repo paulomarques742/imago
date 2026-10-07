@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Base language: English. Translations live in values-<language>/ with the same keys. -->
+<resources>
+    <string name="shell_about_title">About</string>
+    <string name="shell_about_version">Version %1$s</string>
+    <string name="shell_news_title">What’s new</string>
+    <string name="shell_news_version">Version %1$s</string>
+    <string name="shell_news_close">Continue</string>
+    <!-- Release notes: shell_news_<version>_<n>, one line per change, listed in ReleaseNotes.kt. -->
+    <string name="shell_news_0_11_0_1">Settings now show the installed version and what changed in it.</string>
+</resources>

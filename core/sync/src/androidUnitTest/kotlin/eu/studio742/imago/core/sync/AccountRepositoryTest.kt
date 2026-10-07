@@ -184,6 +184,7 @@ class AccountRepositoryTest {
         override var lastExportLibraryId: String? = null
         override val welcomeCompleted = MutableStateFlow(true)
         override fun completeWelcome() = Unit
+        override var lastSeenAppVersion: String? = null
         override fun selectLibrary(id: String) = Unit
         override fun source(id: String) = libraries.value.first { it.id == id }
         override suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String) = error("unused")

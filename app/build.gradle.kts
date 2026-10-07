@@ -11,14 +11,29 @@ plugins {
 /**
  * Machine settings — the Supabase keys and the signing key — read from `local.properties` (outside
  * git) or from environment variables. From Supabase only the URL and the publishable key go in,
- * which are public by design; the secret key never goes into the APK. Without them the app still
- * compiles and works without an account.
+ * which are public by design; the secret key never goes into the APK. Without them the debug build
+ * still compiles and works without an account; the release refuses (see `whenReady` at the end).
  */
 val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
 }
 fun buildSetting(name: String): String =
     (localProperties.getProperty(name) ?: providers.environmentVariable(name).orNull ?: "").trim()
+
+/**
+ * The version comes from `imago.version` in gradle.properties, shared with the Windows app, and the
+ * versionCode is derived from it: a hand-kept counter is the one thing a release forgets to bump,
+ * and Play refuses an upload whose code is not higher than the last one. 0.10.0 shipped with the
+ * code 12, before this rule; every derived code is far above it.
+ */
+val imagoVersion: String = providers.gradleProperty("imago.version").get()
+val imagoVersionCode: Int = run {
+    val parts = Regex("""(\d+)\.(\d+)\.(\d+)""").matchEntire(imagoVersion)?.destructured?.toList()?.map(String::toInt)
+        ?: throw GradleException("imago.version must be MAJOR.MINOR.PATCH, not \"$imagoVersion\"")
+    val (major, minor, patch) = parts
+    if (minor > 99 || patch > 99) throw GradleException("imago.version $imagoVersion: MINOR and PATCH go up to 99")
+    major * 10_000 + minor * 100 + patch
+}
 
 android {
     namespace = "eu.studio742.imago"
@@ -28,8 +43,8 @@ android {
         applicationId = "eu.studio742.imago"
         minSdk = 31
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.10.0"
+        versionCode = imagoVersionCode
+        versionName = imagoVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -55,7 +70,7 @@ android {
 
     buildTypes {
         release {
-            // The release only talks to the prod project; without it configured, it ships without accounts.
+            // The release only talks to the prod project; without it configured, `whenReady` refuses it.
             buildConfigField("String", "SUPABASE_URL", "\"${buildSetting("SUPABASE_RELEASE_URL")}\"")
             buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${buildSetting("SUPABASE_RELEASE_PUBLISHABLE_KEY")}\"")
             signingConfig = signingConfigs.getByName("release").takeIf { it.storeFile != null }
@@ -88,6 +103,27 @@ gradle.taskGraph.whenReady {
             "The release has no signing key. Set RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, " +
                 "RELEASE_KEY_ALIAS and RELEASE_KEY_PASSWORD in local.properties or in the environment."
         )
+    }
+    // Without the prod project the release used to compile anyway and ship an app without accounts,
+    // with no warning at all. The secret key is refused by its prefix: it would go into the APK, and
+    // anyone could take it from there.
+    if (packagesRelease) {
+        val url = buildSetting("SUPABASE_RELEASE_URL")
+        val key = buildSetting("SUPABASE_RELEASE_PUBLISHABLE_KEY")
+        val problems = buildList {
+            if (url.isEmpty()) add("SUPABASE_RELEASE_URL is missing")
+            else if (!Regex("^https://[a-z0-9-]+\\.supabase\\.co/?$").matches(url)) {
+                add("SUPABASE_RELEASE_URL is not https://<project>.supabase.co")
+            }
+            if (key.isEmpty()) add("SUPABASE_RELEASE_PUBLISHABLE_KEY is missing")
+            else if (key.startsWith("sb_secret_")) add("SUPABASE_RELEASE_PUBLISHABLE_KEY is a secret key")
+        }
+        if (problems.isNotEmpty()) {
+            throw GradleException(
+                "The release has no production Supabase project: ${problems.joinToString("; ")}. " +
+                    "Set them in local.properties or in the environment."
+            )
+        }
     }
 }
 

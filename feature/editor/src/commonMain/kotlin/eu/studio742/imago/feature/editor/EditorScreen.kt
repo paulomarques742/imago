@@ -49,6 +49,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -83,6 +84,8 @@ import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.outlined.ColorLens
@@ -230,6 +233,13 @@ private val RAIL_WIDTH_MIN = 320.dp
 private val RAIL_WIDTH_MAX = 400.dp
 private const val RAIL_WIDTH_FRACTION = 0.3f
 
+/** What the recipe editor adds to the editor's bar and menu; null while editing a photo. */
+internal class RecipeEditActions(
+    val onSave: () -> Unit,
+    val onDuplicate: () -> Unit,
+    val onDelete: () -> Unit,
+)
+
 @Composable
 fun EditorRoute(
     asset: EditorAsset,
@@ -243,21 +253,40 @@ fun EditorRoute(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val compositionMode = target is PhotoEditTarget.Composition
+    val recipeMode = target is PhotoEditTarget.Recipe
     DisposableEffect(asset.id, target) {
         viewModel.open(target)
         onDispose { viewModel.saveNow() }
     }
-    BackHandler {
+    // A recipe is saved by hand, unlike a photo: leaving with changes asks first, and one that is not
+    // the user's yet — a filter, a new recipe — asks for a name the first time it is saved.
+    var askingToLeave by rememberSaveable { mutableStateOf(false) }
+    var namingRecipe by rememberSaveable { mutableStateOf(false) }
+    var confirmingDelete by rememberSaveable { mutableStateOf(false) }
+    var leaveOnceSaved by rememberSaveable { mutableStateOf(false) }
+    val leave = {
         viewModel.saveNow()
         onBack()
     }
+    val requestLeave = {
+        if (recipeMode && state.hasUnsavedRecipeChanges) askingToLeave = true else leave()
+    }
+    val saveRecipe = { thenLeave: Boolean ->
+        if (state.recipeEdit?.saved != null) viewModel.saveRecipeEdits() else namingRecipe = true
+        leaveOnceSaved = thenLeave
+    }
+    // The save is asynchronous: leaving waits for it to land, and does not happen if it failed.
+    LaunchedEffect(leaveOnceSaved, namingRecipe, state.hasUnsavedRecipeChanges, state.recipeEdit?.saved) {
+        if (leaveOnceSaved && !namingRecipe && !state.hasUnsavedRecipeChanges && state.recipeEdit?.saved != null) {
+            leaveOnceSaved = false
+            leave()
+        }
+    }
+    BackHandler { requestLeave() }
     EditorScreen(
         state = state,
         compositionMode = compositionMode,
-        onBack = {
-            viewModel.saveNow()
-            onBack()
-        },
+        onBack = requestLeave,
         onConfirm = {
             viewModel.currentRecipe()?.let(onCompositionCommit)
             onBack()
@@ -337,7 +366,80 @@ fun EditorRoute(
                 onGestureFinished = viewModel::finishAdjustment,
             )
         },
+        recipeActions = if (recipeMode) {
+            RecipeEditActions(
+                onSave = { saveRecipe(false) },
+                onDuplicate = viewModel::duplicateRecipeEdit,
+                onDelete = { confirmingDelete = true },
+            )
+        } else {
+            null
+        },
     )
+
+    if (askingToLeave) {
+        AlertDialog(
+            onDismissRequest = { askingToLeave = false },
+            title = { Text(stringResource(Res.string.editor_unsaved_recipe_title)) },
+            text = { Text(stringResource(Res.string.editor_unsaved_recipe_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        askingToLeave = false
+                        saveRecipe(true)
+                    },
+                ) { Text(stringResource(Res.string.editor_tool_save)) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            askingToLeave = false
+                            leave()
+                        },
+                    ) { Text(stringResource(Res.string.editor_discard), color = ImagoColors.Danger) }
+                    TextButton(onClick = { askingToLeave = false }) { Text(stringResource(Res.string.editor_cancel)) }
+                }
+            },
+        )
+    }
+    if (namingRecipe) {
+        val edit = state.recipeEdit
+        RecipeDetailsDialog(
+            title = stringResource(Res.string.editor_save_recipe),
+            initialName = edit?.suggestedName?.resolve().orEmpty(),
+            initialCollection = edit?.suggestedCollection?.resolve() ?: stringResource(Res.string.editor_default_collection),
+            confirmLabel = stringResource(Res.string.editor_tool_save),
+            onDismiss = {
+                namingRecipe = false
+                leaveOnceSaved = false
+            },
+            onConfirm = { name, collection ->
+                viewModel.saveRecipeEdits(name, collection)
+                namingRecipe = false
+            },
+        )
+    }
+    if (confirmingDelete) {
+        val name = state.recipeEdit?.saved?.name.orEmpty()
+        AlertDialog(
+            onDismissRequest = { confirmingDelete = false },
+            title = { Text(stringResource(Res.string.editor_delete_recipe_question)) },
+            text = { Text(stringResource(Res.string.editor_recipe_delete_body, name)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmingDelete = false
+                        // Gone, so there is nothing left to ask about saving: straight out.
+                        viewModel.deleteRecipeEdit(onDeleted = onBack)
+                    },
+                ) { Text(stringResource(Res.string.editor_delete), color = ImagoColors.Danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDelete = false }) { Text(stringResource(Res.string.editor_cancel)) }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -395,7 +497,9 @@ private fun EditorScreen(
     onExportPermissionDenied: () -> Unit,
     maskActions: MaskActions,
     colorGradeActions: ColorGradeActions,
+    recipeActions: RecipeEditActions?,
 ) {
+    val recipeMode = recipeActions != null
     // `rememberSaveable` for the ones that open over the photo: a dialog that disappears halfway
     // because the screen rotated looks like an app failure, and on a tablet it rotates all the time.
     // `editingSavedRecipe` and `deletingSavedRecipe` stay out: they keep a whole `SavedRecipe` and not
@@ -714,7 +818,7 @@ private fun EditorScreen(
                     if (!isActiveAsset || state.bitmap == null) {
                         AsyncImage(
                             model = ImageRequest.Builder(context)
-                                .data(pageAsset.previewUrl)
+                                .data(rememberEditorImageData(pageAsset))
                                 .libraryAuth(pageAsset.apiKey)
                                 .crossfade(false)
                                 .build(),
@@ -1351,6 +1455,11 @@ private fun EditorScreen(
                             isComparing = state.showOriginal,
                             canPasteRecipe = state.canPasteRecipe && state.recipe != null,
                             canExport = !compositionMode && state.bitmap != null && !state.isExporting,
+                            tools = editorTools(recipeMode),
+                            // A recipe that is not the user's yet can always be saved — that is how it
+                            // becomes theirs; one that is only saves when something changed.
+                            canSaveEdits = state.recipe != null && !state.needsNewerApp &&
+                                (state.hasUnsavedRecipeChanges || state.recipeEdit?.saved == null),
                             onSelect = { tool ->
                                 when (tool) {
                                     EditorTool.ADJUSTMENTS -> onSelectSheet(EditorSheet.ADJUSTMENTS)
@@ -1362,6 +1471,7 @@ private fun EditorScreen(
                                     EditorTool.COPY_RECIPE -> onCopyRecipe()
                                     EditorTool.PASTE_RECIPE -> onPasteRecipe()
                                     EditorTool.SAVE_RECIPE -> showSaveRecipeDialog = true
+                                    EditorTool.SAVE_EDITS -> recipeActions?.onSave?.invoke()
                                 }
                             },
                             modifier = Modifier.alpha(if (rail || editingKey == null) 1f else 0f),
@@ -1420,16 +1530,24 @@ private fun EditorScreen(
                 },
                 windowInsets = WindowInsets.statusBars,
                 title = {
-                    AutoSaveStatus(
-                        isSaving = state.isSaving,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                    )
+                    if (recipeMode) {
+                        RecipeEditTitle(state)
+                    } else {
+                        AutoSaveStatus(
+                            isSaving = state.isSaving,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = if (compositionMode) stringResource(Res.string.editor_cancel_edit) else stringResource(Res.string.editor_back_to_library),
+                            contentDescription = when {
+                                compositionMode -> stringResource(Res.string.editor_cancel_edit)
+                                recipeMode -> stringResource(Res.string.editor_back_to_recipes)
+                                else -> stringResource(Res.string.editor_back_to_library)
+                            },
                         )
                     }
                 },
@@ -1486,14 +1604,17 @@ private fun EditorScreen(
                                     onPasteRecipe()
                                 },
                             )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(Res.string.editor_save_to_recipes)) },
-                                enabled = state.recipe != null,
-                                onClick = {
-                                    showContextMenu = false
-                                    showSaveRecipeDialog = true
-                                },
-                            )
+                            // Editing a recipe, saving it "to recipes" is what Save and Duplicate already do.
+                            if (!recipeMode) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(Res.string.editor_save_to_recipes)) },
+                                    enabled = state.recipe != null,
+                                    onClick = {
+                                        showContextMenu = false
+                                        showSaveRecipeDialog = true
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(stringResource(Res.string.editor_recipe_library)) },
                                 onClick = {
@@ -1501,7 +1622,31 @@ private fun EditorScreen(
                                     showRecipeLibrary = true
                                 },
                             )
-                            if (!compositionMode) {
+                            recipeActions?.let { actions ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(Res.string.editor_duplicate)) },
+                                    leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) },
+                                    enabled = state.recipe != null && !state.needsNewerApp,
+                                    onClick = {
+                                        showContextMenu = false
+                                        actions.onDuplicate()
+                                    },
+                                )
+                                // A filter is not the user's to delete, and a new recipe has nothing yet.
+                                if (state.recipeEdit?.saved != null) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(Res.string.editor_delete), color = ImagoColors.Danger) },
+                                        leadingIcon = {
+                                            Icon(Icons.Outlined.Delete, contentDescription = null, tint = ImagoColors.Danger)
+                                        },
+                                        onClick = {
+                                            showContextMenu = false
+                                            actions.onDelete()
+                                        },
+                                    )
+                                }
+                            }
+                            if (!compositionMode && !recipeMode) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(Res.string.editor_tool_export)) },
                                     leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null) },
@@ -1611,7 +1756,7 @@ private fun EditorScreen(
             isLoading = state.isRecipeLibraryLoading,
             assetId = state.asset?.id,
             onBack = { showRecipeLibrary = false },
-            onApply = { card ->
+            onSelect = { card ->
                 if (card.isBuiltIn) onApplyBuiltInRecipe(card.id) else onApplySavedRecipe(card.id)
                 showRecipeLibrary = false
             },
@@ -1704,6 +1849,27 @@ private fun EditorScreen(
                     modifier = Modifier.padding(top = 12.dp, start = 24.dp, end = 24.dp),
                 )
             }
+        }
+    }
+}
+
+/** The recipe editor's title: which recipe, and whether what is on screen is saved. */
+@Composable
+private fun RecipeEditTitle(state: EditorUiState) {
+    val edit = state.recipeEdit ?: return
+    Column {
+        Text(
+            text = edit.saved?.name ?: edit.suggestedName?.resolve() ?: stringResource(Res.string.editor_new_recipe),
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (state.hasUnsavedRecipeChanges) {
+            Text(
+                text = stringResource(Res.string.editor_unsaved_marker),
+                style = MaterialTheme.typography.labelSmall,
+                color = ImagoColors.TextSecondary,
+            )
         }
     }
 }

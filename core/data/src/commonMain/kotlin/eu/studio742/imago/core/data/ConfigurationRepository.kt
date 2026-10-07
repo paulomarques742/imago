@@ -40,6 +40,12 @@ interface ConfigurationRepository {
      */
     val welcomeCompleted: kotlinx.coroutines.flow.StateFlow<Boolean>
     fun completeWelcome()
+
+    /**
+     * The app version whose news the person was last shown, or that was installed fresh. Null in
+     * an install from before it was recorded.
+     */
+    var lastSeenAppVersion: String?
     val connection: Flow<ImmichConnection?>
     fun currentConnection(): ImmichConnection?
     suspend fun validateAndSave(serverUrl: String, apiKey: String): ServerVersion

@@ -6,6 +6,7 @@ import eu.studio742.imago.core.designsystem.i18n.uiText
 import eu.studio742.imago.core.designsystem.i18n.asUiText
 import eu.studio742.imago.core.designsystem.i18n.toUiText
 import eu.studio742.imago.core.designsystem.i18n.LocalizedException
+import eu.studio742.imago.core.designsystem.i18n.resolveNow
 import eu.studio742.imago.feature.editor.resources.*
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -35,6 +36,7 @@ import eu.studio742.imago.core.data.DerivedAssetRepository
 import eu.studio742.imago.core.data.RecipeRepository
 import eu.studio742.imago.core.data.SavedRecipeRepository
 import eu.studio742.imago.core.model.BUILT_IN_RECIPES
+import eu.studio742.imago.core.model.BuiltInRecipe
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.CURRENT_PROCESS_VERSION
 import eu.studio742.imago.core.model.RecipeConflictVersion
@@ -74,7 +76,68 @@ sealed interface PhotoEditTarget {
         override val asset: EditorAsset,
         val recipe: EditRecipe,
     ) : PhotoEditTarget
+
+    /**
+     * A recipe edited on its own, over a sample photo. Opening the same [source] with another sample
+     * only swaps the photo: the edits, the history and what is still unsaved stay.
+     */
+    data class Recipe(
+        override val asset: EditorAsset,
+        val source: RecipeSource,
+    ) : PhotoEditTarget
 }
+
+/** What the recipe editor opened. Only [Saved] is the user's; the others become theirs when saved. */
+sealed interface RecipeSource {
+    /** Tells one editing session from another, so that swapping the sample does not start over. */
+    val key: String
+
+    data class Saved(val saved: SavedRecipe) : RecipeSource {
+        override val key get() = savedKey(saved.id)
+    }
+
+    data class BuiltIn(val builtIn: BuiltInRecipe) : RecipeSource {
+        override val key get() = builtInKey(builtIn.id)
+    }
+
+    /** Each new recipe is its own session: a second one must not reopen what the first left behind. */
+    data class New(val id: String = UUID.randomUUID().toString()) : RecipeSource {
+        override val key get() = "new:$id"
+    }
+
+    companion object {
+        fun savedKey(id: String) = "saved:$id"
+        fun builtInKey(id: String) = "built-in:$id"
+
+        /**
+         * The source a [key] names, from what is at hand. Null while a saved recipe is not in [saved] —
+         * not loaded yet, or deleted meanwhile.
+         */
+        fun fromKey(key: String, saved: List<SavedRecipe>): RecipeSource? = when {
+            key.startsWith("saved:") -> saved.firstOrNull { it.id == key.removePrefix("saved:") }?.let(::Saved)
+            key.startsWith("built-in:") -> BUILT_IN_RECIPES.firstOrNull { it.id == key.removePrefix("built-in:") }?.let(::BuiltIn)
+            key.startsWith("new:") -> New(key.removePrefix("new:"))
+            else -> null
+        }
+    }
+}
+
+/** The recipe editor's part of the state; null while editing a photo. */
+data class RecipeEditState(
+    /** The recipe being edited, once it is the user's. Null for a filter or a new recipe not saved yet. */
+    val saved: SavedRecipe?,
+    /** What the name dialog proposes when saving something that is not the user's yet. */
+    val suggestedName: UiText?,
+    val suggestedCollection: UiText?,
+    /** The recipe as it was last saved, or as it opened — what "unsaved changes" is measured against. */
+    val baseline: EditRecipe,
+)
+
+/**
+ * The same look, whatever the moment it was touched: undoing back to where the recipe started is not
+ * a change, even though every step stamped a new `updatedAt`.
+ */
+internal fun EditRecipe.sameLookAs(other: EditRecipe): Boolean = copy(updatedAt = other.updatedAt) == other
 
 /**
  * The categories of the panel's bar.
@@ -112,6 +175,24 @@ enum class EditorTool {
     COPY_RECIPE,
     PASTE_RECIPE,
     SAVE_RECIPE,
+    /** The recipe editor's save, which takes Export's place: there is no real photo to export there. */
+    SAVE_EDITS,
+}
+
+/**
+ * The bar's tools. Editing a recipe there is no crop — a frame belongs to one photo, not to a look
+ * meant for any — and Save stands where Export was.
+ */
+internal fun editorTools(recipeMode: Boolean): List<EditorTool> = if (recipeMode) {
+    EditorTool.entries.mapNotNull {
+        when (it) {
+            EditorTool.CROP, EditorTool.SAVE_RECIPE, EditorTool.SAVE_EDITS -> null
+            EditorTool.EXPORT -> EditorTool.SAVE_EDITS
+            else -> it
+        }
+    }
+} else {
+    EditorTool.entries - EditorTool.SAVE_EDITS
 }
 
 enum class HslColorBand { RED, ORANGE, YELLOW, GREEN, AQUA, BLUE, PURPLE, MAGENTA }
@@ -347,8 +428,16 @@ data class EditorUiState(
      * and is not saved over.
      */
     val needsNewerApp: Boolean = false,
+    val recipeEdit: RecipeEditState? = null,
     val error: UiText? = null,
 ) {
+    val hasUnsavedRecipeChanges: Boolean
+        get() {
+            val edit = recipeEdit ?: return false
+            val current = recipe ?: return false
+            return !current.sameLookAs(edit.baseline)
+        }
+
     val renderParameters: RenderParameters
         get() = recipe?.toRenderParameters() ?: RenderParameters()
 
@@ -412,7 +501,12 @@ open class EditorViewModel(
     private var shouldPersist = false
     private var needsNewerApp = false
     private var activeTarget: PhotoEditTarget? = null
+    /** The recipe editor's session, kept apart from [activeTarget] so that swapping the sample keeps it. */
+    private var recipeSessionKey: String? = null
     private var copiedRecipe: EditRecipe? = null
+
+    /** Only a photo's own edits go to the photo's record; a composition and a recipe keep theirs elsewhere. */
+    private val persistsToPhoto: Boolean get() = activeTarget is PhotoEditTarget.Asset
 
     private sealed interface PendingChange {
         /** The label and the value come from the adjustment itself, once the drag has ended. */
@@ -431,14 +525,18 @@ open class EditorViewModel(
 
     fun open(target: PhotoEditTarget) {
         val asset = target.asset
+        val sameRecipeSession = target is PhotoEditTarget.Recipe && target.source.key == recipeSessionKey
         val keyMatches = when (val active = activeTarget) {
             is PhotoEditTarget.Asset -> target is PhotoEditTarget.Asset && active.asset.id == asset.id
             is PhotoEditTarget.Composition -> target is PhotoEditTarget.Composition &&
                 active.asset.id == asset.id && active.recipe.updatedAt == target.recipe.updatedAt
+            is PhotoEditTarget.Recipe -> sameRecipeSession && active.asset.id == asset.id
             null -> false
         }
         if (keyMatches && state.value.bitmap != null) return
+        if (sameRecipeSession && state.value.recipe != null) return switchSample(target as PhotoEditTarget.Recipe)
         activeTarget = target
+        recipeSessionKey = (target as? PhotoEditTarget.Recipe)?.source?.key
         loadJob?.cancel()
         conflictsJob?.cancel()
         saveJob?.cancel()
@@ -462,6 +560,11 @@ open class EditorViewModel(
                         when (target) {
                             is PhotoEditTarget.Asset -> recipes.get(asset.id)
                             is PhotoEditTarget.Composition -> target.recipe
+                            is PhotoEditTarget.Recipe -> when (val source = target.source) {
+                                is RecipeSource.Saved -> source.saved.recipe
+                                is RecipeSource.BuiltIn -> source.builtIn.recipe
+                                is RecipeSource.New -> null
+                            }
                         }
                     }
                     val now = Instant.now().toString()
@@ -473,12 +576,19 @@ open class EditorViewModel(
                         !needsNewerApp &&
                             (it.originalChecksum.isBlank() || asset.checksum.isBlank() || it.originalChecksum == asset.checksum)
                     }
-                    val recipe = storedRecipe ?: EditRecipe(
-                        assetId = asset.id,
-                        originalChecksum = asset.checksum,
-                        createdAt = now,
-                        updatedAt = now,
-                    )
+                    val recipe = if (target is PhotoEditTarget.Recipe) {
+                        // Seen through `rebasedOnto`, a recipe is exactly what applying it to a photo
+                        // would give — the sample shows the truth, not the stored record.
+                        val base = EditRecipe(assetId = RECIPE_EDIT_ASSET_ID, originalChecksum = "", createdAt = now, updatedAt = now)
+                        storedRecipe?.rebasedOnto(base, now) ?: base
+                    } else {
+                        storedRecipe ?: EditRecipe(
+                            assetId = asset.id,
+                            originalChecksum = asset.checksum,
+                            createdAt = now,
+                            updatedAt = now,
+                        )
+                    }
                     Triple(bitmap.await(), recipe, storedRecipe != null)
                 }
             }.onSuccess { (bitmap, recipe, existed) ->
@@ -507,6 +617,7 @@ open class EditorViewModel(
                         canRedo = false,
                         needsNewerApp = needsNewerApp,
                         recipeNotice = if (needsNewerApp) uiText(Res.string.editor_needs_newer_app) else it.recipeNotice,
+                        recipeEdit = (target as? PhotoEditTarget.Recipe)?.source?.let { source -> source.editState(recipe) },
                     )
                 }
                 if (target is PhotoEditTarget.Asset) {
@@ -519,6 +630,116 @@ open class EditorViewModel(
                     it.copy(isLoading = false, error = error.toUiText(Res.string.editor_open_failed))
                 }
             }
+        }
+    }
+
+    /** Another sample under the recipe being edited: the photo changes, and nothing else does. */
+    private fun switchSample(target: PhotoEditTarget.Recipe) {
+        activeTarget = target
+        loadJob?.cancel()
+        mutableState.update { it.copy(asset = target.asset, bitmap = null, isLoading = true, error = null) }
+        loadJob = viewModelScope.launch {
+            runCatching { loadBitmap(target.asset) }
+                .onSuccess { bitmap -> mutableState.update { it.copy(bitmap = bitmap, isLoading = false) } }
+                .onFailure { error ->
+                    mutableState.update { it.copy(isLoading = false, error = error.toUiText(Res.string.editor_open_failed)) }
+                }
+        }
+    }
+
+    /**
+     * Leaving the recipe editor, saved or discarded. Without this, opening the same recipe again would
+     * find the session still alive and bring back edits that were thrown away.
+     */
+    fun closeRecipe() {
+        if (activeTarget !is PhotoEditTarget.Recipe) return
+        loadJob?.cancel()
+        activeTarget = null
+        recipeSessionKey = null
+        mutableState.update { EditorUiState(savedRecipes = it.savedRecipes, canPasteRecipe = it.canPasteRecipe) }
+    }
+
+    /**
+     * Saves the recipe editor's work. A recipe that is already the user's is updated where it is; a
+     * filter or a new recipe becomes a new one, under [name] and [collection].
+     */
+    fun saveRecipeEdits(name: String? = null, collection: String? = null) {
+        val edit = state.value.recipeEdit ?: return
+        val current = state.value.recipe ?: return
+        if (needsNewerApp) return
+        val now = Instant.now().toString()
+        val existing = edit.saved
+        val saved = if (existing != null) {
+            existing.copy(recipe = current.storedOver(existing.recipe, now), updatedAt = now)
+        } else {
+            val cleanName = name?.trim().orEmpty()
+            if (cleanName.isBlank()) {
+                mutableState.update { it.copy(recipeNotice = uiText(Res.string.editor_recipe_name_needed)) }
+                return
+            }
+            SavedRecipe(
+                id = UUID.randomUUID().toString(),
+                name = cleanName,
+                collection = collection?.trim().orEmpty(),
+                recipe = current.copy(updatedAt = now),
+                createdAt = now,
+                updatedAt = now,
+            )
+        }
+        persistRecipeEdit(saved, current, uiText(Res.string.editor_recipe_saved))
+    }
+
+    /**
+     * Saves what is on screen as a new recipe and goes on editing that one. The recipe it came from
+     * stays as it was last saved: the copy is where the unsaved edits go.
+     */
+    fun duplicateRecipeEdit() {
+        val edit = state.value.recipeEdit ?: return
+        val current = state.value.recipe ?: return
+        if (needsNewerApp) return
+        viewModelScope.launch {
+            val now = Instant.now().toString()
+            val baseName = edit.saved?.name ?: edit.suggestedName?.resolveNow() ?: appString(Res.string.editor_new_recipe)
+            val copy = SavedRecipe(
+                id = UUID.randomUUID().toString(),
+                name = appString(Res.string.editor_recipe_copy_name, baseName),
+                collection = edit.saved?.collection
+                    ?: edit.suggestedCollection?.resolveNow()
+                    ?: appString(Res.string.editor_default_collection),
+                recipe = current.copy(updatedAt = now),
+                createdAt = now,
+                updatedAt = now,
+            )
+            persistRecipeEdit(copy, current, uiText(Res.string.editor_recipe_duplicated, copy.name))
+        }
+    }
+
+    /** Deletes the recipe being edited. Only one that is the user's can be: a filter never is. */
+    fun deleteRecipeEdit(onDeleted: () -> Unit) {
+        val saved = state.value.recipeEdit?.saved ?: return
+        viewModelScope.launch {
+            runCatching { savedRecipes.delete(saved.id) }
+                .onSuccess {
+                    refreshSavedRecipes()
+                    onDeleted()
+                }
+                .onFailure { error -> mutableState.update { it.copy(recipeNotice = error.toUiText()) } }
+        }
+    }
+
+    private fun persistRecipeEdit(saved: SavedRecipe, savedLook: EditRecipe, notice: UiText) {
+        viewModelScope.launch {
+            runCatching { savedRecipes.save(saved) }
+                .onSuccess {
+                    refreshSavedRecipes()
+                    mutableState.update {
+                        it.copy(
+                            recipeEdit = it.recipeEdit?.copy(saved = saved, baseline = savedLook),
+                            recipeNotice = notice,
+                        )
+                    }
+                }
+                .onFailure { error -> mutableState.update { it.copy(recipeNotice = error.toUiText()) } }
         }
     }
 
@@ -1094,7 +1315,7 @@ open class EditorViewModel(
     }
 
     fun saveNow() {
-        if (activeTarget is PhotoEditTarget.Composition || needsNewerApp) return
+        if (!persistsToPhoto || needsNewerApp) return
         if (!shouldPersist) return
         saveJob?.cancel()
         state.value.recipe?.let { recipe ->
@@ -1431,7 +1652,7 @@ open class EditorViewModel(
     }
 
     private fun scheduleSave(recipe: EditRecipe) {
-        if (activeTarget is PhotoEditTarget.Composition || needsNewerApp) {
+        if (!persistsToPhoto || needsNewerApp) {
             shouldPersist = false
             mutableState.update { it.copy(isSaving = false) }
             return
@@ -1449,7 +1670,7 @@ open class EditorViewModel(
     private suspend fun loadBitmap(asset: EditorAsset): Bitmap {
         val result = SingletonImageLoader.get(context).execute(
             ImageRequest.Builder(context)
-                .data(asset.previewUrl)
+                .data(editorImageData(asset))
                 .libraryAuth(asset.apiKey)
                 .size(2048)
                 .softwareBitmap()
@@ -1459,6 +1680,34 @@ open class EditorViewModel(
         return result.image.toBitmap()
     }
 }
+
+/**
+ * The photo a recipe is edited against, as the recipe sees it. Not the sample's id: swapping the sample
+ * must not change the recipe, or it would count as an edit.
+ */
+internal const val RECIPE_EDIT_ASSET_ID = "recipe"
+
+private fun RecipeSource.editState(opened: EditRecipe) = when (this) {
+    is RecipeSource.Saved -> RecipeEditState(saved = saved, suggestedName = null, suggestedCollection = null, baseline = opened)
+    is RecipeSource.BuiltIn -> RecipeEditState(
+        saved = null,
+        suggestedName = builtIn.nameText(),
+        suggestedCollection = uiText(builtIn.category.labelRes()),
+        baseline = opened,
+    )
+    is RecipeSource.New -> RecipeEditState(saved = null, suggestedName = null, suggestedCollection = null, baseline = opened)
+}
+
+/**
+ * The edited look written back over the stored recipe. What ties the record to where it came from — the
+ * photo it was made on, its creation — stays the record's; only the look and the moment change.
+ */
+internal fun EditRecipe.storedOver(stored: EditRecipe, now: String): EditRecipe = copy(
+    assetId = stored.assetId,
+    originalChecksum = stored.originalChecksum,
+    createdAt = stored.createdAt,
+    updatedAt = now,
+)
 
 internal fun EditRecipe.rebasedOnto(target: EditRecipe, now: String): EditRecipe = copy(
     assetId = target.assetId,

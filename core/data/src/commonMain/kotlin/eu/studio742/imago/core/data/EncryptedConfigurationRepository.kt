@@ -119,6 +119,10 @@ class EncryptedConfigurationRepository(
         get() = preferences.getString("export_library")
         set(value) { preferences.write(mapOf("export_library" to value)) }
 
+    override var lastSeenAppVersion: String?
+        get() = preferences.getString("last_seen_app_version")
+        set(value) { preferences.write(mapOf("last_seen_app_version" to value)) }
+
     override fun completeWelcome() {
         check(preferences.write(mapOf(WELCOME_KEY to "true")))
         welcome.value = true

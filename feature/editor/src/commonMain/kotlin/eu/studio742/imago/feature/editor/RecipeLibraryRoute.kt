@@ -9,9 +9,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -22,10 +25,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import eu.studio742.imago.core.data.SavedRecipeRepository
 import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.i18n.appString
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.feature.library.LibraryNavBar
 import eu.studio742.imago.feature.library.LibraryNavDestination
 import java.time.Instant
+import java.util.UUID
 
 data class RecipeLibraryUiState(
     val recipes: List<SavedRecipe> = emptyList(),
@@ -66,6 +71,28 @@ open class RecipeLibraryViewModel(
         )
     }
 
+    /** A copy is a new recipe of its own: not a favourite and never applied, whatever the original was. */
+    fun duplicate(id: String) {
+        val recipe = mutableState.value.recipes.firstOrNull { it.id == id } ?: return
+        viewModelScope.launch {
+            val now = Instant.now().toString()
+            runCatching {
+                savedRecipes.save(
+                    recipe.copy(
+                        id = UUID.randomUUID().toString(),
+                        name = appString(Res.string.editor_recipe_copy_name, recipe.name),
+                        recipe = recipe.recipe.copy(updatedAt = now),
+                        createdAt = now,
+                        updatedAt = now,
+                        isFavorite = false,
+                        usedAt = null,
+                    ),
+                )
+            }
+            refresh()
+        }
+    }
+
     fun delete(id: String) {
         viewModelScope.launch {
             runCatching { savedRecipes.delete(id) }
@@ -84,9 +111,9 @@ open class RecipeLibraryViewModel(
 /**
  * The recipe library opened from the bottom bar.
  *
- * There is no open photo here, and applying makes no sense — it is a screen for organising, and the
- * same screen gains the tap to apply when opened from the editor. The previews are not left blank: a
- * sample photo serves as the source, so every tile shows the effect instead of a black square.
+ * There is no open photo here, so a recipe is not applied: tapping one opens it in the editor, over a
+ * sample photo, and the edits go to the recipe itself. The previews are not left blank either: the
+ * same sample serves as their source, so every tile shows the effect instead of a black square.
  */
 @Composable
 fun RecipeLibraryRoute(
@@ -94,32 +121,68 @@ fun RecipeLibraryRoute(
     onNavigate: (LibraryNavDestination) -> Unit,
     onOpenSettings: () -> Unit,
     viewModel: RecipeLibraryViewModel = recipeLibraryViewModel(),
+    editor: EditorViewModel = editorViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var renaming by remember { mutableStateOf<SavedRecipe?>(null) }
     var deleting by remember { mutableStateOf<SavedRecipe?>(null) }
-    val sampleAssetId = rememberSampleRecipeSource()
-    BackHandler(onBack = onBack)
+    var sampleIndex by rememberSampleIndex()
+    val sampleAssetId = rememberSampleRecipeSource(sampleIndex)
+    // The key, and not the source: it survives a rotation, and the source is rebuilt from it.
+    var editingKey by rememberSaveable { mutableStateOf<String?>(null) }
+    // The grid stays where it was — tab, filter, scroll — while the editor is open over it.
+    val gridState = rememberSaveableStateHolder()
 
-    RecipeLibraryScreen(
-        saved = state.recipes.toCards(),
-        builtIn = builtInCards(),
-        isLoading = state.isLoading,
-        assetId = sampleAssetId,
-        onBack = onBack,
-        onApply = null,
-        onToggleFavorite = { viewModel.toggleFavorite(it.id) },
-        onRename = { card -> renaming = state.recipes.firstOrNull { it.id == card.id } },
-        onDelete = { card -> deleting = state.recipes.firstOrNull { it.id == card.id } },
-        onCreate = null,
-        bottomBar = {
-            LibraryNavBar(
-                selected = LibraryNavDestination.RECIPES,
-                onSelect = onNavigate,
-                onOpenSettings = onOpenSettings,
-            )
-        },
-    )
+    val editingSource = editingKey?.let { RecipeSource.fromKey(it, state.recipes) }
+    if (editingKey != null) {
+        if (editingSource == null) {
+            // A saved recipe that is not in the list: still loading, or deleted on another device.
+            if (!state.isLoading) LaunchedEffect(editingKey) { editingKey = null }
+            return
+        }
+        EditorRoute(
+            asset = sampleEditorAsset(sampleIndex),
+            target = PhotoEditTarget.Recipe(sampleEditorAsset(sampleIndex), editingSource),
+            assets = (0 until SAMPLE_COUNT).map(::sampleEditorAsset),
+            selectedIndex = sampleIndex,
+            onSelectIndex = { sampleIndex = it },
+            onBack = {
+                editingKey = null
+                editor.closeRecipe()
+                viewModel.refresh()
+            },
+            viewModel = editor,
+        )
+        return
+    }
+
+    BackHandler(onBack = onBack)
+    gridState.SaveableStateProvider("grid") {
+        RecipeLibraryScreen(
+            saved = state.recipes.toCards(),
+            builtIn = builtInCards(),
+            isLoading = state.isLoading,
+            assetId = sampleAssetId,
+            onBack = onBack,
+            onSelect = { card ->
+                editingKey = if (card.isBuiltIn) RecipeSource.builtInKey(card.id) else RecipeSource.savedKey(card.id)
+            },
+            onToggleFavorite = { viewModel.toggleFavorite(it.id) },
+            onRename = { card -> renaming = state.recipes.firstOrNull { it.id == card.id } },
+            onDuplicate = { viewModel.duplicate(it.id) },
+            onDelete = { card -> deleting = state.recipes.firstOrNull { it.id == card.id } },
+            onCreate = { editingKey = RecipeSource.New().key },
+            createLabel = stringResource(Res.string.editor_new_recipe),
+            createHint = stringResource(Res.string.editor_new_recipe_hint),
+            bottomBar = {
+                LibraryNavBar(
+                    selected = LibraryNavDestination.RECIPES,
+                    onSelect = onNavigate,
+                    onOpenSettings = onOpenSettings,
+                )
+            },
+        )
+    }
 
     renaming?.let { recipe ->
         RecipeDetailsDialog(
