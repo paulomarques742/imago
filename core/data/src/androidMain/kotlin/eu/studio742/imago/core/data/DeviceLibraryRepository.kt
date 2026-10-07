@@ -175,7 +175,7 @@ class DeviceLibraryRepository @Inject constructor(
         val parsed = uris.map(Uri::parse)
         // A single photo of the gallery opens among its album, as the gallery would show it.
         if (neighbours && parsed.size == 1) {
-            catalogRowFor(parsed.single())?.let { row ->
+            catalogRowFor(parsed.single(), refreshStaleFolder = true)?.let { row ->
                 val album = row.folderId?.let { database.assetDao().inFolder(DEVICE_LIBRARY_ID, it) }.orEmpty()
                 val index = album.indexOfFirst { it.id == row.id }
                 if (index >= 0) {
@@ -200,7 +200,7 @@ class DeviceLibraryRepository @Inject constructor(
      * catalogue does not have it yet — a photo just taken. Null when it is not in the gallery, or the
      * gallery cannot be read.
      */
-    private suspend fun catalogRowFor(uri: Uri): AssetEntity? = withContext(Dispatchers.IO) {
+    private suspend fun catalogRowFor(uri: Uri, refreshStaleFolder: Boolean = false): AssetEntity? = withContext(Dispatchers.IO) {
         val media = when {
             uri.authority == MediaStore.AUTHORITY -> uri
             android.provider.DocumentsContract.isDocumentUri(context, uri) -> runCatching { MediaStore.getMediaUri(context, uri) }.getOrNull()
@@ -210,8 +210,20 @@ class DeviceLibraryRepository @Inject constructor(
         val suffix = "%/media/$mediaId"
         database.assetDao().byIdSuffix(DEVICE_LIBRARY_ID, suffix) ?: run {
             refreshRows(listOf(media.toString()))
-            database.assetDao().byIdSuffix(DEVICE_LIBRARY_ID, suffix)
+            // A photo the catalogue did not know says it is behind on that folder too: the others
+            // just taken or copied there would be missing from the album it opens among.
+            database.assetDao().byIdSuffix(DEVICE_LIBRARY_ID, suffix)?.also { row ->
+                if (refreshStaleFolder) row.folderId?.let { refreshFolder(it) }
+            }
         }
+    }
+
+    /** Reads one folder again from MediaStore: what is new comes in, what left goes out. */
+    private suspend fun refreshFolder(folderId: String) = withContext(Dispatchers.IO) {
+        val (rows, paths) = readMedia("bucket_id = ?", arrayOf(folderId.substringAfter(':')))
+        val inFolder = rows.filter { it.folderId == folderId }
+        replaceRows(database.assetDao().idsInFolder(DEVICE_LIBRARY_ID, folderId) + inFolder.map { it.id }, inFolder)
+        folderPathCache = folderPathCache + paths
     }
 
     override fun rememberTransfer(transfer: FolderTransfer?) {
