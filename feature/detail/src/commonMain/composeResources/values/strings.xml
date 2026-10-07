@@ -53,4 +53,5 @@
     <string name="detail_save_original">Original</string>
     <string name="detail_save_edited">Edited</string>
     <string name="detail_add_to_album">Add to album</string>
+    <string name="detail_delete_device_body_managed">“%1$s” will go to the device’s trash.</string>
 </resources>

@@ -352,7 +352,14 @@ internal fun AlbumDeleteDialog(album: AlbumUiModel, onConfirm: () -> Unit, onDis
         title = { Text(stringResource(Res.string.library_album_delete_question, album.name)) },
         text = {
             Text(
-                if (album.isFolder) pluralStringResource(Res.plurals.library_album_delete_folder_body, album.assetCount, album.assetCount)
+                if (album.isFolder) {
+                    val managed = rememberMediaManagement()?.granted == true
+                    pluralStringResource(
+                        if (managed) Res.plurals.library_album_delete_folder_body_managed else Res.plurals.library_album_delete_folder_body,
+                        album.assetCount,
+                        album.assetCount,
+                    )
+                }
                 else stringResource(Res.string.library_album_delete_body),
             )
         },

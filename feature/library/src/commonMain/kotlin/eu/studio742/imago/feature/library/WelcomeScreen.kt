@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -83,13 +84,19 @@ fun WelcomeRoute(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var connectingImmich by rememberSaveable { mutableStateOf(false) }
+    val mediaManagement = rememberMediaManagement()
+    var offeringManagement by rememberSaveable { mutableStateOf(false) }
     // Access is asked for before finishing: the library only opens after the dialog closes, whatever
     // the answer — refusing is choosing too, and Settings allow asking again.
     val requestAccess = rememberRequestMediaAccess(settings) {
         viewModel.chooseDevice()
-        onFinished()
+        // With the photos open, the phone can also stop asking for every move and delete: offered
+        // here, once, and kept in Settings. Without access to the photos there is nothing to manage.
+        val hasPhotos = settings.device.accessSummary().message != eu.studio742.imago.core.model.UserMessage.DEVICE_ACCESS_NONE
+        if (mediaManagement != null && !mediaManagement.granted && hasPhotos) offeringManagement = true else onFinished()
     }
     BackHandler(enabled = connectingImmich && !state.isChecking) { connectingImmich = false }
+    BackHandler(enabled = offeringManagement, onBack = onFinished)
     Surface(color = ImagoColors.Background, modifier = Modifier.fillMaxSize()) {
         // Without scroll or imePadding, the keyboard covered the connect button on a small screen and
         // there was no way to reach it. The Box centres the block when the screen is wider than 480 dp.
@@ -110,7 +117,12 @@ fun WelcomeRoute(
                     .padding(horizontal = ImagoSpacing.Xxl, vertical = ImagoSpacing.Xxxl),
                 horizontalAlignment = Alignment.Start,
             ) {
-                if (connectingImmich) {
+                if (offeringManagement && mediaManagement != null) {
+                    MediaManagementOffer(
+                        onAllow = { mediaManagement.request(onDone = onFinished) },
+                        onSkip = onFinished,
+                    )
+                } else if (connectingImmich) {
                     ImmichConnectForm(
                         state = state,
                         onBack = { connectingImmich = false },
@@ -180,6 +192,34 @@ private fun WelcomeChoice(
         modifier = Modifier.padding(top = ImagoSpacing.Md),
     )
     Box(Modifier.padding(top = ImagoSpacing.Xxxl)) { accountPrompt() }
+}
+
+/** The second step of "this device only": moving and deleting without a confirmation each time. */
+@Composable
+private fun MediaManagementOffer(onAllow: () -> Unit, onSkip: () -> Unit) {
+    Text(
+        text = stringResource(Res.string.library_media_management_offer_title),
+        style = MaterialTheme.typography.titleLarge,
+        color = ImagoColors.TextPrimary,
+    )
+    Text(
+        text = stringResource(Res.string.library_media_management_offer_body),
+        style = MaterialTheme.typography.bodyMedium,
+        color = ImagoColors.TextSecondary,
+        modifier = Modifier.padding(top = ImagoSpacing.Md),
+    )
+    Button(onClick = onAllow, modifier = Modifier.fillMaxWidth().padding(top = ImagoSpacing.Xxl)) {
+        Text(stringResource(Res.string.library_media_management_allow))
+    }
+    TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth().padding(top = ImagoSpacing.Sm)) {
+        Text(stringResource(Res.string.library_media_management_skip))
+    }
+    Text(
+        text = stringResource(Res.string.library_media_management_later),
+        style = MaterialTheme.typography.bodySmall,
+        color = ImagoColors.TextTertiary,
+        modifier = Modifier.padding(top = ImagoSpacing.Md),
+    )
 }
 
 @Composable

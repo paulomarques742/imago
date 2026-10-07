@@ -614,11 +614,17 @@ open class LibraryViewModel(
             val albums = runCatching { library.albums() }
             val months = runCatching { library.timeBuckets() }
             if (sourceId != configuration.selectedLibraryId.value) return@launch
+            val refreshed = albums.getOrNull()?.map { it.toUiModel() }?.sortedWith(
+                compareByDescending<AlbumUiModel> { it.endDate.orEmpty() }.thenBy { it.name.lowercase() },
+            )
             uiState.update { current ->
                 current.copy(
-                    albums = albums.getOrNull()?.map { it.toUiModel() }?.sortedWith(
-                        compareByDescending<AlbumUiModel> { it.endDate.orEmpty() }.thenBy { it.name.lowercase() },
-                    ) ?: current.albums,
+                    albums = refreshed ?: current.albums,
+                    // The open album follows the list: photos moved out of it from the selection left
+                    // its header counting them. One no longer listed has nothing left in it.
+                    selectedAlbum = current.selectedAlbum?.let { open ->
+                        if (refreshed == null) open else refreshed.firstOrNull { it.id == open.id } ?: open.copy(assetCount = 0)
+                    },
                     months = months.getOrNull()?.map { MonthUiModel(it.month, it.assetCount) } ?: current.months,
                     isLoadingNavigation = false,
                     // Albums first: a key without album.read has the timeline, and the albums section is

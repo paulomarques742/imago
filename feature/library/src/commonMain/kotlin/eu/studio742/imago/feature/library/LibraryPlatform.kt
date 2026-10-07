@@ -45,6 +45,21 @@ expect fun rememberRequestMediaAccess(viewModel: LibrarySettingsViewModel, onRes
 @Composable
 expect fun DeviceMediaActionHost(viewModel: LibrarySettingsViewModel = librarySettingsViewModel())
 
+/**
+ * Android's "media management apps" access: with it, moving and deleting the device's photos stop
+ * asking for confirmation each time. Offered in the welcome and kept in Settings.
+ */
+interface MediaManagement {
+    val granted: Boolean
+
+    /** Opens where it is given; [onDone] runs on coming back, given or not. */
+    fun request(onDone: () -> Unit = {})
+}
+
+/** Null where there is no such access: on desktop, and below Android 12. */
+@Composable
+expect fun rememberMediaManagement(): MediaManagement?
+
 /** Whether this device's albums — its folders — can be changed from here: on the phone, yes. */
 expect val DeviceFolderAlbums: Boolean
 

@@ -7,6 +7,7 @@ import eu.studio742.imago.core.model.AssetReference
 import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.feature.library.AddToAlbumSheet
 import eu.studio742.imago.feature.library.DeviceFolderAlbums
+import eu.studio742.imago.feature.library.rememberMediaManagement
 import androidx.compose.material.icons.outlined.PhotoAlbum
 import eu.studio742.imago.core.designsystem.i18n.LocalAppLocale
 import eu.studio742.imago.core.designsystem.i18n.resolve
@@ -219,6 +220,8 @@ private fun DetailScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showVersionChoice by remember { mutableStateOf(false) }
     var showAlbums by remember { mutableStateOf(false) }
+    // As a media management app, Android no longer confirms a delete: the dialog must not promise it.
+    val managesMedia = rememberMediaManagement()?.granted == true
     // The device's albums are its folders, which only the phone changes from here.
     val canFileIntoAlbum = DeviceFolderAlbums ||
         runCatching { AssetReference.parse(asset.id).libraryId != DEVICE_LIBRARY_ID }.getOrDefault(false)
@@ -483,7 +486,10 @@ private fun DetailScreen(
             text = {
                 Text(
                     if (eu.studio742.imago.core.model.AssetReference.parse(asset.id).libraryId == eu.studio742.imago.core.model.DEVICE_LIBRARY_ID)
-                        stringResource(Res.string.detail_delete_device_body, asset.fileName)
+                        stringResource(
+                            if (managesMedia) Res.string.detail_delete_device_body_managed else Res.string.detail_delete_device_body,
+                            asset.fileName,
+                        )
                     else stringResource(Res.string.detail_delete_server_body, asset.fileName),
                 )
             },

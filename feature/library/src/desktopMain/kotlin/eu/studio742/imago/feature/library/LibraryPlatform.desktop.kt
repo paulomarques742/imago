@@ -82,6 +82,9 @@ actual fun DeviceMediaActionHost(viewModel: LibrarySettingsViewModel) = Unit
 
 actual val DeviceFolderAlbums: Boolean get() = false
 
+@Composable
+actual fun rememberMediaManagement(): MediaManagement? = null
+
 actual val DeviceLibraryIcon: ImageVector get() = Icons.Outlined.Computer
 
 actual val DeviceLibraryName: StringResource get() = Res.string.library_device_name_desktop

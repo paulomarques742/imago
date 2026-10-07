@@ -117,6 +117,52 @@ actual fun DeviceMediaActionHost(viewModel: LibrarySettingsViewModel) {
 
 actual val DeviceFolderAlbums: Boolean get() = true
 
+/**
+ * Read again on every return to the app: it is given in the system's settings, outside it. The
+ * media location goes first — without it a write request still shows the dialog.
+ */
+@Composable
+actual fun rememberMediaManagement(): MediaManagement? {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var granted by remember { mutableStateOf(android.provider.MediaStore.canManageMedia(context)) }
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) granted = android.provider.MediaStore.canManageMedia(context)
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    var pendingDone by remember { mutableStateOf<() -> Unit>({}) }
+    val settings = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        granted = android.provider.MediaStore.canManageMedia(context)
+        pendingDone()
+    }
+    val openSettings = {
+        settings.launch(
+            android.content.Intent(
+                android.provider.Settings.ACTION_REQUEST_MANAGE_MEDIA,
+                android.net.Uri.parse("package:${context.packageName}"),
+            ),
+        )
+    }
+    val location = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { openSettings() }
+    return remember(granted) {
+        object : MediaManagement {
+            override val granted = granted
+
+            override fun request(onDone: () -> Unit) {
+                pendingDone = onDone
+                if (context.checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    openSettings()
+                } else {
+                    location.launch(Manifest.permission.ACCESS_MEDIA_LOCATION)
+                }
+            }
+        }
+    }
+}
+
 actual val DeviceLibraryIcon: ImageVector get() = Icons.Outlined.PhoneAndroid
 
 actual val DeviceLibraryName: StringResource get() = Res.string.library_device_name
@@ -130,6 +176,17 @@ actual fun ColumnScope.DeviceLibraryAccess(viewModel: LibrarySettingsViewModel, 
     Text(remember(revision) { viewModel.device.accessSummary() }.toUiText().resolve(),
         style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
     OutlinedButton(onClick = requestAccess) { Text(stringResource(Res.string.library_manage_access)) }
+    rememberMediaManagement()?.let { management ->
+        Text(stringResource(Res.string.library_media_management_title), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
+        Text(
+            stringResource(if (management.granted) Res.string.library_media_management_on else Res.string.library_media_management_off),
+            style = MaterialTheme.typography.bodySmall,
+            color = ImagoColors.TextSecondary,
+        )
+        OutlinedButton(onClick = { management.request() }) {
+            Text(stringResource(if (management.granted) Res.string.library_media_management_change else Res.string.library_media_management_allow))
+        }
+    }
     // Where "Always do this" in the move-or-copy question is undone.
     val transfer by viewModel.device.rememberedTransfer.collectAsState()
     Text(stringResource(Res.string.library_folder_transfer_setting), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)

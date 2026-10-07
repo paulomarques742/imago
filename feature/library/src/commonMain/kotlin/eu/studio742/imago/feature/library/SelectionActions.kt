@@ -286,7 +286,11 @@ internal fun SelectionDeleteDialog(selection: List<AssetUiModel>, onConfirm: () 
         text = {
             Text(
                 listOfNotNull(
-                    stringResource(SelectionDeleteDeviceBody).takeIf { onDevice },
+                    // As a media management app, Android no longer asks: saying it would is a promise of a dialog.
+                    stringResource(
+                        if (rememberMediaManagement()?.granted == true) Res.string.library_selection_delete_device_body_managed
+                        else SelectionDeleteDeviceBody,
+                    ).takeIf { onDevice },
                     stringResource(Res.string.library_selection_delete_server_body).takeIf { onServer },
                 ).joinToString("\n\n"),
             )
