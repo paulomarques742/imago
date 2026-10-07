@@ -19,6 +19,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import eu.studio742.imago.core.immich.generated.ImmichContract
+import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
 import eu.studio742.imago.core.model.AssetExif
 import eu.studio742.imago.core.model.AssetPage
 import eu.studio742.imago.core.model.AssetType
@@ -48,6 +49,7 @@ class OkHttpImmichApi(
     override suspend fun currentUserId(connection: ImmichConnection): String = withContext(Dispatchers.IO) {
         val result = executeJson<kotlinx.serialization.json.JsonObject>(
             Request.Builder().url(endpoint(connection, ImmichContract.GET_CURRENT_USER)).get().build(), connection.apiKey,
+            ImmichKeyPermissions.GET_MY_USER,
         )
         (result["id"] as? kotlinx.serialization.json.JsonPrimitive)?.content
             ?.takeIf { it.isNotBlank() } ?: error("The server did not return the account identity.")
@@ -57,6 +59,7 @@ class OkHttpImmichApi(
         val version = executeJson<ServerVersionDto>(
             request = Request.Builder().url(endpoint(connection, ImmichContract.GET_SERVER_VERSION)).get().build(),
             apiKey = null,
+            permission = null,
         ).toDomain()
 
         if (version < ImmichCompatibility.minimum) throw ImmichApiException.UnsupportedVersion(version)
@@ -64,8 +67,20 @@ class OkHttpImmichApi(
         execute(
             request = Request.Builder().url(endpoint(connection, ImmichContract.GET_CURRENT_USER)).get().build(),
             apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.GET_MY_USER,
         ).close()
         version
+    }
+
+    override suspend fun keyPermissions(connection: ImmichConnection): Set<String> = withContext(Dispatchers.IO) {
+        // Blocking OkHttp calls ignore coroutine cancellation: the limit has to be the call's own.
+        val quick = client.newBuilder().callTimeout(KEY_PERMISSIONS_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS).build()
+        executeJson<ApiKeyDto>(
+            request = Request.Builder().url(endpoint(connection, ImmichContract.GET_MY_API_KEY)).get().build(),
+            apiKey = connection.apiKey,
+            permission = null,
+            client = quick,
+        ).permissions.toSet()
     }
 
     override suspend fun ping(serverUrl: String, timeoutMillis: Long): Boolean = withContext(Dispatchers.IO) {
@@ -142,6 +157,7 @@ class OkHttpImmichApi(
                 .post(body)
                 .build(),
             apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.SEARCH_ASSETS,
         )
         AssetPage(
             items = response.assets.items.map(AssetResponseDto::toDomain).filter { it.type in allowedTypes },
@@ -157,6 +173,7 @@ class OkHttpImmichApi(
             return executeJson(
                 request = Request.Builder().url(url).get().build(),
                 apiKey = connection.apiKey,
+                permission = ImmichKeyPermissions.GET_ALL_ALBUMS,
             )
         }
         (load(null) + load(true)).distinctBy(AlbumResponseDto::id).map { album ->
@@ -182,6 +199,7 @@ class OkHttpImmichApi(
             executeJson<List<TimeBucketDto>>(
                 request = Request.Builder().url(url).get().build(),
                 apiKey = connection.apiKey,
+                permission = ImmichKeyPermissions.GET_TIME_BUCKETS,
             ).map { ImmichTimeBucket(month = it.timeBucket, assetCount = it.count) }
         }
 
@@ -204,6 +222,7 @@ class OkHttpImmichApi(
         executeJson<TimeBucketAssetsDto>(
             request = Request.Builder().url(url).get().build(),
             apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.GET_TIME_BUCKET,
         ).toDomain()
     }
 
@@ -215,6 +234,7 @@ class OkHttpImmichApi(
         executeJson<AssetDetailResponseDto>(
             request = Request.Builder().url(endpoint(connection, path)).get().build(),
             apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.GET_ASSET_INFO,
         ).toDomain()
     }
 
@@ -239,6 +259,7 @@ class OkHttpImmichApi(
                 .delete(body)
                 .build(),
             apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.DELETE_ASSETS,
         ).close()
     }
 
@@ -248,6 +269,7 @@ class OkHttpImmichApi(
         execute(
             request = Request.Builder().url(endpoint(connection, path)).put(body).build(),
             apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.UPDATE_ASSET,
         ).close()
     }
 
@@ -271,6 +293,7 @@ class OkHttpImmichApi(
         execute(
             request = Request.Builder().url(endpoint(connection, path)).get().build(),
             apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.DOWNLOAD_ASSET,
         ).use { response ->
             val body = checkNotNull(response.body) { "Immich returned an empty original." }
             destination.outputStream().buffered().use { output -> body.byteStream().copyTo(output) }
@@ -302,6 +325,7 @@ class OkHttpImmichApi(
                 .post(builder.build())
                 .build(),
             apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.UPLOAD_ASSET,
         )
         val canStack = uploaded.status != "duplicate" && uploaded.id != originalAssetId
         val stacked = if (canStack) {
@@ -314,6 +338,7 @@ class OkHttpImmichApi(
                         .post(body)
                         .build(),
                     apiKey = connection.apiKey,
+                    permission = ImmichKeyPermissions.CREATE_STACK,
                 ).close()
             }.isSuccess
         } else {
@@ -351,6 +376,7 @@ class OkHttpImmichApi(
         val uploaded = executeJson<AssetMediaResponseDto>(
             request = Request.Builder().url(endpoint(connection, ImmichContract.UPLOAD_ASSET)).post(builder.build()).build(),
             apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.UPLOAD_ASSET,
         )
         ImmichUploadResult(uploaded.id, uploaded.status)
     }
@@ -366,8 +392,13 @@ class OkHttpImmichApi(
         return base.resolve(apiPath) ?: throw ImmichApiException.InvalidUrl()
     }
 
-    private inline fun <reified T> executeJson(request: Request, apiKey: String?): T =
-        execute(request, apiKey).use { response ->
+    private inline fun <reified T> executeJson(
+        request: Request,
+        apiKey: String?,
+        permission: String?,
+        client: OkHttpClient = this.client,
+    ): T =
+        execute(request, apiKey, permission, client).use { response ->
             val payload = response.body?.string().orEmpty()
             try {
                 json.decodeFromString<T>(payload)
@@ -382,7 +413,17 @@ class OkHttpImmichApi(
             }
         }
 
-    private fun execute(request: Request, apiKey: String?): okhttp3.Response {
+    /**
+     * [permission] is what the key needs for this endpoint. Immich answers 401 to a key it does not
+     * know and 403 to one without the permission, and only the first means the key is wrong: a key
+     * created without a permission on purpose has to hear which one is missing.
+     */
+    private fun execute(
+        request: Request,
+        apiKey: String?,
+        permission: String?,
+        client: OkHttpClient = this.client,
+    ): okhttp3.Response {
         val authenticated = request.newBuilder().apply {
             if (!apiKey.isNullOrBlank()) header(ImmichContract.API_KEY_HEADER, apiKey)
         }.build()
@@ -397,11 +438,13 @@ class OkHttpImmichApi(
 
         val detail = response.body?.string().orEmpty().take(240)
         response.close()
+        if (response.code == 403 && permission != null) throw ImmichApiException.MissingPermission(listOf(permission), detail)
         if (response.code == 401 || response.code == 403) throw ImmichApiException.Authentication()
         throw ImmichApiException.Server(response.code, detail)
     }
 
     private companion object {
+        const val KEY_PERMISSIONS_TIMEOUT_MS = 3_000L
         val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         val JPEG_MEDIA_TYPE = "image/jpeg".toMediaType()
     }
@@ -412,6 +455,9 @@ private data class AssetMediaResponseDto(val id: String, val status: String)
 
 @Serializable
 private data class StackCreateDto(val assetIds: List<String>)
+
+@Serializable
+private data class ApiKeyDto(val permissions: List<String>)
 
 @Serializable
 private data class ServerVersionDto(

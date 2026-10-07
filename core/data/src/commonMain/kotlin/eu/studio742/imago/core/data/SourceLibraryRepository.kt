@@ -74,6 +74,9 @@ class SourceLibraryRepository @Inject constructor(
     override suspend fun deleteAsset(assetId: String) {
         val ref = AssetReference.parse(assetId); provider(ref.libraryId).deleteAsset(ref.localId)
     }
+    override suspend fun checkCanDelete(assetId: String) {
+        val ref = AssetReference.parse(assetId); provider(ref.libraryId).checkCanDelete(ref.localId)
+    }
     override suspend fun downloadOriginal(assetId: String, destination: File) {
         val ref = AssetReference.parse(assetId); provider(ref.libraryId).downloadOriginal(ref.localId, destination)
     }

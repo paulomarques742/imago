@@ -13,6 +13,7 @@ class ImmichKeyPermissionsTest {
     @Test fun explainsExactlyThePermissionsTheContractNeeds() {
         val shown = ImmichKeyPermissionList.map { it.id }
         assertEquals(shown.distinct(), shown)
-        assertEquals(Contract.REQUIRED.sorted(), shown.sorted())
+        assertEquals(Contract.REQUIRED.sorted(), ImmichKeyPermissionList.filterNot { it.optional }.map { it.id }.sorted())
+        assertEquals(Contract.OPTIONAL.sorted(), ImmichKeyPermissionList.filter { it.optional }.map { it.id }.sorted())
     }
 }

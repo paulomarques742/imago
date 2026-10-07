@@ -42,6 +42,7 @@ private fun UserMessage.resource(): StringResource = when (this) {
     UserMessage.EDIT_NEEDS_NEWER_APP -> Res.string.message_edit_needs_newer_app
     UserMessage.IMMICH_INVALID_URL -> Res.string.message_immich_invalid_url
     UserMessage.IMMICH_KEY_REJECTED -> Res.string.message_immich_key_rejected
+    UserMessage.IMMICH_PERMISSION_MISSING -> Res.string.message_immich_permission_missing
     UserMessage.IMMICH_VERSION_UNSUPPORTED -> Res.string.message_immich_version_unsupported
     UserMessage.IMMICH_SERVER_ERROR -> Res.string.message_immich_server_error
     UserMessage.IMMICH_UNREACHABLE -> Res.string.message_immich_unreachable

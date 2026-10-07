@@ -91,6 +91,12 @@ interface LibraryRepository {
     suspend fun setFavorite(assetId: String, isFavorite: Boolean)
     suspend fun deleteAsset(assetId: String)
 
+    /**
+     * Fails with the permission the library's key lacks to delete this asset, before the
+     * confirmation is asked. Libraries without a key can always delete.
+     */
+    suspend fun checkCanDelete(assetId: String) = Unit
+
     /** The original file, for sharing. */
     suspend fun downloadOriginal(assetId: String, destination: File)
 }

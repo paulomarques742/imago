@@ -413,6 +413,65 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun forbiddenWriteNamesTheMissingPermissionInsteadOfRejectingTheKey() = runTest {
+        server.enqueue(
+            MockResponse().setResponseCode(403).setBody("""{"message":"Missing required permission: asset.delete"}"""),
+        )
+        server.enqueue(MockResponse().setResponseCode(403))
+
+        val delete = runCatching { api.deleteAsset(connection(), "a1") }.exceptionOrNull()
+        val favorite = runCatching { api.setFavorite(connection(), "a1", true) }.exceptionOrNull()
+
+        assertEquals(listOf("asset.delete"), (delete as ImmichApiException.MissingPermission).permissions)
+        assertEquals(listOf("asset.update"), (favorite as ImmichApiException.MissingPermission).permissions)
+        assertEquals(eu.studio742.imago.core.model.UserMessage.IMMICH_PERMISSION_MISSING, favorite.userMessage)
+        assertEquals(listOf("asset.update"), favorite.args)
+    }
+
+    @Test
+    fun forbiddenAlbumsNameAlbumRead() = runTest {
+        server.enqueue(MockResponse().setResponseCode(403))
+
+        val error = runCatching { api.getAlbums(connection()) }.exceptionOrNull()
+
+        assertEquals(listOf("album.read"), (error as ImmichApiException.MissingPermission).permissions)
+    }
+
+    @Test
+    fun readsTheKeysOwnPermissions() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"id":"k","name":"IMAGO","createdAt":"2026-01-01T00:00:00.000Z","updatedAt":"2026-01-01T00:00:00.000Z","permissions":["asset.read","asset.view"]}""",
+            ),
+        )
+
+        assertEquals(setOf("asset.read", "asset.view"), api.keyPermissions(connection()))
+        val request = server.takeRequest()
+        assertEquals("/api/api-keys/me", request.path)
+        assertEquals("secret", request.getHeader("x-api-key"))
+    }
+
+    @Test
+    fun requirePermissionFailsBeforeTheRequestOnlyWhenTheKeyLacksIt() = runTest {
+        fun keyWith(vararg permissions: String) = MockResponse().setBody(
+            """{"permissions":[${permissions.joinToString { "\"$it\"" }}]}""",
+        )
+        server.enqueue(keyWith("asset.read", "asset.update"))
+        val missing = runCatching { api.requirePermission(connection(), "asset.delete") }.exceptionOrNull()
+        assertEquals(listOf("asset.delete"), (missing as ImmichApiException.MissingPermission).permissions)
+
+        server.enqueue(keyWith("asset.delete"))
+        api.requirePermission(connection(), "asset.delete")
+
+        server.enqueue(keyWith("all"))
+        api.requirePermission(connection(), "asset.delete")
+
+        // Without knowing, it lets the request itself answer.
+        server.enqueue(MockResponse().setResponseCode(500))
+        api.requirePermission(connection(), "asset.delete")
+    }
+
+    @Test
     fun serverErrorOnDeleteSurfacesWithStatus() = runTest {
         server.enqueue(MockResponse().setResponseCode(500).setBody("boom"))
 

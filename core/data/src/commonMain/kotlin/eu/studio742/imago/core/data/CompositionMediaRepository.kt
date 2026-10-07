@@ -12,5 +12,8 @@ interface CompositionMediaRepository {
     fun videoPlaybackUrl(assetId: String): String
     fun apiKey(assetId: String): String
     suspend fun downloadOriginal(assetId: String, destination: File)
+
+    /** Fails with the permission the library's key lacks to upload, before anything is rendered. */
+    suspend fun checkCanUpload(targetLibraryId: String) = Unit
     suspend fun uploadComposition(targetLibraryId: String, file: File, fileName: String, mimeType: String, createdAt: String)
 }

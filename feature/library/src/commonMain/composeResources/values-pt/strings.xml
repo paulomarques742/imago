@@ -64,8 +64,10 @@
     <string name="library_no_recent">Não há nada dos últimos 30 dias.</string>
     <string name="library_empty_view">Não há nada nesta vista.</string>
     <string name="library_saved">Biblioteca guardada.</string>
+    <string name="library_saved_limited">Biblioteca guardada. A chave não tem %1$s: o que precisar disso avisa quando o tentar fazer.</string>
     <string name="library_save_failed">Não foi possível guardar a biblioteca.</string>
     <string name="library_connection_ok">Ligação disponível · Immich %1$s</string>
+    <string name="library_connection_ok_limited">Ligação disponível · Immich %1$s · a chave não tem %2$s</string>
     <string name="library_connect_failed">Não foi possível ligar.</string>
     <string name="library_address_added">Endereço acrescentado · Immich %1$s</string>
     <string name="library_address_add_failed">Não foi possível acrescentar o endereço.</string>
@@ -130,9 +132,10 @@
     <string name="library_welcome_later">Pode juntar a outra opção mais tarde, nas Definições.</string>
     <!-- As permissões da chave de API do Immich -->
     <string name="library_key_permissions_title">Que permissões dar à chave?</string>
-    <string name="library_key_permissions_where">Crie a chave no Immich, nas definições da sua conta, na secção das chaves de API, e marque estas permissões.</string>
-    <string name="library_key_permissions_read">Para mostrar a biblioteca</string>
-    <string name="library_key_permissions_write">Para guardar no servidor</string>
+    <string name="library_key_permissions_where">Crie a chave no Immich, nas definições da sua conta, na secção das chaves de API, e marque pelo menos as permissões obrigatórias.</string>
+    <string name="library_key_permissions_required">Obrigatórias, para mostrar e editar a biblioteca</string>
+    <string name="library_key_permissions_optional">Opcionais</string>
+    <string name="library_key_permissions_optional_note">Sem uma delas, só deixa de funcionar o que ela faz. O IMAGO diz qual falta quando tentar fazê-lo.</string>
     <string name="library_key_permissions_all">Escolher “all” também funciona, mas dá à chave mais acesso do que o IMAGO usa.</string>
     <string name="library_permission_user_read">Confirma de que conta é a chave, para a mesma biblioteca não entrar duas vezes</string>
     <string name="library_permission_asset_read">Lista a cronologia, pesquisa e lê os detalhes de cada fotografia</string>

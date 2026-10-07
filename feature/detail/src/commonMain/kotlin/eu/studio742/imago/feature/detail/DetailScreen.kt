@@ -168,6 +168,7 @@ fun DetailRoute(
         onAddToComposition = onAddToComposition,
         onToggleFavorite = viewModel::toggleFavorite,
         onFavorite = viewModel::favorite,
+        onRequestDelete = { confirm -> viewModel.requestDelete(asset.id, confirm) },
         onDelete = { viewModel.delete(asset.id) { onDeleted(asset.id) } },
         onShare = viewModel::share,
         onConsumeMessage = viewModel::consumeMessage,
@@ -186,6 +187,8 @@ private fun DetailScreen(
     onAddToComposition: () -> Unit,
     onToggleFavorite: () -> Unit,
     onFavorite: () -> Unit,
+    /** Asks to delete; [confirm][onRequestDelete] opens the confirmation only if deleting is allowed. */
+    onRequestDelete: (confirm: () -> Unit) -> Unit,
     onDelete: () -> Unit,
     onShare: (DetailAsset, (java.io.File, String) -> Unit) -> Unit,
     onConsumeMessage: () -> Unit,
@@ -352,7 +355,7 @@ private fun DetailScreen(
                     onEdit = onEdit,
                     onCompose = onAddToComposition,
                     onInfo = { showInfo = true },
-                    onDelete = { showDeleteConfirmation = true },
+                    onDelete = { onRequestDelete { showDeleteConfirmation = true } },
                 )
             }
 

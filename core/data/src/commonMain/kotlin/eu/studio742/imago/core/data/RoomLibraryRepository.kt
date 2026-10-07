@@ -22,6 +22,8 @@ import eu.studio742.imago.core.data.db.CatalogMonthEntity
 import eu.studio742.imago.core.data.db.ImmichRoomDatabase
 import eu.studio742.imago.core.data.db.RemoteKeyEntity
 import eu.studio742.imago.core.immich.ImmichApi
+import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
+import eu.studio742.imago.core.immich.requirePermission
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichAlbum
@@ -320,6 +322,9 @@ class RoomLibraryRepository @Inject constructor(
         api.deleteAsset(connection, assetId)
         database.assetDao().delete(connection.libraryId ?: libraryKeyOf(connection.serverUrl), assetId)
     }
+
+    override suspend fun checkCanDelete(assetId: String) =
+        api.requirePermission(requireConnection(), ImmichKeyPermissions.DELETE_ASSETS)
 
     override suspend fun downloadOriginal(assetId: String, destination: File) =
         api.downloadOriginal(requireConnection(), assetId, destination)

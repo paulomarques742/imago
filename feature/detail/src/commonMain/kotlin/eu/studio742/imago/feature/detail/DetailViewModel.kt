@@ -159,6 +159,18 @@ open class DetailViewModel(
         }
     }
 
+    /**
+     * Opens the confirmation only if the library lets this asset be deleted. A key created without the
+     * permission hears which one is missing instead of confirming something that will fail.
+     */
+    fun requestDelete(assetId: String, confirm: () -> Unit) {
+        viewModelScope.launch {
+            runCatching { library.checkCanDelete(assetId) }
+                .onSuccess { confirm() }
+                .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(Res.string.detail_delete_failed)) } }
+        }
+    }
+
     fun delete(assetId: String, onDeleted: () -> Unit) {
         mutableState.update { it.copy(isBusy = true, busyLabel = uiText(Res.string.detail_deleting)) }
         viewModelScope.launch {

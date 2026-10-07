@@ -64,8 +64,10 @@
     <string name="library_no_recent">Nothing from the last 30 days.</string>
     <string name="library_empty_view">Nothing in this view.</string>
     <string name="library_saved">Library saved.</string>
+    <string name="library_saved_limited">Library saved. The key leaves out %1$s: what needs it will say so when you try it.</string>
     <string name="library_save_failed">Couldn’t save the library.</string>
     <string name="library_connection_ok">Connection available · Immich %1$s</string>
+    <string name="library_connection_ok_limited">Connection available · Immich %1$s · the key leaves out %2$s</string>
     <string name="library_connect_failed">Couldn’t connect.</string>
     <string name="library_address_added">Address added · Immich %1$s</string>
     <string name="library_address_add_failed">Couldn’t add the address.</string>
@@ -130,9 +132,10 @@
     <string name="library_welcome_later">You can add the other option later in Settings.</string>
     <!-- The Immich API key permissions -->
     <string name="library_key_permissions_title">Which permissions does the key need?</string>
-    <string name="library_key_permissions_where">Create the key in Immich, in your account settings under API keys, and tick these permissions.</string>
-    <string name="library_key_permissions_read">To show your library</string>
-    <string name="library_key_permissions_write">To save back to the server</string>
+    <string name="library_key_permissions_where">Create the key in Immich, in your account settings under API keys, and tick at least the required permissions.</string>
+    <string name="library_key_permissions_required">Required, to show and edit your library</string>
+    <string name="library_key_permissions_optional">Optional</string>
+    <string name="library_key_permissions_optional_note">Leave any of these out and only what it does stops working. IMAGO tells you which one is missing when you try it.</string>
     <string name="library_key_permissions_all">Choosing “all” also works, but it gives the key more access than IMAGO uses.</string>
     <string name="library_permission_user_read">Checks which account the key belongs to, so the same library isn’t added twice</string>
     <string name="library_permission_asset_read">Lists the timeline, searches, and reads each photo’s details</string>

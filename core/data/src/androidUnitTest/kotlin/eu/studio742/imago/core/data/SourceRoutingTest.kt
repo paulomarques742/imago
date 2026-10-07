@@ -22,6 +22,8 @@ class SourceRoutingTest {
         val proceed = CompletableDeferred<Unit>()
         var favoriteSource: String? = null
         val api = object : ImmichApi by OkHttpImmichApi(OkHttpClient()) {
+            // Without this the real client would ask the network for the key's permissions.
+            override suspend fun keyPermissions(connection: ImmichConnection) = setOf(eu.studio742.imago.core.immich.generated.ImmichKeyPermissions.ALL)
             override suspend fun validateConnection(connection: ImmichConnection) = ServerVersion(2,6,3)
             override suspend fun currentUserId(connection: ImmichConnection) = "user-${connection.apiKey}"
             override suspend fun setFavorite(connection: ImmichConnection, assetId: String, isFavorite: Boolean) {

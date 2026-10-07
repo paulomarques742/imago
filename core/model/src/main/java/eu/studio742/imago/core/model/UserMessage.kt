@@ -78,8 +78,11 @@ enum class UserMessage {
     /** An Immich server address is not a valid http(s) URL. */
     IMMICH_INVALID_URL,
 
-    /** O servidor Immich recusou a chave API. */
+    /** The Immich server refused the API key. */
     IMMICH_KEY_REJECTED,
+
+    /** The API key lacks permissions. Argument: their Immich names, comma separated. */
+    IMMICH_PERMISSION_MISSING,
 
     /** The Immich server is too old. Arguments: its version and the minimum. */
     IMMICH_VERSION_UNSUPPORTED,

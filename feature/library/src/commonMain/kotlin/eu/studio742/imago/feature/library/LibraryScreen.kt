@@ -1311,7 +1311,7 @@ private fun AppendError(message: String?, onRetry: () -> Unit) = Column(
 private fun AlbumBrowser(state: LibraryUiState, onOpenAlbum: (AlbumUiModel) -> Unit, onRetry: () -> Unit) {
     when {
         state.isLoadingNavigation && state.albums.isEmpty() -> LoadingState()
-        state.navigationError != null && state.albums.isEmpty() -> ErrorState(state.navigationError, onRetry)
+        state.navigationError != null && state.albums.isEmpty() -> ErrorState(state.navigationError.resolve(), onRetry)
         state.albums.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(stringResource(Res.string.library_no_albums), color = ImagoColors.TextSecondary)
         }

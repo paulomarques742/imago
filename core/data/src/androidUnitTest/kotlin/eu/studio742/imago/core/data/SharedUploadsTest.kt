@@ -33,6 +33,8 @@ class SharedUploadsTest {
     private val answers = mutableMapOf<String, () -> ImmichUploadResult>()
 
     private val api = object : ImmichApi by OkHttpImmichApi(OkHttpClient()) {
+        // Without this the real client would ask the network for the key's permissions.
+        override suspend fun keyPermissions(connection: ImmichConnection) = setOf(eu.studio742.imago.core.immich.generated.ImmichKeyPermissions.ALL)
         override suspend fun validateConnection(connection: ImmichConnection) = ServerVersion(3, 1, 0)
         override suspend fun currentUserId(connection: ImmichConnection) = "user-${connection.apiKey}"
         override suspend fun uploadAsset(
@@ -124,6 +126,20 @@ class SharedUploadsTest {
         val run = SharedMediaUploader(config, api).upload(queue)
 
         assertTrue(run is SharedUploadRun.Stopped)
+        assertEquals(2, queue.pending.size)
+    }
+
+    /** Retrying would not grant the permission: it stops at once, saying which one the key lacks. */
+    @Test fun aKeyWithoutUploadStopsNamingThePermission() = runBlocking {
+        val (config, library) = oneLibrary()
+        answers["a.jpg"] = { throw ImmichApiException.MissingPermission(listOf("asset.upload")) }
+        val queue = queue(library, "a.jpg" to "image/jpeg", "b.jpg" to "image/jpeg")
+
+        val run = SharedMediaUploader(config, api).upload(queue)
+
+        val cause = (run as SharedUploadRun.Stopped).cause as UserMessageException
+        assertEquals(UserMessage.IMMICH_PERMISSION_MISSING, cause.userMessage)
+        assertEquals(listOf("asset.upload"), cause.args)
         assertEquals(2, queue.pending.size)
     }
 

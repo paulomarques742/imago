@@ -22,6 +22,8 @@ class LibraryEndpointsTest {
     private val reachable = mutableSetOf(HOME, AWAY)
     private val pings = AtomicInteger()
     private val api = object : ImmichApi by OkHttpImmichApi(OkHttpClient()) {
+        // Without this the real client would ask the network for the key's permissions.
+        override suspend fun keyPermissions(connection: ImmichConnection) = setOf(eu.studio742.imago.core.immich.generated.ImmichKeyPermissions.ALL)
         override suspend fun validateConnection(connection: ImmichConnection): ServerVersion {
             if (connection.serverUrl == LOCKED) throw ImmichApiException.Authentication()
             return ServerVersion(2, 6, 3)

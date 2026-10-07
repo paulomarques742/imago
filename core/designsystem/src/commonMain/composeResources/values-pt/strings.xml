@@ -24,6 +24,7 @@
     <string name="message_edit_needs_newer_app">Esta edição precisa de uma versão mais recente da app.</string>
     <string name="message_immich_invalid_url">Introduza um URL http:// ou https:// válido.</string>
     <string name="message_immich_key_rejected">A chave API foi recusada pelo servidor Immich.</string>
+    <string name="message_immich_permission_missing">A chave API não permite isto. Falta-lhe: %1$s. Acrescente-a à chave no Immich, nas definições da sua conta, na secção das chaves de API.</string>
     <string name="message_immich_version_unsupported">O servidor usa Immich %1$s. É necessária a versão %2$s ou superior.</string>
     <string name="message_immich_server_error">O servidor Immich respondeu com o erro %1$s.</string>
     <string name="message_immich_unreachable">Não foi possível contactar o servidor. Confirme o URL, a rede e o certificado HTTPS.</string>

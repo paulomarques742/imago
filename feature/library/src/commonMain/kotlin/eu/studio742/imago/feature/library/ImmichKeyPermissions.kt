@@ -39,26 +39,27 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** A permission of the Immich API key, and what IMAGO does with it. */
-internal data class ImmichKeyPermission(val id: String, val purpose: StringResource, val writes: Boolean)
+internal data class ImmichKeyPermission(val id: String, val purpose: StringResource, val optional: Boolean)
 
 /**
- * The permissions the key needs, in reading order: first what shows the library, then what writes
- * to the server.
+ * The permissions the key is asked for, in reading order: first the ones without which there is no
+ * library, then the ones whose absence only turns off what they do — the self-hosting person who
+ * would rather not let an app write to the server leaves those out.
  *
  * The ids are Immich's and are not translated — they are what the person looks for in its list. That
  * the list is complete is checked by `ImmichKeyPermissionsTest` against the permissions the contract
  * generated from the OpenAPI says the endpoints ask for.
  */
 internal val ImmichKeyPermissionList = listOf(
-    ImmichKeyPermission("user.read", Res.string.library_permission_user_read, writes = false),
-    ImmichKeyPermission("asset.read", Res.string.library_permission_asset_read, writes = false),
-    ImmichKeyPermission("asset.view", Res.string.library_permission_asset_view, writes = false),
-    ImmichKeyPermission("asset.download", Res.string.library_permission_asset_download, writes = false),
-    ImmichKeyPermission("album.read", Res.string.library_permission_album_read, writes = false),
-    ImmichKeyPermission("asset.upload", Res.string.library_permission_asset_upload, writes = true),
-    ImmichKeyPermission("stack.create", Res.string.library_permission_stack_create, writes = true),
-    ImmichKeyPermission("asset.update", Res.string.library_permission_asset_update, writes = true),
-    ImmichKeyPermission("asset.delete", Res.string.library_permission_asset_delete, writes = true),
+    ImmichKeyPermission("user.read", Res.string.library_permission_user_read, optional = false),
+    ImmichKeyPermission("asset.read", Res.string.library_permission_asset_read, optional = false),
+    ImmichKeyPermission("asset.view", Res.string.library_permission_asset_view, optional = false),
+    ImmichKeyPermission("asset.download", Res.string.library_permission_asset_download, optional = false),
+    ImmichKeyPermission("album.read", Res.string.library_permission_album_read, optional = true),
+    ImmichKeyPermission("asset.upload", Res.string.library_permission_asset_upload, optional = true),
+    ImmichKeyPermission("stack.create", Res.string.library_permission_stack_create, optional = true),
+    ImmichKeyPermission("asset.update", Res.string.library_permission_asset_update, optional = true),
+    ImmichKeyPermission("asset.delete", Res.string.library_permission_asset_delete, optional = true),
 )
 
 /**
@@ -100,8 +101,12 @@ internal fun ImmichKeyPermissions(modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.bodySmall,
                     color = ImagoColors.TextSecondary,
                 )
-                PermissionGroup(Res.string.library_key_permissions_read, ImmichKeyPermissionList.filterNot { it.writes })
-                PermissionGroup(Res.string.library_key_permissions_write, ImmichKeyPermissionList.filter { it.writes })
+                PermissionGroup(Res.string.library_key_permissions_required, ImmichKeyPermissionList.filterNot { it.optional })
+                PermissionGroup(
+                    Res.string.library_key_permissions_optional,
+                    ImmichKeyPermissionList.filter { it.optional },
+                    note = Res.string.library_key_permissions_optional_note,
+                )
                 Text(
                     stringResource(Res.string.library_key_permissions_all),
                     style = MaterialTheme.typography.bodySmall,
@@ -113,9 +118,10 @@ internal fun ImmichKeyPermissions(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun PermissionGroup(title: StringResource, permissions: List<ImmichKeyPermission>) {
+private fun PermissionGroup(title: StringResource, permissions: List<ImmichKeyPermission>, note: StringResource? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs)) {
         Text(stringResource(title), style = MaterialTheme.typography.labelLarge, color = ImagoColors.TextPrimary)
+        note?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextTertiary) }
         permissions.forEach { permission ->
             Row {
                 // Fixed width so the explanations line up in a column; it fits the longest,

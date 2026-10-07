@@ -13,6 +13,12 @@ interface ConfigurationRepository {
     suspend fun testLibrary(id: String): ServerVersion
 
     /**
+     * The optional permissions this key was created without, in Immich's names. Empty when it has them
+     * all or when they could not be read: it is a notice, never a reason to refuse the key.
+     */
+    suspend fun missingOptionalPermissions(connection: ImmichConnection): List<String> = emptyList()
+
+    /**
      * Adds an address to an Immich library that is already linked.
      *
      * It is only accepted if it answers with a supported version and returns the same account with

@@ -25,6 +25,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import eu.studio742.imago.core.immich.ImmichApi
 import eu.studio742.imago.core.immich.ImmichApiException
 import eu.studio742.imago.core.immich.canonicalServerUrl
+import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
 import eu.studio742.imago.core.model.*
 import eu.studio742.imago.core.sync.EndpointSelector
 import javax.inject.Singleton
@@ -133,6 +134,7 @@ class EncryptedConfigurationRepository(
         val url = canonicalServerUrl(serverUrl)
         val candidate = ImmichConnection(url, apiKey.trim())
         val version = api.validateConnection(candidate)
+        requireRequiredPermissions(candidate)
         val userId = api.currentUserId(candidate)
         // A legacy profile has no stored user ID. Verify its existing credential before
         // matching it by URL, otherwise replacing it with another account would reuse edits.
@@ -160,6 +162,22 @@ class EncryptedConfigurationRepository(
         return version
     }
     override suspend fun testLibrary(id: String) = api.validateConnection(source(id).connection())
+
+    override suspend fun missingOptionalPermissions(connection: ImmichConnection): List<String> {
+        val granted = runCatching { api.keyPermissions(connection) }.getOrNull() ?: return emptyList()
+        return ImmichKeyPermissions.OPTIONAL.filterNot { ImmichKeyPermissions.grants(granted, it) }
+    }
+
+    /**
+     * A key without one of these would connect and then fail on the first thumbnail, so it is refused
+     * here, naming every one it lacks. When the permissions cannot be read the key goes through: the
+     * endpoints themselves still say what is missing.
+     */
+    private suspend fun requireRequiredPermissions(connection: ImmichConnection) {
+        val granted = runCatching { api.keyPermissions(connection) }.getOrNull() ?: return
+        val missing = ImmichKeyPermissions.REQUIRED.filterNot { ImmichKeyPermissions.grants(granted, it) }
+        if (missing.isNotEmpty()) throw ImmichApiException.MissingPermission(missing)
+    }
 
     override suspend fun addServerUrl(id: String, serverUrl: String): ServerVersion {
         val source = source(id)

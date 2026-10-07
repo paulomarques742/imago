@@ -13,6 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import eu.studio742.imago.core.immich.*
+import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions as Permissions
 import eu.studio742.imago.core.model.*
 
 @RunWith(RobolectricTestRunner::class)
@@ -23,6 +24,12 @@ class LibraryConfigurationTest {
             check(connection.apiKey != "invalid") { "Invalid key" }; return ServerVersion(2,6,3)
         }
         override suspend fun currentUserId(connection: ImmichConnection) = if (connection.apiKey == "other-account") "user-b" else "user-a"
+        override suspend fun keyPermissions(connection: ImmichConnection): Set<String> = when (connection.apiKey) {
+            "read-only" -> Permissions.REQUIRED.toSet()
+            "no-originals" -> Permissions.REQUIRED.toSet() - Permissions.DOWNLOAD_ASSET - Permissions.VIEW_ASSET
+            "unreadable-permissions" -> throw ImmichApiException.Server(500, "")
+            else -> setOf(Permissions.ALL)
+        }
     }
     private fun prefs() = RuntimeEnvironment.getApplication().getSharedPreferences(java.util.UUID.randomUUID().toString(), 0)
     @Test fun migratesSingleConnectionAndKeepsItsExistingDataKey() = runBlocking {
@@ -73,6 +80,29 @@ class LibraryConfigurationTest {
         val withLegacyKey = prefs()
         withLegacyKey.edit().putString("server_url", "https://example.test").putString("api_key", "old-secret").commit()
         assertTrue(EncryptedConfigurationRepository(SharedPreferencesStore(withLegacyKey), api).welcomeCompleted.value)
+    }
+    /**
+     * Only the read permissions are required: a key without the write ones connects, and says which
+     * it lacks. One without a required permission is refused naming all it lacks, not as a key Immich
+     * rejected.
+     */
+    @Test fun aKeyNeedsOnlyTheRequiredPermissions() = runBlocking {
+        val repo = EncryptedConfigurationRepository(SharedPreferencesStore(prefs()), api)
+
+        repo.saveLibrary(null, "Home", "https://example.test", "read-only")
+        assertEquals(
+            listOf("album.read", "asset.upload", "stack.create", "asset.update", "asset.delete"),
+            repo.missingOptionalPermissions(ImmichConnection("https://example.test", "read-only")),
+        )
+        assertEquals(emptyList<String>(), repo.missingOptionalPermissions(ImmichConnection("https://example.test", "everything")))
+
+        val refused = runCatching { repo.saveLibrary(null, "Other", "https://other.test", "no-originals") }.exceptionOrNull()
+        assertEquals(listOf("asset.view", "asset.download"), (refused as ImmichApiException.MissingPermission).permissions)
+        assertEquals(1, repo.libraries.value.count { !it.isDevice })
+
+        // Permissions that cannot be read are no reason to refuse: the endpoints still say what is missing.
+        repo.saveLibrary(null, "Unknown", "https://unknown.test", "unreadable-permissions")
+        assertEquals(emptyList<String>(), repo.missingOptionalPermissions(ImmichConnection("https://unknown.test", "unreadable-permissions")))
     }
     @Test fun legacyAccountCannotBeReplacedByAnotherUsersCredential() = runBlocking {
         val prefs = prefs()

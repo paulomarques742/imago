@@ -28,6 +28,7 @@
     <string name="message_edit_needs_newer_app">This edit needs a newer version of the app.</string>
     <string name="message_immich_invalid_url">Enter a valid http:// or https:// URL.</string>
     <string name="message_immich_key_rejected">The Immich server rejected the API key.</string>
+    <string name="message_immich_permission_missing">The API key doesn’t allow this. It needs: %1$s. Add it to the key in Immich, in your account settings under API keys.</string>
     <string name="message_immich_version_unsupported">The server runs Immich %1$s. Version %2$s or later is required.</string>
     <string name="message_immich_server_error">The Immich server responded with error %1$s.</string>
     <string name="message_immich_unreachable">Couldn’t reach the server. Check the URL, the network and the HTTPS certificate.</string>

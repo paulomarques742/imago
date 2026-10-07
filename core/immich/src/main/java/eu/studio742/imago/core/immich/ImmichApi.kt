@@ -12,11 +12,19 @@ import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.ServerVersion
 import eu.studio742.imago.core.model.AssetType
 import eu.studio742.imago.core.immich.generated.ImmichContract
+import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
 import java.io.File
 
 interface ImmichApi {
     suspend fun currentUserId(connection: ImmichConnection): String = error("User identity unavailable")
     suspend fun validateConnection(connection: ImmichConnection): ServerVersion
+
+    /**
+     * The permissions the key was created with, as Immich names them; [ImmichKeyPermissions.ALL]
+     * stands for every one. A tap waits for it, so it gives up quickly on a slow server. A fake that
+     * does not care about permissions grants them all.
+     */
+    suspend fun keyPermissions(connection: ImmichConnection): Set<String> = setOf(ImmichKeyPermissions.ALL)
 
     /**
      * Whether an Immich server is answering at this address, without a key and with a short timeout.
@@ -64,7 +72,7 @@ interface ImmichApi {
 
     suspend fun setFavorite(connection: ImmichConnection, assetId: String, isFavorite: Boolean)
 
-    /** Move para o lixo do Immich; `force` apaga definitivamente. */
+    /** Moves to Immich's trash; `force` deletes for good. */
     suspend fun deleteAsset(connection: ImmichConnection, assetId: String, force: Boolean = false)
 
     fun thumbnailUrl(connection: ImmichConnection, assetId: String): String
@@ -93,6 +101,24 @@ interface ImmichApi {
         mimeType: String,
         fileCreatedAt: String,
     ): ImmichUploadResult
+}
+
+/**
+ * Fails now with [ImmichApiException.MissingPermission] if the key lacks [permission].
+ *
+ * It is for what costs work before the request — a confirmation, rendering an export: whoever
+ * left the permission out hears it on the tap, not at the end. When the key's permissions cannot be
+ * read it lets through, and the request itself answers.
+ */
+suspend fun ImmichApi.requirePermission(connection: ImmichConnection, permission: String) {
+    val granted = try {
+        keyPermissions(connection)
+    } catch (error: kotlinx.coroutines.CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        return
+    }
+    if (!ImmichKeyPermissions.grants(granted, permission)) throw ImmichApiException.MissingPermission(listOf(permission))
 }
 
 /**
@@ -127,6 +153,13 @@ sealed class ImmichApiException(
 ) : UserMessageException(message, args, cause) {
     class InvalidUrl : ImmichApiException(UserMessage.IMMICH_INVALID_URL)
     class Authentication : ImmichApiException(UserMessage.IMMICH_KEY_REJECTED)
+
+    /** The key is valid but was created without [permissions]. */
+    class MissingPermission(val permissions: List<String>, detail: String = "") : ImmichApiException(
+        UserMessage.IMMICH_PERMISSION_MISSING,
+        listOf(permissions.joinToString(", ")),
+        detail = detail,
+    )
     class UnsupportedVersion(val actual: ServerVersion) : ImmichApiException(
         UserMessage.IMMICH_VERSION_UNSUPPORTED,
         listOf(actual.toString(), ImmichCompatibility.minimum.toString()),

@@ -70,15 +70,24 @@ open class LibrarySettingsViewModel(
         viewModelScope.launch {
             busy.value = true
             runCatching { configuration.saveLibrary(id, name, url, key) }
-                .onSuccess { message.value = uiText(Res.string.library_saved); done() }
+                .onSuccess {
+                    val missing = configuration.missingOptionalPermissions(ImmichConnection(url, key.trim()))
+                    message.value = if (missing.isEmpty()) uiText(Res.string.library_saved)
+                    else uiText(Res.string.library_saved_limited, missing.joinToString(", "))
+                    done()
+                }
                 .onFailure { message.value = it.toUiText(Res.string.library_save_failed) }
             busy.value = false
         }
     }
     fun test(id: String) { viewModelScope.launch {
         busy.value = true
-        message.value = runCatching { uiText(Res.string.library_connection_ok, configuration.testLibrary(id)) }
-            .getOrElse { it.toUiText(Res.string.library_connect_failed) }
+        message.value = runCatching {
+            val version = configuration.testLibrary(id)
+            val missing = configuration.missingOptionalPermissions(configuration.source(id).connection())
+            if (missing.isEmpty()) uiText(Res.string.library_connection_ok, version)
+            else uiText(Res.string.library_connection_ok_limited, version, missing.joinToString(", "))
+        }.getOrElse { it.toUiText(Res.string.library_connect_failed) }
         busy.value = false
     } }
     fun addUrl(id: String, url: String, done: () -> Unit) {

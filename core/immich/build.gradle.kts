@@ -76,7 +76,17 @@ val generateImmichContract by tasks.registering {
             "getAssetInfo",
             "updateAsset",
             "deleteAssets",
+            "getMyApiKey",
         )
+
+        /**
+         * The operations the app works without. A self-hosting person may well refuse a key that can
+         * write to the server; with only the permissions of the other operations IMAGO still edits and
+         * exports to the device, and each of these answers with the permission it lacks.
+         */
+        val allPermission = "all"
+        val optionalOperationIds = setOf("getAllAlbums", "uploadAsset", "createStack", "updateAsset", "deleteAssets")
+        check(operationIds.containsAll(optionalOperationIds))
         validatedDocuments.forEach { validatedDocument ->
             operationIds.forEach { operationId ->
                 check(operationFor(document, operationId) == operationFor(validatedDocument, operationId)) {
@@ -176,7 +186,41 @@ val generateImmichContract by tasks.registering {
                 }
             }
         }
-        val requiredPermissions = operationIds.mapNotNull { permissionFor(document, it) }.distinct()
+        val requiredPermissions = operationIds.filterNot { it in optionalOperationIds }
+            .mapNotNull { permissionFor(document, it) }.distinct()
+        val optionalPermissions = optionalOperationIds.mapNotNull { permissionFor(document, it) }
+            .distinct().filterNot { it in requiredPermissions }
+        // Reading the key's own permissions must not itself need one, or a key without it could not
+        // be told what it lacks.
+        check(permissionFor(document, "getMyApiKey") == null)
+
+        // The schema is named APIKeyResponseDto in v2 and ApiKeyResponseDto in v3: it is reached
+        // through the response, not by name.
+        fun responseSchemaOf(spec: Map<String, Any?>, operationId: String): Map<String, Any?> {
+            val operation = pathsOf(spec).values.firstNotNullOf { methods ->
+                methods.values.firstOrNull { it["operationId"] == operationId }
+            }
+            @Suppress("UNCHECKED_CAST")
+            val content = ((operation["responses"] as Map<String, Map<String, Any?>>).getValue("200")["content"]
+                as Map<String, Map<String, Map<String, String>>>)
+            val name = content.getValue("application/json").getValue("schema").getValue("\$ref").substringAfterLast('/')
+            @Suppress("UNCHECKED_CAST")
+            return (componentsOf(spec)["schemas"] as Map<String, Map<String, Any?>>).getValue(name)
+        }
+        (listOf(document) + validatedDocuments).forEach { spec ->
+            @Suppress("UNCHECKED_CAST")
+            val properties = responseSchemaOf(spec, "getMyApiKey").getValue("properties") as Map<String, Any?>
+            check("permissions" in properties) { "Immich no longer lists the key's permissions" }
+            @Suppress("UNCHECKED_CAST")
+            val permissionValues = (componentsOf(spec)["schemas"] as Map<String, Map<String, Any?>>)
+                .getValue("Permission")["enum"] as List<String>
+            check(allPermission in permissionValues) { "Immich no longer has the \"$allPermission\" permission" }
+        }
+
+        fun permissionConstant(operationId: String): String? = permissionFor(document, operationId)?.let { permission ->
+            val name = operationId.replace(Regex("([a-z])([A-Z])"), "$1_$2").uppercase()
+            "|    const val $name = \"$permission\""
+        }
 
         val packageDir = generatedContractDir.get().asFile
             .resolve("eu/studio742/imago/core/immich/generated")
@@ -205,11 +249,24 @@ val generateImmichContract by tasks.registering {
             |    const val GET_ASSET_INFO = "${pathFor("getAssetInfo")}"
             |    const val UPDATE_ASSET = "${pathFor("updateAsset")}"
             |    const val DELETE_ASSETS = "${pathFor("deleteAssets")}"
+            |    const val GET_MY_API_KEY = "${pathFor("getMyApiKey")}"
             |}
             |
-            |/** The permissions an API key needs for every endpoint the app uses. */
+            |/** The API key permissions the endpoints the app uses ask for. */
             |object ImmichKeyPermissions {
+            |    /** Grants every permission, including the ones a later Immich adds. */
+            |    const val ALL = "$allPermission"
+            |
+            |    /** Without these there is no library to show or original to edit. */
             |    val REQUIRED: List<String> = listOf(${requiredPermissions.joinToString { "\"$it\"" }})
+            |
+            |    /** Each one only turns off what asks for it. */
+            |    val OPTIONAL: List<String> = listOf(${optionalPermissions.joinToString { "\"$it\"" }})
+            |
+            |    // The permission of each operation, named after it.
+            ${operationIds.mapNotNull(::permissionConstant).joinToString("\n")}
+            |
+            |    fun grants(granted: Collection<String>, permission: String): Boolean = ALL in granted || permission in granted
             |}
             |""".trimMargin(),
         )

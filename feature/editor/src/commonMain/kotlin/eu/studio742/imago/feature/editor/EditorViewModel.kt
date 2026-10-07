@@ -52,6 +52,8 @@ import eu.studio742.imago.core.model.ToneCurve
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.immichRoomExportFileName
 import eu.studio742.imago.core.immich.ImmichApi
+import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
+import eu.studio742.imago.core.immich.requirePermission
 import eu.studio742.imago.core.render.RenderParameters
 import eu.studio742.imago.core.render.toRenderParameters
 import kotlin.math.floor
@@ -1330,7 +1332,13 @@ open class EditorViewModel(
         exporter.saveToDevice(jpeg, exportFileName(asset), asset.fileCreatedAt)
     }
 
-    fun exportToImmich(targetLibraryId: String) = export { asset, jpeg, recipe ->
+    fun exportToImmich(targetLibraryId: String) = export(
+        // Before rendering, which takes seconds on a large original: a key without the upload
+        // permission hears it on the tap.
+        before = {
+            immichApi.requirePermission(configuration.source(targetLibraryId).connection(), ImmichKeyPermissions.UPLOAD_ASSET)
+        },
+    ) { asset, jpeg, recipe ->
         val reference = eu.studio742.imago.core.model.AssetReference.parse(asset.id)
         val connection = configuration.source(targetLibraryId).connection()
         configuration.lastExportLibraryId = targetLibraryId
@@ -1369,7 +1377,10 @@ open class EditorViewModel(
     private suspend fun exportFileName(asset: EditorAsset): String =
         immichRoomExportFileName(asset.fileName, appString(Res.string.editor_export_untitled))
 
-    private fun export(block: suspend (EditorAsset, File, EditRecipe) -> UiText?) {
+    private fun export(
+        before: suspend () -> Unit = {},
+        block: suspend (EditorAsset, File, EditRecipe) -> UiText?,
+    ) {
         val snapshot = state.value
         val asset = snapshot.asset ?: return
         snapshot.bitmap ?: return
@@ -1385,6 +1396,7 @@ open class EditorViewModel(
         }
         viewModelScope.launch {
             runCatching {
+                before()
                 val jpeg = exporter.renderJpeg(asset, recipe) { phase ->
                     mutableState.update { it.copy(exportPhase = phase) }
                 }

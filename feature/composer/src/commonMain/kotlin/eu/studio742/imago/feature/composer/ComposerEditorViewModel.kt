@@ -1135,6 +1135,9 @@ open class ComposerEditorViewModel(
                 return@launch
             }
             runCatching {
+                // Before rendering: a key without the upload permission would otherwise only show up after
+                // every page was made, as a count of failed uploads.
+                targetLibraryId?.let { mediaRepository.checkCanUpload(it) }
                 exports.export(project, format, pageIndex, targetLibraryId) { completed, total ->
                     mutableState.update { it.copy(exportCompleted = completed, exportTotal = total) }
                 }

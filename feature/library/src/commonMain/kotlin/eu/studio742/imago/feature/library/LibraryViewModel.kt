@@ -83,7 +83,7 @@ data class LibraryUiState(
     val albums: List<AlbumUiModel> = emptyList(),
     val months: List<MonthUiModel> = emptyList(),
     val isLoadingNavigation: Boolean = false,
-    val navigationError: String? = null,
+    val navigationError: UiText? = null,
     val query: String = "",
     val isSearching: Boolean = false,
     val actionError: UiText? = null,
@@ -378,7 +378,9 @@ open class LibraryViewModel(
                     ) ?: current.albums,
                     months = months.getOrNull()?.map { MonthUiModel(it.month, it.assetCount) } ?: current.months,
                     isLoadingNavigation = false,
-                    navigationError = albums.exceptionOrNull()?.message ?: months.exceptionOrNull()?.message,
+                    // Albums first: a key without album.read has the timeline, and the albums section is
+                    // where it has to say which permission is missing.
+                    navigationError = (albums.exceptionOrNull() ?: months.exceptionOrNull())?.toUiText(Res.string.library_load_failed),
                 )
             }
         }
