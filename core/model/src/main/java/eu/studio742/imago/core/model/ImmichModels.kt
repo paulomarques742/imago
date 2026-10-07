@@ -84,7 +84,22 @@ data class ImmichAlbum(
     val startDate: String?,
     val endDate: String?,
     val shared: Boolean,
+    /** Photos can be added and taken out: the owner's album, or one shared with this person as editor. */
+    val canEditContent: Boolean = false,
+    /** Renaming and deleting belong to the owner only. */
+    val isOwned: Boolean = false,
+    /**
+     * An album that is a folder of the device. A photo lives in exactly one folder, so it is never
+     * "taken out" of one: it is moved to another, or copied.
+     */
+    val isFolder: Boolean = false,
 )
+
+/** How photos go into a folder album: moved out of where they were, or copied and left there too. */
+enum class FolderTransfer { MOVE, COPY }
+
+/** What adding photos to an album did with each one. */
+data class AlbumAddition(val added: Int, val alreadyThere: Int, val failed: Int)
 
 data class ImmichTimeBucket(
     val month: String,

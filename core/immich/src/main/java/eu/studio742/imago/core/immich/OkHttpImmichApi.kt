@@ -26,6 +26,7 @@ import eu.studio742.imago.core.model.AssetType
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichAlbum
+import eu.studio742.imago.core.model.AlbumAddition
 import eu.studio742.imago.core.model.ImmichConnection
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.LibraryFilter
@@ -176,18 +177,87 @@ class OkHttpImmichApi(
                 permission = ImmichKeyPermissions.GET_ALL_ALBUMS,
             )
         }
-        (load(null) + load(true)).distinctBy(AlbumResponseDto::id).map { album ->
-            ImmichAlbum(
-                id = album.id,
-                name = album.albumName,
-                description = album.description,
-                thumbnailAssetId = album.albumThumbnailAssetId,
-                assetCount = album.assetCount,
-                startDate = album.startDate,
-                endDate = album.endDate,
-                shared = album.shared,
-            )
-        }
+        val albums = (load(null) + load(true)).distinctBy(AlbumResponseDto::id)
+        // Who may change each album depends on who is asking. Without the answer the albums still
+        // show, only without the actions that change them.
+        val me = runCatching { currentUserId(connection) }.getOrNull()
+        albums.map { it.toDomain(me) }
+    }
+
+    override suspend fun createAlbum(
+        connection: ImmichConnection,
+        name: String,
+        assetIds: List<String>,
+    ): ImmichAlbum = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(CreateAlbumDto(albumName = name, assetIds = assetIds)).toRequestBody(JSON_MEDIA_TYPE)
+        val album = executeJson<AlbumResponseDto>(
+            request = Request.Builder().url(endpoint(connection, ImmichContract.CREATE_ALBUM)).post(body).build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.CREATE_ALBUM,
+        )
+        // Whoever creates it owns it; asking the server who that is would be one more request for
+        // an answer already known.
+        album.toDomain(null).copy(isOwned = true, canEditContent = true)
+    }
+
+    override suspend fun addToAlbum(
+        connection: ImmichConnection,
+        albumId: String,
+        assetIds: List<String>,
+    ): AlbumAddition = withContext(Dispatchers.IO) {
+        if (assetIds.isEmpty()) return@withContext AlbumAddition(0, 0, 0)
+        val results = albumAssets(connection, albumId, assetIds, add = true)
+        AlbumAddition(
+            added = results.count { it.success },
+            alreadyThere = results.count { !it.success && it.error == "duplicate" },
+            failed = results.count { !it.success && it.error != "duplicate" },
+        )
+    }
+
+    override suspend fun removeFromAlbum(
+        connection: ImmichConnection,
+        albumId: String,
+        assetIds: List<String>,
+    ): Int = withContext(Dispatchers.IO) {
+        if (assetIds.isEmpty()) return@withContext 0
+        albumAssets(connection, albumId, assetIds, add = false).count { it.success }
+    }
+
+    /** The same body and answer for adding and removing; only the method and the permission change. */
+    private fun albumAssets(
+        connection: ImmichConnection,
+        albumId: String,
+        assetIds: List<String>,
+        add: Boolean,
+    ): List<BulkIdResponseDto> {
+        val path = (if (add) ImmichContract.ADD_ASSETS_TO_ALBUM else ImmichContract.REMOVE_ASSET_FROM_ALBUM).replace("{id}", albumId)
+        val body = json.encodeToString(BulkIdsDto(assetIds)).toRequestBody(JSON_MEDIA_TYPE)
+        val request = Request.Builder().url(endpoint(connection, path)).apply { if (add) put(body) else delete(body) }.build()
+        return executeJson(
+            request = request,
+            apiKey = connection.apiKey,
+            permission = if (add) ImmichKeyPermissions.ADD_ASSETS_TO_ALBUM else ImmichKeyPermissions.REMOVE_ASSET_FROM_ALBUM,
+        )
+    }
+
+    override suspend fun renameAlbum(connection: ImmichConnection, albumId: String, name: String): Unit = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(UpdateAlbumDto(albumName = name)).toRequestBody(JSON_MEDIA_TYPE)
+        execute(
+            request = Request.Builder()
+                .url(endpoint(connection, ImmichContract.UPDATE_ALBUM_INFO.replace("{id}", albumId)))
+                .patch(body)
+                .build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.UPDATE_ALBUM_INFO,
+        ).close()
+    }
+
+    override suspend fun deleteAlbum(connection: ImmichConnection, albumId: String): Unit = withContext(Dispatchers.IO) {
+        execute(
+            request = Request.Builder().url(endpoint(connection, ImmichContract.DELETE_ALBUM.replace("{id}", albumId))).delete().build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.DELETE_ALBUM,
+        ).close()
     }
 
     override suspend fun getTimeBuckets(connection: ImmichConnection): List<ImmichTimeBucket> =
@@ -246,12 +316,34 @@ class OkHttpImmichApi(
         updateAsset(connection, assetId, UpdateAssetDto(isFavorite))
     }
 
+    override suspend fun setFavorites(
+        connection: ImmichConnection,
+        assetIds: List<String>,
+        isFavorite: Boolean,
+    ): Unit = withContext(Dispatchers.IO) {
+        if (assetIds.isEmpty()) return@withContext
+        val body = json.encodeToString(AssetBulkUpdateDto(ids = assetIds, isFavorite = isFavorite))
+            .toRequestBody(JSON_MEDIA_TYPE)
+        execute(
+            request = Request.Builder().url(endpoint(connection, ImmichContract.UPDATE_ASSETS)).put(body).build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.UPDATE_ASSETS,
+        ).close()
+    }
+
     override suspend fun deleteAsset(
         connection: ImmichConnection,
         assetId: String,
         force: Boolean,
+    ) = deleteAssets(connection, listOf(assetId), force)
+
+    override suspend fun deleteAssets(
+        connection: ImmichConnection,
+        assetIds: List<String>,
+        force: Boolean,
     ): Unit = withContext(Dispatchers.IO) {
-        val body = json.encodeToString(AssetBulkDeleteDto(ids = listOf(assetId), force = force))
+        if (assetIds.isEmpty()) return@withContext
+        val body = json.encodeToString(AssetBulkDeleteDto(ids = assetIds, force = force))
             .toRequestBody(JSON_MEDIA_TYPE)
         execute(
             request = Request.Builder()
@@ -486,6 +578,9 @@ private data class MetadataSearchDto(
 private data class UpdateAssetDto(val isFavorite: Boolean)
 
 @Serializable
+private data class AssetBulkUpdateDto(val ids: List<String>, val isFavorite: Boolean)
+
+@Serializable
 private data class AssetBulkDeleteDto(val ids: List<String>, val force: Boolean)
 
 @Serializable
@@ -567,7 +662,46 @@ private data class AlbumResponseDto(
     val startDate: String? = null,
     val endDate: String? = null,
     val shared: Boolean = false,
-)
+    /** Up to v2. From v3 the owner is the first of [albumUsers], with the role "owner". */
+    val ownerId: String? = null,
+    val albumUsers: List<AlbumUserDto> = emptyList(),
+) {
+    /** [me] is this key's account; without it nothing can be said about who may change the album. */
+    fun toDomain(me: String?): ImmichAlbum {
+        val owner = ownerId ?: albumUsers.firstOrNull { it.role == "owner" }?.user?.id
+        val isOwned = me != null && owner == me
+        return ImmichAlbum(
+            id = id,
+            name = albumName,
+            description = description,
+            thumbnailAssetId = albumThumbnailAssetId,
+            assetCount = assetCount,
+            startDate = startDate,
+            endDate = endDate,
+            shared = shared,
+            canEditContent = isOwned || albumUsers.any { it.user.id == me && it.role == "editor" },
+            isOwned = isOwned,
+        )
+    }
+}
+
+@Serializable
+private data class AlbumUserDto(val role: String, val user: AlbumUserIdDto)
+
+@Serializable
+private data class AlbumUserIdDto(val id: String)
+
+@Serializable
+private data class CreateAlbumDto(val albumName: String, val assetIds: List<String>)
+
+@Serializable
+private data class BulkIdsDto(val ids: List<String>)
+
+@Serializable
+private data class BulkIdResponseDto(val id: String, val success: Boolean, val error: String? = null)
+
+@Serializable
+private data class UpdateAlbumDto(val albumName: String)
 
 @Serializable
 private data class TimeBucketDto(val timeBucket: String, val count: Int)

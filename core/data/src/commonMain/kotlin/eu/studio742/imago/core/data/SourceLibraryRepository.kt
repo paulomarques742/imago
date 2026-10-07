@@ -42,9 +42,50 @@ class SourceLibraryRepository @Inject constructor(
     }
     override suspend fun albums(): List<ImmichAlbum> {
         val id = configuration.selectedLibraryId.value
-        return provider(id).albums().map { it.copy(id = AssetReference(id, it.id).encode(),
-            thumbnailAssetId = it.thumbnailAssetId?.let { raw -> AssetReference(id, raw).encode() }) }
+        return provider(id).albums().map { it.encodedFor(id) }
     }
+    override suspend fun createAlbum(name: String, assetIds: List<String>): ImmichAlbum {
+        val id = configuration.selectedLibraryId.value
+        return provider(id).createAlbum(name, localIdsIn(id, assetIds)).encodedFor(id)
+    }
+
+    override suspend fun addToAlbum(albumId: String, assetIds: List<String>): AlbumAddition {
+        val album = AssetReference.parse(albumId)
+        return provider(album.libraryId).addToAlbum(album.localId, localIdsIn(album.libraryId, assetIds))
+    }
+
+    override suspend fun removeFromAlbum(albumId: String, assetIds: List<String>): Int {
+        val album = AssetReference.parse(albumId)
+        return provider(album.libraryId).removeFromAlbum(album.localId, localIdsIn(album.libraryId, assetIds))
+    }
+
+    override suspend fun renameAlbum(albumId: String, name: String) {
+        val album = AssetReference.parse(albumId); provider(album.libraryId).renameAlbum(album.localId, name)
+    }
+
+    override suspend fun deleteAlbum(albumId: String) {
+        val album = AssetReference.parse(albumId); provider(album.libraryId).deleteAlbum(album.localId)
+    }
+
+    override suspend fun fileIntoAlbum(albumId: String, assetIds: List<String>, transfer: FolderTransfer): AlbumAddition {
+        val album = AssetReference.parse(albumId)
+        return provider(album.libraryId).fileIntoAlbum(album.localId, localIdsIn(album.libraryId, assetIds), transfer)
+    }
+
+    override suspend fun createFolderAlbum(name: String, assetIds: List<String>, transfer: FolderTransfer): ImmichAlbum {
+        val id = configuration.selectedLibraryId.value
+        return provider(id).createFolderAlbum(name, localIdsIn(id, assetIds), transfer).encodedFor(id)
+    }
+
+    /** An album lives in one library: a photo of another one could never go into it. */
+    private fun localIdsIn(libraryId: String, assetIds: List<String>): List<String> =
+        assetIds.map(AssetReference::parse).filter { it.libraryId == libraryId }.map { it.localId }
+
+    private fun ImmichAlbum.encodedFor(libraryId: String) = copy(
+        id = AssetReference(libraryId, id).encode(),
+        thumbnailAssetId = thumbnailAssetId?.let { AssetReference(libraryId, it).encode() },
+    )
+
     override suspend fun timeBuckets() = provider(configuration.selectedLibraryId.value).timeBuckets()
     override suspend fun syncCatalog() = provider(configuration.selectedLibraryId.value).syncCatalog()
     override suspend fun loadMonth(month: String) = provider(configuration.selectedLibraryId.value).loadMonth(month)
@@ -73,6 +114,16 @@ class SourceLibraryRepository @Inject constructor(
     }
     override suspend fun deleteAsset(assetId: String) {
         val ref = AssetReference.parse(assetId); provider(ref.libraryId).deleteAsset(ref.localId)
+    }
+    override suspend fun setFavorites(assetIds: List<String>, isFavorite: Boolean) =
+        byLibrary(assetIds) { ids -> setFavorites(ids, isFavorite) }
+    override suspend fun deleteAssets(assetIds: List<String>) = byLibrary(assetIds) { ids -> deleteAssets(ids) }
+
+    /** A selection can mix libraries; each one gets its own ids in a single call. */
+    private suspend fun byLibrary(assetIds: List<String>, action: suspend LibraryRepository.(List<String>) -> Unit) {
+        assetIds.map(AssetReference::parse).groupBy { it.libraryId }.forEach { (libraryId, refs) ->
+            provider(libraryId).action(refs.map { it.localId })
+        }
     }
     override suspend fun checkCanDelete(assetId: String) {
         val ref = AssetReference.parse(assetId); provider(ref.libraryId).checkCanDelete(ref.localId)

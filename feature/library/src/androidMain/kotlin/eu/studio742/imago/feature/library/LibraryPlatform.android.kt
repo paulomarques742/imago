@@ -14,6 +14,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.Share
+import eu.studio742.imago.core.designsystem.i18n.UiText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -31,6 +33,7 @@ import eu.studio742.imago.core.data.LibraryRepository
 import eu.studio742.imago.core.data.PendingMediaAction
 import eu.studio742.imago.core.data.RecipeRepository
 import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.model.FolderTransfer
 import javax.inject.Inject
 
 @HiltViewModel
@@ -39,13 +42,18 @@ class HiltLibraryViewModel @Inject constructor(
     recipes: RecipeRepository,
     configuration: ConfigurationRepository,
     device: DeviceLibrary,
-) : LibraryViewModel(library, recipes, configuration, device)
+    deviceCopies: DeviceCopies,
+) : LibraryViewModel(library, recipes, configuration, device, deviceCopies)
 
 @HiltViewModel
 class HiltLibrarySettingsViewModel @Inject constructor(
     configuration: ConfigurationRepository,
     device: DeviceLibrary,
 ) : LibrarySettingsViewModel(configuration, device)
+
+@HiltViewModel
+class HiltAlbumPickerViewModel @Inject constructor(library: LibraryRepository, device: DeviceLibrary) :
+    AlbumPickerViewModel(library, device)
 
 @HiltViewModel
 class HiltConfigurationViewModel @Inject constructor(repository: ConfigurationRepository) : ConfigurationViewModel(repository)
@@ -55,6 +63,9 @@ actual fun libraryViewModel(key: String?): LibraryViewModel = hiltViewModel<Hilt
 
 @Composable
 actual fun librarySettingsViewModel(): LibrarySettingsViewModel = hiltViewModel<HiltLibrarySettingsViewModel>()
+
+@Composable
+actual fun albumPickerViewModel(): AlbumPickerViewModel = hiltViewModel<HiltAlbumPickerViewModel>()
 
 @Composable
 actual fun configurationViewModel(): ConfigurationViewModel = hiltViewModel<HiltConfigurationViewModel>()
@@ -104,6 +115,8 @@ actual fun DeviceMediaActionHost(viewModel: LibrarySettingsViewModel) {
     }
 }
 
+actual val DeviceFolderAlbums: Boolean get() = true
+
 actual val DeviceLibraryIcon: ImageVector get() = Icons.Outlined.PhoneAndroid
 
 actual val DeviceLibraryName: StringResource get() = Res.string.library_device_name
@@ -117,9 +130,83 @@ actual fun ColumnScope.DeviceLibraryAccess(viewModel: LibrarySettingsViewModel, 
     Text(remember(revision) { viewModel.device.accessSummary() }.toUiText().resolve(),
         style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
     OutlinedButton(onClick = requestAccess) { Text(stringResource(Res.string.library_manage_access)) }
+    // Where "Always do this" in the move-or-copy question is undone.
+    val transfer by viewModel.device.rememberedTransfer.collectAsState()
+    Text(stringResource(Res.string.library_folder_transfer_setting), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
+    androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(eu.studio742.imago.core.designsystem.ImagoSpacing.Sm)) {
+        listOf(
+            null to Res.string.library_folder_transfer_ask,
+            FolderTransfer.MOVE to Res.string.library_folder_transfer_move,
+            FolderTransfer.COPY to Res.string.library_folder_transfer_copy,
+        ).forEach { (option, label) ->
+            androidx.compose.material3.FilterChip(
+                selected = transfer == option,
+                onClick = { viewModel.device.rememberTransfer(option) },
+                label = { Text(stringResource(label)) },
+            )
+        }
+    }
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.material3.TextButton(onClick = {
         context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
             android.net.Uri.parse("package:${context.packageName}")))
     }) { Text(stringResource(Res.string.library_open_android_permissions)) }
+}
+
+/** The cache folder the FileProvider serves (`imago_share_paths.xml`); emptied on every share. */
+@Composable
+actual fun rememberSelectionShare(): SelectionShare {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    return remember(context) {
+        object : SelectionShare {
+            override suspend fun prepare(): java.io.File = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                // Nothing here deserves to outlive the Intent; originals left in cache would pile up with no owner.
+                java.io.File(context.cacheDir, "share").apply { deleteRecursively(); mkdirs() }
+            }
+
+            override fun deliver(files: List<java.io.File>, mimeType: String): UiText? {
+                val uris = files.map { androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.share", it) }
+                val intent = if (uris.size == 1) {
+                    android.content.Intent(android.content.Intent.ACTION_SEND).putExtra(android.content.Intent.EXTRA_STREAM, uris.single())
+                } else {
+                    android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE)
+                        .putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, ArrayList(uris))
+                }
+                intent.type = mimeType
+                // The read grant travels with the ClipData; EXTRA_STREAM alone only grants the first URI on some receivers.
+                intent.clipData = android.content.ClipData.newRawUri(null, uris.first()).apply {
+                    uris.drop(1).forEach { addItem(android.content.ClipData.Item(it)) }
+                }
+                intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                context.startActivity(android.content.Intent.createChooser(intent, null))
+                return null
+            }
+        }
+    }
+}
+
+actual val SelectionShareLabel: StringResource get() = Res.string.library_selection_share
+
+actual val SelectionShareIcon: ImageVector get() = Icons.Outlined.Share
+
+actual val SelectionDeleteDeviceBody: StringResource get() = Res.string.library_selection_delete_device_body
+
+/**
+ * The same sheet as sharing from another app, addressed to this app only: it asks for the library,
+ * copies, and sends in the background with a notification.
+ */
+@Composable
+actual fun rememberSendToImmich(): ((List<String>, String) -> Unit)? {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    return remember(context) {
+        { assetIds, mimeType ->
+            val uris = assetIds.map(android.net.Uri::parse)
+            context.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE)
+                    .setPackage(context.packageName)
+                    .setType(mimeType)
+                    .putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, ArrayList(uris)),
+            )
+        }
+    }
 }

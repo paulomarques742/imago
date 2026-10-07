@@ -113,10 +113,6 @@
         <item quantity="one">%1$d selected</item>
         <item quantity="other">%1$d selected</item>
     </plurals>
-    <plurals name="library_add_to_composition">
-        <item quantity="one">Add to composition</item>
-        <item quantity="other">Add %1$d to composition</item>
-    </plurals>
     <plurals name="library_items">
         <item quantity="one">%1$d item</item>
         <item quantity="other">%1$d items</item>
@@ -142,6 +138,11 @@
     <string name="library_permission_asset_view">Loads thumbnails and previews, and plays videos</string>
     <string name="library_permission_asset_download">Opens the full-resolution original to edit and export</string>
     <string name="library_permission_album_read">Shows your albums</string>
+    <string name="library_permission_album_create">Creates new albums</string>
+    <string name="library_permission_album_asset_create">Adds photos to albums</string>
+    <string name="library_permission_album_asset_delete">Takes photos out of albums, without deleting them</string>
+    <string name="library_permission_album_update">Renames your albums</string>
+    <string name="library_permission_album_delete">Deletes the albums you ask it to delete, keeping their photos</string>
     <string name="library_permission_asset_upload">Sends exported photos, compositions and what you share with IMAGO to the server</string>
     <string name="library_permission_stack_create">Stacks each exported edit with its original</string>
     <string name="library_permission_asset_update">Marks and unmarks favorites</string>
@@ -187,4 +188,116 @@
         <item quantity="one">%1$d couldn’t be sent</item>
         <item quantity="other">%1$d couldn’t be sent</item>
     </plurals>
+    <!-- Selection actions -->
+    <string name="library_selection_share">Share</string>
+    <string name="library_selection_save_copies">Save copies…</string>
+    <string name="library_selection_favorite">Favorite</string>
+    <string name="library_selection_unfavorite">Unfavorite</string>
+    <string name="library_selection_compose">Compose</string>
+    <string name="library_selection_delete">Delete</string>
+    <string name="library_selection_more">More</string>
+    <string name="library_selection_save_to_gallery">Save to gallery</string>
+    <string name="library_selection_send_to_immich">Send to Immich</string>
+    <string name="library_selection_delete_device_body">The ones on this device will go to its trash. Android will ask you to confirm.</string>
+    <string name="library_selection_delete_computer_body">The ones on this computer will go to the Recycle Bin.</string>
+    <string name="library_selection_delete_server_body">The ones from a server will go to its trash. You can restore them until the trash is emptied.</string>
+    <string name="library_selection_delete_failed">Couldn’t delete.</string>
+    <string name="library_selection_deleting">Deleting…</string>
+    <string name="library_selection_working">One moment…</string>
+    <string name="library_selection_share_failed">Couldn’t prepare the files.</string>
+    <string name="library_selection_save_failed">Couldn’t save to the gallery.</string>
+    <string name="library_selection_save_which_question">Save which versions?</string>
+    <string name="library_selection_save_which_body">Some of these photos have edits. The originals are the files as they are on the server; the edited versions are rendered at full resolution. Photos without edits are saved as they are.</string>
+    <string name="library_selection_save_original">Originals</string>
+    <string name="library_selection_save_edited">Edited</string>
+    <plurals name="library_selection_delete_question">
+        <item quantity="one">Delete %1$d item?</item>
+        <item quantity="other">Delete %1$d items?</item>
+    </plurals>
+    <plurals name="library_selection_preparing">
+        <item quantity="one">Preparing %1$d of %2$d…</item>
+        <item quantity="other">Preparing %1$d of %2$d…</item>
+    </plurals>
+    <plurals name="library_selection_saving">
+        <item quantity="one">Saving %1$d of %2$d…</item>
+        <item quantity="other">Saving %1$d of %2$d…</item>
+    </plurals>
+    <plurals name="library_selection_saved">
+        <item quantity="one">Saved to Pictures/IMAGO.</item>
+        <item quantity="other">%1$d saved to Pictures/IMAGO.</item>
+    </plurals>
+    <plurals name="library_selection_saved_some">
+        <item quantity="one">%1$d saved to Pictures/IMAGO; %2$d couldn’t be saved.</item>
+        <item quantity="other">%1$d saved to Pictures/IMAGO; %2$d couldn’t be saved.</item>
+    </plurals>
+    <plurals name="library_selection_copies_saved">
+        <item quantity="one">Copy saved to %2$s.</item>
+        <item quantity="other">%1$d copies saved to %2$s.</item>
+    </plurals>
+    <!-- Albums -->
+    <string name="library_selection_album">Album</string>
+    <string name="library_selection_remove_from_album">Remove</string>
+    <string name="library_selection_add_to_album">Add to album</string>
+    <string name="library_album_new">New album</string>
+    <string name="library_album_name_label">Name</string>
+    <string name="library_album_create">Create</string>
+    <string name="library_album_choose_photos">Choose photos</string>
+    <string name="library_album_rename">Rename</string>
+    <string name="library_album_save">Save</string>
+    <string name="library_album_delete">Delete album</string>
+    <string name="library_album_delete_question">Delete “%1$s”?</string>
+    <string name="library_album_delete_body">The album goes away; its photos stay in the library.</string>
+    <string name="library_album_add_photos">Add photos</string>
+    <string name="library_album_more">Album options</string>
+    <string name="library_album_pick_title">Add to “%1$s”</string>
+    <string name="library_album_pick_new_subtitle">Choose the photos for the new album</string>
+    <string name="library_album_none_editable">There are no albums you can add to yet.</string>
+    <string name="library_album_failed">Couldn’t change the album.</string>
+    <string name="library_album_all_there">Already in “%1$s”.</string>
+    <plurals name="library_album_sheet_title">
+        <item quantity="one">Add %1$d item to album</item>
+        <item quantity="other">Add %1$d items to album</item>
+    </plurals>
+    <plurals name="library_album_added">
+        <item quantity="one">Added to “%2$s”.</item>
+        <item quantity="other">%1$d added to “%2$s”.</item>
+    </plurals>
+    <plurals name="library_album_added_some_there">
+        <item quantity="one">%1$d added to “%2$s”; the others were already there.</item>
+        <item quantity="other">%1$d added to “%2$s”; the others were already there.</item>
+    </plurals>
+    <plurals name="library_album_add_failed">
+        <item quantity="one">%1$d couldn’t be added to “%2$s”.</item>
+        <item quantity="other">%1$d couldn’t be added to “%2$s”.</item>
+    </plurals>
+    <plurals name="library_album_created">
+        <item quantity="one">Album “%1$s” created with %2$d item.</item>
+        <item quantity="other">Album “%1$s” created with %2$d items.</item>
+    </plurals>
+    <plurals name="library_album_removed">
+        <item quantity="one">Removed from “%2$s”.</item>
+        <item quantity="other">%1$d removed from “%2$s”.</item>
+    </plurals>
+    <!-- Albums of the device -->
+    <string name="library_folder_transfer_question">Move or copy?</string>
+    <string name="library_folder_transfer_body">Moving takes the photos out of the album they’re in; copying leaves them there and puts a copy in this one.</string>
+    <string name="library_folder_transfer_always">Always do this (you can change it in Settings)</string>
+    <string name="library_folder_transfer_move">Move</string>
+    <string name="library_folder_transfer_copy">Copy</string>
+    <string name="library_folder_transfer_ask">Ask</string>
+    <string name="library_folder_transfer_setting">Adding photos to an album on this device</string>
+    <plurals name="library_album_delete_folder_body">
+        <item quantity="one">The photo or video in this album will go to the device’s trash. Android will ask you to confirm.</item>
+        <item quantity="other">The %1$d photos and videos in this album will go to the device’s trash. Android will ask you to confirm.</item>
+    </plurals>
+    <plurals name="library_album_moved">
+        <item quantity="one">Moved to “%2$s”.</item>
+        <item quantity="other">%1$d moved to “%2$s”.</item>
+    </plurals>
+    <plurals name="library_album_copied">
+        <item quantity="one">Copied to “%2$s”.</item>
+        <item quantity="other">%1$d copied to “%2$s”.</item>
+    </plurals>
+    <string name="library_album_name">Album name</string>
+    <string name="library_no_album_match">No album matches “%1$s”.</string>
 </resources>

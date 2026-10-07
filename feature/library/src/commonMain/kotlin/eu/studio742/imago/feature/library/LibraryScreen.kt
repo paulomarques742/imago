@@ -5,6 +5,7 @@ package eu.studio742.imago.feature.library
 import eu.studio742.imago.core.designsystem.i18n.resolve
 import eu.studio742.imago.core.designsystem.i18n.resolveNow
 import eu.studio742.imago.core.designsystem.i18n.toUiText
+import eu.studio742.imago.core.designsystem.i18n.UiText
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import eu.studio742.imago.feature.library.resources.*
@@ -42,6 +43,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
@@ -69,7 +75,6 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.ViewCarousel
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
@@ -227,20 +232,69 @@ fun LibraryRoute(
             onSectionConsumed()
         }
     }
-    LibraryHost(
-        viewModel = viewModel,
-        modifier = modifier,
-        picker = null,
-        selectedAssetId = selectedAssetId,
-        focusAssetId = focusAssetId,
-        onFocusConsumed = onFocusConsumed,
-        onOpenAsset = onOpenAsset,
-        onOpenRecipes = onOpenRecipes,
-        onOpenComposer = onOpenComposer,
-        onOpenSettings = onOpenSettings,
-        onComposeSelection = { selected -> onComposeSelection(selected, viewModel::clearSelection) },
-    )
+    var albumPick by remember { mutableStateOf<AlbumPick?>(null) }
+    val remembered by viewModel.rememberedTransfer.collectAsStateWithLifecycle()
+    val chooseTransfer = rememberFolderTransfer(remembered, viewModel::rememberTransfer)
+    Box(modifier) {
+        LibraryHost(
+            viewModel = viewModel,
+            modifier = Modifier.fillMaxSize(),
+            picker = null,
+            selectedAssetId = selectedAssetId,
+            focusAssetId = focusAssetId,
+            onFocusConsumed = onFocusConsumed,
+            onOpenAsset = onOpenAsset,
+            onOpenRecipes = onOpenRecipes,
+            onOpenComposer = onOpenComposer,
+            onOpenSettings = onOpenSettings,
+            onComposeSelection = { selected -> onComposeSelection(selected, viewModel::clearSelection) },
+            albumEditing = AlbumEditing(
+                onNewAlbum = { name -> albumPick = AlbumPick.New(name) },
+                onAddPhotos = { album -> albumPick = AlbumPick.Into(album) },
+                onRename = viewModel::renameOpenAlbum,
+                onDelete = viewModel::deleteOpenAlbum,
+            ),
+        )
+        // Laid over the library and not in its place: the grid underneath keeps where it was.
+        albumPick?.let { pick ->
+            LibraryPickerRoute(
+                title = when (pick) {
+                    is AlbumPick.New -> pick.name
+                    is AlbumPick.Into -> stringResource(Res.string.library_album_pick_title, pick.album.name)
+                },
+                subtitle = (pick as? AlbumPick.New)?.let { stringResource(Res.string.library_album_pick_new_subtitle) },
+                confirmLabel = stringResource(if (pick is AlbumPick.New) Res.string.library_album_create else Res.string.library_add),
+                onConfirm = { chosen ->
+                    albumPick = null
+                    when {
+                        pick is AlbumPick.New && viewModel.isDeviceLibrary ->
+                            chooseTransfer { transfer -> viewModel.createAlbum(pick.name, chosen, transfer) }
+                        pick is AlbumPick.New -> viewModel.createAlbum(pick.name, chosen)
+                        pick is AlbumPick.Into && pick.album.isFolder ->
+                            chooseTransfer { transfer -> viewModel.addToAlbum(pick.album, chosen, transfer) }
+                        pick is AlbumPick.Into -> viewModel.addToAlbum(pick.album, chosen)
+                    }
+                },
+                onCancel = { albumPick = null },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
 }
+
+/** What the photos being chosen are for: a new album, named already, or one that exists. */
+private sealed interface AlbumPick {
+    data class New(val name: String) : AlbumPick
+    data class Into(val album: AlbumUiModel) : AlbumPick
+}
+
+/** What the library does to its albums. A picker only chooses, and has none. */
+internal class AlbumEditing(
+    val onNewAlbum: (name: String) -> Unit,
+    val onAddPhotos: (AlbumUiModel) -> Unit,
+    val onRename: (name: String) -> Unit,
+    val onDelete: () -> Unit,
+)
 
 /**
  * The key of the instance that serves the pickers.
@@ -334,6 +388,7 @@ private fun LibraryHost(
     onOpenComposer: () -> Unit,
     onOpenSettings: () -> Unit,
     onComposeSelection: (List<AssetUiModel>) -> Unit,
+    albumEditing: AlbumEditing? = null,
 ) {
     val sourceId by viewModel.selectedSource.collectAsStateWithLifecycle()
     val savedSourceState = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
@@ -342,6 +397,7 @@ private fun LibraryHost(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val catalogSync by viewModel.catalogSync.collectAsStateWithLifecycle()
     var retriedDateNavigation by remember { mutableStateOf(false) }
+    LaunchedEffect(uiState.gridRevision) { if (uiState.gridRevision > 0) assets.refresh() }
 
     LaunchedEffect(assets.loadState.refresh, assets.itemCount, uiState.isLoadingNavigation) {
         if (
@@ -382,7 +438,9 @@ private fun LibraryHost(
             onOpenAsset = onOpenAsset,
             onOpenRecipes = onOpenRecipes,
             onOpenComposer = onOpenComposer,
-            onComposeSelection = onComposeSelection,
+            selectionBar = { selection, work -> LibrarySelectionBar(viewModel, selection, work, onComposeSelection) },
+            // The device's albums are its folders, which only the phone changes from here.
+            albumEditing = albumEditing?.takeIf { sourceId != eu.studio742.imago.core.model.DEVICE_LIBRARY_ID || DeviceFolderAlbums },
             onToggleSelection = viewModel::toggleSelection,
             onClearSelection = viewModel::clearSelection,
             onToggleFavorite = viewModel::toggleFavorite,
@@ -428,7 +486,9 @@ private fun LibraryScreen(
     onOpenAsset: (AssetUiModel, List<AssetUiModel>) -> Unit,
     onOpenRecipes: () -> Unit,
     onOpenComposer: () -> Unit,
-    onComposeSelection: (List<AssetUiModel>) -> Unit,
+    /** The bar while photos are chosen; it lives with the view model, which does the work. */
+    selectionBar: @Composable (selection: List<AssetUiModel>, work: UiText?) -> Unit,
+    albumEditing: AlbumEditing?,
     onToggleSelection: (AssetUiModel) -> Unit,
     onClearSelection: () -> Unit,
     onToggleFavorite: (AssetUiModel) -> Unit,
@@ -498,8 +558,8 @@ private fun LibraryScreen(
         gridState.centreOn(index)
         onFocusConsumed()
     }
-    LaunchedEffect(uiState.actionError) {
-        val message = uiState.actionError ?: return@LaunchedEffect
+    LaunchedEffect(uiState.actionError, uiState.actionMessage) {
+        val message = uiState.actionError ?: uiState.actionMessage ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(message.resolveNow())
         onConsumeActionError()
     }
@@ -538,9 +598,10 @@ private fun LibraryScreen(
                 } else if (selecting) {
                     SelectionTopBar(count = uiState.selection.size, onClear = onClearSelection)
                 } else if (inAlbum) {
-                    AlbumTopBar(album = uiState.selectedAlbum, onBack = onCloseAlbum)
+                    AlbumTopBar(album = uiState.selectedAlbum, onBack = onCloseAlbum, editing = albumEditing)
                 } else {
                     LibraryTopBar(
+                        searchesAlbums = uiState.section == LibrarySection.ALBUMS,
                         isSearching = uiState.isSearching,
                         query = uiState.query,
                         onQueryChange = onQueryChange,
@@ -582,11 +643,8 @@ private fun LibraryScreen(
                         onConfirm = { picker.onConfirm(uiState.selection.values.toList()) },
                     )
                 }
-            } else if (selecting) {
-                SelectionBottomBar(
-                    count = uiState.selection.size,
-                    onCompose = { onComposeSelection(uiState.selection.values.toList()) },
-                )
+            } else if (selecting || uiState.selectionWork != null) {
+                selectionBar(uiState.selection.values.toList(), uiState.selectionWork)
             } else if (!inAlbum) {
                 LibraryNavBar(
                     selected = when (uiState.section) {
@@ -615,7 +673,7 @@ private fun LibraryScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             if (uiState.section == LibrarySection.ALBUMS && uiState.selectedAlbum == null) {
-                AlbumBrowser(state = uiState, onOpenAlbum = onOpenAlbum, onRetry = onRefresh)
+                AlbumBrowser(state = uiState, onOpenAlbum = onOpenAlbum, onRetry = onRefresh, onNewAlbum = albumEditing?.onNewAlbum)
             } else {
                 PhotoBrowser(
                     selectedAssetId = selectedAssetId,
@@ -715,6 +773,8 @@ private fun LibraryFilter.label() = when (this) {
  */
 @Composable
 private fun LibraryTopBar(
+    /** In the album list the search is by album name, and there is no date to jump to. */
+    searchesAlbums: Boolean,
     isSearching: Boolean,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -736,8 +796,9 @@ private fun LibraryTopBar(
             LibrarySearchField(
                 query = query,
                 onQueryChange = onQueryChange,
-                onOpenDatePicker = onOpenDatePicker,
+                onOpenDatePicker = onOpenDatePicker.takeUnless { searchesAlbums },
                 onCloseSearch = onCloseSearch,
+                searchesAlbums = searchesAlbums,
             )
         } else {
             Image(
@@ -825,48 +886,6 @@ private fun SelectionTopBar(count: Int, onClear: () -> Unit) {
 }
 
 /**
- * What is done with the chosen photos.
- *
- * It sits at the bottom, in place of the navigation bar, because that is where the thumb reaches —
- * the top bar is kept for saying how many there are and for dropping them.
- */
-@Composable
-private fun SelectionBottomBar(count: Int, onCompose: () -> Unit) {
-    ImagoNavBarSurface {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(ImagoSizes.TouchTarget + ImagoSpacing.Xl)
-                .padding(horizontal = ImagoSpacing.Lg),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(ImagoRadii.Pill))
-                    .clickable(role = Role.Button, onClick = onCompose)
-                    .sizeIn(minHeight = ImagoSizes.TouchTarget)
-                    .padding(horizontal = ImagoSpacing.Xl),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Outlined.ViewCarousel,
-                    contentDescription = null,
-                    tint = ImagoColors.Ivory,
-                    modifier = Modifier.size(ImagoSizes.IconDefault),
-                )
-                Text(
-                    text = pluralStringResource(Res.plurals.library_add_to_composition, count, count),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = ImagoColors.Ivory,
-                    modifier = Modifier.padding(start = ImagoSpacing.Sm),
-                )
-            }
-        }
-    }
-}
-
-/**
  * The search box, with the jump to a date next to it.
  *
  * A single definition for the two bars that show it — the library's and the picker's — because
@@ -876,8 +895,10 @@ private fun SelectionBottomBar(count: Int, onCompose: () -> Unit) {
 private fun RowScope.LibrarySearchField(
     query: String,
     onQueryChange: (String) -> Unit,
-    onOpenDatePicker: () -> Unit,
+    /** Null where there is no date to reach: the album list. */
+    onOpenDatePicker: (() -> Unit)?,
     onCloseSearch: () -> Unit,
+    searchesAlbums: Boolean = false,
 ) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
@@ -885,12 +906,19 @@ private fun RowScope.LibrarySearchField(
         value = query,
         onValueChange = onQueryChange,
         singleLine = true,
-        placeholder = { Text(stringResource(Res.string.library_file_name), color = ImagoColors.TextTertiary) },
+        placeholder = {
+            Text(
+                stringResource(if (searchesAlbums) Res.string.library_album_name else Res.string.library_file_name),
+                color = ImagoColors.TextTertiary,
+            )
+        },
         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
         trailingIcon = {
             Row {
-                IconButton(onClick = onOpenDatePicker) {
-                    Icon(Icons.Outlined.CalendarMonth, contentDescription = stringResource(Res.string.library_jump_to_date))
+                if (onOpenDatePicker != null) {
+                    IconButton(onClick = onOpenDatePicker) {
+                        Icon(Icons.Outlined.CalendarMonth, contentDescription = stringResource(Res.string.library_jump_to_date))
+                    }
                 }
                 LibrarySourceButton()
                 IconButton(onClick = onCloseSearch) {
@@ -957,11 +985,13 @@ private fun PickerTopBar(
             )
         }
         if (isSearching) {
+            val searchesAlbums = section == LibrarySection.ALBUMS && !inAlbum
             LibrarySearchField(
                 query = query,
                 onQueryChange = onQueryChange,
-                onOpenDatePicker = onOpenDatePicker,
+                onOpenDatePicker = onOpenDatePicker.takeUnless { searchesAlbums },
                 onCloseSearch = onCloseSearch,
+                searchesAlbums = searchesAlbums,
             )
             return@Row
         }
@@ -1069,7 +1099,10 @@ private fun PickerConfirmBar(label: String, count: Int, onConfirm: () -> Unit) {
 }
 
 @Composable
-private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit) {
+private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit, editing: AlbumEditing?) {
+    var menu by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1100,6 +1133,42 @@ private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit) {
                 )
             }
         }
+        if (album != null && editing != null && album.canEditContent) {
+            IconButton(onClick = { editing.onAddPhotos(album) }) {
+                Icon(Icons.Outlined.AddPhotoAlternate, stringResource(Res.string.library_album_add_photos), tint = ImagoColors.TextPrimary)
+            }
+        }
+        if (album != null && editing != null && album.isOwned) {
+            Box {
+                IconButton(onClick = { menu = true }) {
+                    Icon(Icons.Outlined.MoreVert, stringResource(Res.string.library_album_more), tint = ImagoColors.TextPrimary)
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(Res.string.library_album_rename)) },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                        onClick = { menu = false; renaming = true },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(Res.string.library_album_delete)) },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                        onClick = { menu = false; deleting = true },
+                    )
+                }
+            }
+        }
+    }
+    if (renaming && album != null && editing != null) {
+        AlbumNameDialog(
+            title = stringResource(Res.string.library_album_rename),
+            initial = album.name,
+            confirmLabel = stringResource(Res.string.library_album_save),
+            onConfirm = { name -> renaming = false; if (name != album.name) editing.onRename(name) },
+            onDismiss = { renaming = false },
+        )
+    }
+    if (deleting && album != null && editing != null) {
+        AlbumDeleteDialog(album, onConfirm = { deleting = false; editing.onDelete() }, onDismiss = { deleting = false })
     }
 }
 
@@ -1308,23 +1377,75 @@ private fun AppendError(message: String?, onRetry: () -> Unit) = Column(
 }
 
 @Composable
-private fun AlbumBrowser(state: LibraryUiState, onOpenAlbum: (AlbumUiModel) -> Unit, onRetry: () -> Unit) {
+private fun AlbumBrowser(
+    state: LibraryUiState,
+    onOpenAlbum: (AlbumUiModel) -> Unit,
+    onRetry: () -> Unit,
+    /** Null where albums are not created from here: the device's folders, a picker. */
+    onNewAlbum: ((name: String) -> Unit)?,
+) {
+    var naming by remember { mutableStateOf(false) }
     when {
         state.isLoadingNavigation && state.albums.isEmpty() -> LoadingState()
         state.navigationError != null && state.albums.isEmpty() -> ErrorState(state.navigationError.resolve(), onRetry)
-        state.albums.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        state.albums.isEmpty() && onNewAlbum == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(stringResource(Res.string.library_no_albums), color = ImagoColors.TextSecondary)
         }
+        state.query.isNotBlank() && albumsMatching(state.albums, state.query).isEmpty() ->
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(stringResource(Res.string.library_no_album_match, state.query.trim()), color = ImagoColors.TextSecondary)
+            }
         else -> LazyVerticalGrid(
             columns = GridCells.Adaptive(160.dp),
             modifier = Modifier.fillMaxSize().padding(horizontal = ImagoSpacing.Sm),
             horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
             verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Lg),
         ) {
-            gridItems(state.albums, key = AlbumUiModel::id) { album ->
+            // While searching, the tile would answer a question nobody asked.
+            if (onNewAlbum != null && state.query.isBlank()) {
+                item(key = "new-album") { NewAlbumTile(onClick = { naming = true }) }
+            }
+            gridItems(albumsMatching(state.albums, state.query), key = AlbumUiModel::id) { album ->
                 AlbumTile(album, onClick = { onOpenAlbum(album) })
             }
         }
+    }
+    if (naming && onNewAlbum != null) {
+        AlbumNameDialog(
+            title = stringResource(Res.string.library_album_new),
+            initial = "",
+            confirmLabel = stringResource(Res.string.library_album_choose_photos),
+            onConfirm = { name -> naming = false; onNewAlbum(name) },
+            onDismiss = { naming = false },
+        )
+    }
+}
+
+/** The first tile of the albums: same shape as an album, so it reads as "one more here". */
+@Composable
+private fun NewAlbumTile(onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(ImagoRadii.Small))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(bottom = ImagoSpacing.Sm),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1.18f)
+                .clip(RoundedCornerShape(ImagoRadii.Small))
+                .border(1.dp, ImagoColors.BorderSubtle, RoundedCornerShape(ImagoRadii.Small)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Outlined.Add, contentDescription = null, tint = ImagoColors.Ivory, modifier = Modifier.size(ImagoSizes.IconDefault))
+        }
+        Text(
+            text = stringResource(Res.string.library_album_new),
+            style = MaterialTheme.typography.titleSmall,
+            maxLines = 1,
+            modifier = Modifier.padding(top = ImagoSpacing.Sm),
+        )
     }
 }
 
@@ -1699,3 +1820,62 @@ private fun formatMonth(value: String): String = runCatching {
     LocalDate.parse(value).format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
         .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 }.getOrDefault(value)
+
+/**
+ * The selection bar wired to the library: the dialogs it opens, and the platform for sharing and for
+ * sending to Immich.
+ */
+@Composable
+private fun LibrarySelectionBar(
+    viewModel: LibraryViewModel,
+    selection: List<AssetUiModel>,
+    work: UiText?,
+    onComposeSelection: (List<AssetUiModel>) -> Unit,
+) {
+    val share = rememberSelectionShare()
+    val sendToImmich = rememberSendToImmich()
+    var confirmDelete by remember { mutableStateOf(false) }
+    var askWhich by remember { mutableStateOf(false) }
+    var pickAlbum by remember { mutableStateOf(false) }
+    val openAlbum = viewModel.uiState.collectAsStateWithLifecycle().value.selectedAlbum
+    SelectionActionsBar(
+        selection = selection,
+        work = work,
+        albumSlot = albumSlotFor(selection, openAlbum, DeviceFolderAlbums),
+        canSaveToDevice = viewModel.canSaveSelectionToDevice(selection),
+        canSendToImmich = sendToImmich != null && viewModel.canSendToImmich(selection),
+        onShare = { viewModel.shareSelection(share) },
+        onFavorite = viewModel::favoriteSelection,
+        onCompose = { onComposeSelection(selection) },
+        onAddToAlbum = { pickAlbum = true },
+        onRemoveFromAlbum = viewModel::removeSelectionFromAlbum,
+        onRequestDelete = { viewModel.requestDeleteSelection { confirmDelete = true } },
+        onSaveToDevice = {
+            if (deviceCopyNeedsChoice(selection)) askWhich = true else viewModel.saveSelectionToDevice(edited = true)
+        },
+        onSendToImmich = {
+            sendToImmich?.invoke(viewModel.deviceAssetsIn(selection), sharedMimeType(selection.filter { it.isOnDevice() }))
+            viewModel.selectionHandedOver()
+        },
+    )
+    if (confirmDelete) {
+        SelectionDeleteDialog(
+            selection = selection,
+            onConfirm = { confirmDelete = false; viewModel.deleteSelection() },
+            onDismiss = { confirmDelete = false },
+        )
+    }
+    if (askWhich) {
+        SelectionSaveWhichDialog(
+            onChoose = { edited -> askWhich = false; viewModel.saveSelectionToDevice(edited) },
+            onDismiss = { askWhich = false },
+        )
+    }
+    if (pickAlbum) {
+        AddToAlbumSheet(
+            assetIds = selection.map { it.id },
+            onFinished = { message, failed -> pickAlbum = false; viewModel.selectionAddedToAlbum(message, failed) },
+            onDismiss = { pickAlbum = false },
+        )
+    }
+}

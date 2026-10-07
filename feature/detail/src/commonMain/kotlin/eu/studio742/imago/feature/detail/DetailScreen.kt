@@ -2,6 +2,12 @@
 
 package eu.studio742.imago.feature.detail
 
+import eu.studio742.imago.core.designsystem.i18n.UiText
+import eu.studio742.imago.core.model.AssetReference
+import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
+import eu.studio742.imago.feature.library.AddToAlbumSheet
+import eu.studio742.imago.feature.library.DeviceFolderAlbums
+import androidx.compose.material.icons.outlined.PhotoAlbum
 import eu.studio742.imago.core.designsystem.i18n.LocalAppLocale
 import eu.studio742.imago.core.designsystem.i18n.resolve
 import eu.studio742.imago.core.designsystem.i18n.resolveNow
@@ -177,6 +183,7 @@ fun DetailRoute(
         onShare = viewModel::share,
         onSaveOriginal = viewModel::saveOriginalToDevice,
         onSaveEdited = viewModel::saveEditedToDevice,
+        onAlbumResult = viewModel::show,
         onConsumeMessage = viewModel::consumeMessage,
     )
 }
@@ -199,6 +206,7 @@ private fun DetailScreen(
     onShare: (DetailAsset, (java.io.File, String) -> Unit) -> Unit,
     onSaveOriginal: (DetailAsset) -> Unit,
     onSaveEdited: (DetailAsset) -> Unit,
+    onAlbumResult: (UiText, failed: Boolean) -> Unit,
     onConsumeMessage: () -> Unit,
 ) {
     val shareFile = rememberShareFile()
@@ -210,6 +218,10 @@ private fun DetailScreen(
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showVersionChoice by remember { mutableStateOf(false) }
+    var showAlbums by remember { mutableStateOf(false) }
+    // The device's albums are its folders, which only the phone changes from here.
+    val canFileIntoAlbum = DeviceFolderAlbums ||
+        runCatching { AssetReference.parse(asset.id).libraryId != DEVICE_LIBRARY_ID }.getOrDefault(false)
     val deviceCopy = deviceCopyFor(asset, if (state.assetId == asset.id) state.recipe else asset.recipe)
     // Zoomed in, the photo gets the whole finger: the drag becomes its own and not the pager's.
     // Without this, pulling a zoomed photo sideways jumped to the next one.
@@ -314,6 +326,16 @@ private fun DetailScreen(
                                     showInfo = true
                                 },
                             )
+                            if (canFileIntoAlbum) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(Res.string.detail_add_to_album)) },
+                                    leadingIcon = { Icon(Icons.Outlined.PhotoAlbum, contentDescription = null) },
+                                    onClick = {
+                                        showMenu = false
+                                        showAlbums = true
+                                    },
+                                )
+                            }
                             if (deviceCopy != DeviceCopy.NONE) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(SaveToDeviceLabel)) },
@@ -421,6 +443,13 @@ private fun DetailScreen(
         }
     }
 
+    if (showAlbums) {
+        AddToAlbumSheet(
+            assetIds = listOf(asset.id),
+            onFinished = { message, failed -> showAlbums = false; onAlbumResult(message, failed) },
+            onDismiss = { showAlbums = false },
+        )
+    }
     if (showInfo) {
         InfoDialog(asset = asset, exif = state.exif, onDismiss = { showInfo = false })
     }

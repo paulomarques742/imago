@@ -237,11 +237,95 @@ class OkHttpImmichApiTest {
             ),
         )
 
+        server.enqueue(MockResponse().setBody("""{"id":"me"}"""))
+
         val albums = api.getAlbums(connection())
 
         assertEquals(listOf("a1", "a2"), albums.map { it.id })
         assertEquals("/api/albums", server.takeRequest().path)
         assertEquals("/api/albums?shared=true", server.takeRequest().path)
+    }
+
+    @Test
+    fun tellsWhoMayChangeEachAlbumInBothServerGenerations() = runTest {
+        // v2 names the owner in ownerId and lists only the other users; v3 puts the owner first in albumUsers.
+        server.enqueue(
+            MockResponse().setBody(
+                """[{"id":"mine2","albumName":"A","ownerId":"me","albumUsers":[]},""" +
+                    """{"id":"mine3","albumName":"B","albumUsers":[{"role":"owner","user":{"id":"me"}}]},""" +
+                    """{"id":"editor","albumName":"C","albumUsers":[{"role":"owner","user":{"id":"ana"}},{"role":"editor","user":{"id":"me"}}]},""" +
+                    """{"id":"viewer","albumName":"D","ownerId":"ana","albumUsers":[{"role":"viewer","user":{"id":"me"}}]}]""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("[]"))
+        server.enqueue(MockResponse().setBody("""{"id":"me"}"""))
+
+        val albums = api.getAlbums(connection()).associateBy { it.id }
+
+        assertEquals(listOf(true, true, false, false), listOf("mine2", "mine3", "editor", "viewer").map { albums.getValue(it).isOwned })
+        assertEquals(listOf(true, true, true, false), listOf("mine2", "mine3", "editor", "viewer").map { albums.getValue(it).canEditContent })
+    }
+
+    @Test
+    fun createsAnAlbumWithItsPhotos() = runTest {
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"n1","albumName":"Trip","assetCount":2}"""))
+
+        val album = api.createAlbum(connection(), "Trip", listOf("a1", "a2"))
+
+        val request = server.takeRequest()
+        assertEquals("POST", request.method)
+        assertEquals("/api/albums", request.path)
+        assertEquals("""{"albumName":"Trip","assetIds":["a1","a2"]}""", request.body.readUtf8())
+        assertEquals("n1", album.id)
+        assertTrue(album.isOwned && album.canEditContent)
+    }
+
+    @Test
+    fun addingCountsWhatWasAlreadyThereApart() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """[{"id":"a1","success":true},{"id":"a2","success":false,"error":"duplicate"},{"id":"a3","success":false,"error":"no_permission"}]""",
+            ),
+        )
+
+        val result = api.addToAlbum(connection(), "al", listOf("a1", "a2", "a3"))
+
+        val request = server.takeRequest()
+        assertEquals("PUT", request.method)
+        assertEquals("/api/albums/al/assets", request.path)
+        assertEquals("""{"ids":["a1","a2","a3"]}""", request.body.readUtf8())
+        assertEquals(eu.studio742.imago.core.model.AlbumAddition(added = 1, alreadyThere = 1, failed = 1), result)
+    }
+
+    @Test
+    fun removesFromAnAlbumAndRenamesAndDeletesIt() = runTest {
+        server.enqueue(MockResponse().setBody("""[{"id":"a1","success":true},{"id":"a2","success":false,"error":"not_found"}]"""))
+        server.enqueue(MockResponse().setBody("""{"id":"al","albumName":"New"}"""))
+        server.enqueue(MockResponse().setResponseCode(204))
+
+        assertEquals(1, api.removeFromAlbum(connection(), "al", listOf("a1", "a2")))
+        api.renameAlbum(connection(), "al", "New")
+        api.deleteAlbum(connection(), "al")
+
+        val remove = server.takeRequest()
+        assertEquals("DELETE", remove.method)
+        assertEquals("/api/albums/al/assets", remove.path)
+        val rename = server.takeRequest()
+        assertEquals("PATCH", rename.method)
+        assertEquals("/api/albums/al", rename.path)
+        assertEquals("""{"albumName":"New"}""", rename.body.readUtf8())
+        val delete = server.takeRequest()
+        assertEquals("DELETE", delete.method)
+        assertEquals("/api/albums/al", delete.path)
+    }
+
+    @Test
+    fun forbiddenAlbumCreationNamesItsPermission() = runTest {
+        server.enqueue(MockResponse().setResponseCode(403))
+
+        val error = runCatching { api.createAlbum(connection(), "Trip", emptyList()) }.exceptionOrNull()
+
+        assertEquals(listOf("album.create"), (error as ImmichApiException.MissingPermission).permissions)
     }
 
     @Test
@@ -401,6 +485,37 @@ class OkHttpImmichApiTest {
         assertEquals("DELETE", request.method)
         assertEquals("/api/assets", request.path)
         assertEquals("""{"ids":["a1"],"force":false}""", request.body.readUtf8())
+    }
+
+    @Test
+    fun favoritesSeveralInOneRequest() = runTest {
+        server.enqueue(MockResponse().setResponseCode(204))
+
+        api.setFavorites(connection(), listOf("a1", "a2"), false)
+
+        val request = server.takeRequest()
+        assertEquals("PUT", request.method)
+        assertEquals("/api/assets", request.path)
+        assertEquals("""{"ids":["a1","a2"],"isFavorite":false}""", request.body.readUtf8())
+    }
+
+    @Test
+    fun deletesSeveralInOneRequest() = runTest {
+        server.enqueue(MockResponse().setResponseCode(204))
+
+        api.deleteAssets(connection(), listOf("a1", "a2"))
+
+        val request = server.takeRequest()
+        assertEquals("DELETE", request.method)
+        assertEquals("""{"ids":["a1","a2"],"force":false}""", request.body.readUtf8())
+    }
+
+    @Test
+    fun anEmptySelectionSendsNothing() = runTest {
+        api.setFavorites(connection(), emptyList(), true)
+        api.deleteAssets(connection(), emptyList())
+
+        assertEquals(0, server.requestCount)
     }
 
     @Test

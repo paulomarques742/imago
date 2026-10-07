@@ -163,6 +163,24 @@ class FolderLibraryRepository(
         syncCatalog()
     }
 
+    override suspend fun setFavorites(assetIds: List<String>, isFavorite: Boolean) {
+        val favorites = readList(FAVORITES_KEY).toMutableSet()
+        if (isFavorite) favorites += assetIds else favorites -= assetIds.toSet()
+        writeList(FAVORITES_KEY, favorites.toList())
+        syncCatalog()
+    }
+
+    /** The catalogue is read again once at the end; one that stopped halfway still shows what went. */
+    override suspend fun deleteAssets(assetIds: List<String>) {
+        try {
+            withContext(Dispatchers.IO) {
+                assetIds.forEach { requireUser(java.awt.Desktop.getDesktop().moveToTrash(fileOf(it).toFile()), UserMessage.TRASH_FAILED) }
+            }
+        } finally {
+            syncCatalog()
+        }
+    }
+
     override suspend fun downloadOriginal(assetId: String, destination: File) = withContext(Dispatchers.IO) {
         val source = fileOf(assetId)
         requireUser(Files.isRegularFile(source), UserMessage.FOLDER_FILE_UNAVAILABLE)

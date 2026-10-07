@@ -22,6 +22,9 @@ expect fun libraryViewModel(key: String? = null): LibraryViewModel
 expect fun librarySettingsViewModel(): LibrarySettingsViewModel
 
 @Composable
+expect fun albumPickerViewModel(): AlbumPickerViewModel
+
+@Composable
 expect fun configurationViewModel(): ConfigurationViewModel
 
 /**
@@ -41,6 +44,9 @@ expect fun rememberRequestMediaAccess(viewModel: LibrarySettingsViewModel, onRes
  */
 @Composable
 expect fun DeviceMediaActionHost(viewModel: LibrarySettingsViewModel = librarySettingsViewModel())
+
+/** Whether this device's albums — its folders — can be changed from here: on the phone, yes. */
+expect val DeviceFolderAlbums: Boolean
 
 /** The icon of this device's library: the phone, the computer. */
 expect val DeviceLibraryIcon: ImageVector
@@ -66,3 +72,20 @@ expect val WelcomeDeviceBody: StringResource
 /** The content of the device library's card in Settings. */
 @Composable
 expect fun ColumnScope.DeviceLibraryAccess(viewModel: LibrarySettingsViewModel, revision: Int, requestAccess: () -> Unit)
+
+/** What the selection's share does: the share menu on Android; on desktop, copies in a folder. */
+@Composable
+expect fun rememberSelectionShare(): SelectionShare
+
+expect val SelectionShareLabel: StringResource
+expect val SelectionShareIcon: ImageVector
+
+/** Where this device's photos go when deleted: the phone's trash, the Recycle Bin. */
+expect val SelectionDeleteDeviceBody: StringResource
+
+/**
+ * Hands photos of this device — their ids in its library — to the upload to Immich, which asks for
+ * the library and sends in the background. Null where the app has no such upload.
+ */
+@Composable
+expect fun rememberSendToImmich(): ((assetIds: List<String>, mimeType: String) -> Unit)?

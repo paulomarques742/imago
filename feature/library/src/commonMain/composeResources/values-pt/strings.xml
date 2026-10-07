@@ -113,10 +113,6 @@
         <item quantity="one">%1$d selecionada</item>
         <item quantity="other">%1$d selecionadas</item>
     </plurals>
-    <plurals name="library_add_to_composition">
-        <item quantity="one">Adicionar a composição</item>
-        <item quantity="other">Adicionar %1$d a composição</item>
-    </plurals>
     <plurals name="library_items">
         <item quantity="one">%1$d item</item>
         <item quantity="other">%1$d itens</item>
@@ -142,6 +138,11 @@
     <string name="library_permission_asset_view">Carrega as miniaturas e as pré-visualizações, e reproduz os vídeos</string>
     <string name="library_permission_asset_download">Abre o original em resolução total para editar e exportar</string>
     <string name="library_permission_album_read">Mostra os seus álbuns</string>
+    <string name="library_permission_album_create">Cria álbuns novos</string>
+    <string name="library_permission_album_asset_create">Junta fotografias aos álbuns</string>
+    <string name="library_permission_album_asset_delete">Tira fotografias dos álbuns, sem as apagar</string>
+    <string name="library_permission_album_update">Muda o nome dos seus álbuns</string>
+    <string name="library_permission_album_delete">Elimina os álbuns que mandar eliminar, mantendo as fotografias</string>
     <string name="library_permission_asset_upload">Envia para o servidor as fotografias e as composições exportadas, e o que partilhar com o IMAGO</string>
     <string name="library_permission_stack_create">Empilha cada edição exportada com o original</string>
     <string name="library_permission_asset_update">Marca e desmarca favoritos</string>
@@ -187,4 +188,116 @@
         <item quantity="one">%1$d não foi enviado</item>
         <item quantity="other">%1$d não foram enviados</item>
     </plurals>
+    <!-- Ações da seleção -->
+    <string name="library_selection_share">Partilhar</string>
+    <string name="library_selection_save_copies">Guardar cópias…</string>
+    <string name="library_selection_favorite">Favorita</string>
+    <string name="library_selection_unfavorite">Desmarcar</string>
+    <string name="library_selection_compose">Compor</string>
+    <string name="library_selection_delete">Eliminar</string>
+    <string name="library_selection_more">Mais</string>
+    <string name="library_selection_save_to_gallery">Guardar na galeria</string>
+    <string name="library_selection_send_to_immich">Enviar para o Immich</string>
+    <string name="library_selection_delete_device_body">As que estão no dispositivo vão para o lixo dele. O Android irá pedir confirmação.</string>
+    <string name="library_selection_delete_computer_body">As que estão no computador vão para a Reciclagem.</string>
+    <string name="library_selection_delete_server_body">As que vêm de um servidor vão para o lixo dele. Pode recuperá-las antes de o lixo ser esvaziado.</string>
+    <string name="library_selection_delete_failed">Não foi possível eliminar.</string>
+    <string name="library_selection_deleting">A eliminar…</string>
+    <string name="library_selection_working">Um momento…</string>
+    <string name="library_selection_share_failed">Não foi possível preparar os ficheiros.</string>
+    <string name="library_selection_save_failed">Não foi possível guardar na galeria.</string>
+    <string name="library_selection_save_which_question">Que versões guardar?</string>
+    <string name="library_selection_save_which_body">Algumas destas fotografias têm edições. Os originais são os ficheiros tal como estão no servidor; as versões editadas são geradas em resolução máxima. As que não têm edições são guardadas como estão.</string>
+    <string name="library_selection_save_original">Originais</string>
+    <string name="library_selection_save_edited">Editadas</string>
+    <plurals name="library_selection_delete_question">
+        <item quantity="one">Eliminar %1$d item?</item>
+        <item quantity="other">Eliminar %1$d itens?</item>
+    </plurals>
+    <plurals name="library_selection_preparing">
+        <item quantity="one">A preparar %1$d de %2$d…</item>
+        <item quantity="other">A preparar %1$d de %2$d…</item>
+    </plurals>
+    <plurals name="library_selection_saving">
+        <item quantity="one">A guardar %1$d de %2$d…</item>
+        <item quantity="other">A guardar %1$d de %2$d…</item>
+    </plurals>
+    <plurals name="library_selection_saved">
+        <item quantity="one">Guardado em Pictures/IMAGO.</item>
+        <item quantity="other">%1$d guardados em Pictures/IMAGO.</item>
+    </plurals>
+    <plurals name="library_selection_saved_some">
+        <item quantity="one">%1$d guardados em Pictures/IMAGO; %2$d não foi possível guardar.</item>
+        <item quantity="other">%1$d guardados em Pictures/IMAGO; %2$d não foi possível guardar.</item>
+    </plurals>
+    <plurals name="library_selection_copies_saved">
+        <item quantity="one">Cópia guardada em %2$s.</item>
+        <item quantity="other">%1$d cópias guardadas em %2$s.</item>
+    </plurals>
+    <!-- Álbuns -->
+    <string name="library_selection_album">Álbum</string>
+    <string name="library_selection_remove_from_album">Tirar</string>
+    <string name="library_selection_add_to_album">Juntar a álbum</string>
+    <string name="library_album_new">Novo álbum</string>
+    <string name="library_album_name_label">Nome</string>
+    <string name="library_album_create">Criar</string>
+    <string name="library_album_choose_photos">Escolher fotografias</string>
+    <string name="library_album_rename">Mudar o nome</string>
+    <string name="library_album_save">Guardar</string>
+    <string name="library_album_delete">Eliminar álbum</string>
+    <string name="library_album_delete_question">Eliminar “%1$s”?</string>
+    <string name="library_album_delete_body">O álbum desaparece; as fotografias ficam na biblioteca.</string>
+    <string name="library_album_add_photos">Adicionar fotografias</string>
+    <string name="library_album_more">Opções do álbum</string>
+    <string name="library_album_pick_title">Juntar a “%1$s”</string>
+    <string name="library_album_pick_new_subtitle">Escolha as fotografias do álbum novo</string>
+    <string name="library_album_none_editable">Ainda não há álbuns a que possa juntar fotografias.</string>
+    <string name="library_album_failed">Não foi possível alterar o álbum.</string>
+    <string name="library_album_all_there">Já estavam em “%1$s”.</string>
+    <plurals name="library_album_sheet_title">
+        <item quantity="one">Juntar %1$d item a um álbum</item>
+        <item quantity="other">Juntar %1$d itens a um álbum</item>
+    </plurals>
+    <plurals name="library_album_added">
+        <item quantity="one">Juntado a “%2$s”.</item>
+        <item quantity="other">%1$d juntados a “%2$s”.</item>
+    </plurals>
+    <plurals name="library_album_added_some_there">
+        <item quantity="one">%1$d juntado a “%2$s”; os outros já lá estavam.</item>
+        <item quantity="other">%1$d juntados a “%2$s”; os outros já lá estavam.</item>
+    </plurals>
+    <plurals name="library_album_add_failed">
+        <item quantity="one">Não foi possível juntar %1$d a “%2$s”.</item>
+        <item quantity="other">Não foi possível juntar %1$d a “%2$s”.</item>
+    </plurals>
+    <plurals name="library_album_created">
+        <item quantity="one">Álbum “%1$s” criado com %2$d item.</item>
+        <item quantity="other">Álbum “%1$s” criado com %2$d itens.</item>
+    </plurals>
+    <plurals name="library_album_removed">
+        <item quantity="one">Tirado de “%2$s”.</item>
+        <item quantity="other">%1$d tirados de “%2$s”.</item>
+    </plurals>
+    <!-- Álbuns do dispositivo -->
+    <string name="library_folder_transfer_question">Mover ou copiar?</string>
+    <string name="library_folder_transfer_body">Mover tira as fotografias do álbum onde estão; copiar deixa-as lá e põe uma cópia neste.</string>
+    <string name="library_folder_transfer_always">Fazer sempre isto (pode mudar nas Definições)</string>
+    <string name="library_folder_transfer_move">Mover</string>
+    <string name="library_folder_transfer_copy">Copiar</string>
+    <string name="library_folder_transfer_ask">Perguntar</string>
+    <string name="library_folder_transfer_setting">Ao juntar fotografias a um álbum deste dispositivo</string>
+    <plurals name="library_album_delete_folder_body">
+        <item quantity="one">A fotografia ou vídeo deste álbum vai para o lixo do dispositivo. O Android irá pedir confirmação.</item>
+        <item quantity="other">As %1$d fotografias e vídeos deste álbum vão para o lixo do dispositivo. O Android irá pedir confirmação.</item>
+    </plurals>
+    <plurals name="library_album_moved">
+        <item quantity="one">Movido para “%2$s”.</item>
+        <item quantity="other">%1$d movidos para “%2$s”.</item>
+    </plurals>
+    <plurals name="library_album_copied">
+        <item quantity="one">Copiado para “%2$s”.</item>
+        <item quantity="other">%1$d copiados para “%2$s”.</item>
+    </plurals>
+    <string name="library_album_name">Nome do álbum</string>
+    <string name="library_no_album_match">Nenhum álbum corresponde a “%1$s”.</string>
 </resources>

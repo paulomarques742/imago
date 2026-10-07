@@ -6,6 +6,7 @@ import eu.studio742.imago.core.model.AssetPage
 import eu.studio742.imago.core.model.ImmichConnection
 import eu.studio742.imago.core.model.LibraryFilter
 import eu.studio742.imago.core.model.ImmichAlbum
+import eu.studio742.imago.core.model.AlbumAddition
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichTimeBucket
@@ -55,6 +56,25 @@ interface ImmichApi {
     ): AssetPage
 
     suspend fun getAlbums(connection: ImmichConnection): List<ImmichAlbum>
+
+    /** A new album of this account, with [assetIds] already in it. */
+    suspend fun createAlbum(connection: ImmichConnection, name: String, assetIds: List<String>): ImmichAlbum =
+        error("Albums cannot be created here")
+
+    /** A photo already in the album counts in [AlbumAddition.alreadyThere], not as a failure. */
+    suspend fun addToAlbum(connection: ImmichConnection, albumId: String, assetIds: List<String>): AlbumAddition =
+        error("Albums cannot be changed here")
+
+    /** Takes them out of the album only; they stay in the library. Returns how many came out. */
+    suspend fun removeFromAlbum(connection: ImmichConnection, albumId: String, assetIds: List<String>): Int =
+        error("Albums cannot be changed here")
+
+    suspend fun renameAlbum(connection: ImmichConnection, albumId: String, name: String): Unit =
+        error("Albums cannot be changed here")
+
+    /** The album goes; its photos stay in the library. */
+    suspend fun deleteAlbum(connection: ImmichConnection, albumId: String): Unit =
+        error("Albums cannot be deleted here")
     suspend fun getTimeBuckets(connection: ImmichConnection): List<ImmichTimeBucket>
 
     /**
@@ -72,8 +92,17 @@ interface ImmichApi {
 
     suspend fun setFavorite(connection: ImmichConnection, assetId: String, isFavorite: Boolean)
 
+    /** Several in a single request — a selection of two hundred is not two hundred requests. */
+    suspend fun setFavorites(connection: ImmichConnection, assetIds: List<String>, isFavorite: Boolean) {
+        assetIds.forEach { setFavorite(connection, it, isFavorite) }
+    }
+
     /** Moves to Immich's trash; `force` deletes for good. */
     suspend fun deleteAsset(connection: ImmichConnection, assetId: String, force: Boolean = false)
+
+    suspend fun deleteAssets(connection: ImmichConnection, assetIds: List<String>, force: Boolean = false) {
+        assetIds.forEach { deleteAsset(connection, it, force) }
+    }
 
     fun thumbnailUrl(connection: ImmichConnection, assetId: String): String
     fun previewUrl(connection: ImmichConnection, assetId: String): String

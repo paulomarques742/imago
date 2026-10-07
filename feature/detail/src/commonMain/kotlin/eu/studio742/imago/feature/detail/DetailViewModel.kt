@@ -307,4 +307,8 @@ open class DetailViewModel(
     }
 
     fun consumeMessage() = mutableState.update { it.copy(message = null, error = null) }
+
+    /** A sentence from elsewhere on the screen — how adding to an album went. */
+    fun show(message: UiText, failed: Boolean) =
+        mutableState.update { if (failed) it.copy(error = message) else it.copy(message = message) }
 }

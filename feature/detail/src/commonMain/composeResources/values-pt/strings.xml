@@ -52,4 +52,5 @@
     <string name="detail_save_which_body">Esta fotografia tem edições. O original é o ficheiro tal como está no servidor; a versão editada é gerada em resolução máxima.</string>
     <string name="detail_save_original">Original</string>
     <string name="detail_save_edited">Editada</string>
+    <string name="detail_add_to_album">Juntar a álbum</string>
 </resources>

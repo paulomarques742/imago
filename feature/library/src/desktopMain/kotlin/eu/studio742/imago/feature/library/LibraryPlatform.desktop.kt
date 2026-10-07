@@ -12,6 +12,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.SaveAlt
+import eu.studio742.imago.core.designsystem.i18n.UiText
+import eu.studio742.imago.core.designsystem.i18n.uiPlural
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +51,12 @@ actual fun librarySettingsViewModel(): LibrarySettingsViewModel {
 }
 
 @Composable
+actual fun albumPickerViewModel(): AlbumPickerViewModel {
+    val graph = LocalDesktopDataGraph.current
+    return viewModel { AlbumPickerViewModel(graph.library, graph.folders) }
+}
+
+@Composable
 actual fun configurationViewModel(): ConfigurationViewModel {
     val graph = LocalDesktopDataGraph.current
     return viewModel { ConfigurationViewModel(graph.configuration) }
@@ -70,6 +79,8 @@ actual fun rememberRequestMediaAccess(viewModel: LibrarySettingsViewModel, onRes
 
 @Composable
 actual fun DeviceMediaActionHost(viewModel: LibrarySettingsViewModel) = Unit
+
+actual val DeviceFolderAlbums: Boolean get() = false
 
 actual val DeviceLibraryIcon: ImageVector get() = Icons.Outlined.Computer
 
@@ -101,3 +112,24 @@ actual fun ColumnScope.DeviceLibraryAccess(viewModel: LibrarySettingsViewModel, 
         Text(stringResource(Res.string.library_add_folder))
     }
 }
+
+/** On a computer sharing is keeping copies: the originals are downloaded straight into the folder picked. */
+@Composable
+actual fun rememberSelectionShare(): SelectionShare = remember {
+    object : SelectionShare {
+        override suspend fun prepare(): java.io.File? = NativeDialogs.pickFolder()?.toFile()
+
+        override fun deliver(files: List<java.io.File>, mimeType: String): UiText =
+            uiPlural(Res.plurals.library_selection_copies_saved, files.size, files.size, files.first().parent.orEmpty())
+    }
+}
+
+actual val SelectionShareLabel: StringResource get() = Res.string.library_selection_save_copies
+
+actual val SelectionShareIcon: ImageVector get() = Icons.Outlined.SaveAlt
+
+actual val SelectionDeleteDeviceBody: StringResource get() = Res.string.library_selection_delete_computer_body
+
+/** The computer has no background upload like the phone's share sheet yet, so the entry does not show. */
+@Composable
+actual fun rememberSendToImmich(): ((List<String>, String) -> Unit)? = null

@@ -2,6 +2,18 @@ package eu.studio742.imago.feature.library
 
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.designsystem.i18n.toUiText
+import eu.studio742.imago.core.designsystem.i18n.uiPlural
+import eu.studio742.imago.core.designsystem.i18n.uiText
+import eu.studio742.imago.core.model.AssetReference
+import eu.studio742.imago.core.model.FolderTransfer
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.PluralStringResource
+import org.jetbrains.compose.resources.StringResource
+import java.io.File
 import eu.studio742.imago.feature.library.resources.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -70,6 +82,12 @@ data class AlbumUiModel(
     val endDate: String?,
     val shared: Boolean,
     val apiKey: String,
+    /** Photos can be added and taken out here. */
+    val canEditContent: Boolean = false,
+    /** Renaming and deleting are the owner's. */
+    val isOwned: Boolean = false,
+    /** A folder of the device: photos are moved or copied into it, never taken out. */
+    val isFolder: Boolean = false,
 )
 
 data class MonthUiModel(val value: String, val assetCount: Int)
@@ -102,6 +120,15 @@ data class LibraryUiState(
      * and without the model at hand there was no way to send it to the composition.
      */
     val selection: Map<String, AssetUiModel> = emptyMap(),
+    /** What is being done with the selection right now, with its progress; null when nothing is. */
+    val selectionWork: UiText? = null,
+    /** A sentence to show once that is not an error: how many copies were saved. */
+    val actionMessage: UiText? = null,
+    /**
+     * Raised when an album changed under the open grid. An album is read straight from the server,
+     * without the catalogue in between, so nothing else would tell the grid to read it again.
+     */
+    val gridRevision: Int = 0,
 )
 
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -110,6 +137,7 @@ open class LibraryViewModel(
     private val recipes: RecipeRepository,
     private val configuration: ConfigurationRepository,
     private val device: eu.studio742.imago.core.data.DeviceLibrary,
+    private val deviceCopies: DeviceCopies? = null,
 ) : ViewModel() {
     val selectedSource = configuration.selectedLibraryId
     val filter = MutableStateFlow(LibraryFilter.ALL)
@@ -287,7 +315,214 @@ open class LibraryViewModel(
 
     fun closeSearch() = uiState.update { it.copy(isSearching = false, query = "") }
 
-    fun consumeActionError() = uiState.update { it.copy(actionError = null) }
+    fun consumeActionError() = uiState.update { it.copy(actionError = null, actionMessage = null) }
+
+    private val chosen: List<AssetUiModel> get() = uiState.value.selection.values.toList()
+
+    /**
+     * Runs one job over the selection, with the bar showing [label] meanwhile.
+     *
+     * The selection is dropped when the job ends well: what was chosen has been dealt with. When it
+     * fails it stays, so the person can try again without choosing everything again. A system
+     * confirmation the person refused is not a failure, and says nothing.
+     */
+    private fun runOnSelection(
+        label: UiText,
+        failure: StringResource,
+        needsSelection: Boolean = true,
+        block: suspend () -> UiText?,
+    ) {
+        if (uiState.value.selectionWork != null || (needsSelection && uiState.value.selection.isEmpty())) return
+        uiState.update { it.copy(selectionWork = label) }
+        viewModelScope.launch {
+            try {
+                val message = block()
+                uiState.update { it.copy(selectionWork = null, selection = emptyMap(), actionMessage = message) }
+            } catch (cancelled: CancellationException) {
+                uiState.update { it.copy(selectionWork = null) }
+                if (!currentCoroutineContext().isActive) throw cancelled
+            } catch (error: Exception) {
+                uiState.update { it.copy(selectionWork = null, actionError = error.toUiText(failure)) }
+            }
+        }
+    }
+
+    private fun progress(label: PluralStringResource, done: Int, total: Int) =
+        uiState.update { it.copy(selectionWork = uiPlural(label, total, done, total)) }
+
+    fun favoriteSelection() {
+        val selection = chosen
+        val target = favoriteTarget(selection)
+        runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_favorite_failed) {
+            library.setFavorites(selection.map { it.id }, target)
+            null
+        }
+    }
+
+    /**
+     * Opens the confirmation only if every library in the selection lets its photos be deleted: a key
+     * without the permission hears which one is missing before confirming something that will fail.
+     */
+    fun requestDeleteSelection(confirm: () -> Unit) {
+        val selection = chosen
+        viewModelScope.launch {
+            runCatching {
+                selection.groupBy { AssetReference.parse(it.id).libraryId }.values.forEach { library.checkCanDelete(it.first().id) }
+            }
+                .onSuccess { confirm() }
+                .onFailure { error -> uiState.update { it.copy(actionError = error.toUiText(Res.string.library_selection_delete_failed)) } }
+        }
+    }
+
+    fun deleteSelection() {
+        val selection = chosen
+        runOnSelection(uiText(Res.string.library_selection_deleting), Res.string.library_selection_delete_failed) {
+            library.deleteAssets(selection.map { it.id })
+            null
+        }
+    }
+
+    /** The originals, downloaded to where [share] says and handed to it. Edits are the editor's export. */
+    fun shareSelection(share: SelectionShare) {
+        val selection = chosen
+        runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_selection_share_failed) {
+            val directory = share.prepare() ?: return@runOnSelection null
+            val taken = mutableSetOf<String>()
+            val files = selection.mapIndexed { index, asset ->
+                progress(Res.plurals.library_selection_preparing, index + 1, selection.size)
+                val name = withContext(Dispatchers.IO) { uniqueFileName(asset.fileName, directory, taken, "IMAGO-${index + 1}") }
+                File(directory, name).also { library.downloadOriginal(asset.id, it) }
+            }
+            share.deliver(files, sharedMimeType(selection))
+        }
+    }
+
+    /** Whether "Save to gallery" has anything to save in this selection. */
+    fun canSaveSelectionToDevice(selection: List<AssetUiModel>): Boolean =
+        deviceCopies != null && deviceCopyPlan(selection, edited = true).isNotEmpty()
+
+    /**
+     * One copy per photo, counted at the end. A photo that fails does not stop the others: a server
+     * that lost one original should not cost the whole selection.
+     */
+    fun saveSelectionToDevice(edited: Boolean) {
+        val copies = deviceCopies ?: return
+        val plan = deviceCopyPlan(chosen, edited)
+        if (plan.isEmpty()) return
+        runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_selection_save_failed) {
+            var failed = 0
+            plan.forEachIndexed { index, (asset, kind) ->
+                progress(Res.plurals.library_selection_saving, index + 1, plan.size)
+                try {
+                    when (kind) {
+                        CopyKind.ORIGINAL -> copies.saveOriginal(asset)
+                        CopyKind.EDITED -> copies.saveEdited(asset, checkNotNull(asset.recipe))
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    failed++
+                }
+            }
+            val saved = plan.size - failed
+            check(saved > 0) { "No copy could be saved" }
+            if (failed == 0) uiPlural(Res.plurals.library_selection_saved, saved, saved)
+            else uiPlural(Res.plurals.library_selection_saved_some, failed, saved, failed)
+        }
+    }
+
+    /** The photos of this device in the selection, by their id in its library, for the upload to Immich. */
+    fun deviceAssetsIn(selection: List<AssetUiModel>): List<String> =
+        selection.filter { it.isOnDevice() }.map { AssetReference.parse(it.id).localId }
+
+    /** Only with photos of this device and a server to send them to. */
+    fun canSendToImmich(selection: List<AssetUiModel>): Boolean =
+        selection.any { it.isOnDevice() } && configuration.libraries.value.any { !it.isDevice && it.isConnected }
+
+    /** The upload takes the selection over; here it is done. */
+    fun selectionHandedOver() = clearSelection()
+
+    /** How photos of the device go into its albums when the person stopped being asked; null asks. */
+    val rememberedTransfer: StateFlow<FolderTransfer?> get() = device.rememberedTransfer
+
+    fun rememberTransfer(transfer: FolderTransfer?) = device.rememberTransfer(transfer)
+
+    /** Whether the open library is this device's. */
+    val isDeviceLibrary: Boolean get() = configuration.selectedLibraryId.value == eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
+
+    /** How adding the selection to an album went: done, it stops being chosen; failed, it stays. */
+    fun selectionAddedToAlbum(message: UiText, failed: Boolean) {
+        uiState.update {
+            if (failed) it.copy(actionError = message) else it.copy(actionMessage = message, selection = emptyMap())
+        }
+        // The counts and the cover in the albums section changed.
+        refreshNavigation()
+    }
+
+    /** Out of the open album, not out of the library. */
+    fun removeSelectionFromAlbum() {
+        val album = uiState.value.selectedAlbum ?: return
+        val selection = chosen
+        runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_album_failed) {
+            val removed = library.removeFromAlbum(album.id, selection.map { it.id })
+            albumChanged(album.copy(assetCount = (album.assetCount - removed).coerceAtLeast(0)))
+            uiPlural(Res.plurals.library_album_removed, removed, removed, album.name)
+        }
+    }
+
+    /** What was chosen in the picker opened from inside [album]; [transfer] for a folder album. */
+    fun addToAlbum(album: AlbumUiModel, assets: List<AssetUiModel>, transfer: FolderTransfer? = null) {
+        if (assets.isEmpty()) return
+        runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_album_failed, needsSelection = false) {
+            val ids = assets.map { it.id }
+            val result = if (transfer != null) library.fileIntoAlbum(album.id, ids, transfer) else library.addToAlbum(album.id, ids)
+            albumChanged(album.copy(assetCount = album.assetCount + result.added))
+            albumAdditionOutcome(result, album.name, transfer).message
+        }
+    }
+
+    /** A new album with what was chosen, opened straight away; [transfer] makes it a folder of the device. */
+    fun createAlbum(name: String, assets: List<AssetUiModel>, transfer: FolderTransfer? = null) {
+        runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_album_failed, needsSelection = false) {
+            val ids = assets.map { it.id }
+            val created = if (transfer != null) library.createFolderAlbum(name, ids, transfer) else library.createAlbum(name, ids)
+            val album = created.toUiModel()
+            uiState.update { it.copy(section = LibrarySection.ALBUMS, selectedAlbum = album, selectedMonth = null) }
+            albumChanged(album)
+            uiPlural(Res.plurals.library_album_created, assets.size, album.name, assets.size)
+        }
+    }
+
+    fun renameOpenAlbum(name: String) {
+        val album = uiState.value.selectedAlbum ?: return
+        runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_album_failed, needsSelection = false) {
+            library.renameAlbum(album.id, name)
+            uiState.update { it.copy(selectedAlbum = album.copy(name = name)) }
+            refreshNavigation()
+            null
+        }
+    }
+
+    /** The album goes and the grid goes back to the albums; the photos stay in the library. */
+    fun deleteOpenAlbum() {
+        val album = uiState.value.selectedAlbum ?: return
+        runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_album_failed, needsSelection = false) {
+            library.deleteAlbum(album.id)
+            uiState.update { it.copy(selectedAlbum = null, albums = it.albums.filterNot { other -> other.id == album.id }) }
+            refreshNavigation()
+            null
+        }
+    }
+
+    private fun albumChanged(album: AlbumUiModel) {
+        uiState.update {
+            it.copy(
+                selectedAlbum = album.takeIf { _ -> it.selectedAlbum?.id == album.id } ?: it.selectedAlbum,
+                gridRevision = it.gridRevision + 1,
+            )
+        }
+        refreshNavigation()
+    }
 
     /**
      * Toggles the favourite.
@@ -308,10 +543,14 @@ open class LibraryViewModel(
 
     fun selectSection(section: LibrarySection) {
         uiState.update {
+            // The timeline searches file names and the albums search album names: a query does
+            // not carry from one to the other.
             it.copy(
                 section = section,
                 selectedAlbum = null,
                 navigationError = null,
+                isSearching = if (section == it.section) it.isSearching else false,
+                query = if (section == it.section) it.query else "",
             )
         }
         if (
@@ -357,8 +596,12 @@ open class LibraryViewModel(
 
     fun consumePendingScroll() = uiState.update { it.copy(pendingScrollDate = null) }
 
+    /**
+     * The search that found the album ends here: it was by album name, and kept open it would go on
+     * slicing the photos inside by file name — the album "Beach" searched as "beach" opened empty.
+     */
     fun openAlbum(album: AlbumUiModel) = uiState.update {
-        it.copy(section = LibrarySection.ALBUMS, selectedAlbum = album, selectedMonth = null)
+        it.copy(section = LibrarySection.ALBUMS, selectedAlbum = album, selectedMonth = null, isSearching = false, query = "")
     }
 
     fun closeAlbum() = uiState.update { it.copy(selectedAlbum = null) }
@@ -400,5 +643,8 @@ open class LibraryViewModel(
         endDate = endDate,
         shared = shared,
         apiKey = thumbnailAssetId?.let(library::apiKey).orEmpty(),
+        canEditContent = canEditContent,
+        isOwned = isOwned,
+        isFolder = isFolder,
     )
 }

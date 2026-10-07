@@ -52,4 +52,5 @@
     <string name="detail_save_which_body">This photo has edits. The original is the file as it is on the server; the edited version is rendered at full resolution.</string>
     <string name="detail_save_original">Original</string>
     <string name="detail_save_edited">Edited</string>
+    <string name="detail_add_to_album">Add to album</string>
 </resources>

@@ -125,6 +125,19 @@ class RoomLibraryRepository @Inject constructor(
     }
 
     override suspend fun albums(): List<ImmichAlbum> = api.getAlbums(requireConnection())
+
+    override suspend fun createAlbum(name: String, assetIds: List<String>): ImmichAlbum =
+        api.createAlbum(requireConnection(), name, assetIds)
+
+    override suspend fun addToAlbum(albumId: String, assetIds: List<String>) =
+        api.addToAlbum(requireConnection(), albumId, assetIds)
+
+    override suspend fun removeFromAlbum(albumId: String, assetIds: List<String>) =
+        api.removeFromAlbum(requireConnection(), albumId, assetIds)
+
+    override suspend fun renameAlbum(albumId: String, name: String) = api.renameAlbum(requireConnection(), albumId, name)
+
+    override suspend fun deleteAlbum(albumId: String) = api.deleteAlbum(requireConnection(), albumId)
     override suspend fun timeBuckets(): List<ImmichTimeBucket> {
         val connection = requireConnection()
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
@@ -321,6 +334,20 @@ class RoomLibraryRepository @Inject constructor(
         val connection = requireConnection()
         api.deleteAsset(connection, assetId)
         database.assetDao().delete(connection.libraryId ?: libraryKeyOf(connection.serverUrl), assetId)
+    }
+
+    override suspend fun setFavorites(assetIds: List<String>, isFavorite: Boolean) {
+        val connection = requireConnection()
+        api.setFavorites(connection, assetIds, isFavorite)
+        val library = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        assetIds.forEach { database.assetDao().setFavorite(library, it, isFavorite) }
+    }
+
+    override suspend fun deleteAssets(assetIds: List<String>) {
+        val connection = requireConnection()
+        api.deleteAssets(connection, assetIds)
+        val library = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        assetIds.forEach { database.assetDao().delete(library, it) }
     }
 
     override suspend fun checkCanDelete(assetId: String) =

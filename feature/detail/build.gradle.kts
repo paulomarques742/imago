@@ -27,6 +27,8 @@ kotlin {
             // Saving the edited version renders the recipe at full resolution, and where the copy goes
             // on each platform is already the editor's export.
             implementation(project(":feature:editor"))
+            // "Add to album" is the library's sheet, the same one its selection opens.
+            implementation(project(":feature:library"))
             implementation(compose.materialIconsExtended)
             implementation(libs.compose.backhandler)
             implementation(libs.jetbrains.lifecycle.viewmodel.compose)

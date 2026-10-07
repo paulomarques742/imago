@@ -22,6 +22,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import eu.studio742.imago.core.data.ConfigurationRepository
 import eu.studio742.imago.core.data.DerivedAssetRepository
+import eu.studio742.imago.core.data.LibraryRepository
+import eu.studio742.imago.feature.library.AssetUiModel
+import eu.studio742.imago.feature.library.DeviceCopies
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import eu.studio742.imago.core.data.RecipeRepository
 import eu.studio742.imago.core.data.SavedRecipeRepository
 import eu.studio742.imago.core.immich.ImmichApi
@@ -48,10 +53,33 @@ class AndroidEditorExporter @Inject constructor(
     }
 }
 
+/** The library selection's "Save to gallery": this module's export, one photo at a time. */
+class ExporterDeviceCopies @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val library: LibraryRepository,
+    private val exporter: EditorExporter,
+) : DeviceCopies {
+    override suspend fun saveOriginal(asset: AssetUiModel) {
+        val file = withContext(Dispatchers.IO) { File.createTempFile("download-", ".asset", context.cacheDir) }
+        try {
+            library.downloadOriginal(asset.id, file)
+            exporter.saveOriginalToDevice(file, asset.fileName, asset.isVideo, asset.fileCreatedAt)
+        } finally {
+            file.delete()
+        }
+    }
+
+    override suspend fun saveEdited(asset: AssetUiModel, recipe: EditRecipe) {
+        val target = EditorAsset(asset.id, asset.checksum, asset.fileName, asset.previewUrl, asset.apiKey, asset.fileCreatedAt)
+        exporter.saveEditedToDevice(target, recipe) {}
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class EditorBindings {
     @Binds abstract fun exporter(implementation: AndroidEditorExporter): EditorExporter
+    @Binds abstract fun deviceCopies(implementation: ExporterDeviceCopies): DeviceCopies
 }
 
 @HiltViewModel

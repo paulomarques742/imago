@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAlbum
+import eu.studio742.imago.core.model.AlbumAddition
+import eu.studio742.imago.core.model.FolderTransfer
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.LibraryFilter
@@ -90,6 +92,44 @@ interface LibraryRepository {
     /** Writes to Immich and to the local catalogue, so the grid reacts without a refetch. */
     suspend fun setFavorite(assetId: String, isFavorite: Boolean)
     suspend fun deleteAsset(assetId: String)
+
+    /**
+     * A whole selection at once. A library that can do it in one go overrides these: one request to
+     * the server, and on the phone one system confirmation instead of one per photo.
+     */
+    suspend fun setFavorites(assetIds: List<String>, isFavorite: Boolean) {
+        assetIds.forEach { setFavorite(it, isFavorite) }
+    }
+
+    suspend fun deleteAssets(assetIds: List<String>) {
+        assetIds.forEach { deleteAsset(it) }
+    }
+
+    /*
+     * Changing albums. Only a library whose albums say so ([ImmichAlbum.canEditContent],
+     * [ImmichAlbum.isOwned]) is asked; the others keep these defaults and never show the actions.
+     */
+
+    /** A new album in the open library, with [assetIds] already in it. */
+    suspend fun createAlbum(name: String, assetIds: List<String>): ImmichAlbum = error("This library cannot create albums")
+
+    suspend fun addToAlbum(albumId: String, assetIds: List<String>): AlbumAddition = error("This library cannot change albums")
+
+    /** Out of the album only; the photos stay in the library. How many came out. */
+    suspend fun removeFromAlbum(albumId: String, assetIds: List<String>): Int = error("This library cannot change albums")
+
+    suspend fun renameAlbum(albumId: String, name: String): Unit = error("This library cannot change albums")
+
+    /** The album goes. A server's keeps its photos; a folder's go to the device's trash. */
+    suspend fun deleteAlbum(albumId: String): Unit = error("This library cannot delete albums")
+
+    /** Into a folder album, moved or copied. */
+    suspend fun fileIntoAlbum(albumId: String, assetIds: List<String>, transfer: FolderTransfer): AlbumAddition =
+        error("This library has no folder albums")
+
+    /** A new folder album, born with [assetIds] in it: a folder cannot exist empty. */
+    suspend fun createFolderAlbum(name: String, assetIds: List<String>, transfer: FolderTransfer): ImmichAlbum =
+        error("This library has no folder albums")
 
     /**
      * Fails with the permission the library's key lacks to delete this asset, before the

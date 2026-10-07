@@ -75,7 +75,13 @@ val generateImmichContract by tasks.registering {
             "createStack",
             "getAssetInfo",
             "updateAsset",
+            "updateAssets",
             "deleteAssets",
+            "createAlbum",
+            "addAssetsToAlbum",
+            "removeAssetFromAlbum",
+            "updateAlbumInfo",
+            "deleteAlbum",
             "getMyApiKey",
         )
 
@@ -85,7 +91,10 @@ val generateImmichContract by tasks.registering {
          * exports to the device, and each of these answers with the permission it lacks.
          */
         val allPermission = "all"
-        val optionalOperationIds = setOf("getAllAlbums", "uploadAsset", "createStack", "updateAsset", "deleteAssets")
+        val optionalOperationIds = setOf(
+            "getAllAlbums", "uploadAsset", "createStack", "updateAsset", "updateAssets", "deleteAssets",
+            "createAlbum", "addAssetsToAlbum", "removeAssetFromAlbum", "updateAlbumInfo", "deleteAlbum",
+        )
         check(operationIds.containsAll(optionalOperationIds))
         validatedDocuments.forEach { validatedDocument ->
             operationIds.forEach { operationId ->
@@ -128,7 +137,16 @@ val generateImmichContract by tasks.registering {
             ),
         )
         check(propertiesOf("UpdateAssetDto").contains("isFavorite"))
+        check(propertiesOf("AssetBulkUpdateDto").containsAll(setOf("ids", "isFavorite")))
         check(propertiesOf("AssetBulkDeleteDto").containsAll(setOf("ids", "force")))
+        // Managing albums. Who owns one is read from `ownerId` up to v2 and from the first
+        // `albumUsers` entry, with the role "owner", from v3: the client reads both.
+        check(propertiesOf("CreateAlbumDto").containsAll(setOf("albumName", "assetIds")))
+        check(propertiesOf("BulkIdsDto").contains("ids"))
+        check(propertiesOf("BulkIdResponseDto").containsAll(setOf("id", "success", "error")))
+        check(propertiesOf("UpdateAlbumDto").contains("albumName"))
+        check(propertiesOf("AlbumResponseDto").contains("albumUsers"))
+        check(propertiesOf("AlbumUserResponseDto").containsAll(setOf("role", "user")))
         check(
             propertiesOf("AlbumResponseDto").containsAll(
                 setOf("id", "albumName", "albumThumbnailAssetId", "assetCount", "description", "shared"),
@@ -162,6 +180,13 @@ val generateImmichContract by tasks.registering {
                 "Immich AssetOrder differs between validated contracts"
             }
             check(validatedProperties("UpdateAssetDto").contains("isFavorite"))
+            check(validatedProperties("AssetBulkUpdateDto").containsAll(setOf("ids", "isFavorite")))
+            check(validatedProperties("CreateAlbumDto").containsAll(setOf("albumName", "assetIds")))
+            check(validatedProperties("BulkIdsDto").contains("ids"))
+            check(validatedProperties("BulkIdResponseDto").containsAll(setOf("id", "success", "error")))
+            check(validatedProperties("UpdateAlbumDto").contains("albumName"))
+            check(validatedProperties("AlbumResponseDto").contains("albumUsers"))
+            check(validatedProperties("AlbumUserResponseDto").containsAll(setOf("role", "user")))
             check(validatedProperties("AssetBulkDeleteDto").containsAll(setOf("ids", "force")))
         }
 
@@ -248,7 +273,13 @@ val generateImmichContract by tasks.registering {
             |    const val CREATE_STACK = "${pathFor("createStack")}"
             |    const val GET_ASSET_INFO = "${pathFor("getAssetInfo")}"
             |    const val UPDATE_ASSET = "${pathFor("updateAsset")}"
+            |    const val UPDATE_ASSETS = "${pathFor("updateAssets")}"
             |    const val DELETE_ASSETS = "${pathFor("deleteAssets")}"
+            |    const val CREATE_ALBUM = "${pathFor("createAlbum")}"
+            |    const val ADD_ASSETS_TO_ALBUM = "${pathFor("addAssetsToAlbum")}"
+            |    const val REMOVE_ASSET_FROM_ALBUM = "${pathFor("removeAssetFromAlbum")}"
+            |    const val UPDATE_ALBUM_INFO = "${pathFor("updateAlbumInfo")}"
+            |    const val DELETE_ALBUM = "${pathFor("deleteAlbum")}"
             |    const val GET_MY_API_KEY = "${pathFor("getMyApiKey")}"
             |}
             |
