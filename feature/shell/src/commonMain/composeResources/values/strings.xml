@@ -7,5 +7,12 @@
     <string name="shell_news_version">Version %1$s</string>
     <string name="shell_news_close">Continue</string>
     <!-- Release notes: shell_news_<version>_<n>, one line per change, listed in ReleaseNotes.kt. -->
-    <string name="shell_news_0_11_0_1">Settings now show the installed version and what changed in it.</string>
+    <string name="shell_news_0_11_0_1">Recipes can now be edited: tap one in the recipe library to open it over a sample photo, adjust it and save. Swipe to see it on other photos.</string>
+    <string name="shell_news_0_11_0_2">Built-in filters open the same way, and saving one makes your own copy.</string>
+    <string name="shell_news_0_11_0_3">New recipe, Duplicate and Delete, in the recipe library and inside the editor.</string>
+    <string name="shell_news_0_11_0_4">Your Immich API key no longer needs write permissions: reading and downloading photos is enough. Without the others, only the tools that use them stop working, and the app tells you which one is missing and where to add it.</string>
+    <string name="shell_news_0_11_0_5">When you connect an Immich server, the app lists the required and optional permissions separately, explains what each one is for and says which are missing.</string>
+    <string name="shell_news_0_11_0_6">Recipe previews show their sample photos again, instead of empty tiles.</string>
+    <string name="shell_news_0_11_0_7">Settings now show the installed version and what changed in it.</string>
+    <string name="shell_news_0_11_0_8">Names the app creates on its own, such as for exports and sync copies, now follow the app language.</string>
 </resources>

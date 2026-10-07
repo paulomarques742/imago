@@ -2,6 +2,13 @@ package eu.studio742.imago.feature.shell
 
 import eu.studio742.imago.feature.shell.resources.Res
 import eu.studio742.imago.feature.shell.resources.shell_news_0_11_0_1
+import eu.studio742.imago.feature.shell.resources.shell_news_0_11_0_2
+import eu.studio742.imago.feature.shell.resources.shell_news_0_11_0_3
+import eu.studio742.imago.feature.shell.resources.shell_news_0_11_0_4
+import eu.studio742.imago.feature.shell.resources.shell_news_0_11_0_5
+import eu.studio742.imago.feature.shell.resources.shell_news_0_11_0_6
+import eu.studio742.imago.feature.shell.resources.shell_news_0_11_0_7
+import eu.studio742.imago.feature.shell.resources.shell_news_0_11_0_8
 import org.jetbrains.compose.resources.StringResource
 
 /** A MAJOR.MINOR.PATCH version, compared number by number: 0.10.0 comes after 0.9.0. */
@@ -27,7 +34,19 @@ internal class Release(val version: AppVersion, val notes: List<StringResource>)
  * A version without an entry — a fix nobody would notice — opens nothing after the update.
  */
 internal val Releases: List<Release> = listOf(
-    Release(AppVersion(0, 11, 0), listOf(Res.string.shell_news_0_11_0_1)),
+    Release(
+        AppVersion(0, 11, 0),
+        listOf(
+            Res.string.shell_news_0_11_0_1,
+            Res.string.shell_news_0_11_0_2,
+            Res.string.shell_news_0_11_0_3,
+            Res.string.shell_news_0_11_0_4,
+            Res.string.shell_news_0_11_0_5,
+            Res.string.shell_news_0_11_0_6,
+            Res.string.shell_news_0_11_0_7,
+            Res.string.shell_news_0_11_0_8,
+        ),
+    ),
 )
 
 internal val InstalledVersion: AppVersion =
