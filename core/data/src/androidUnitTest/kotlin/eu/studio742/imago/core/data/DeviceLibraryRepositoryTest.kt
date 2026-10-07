@@ -39,6 +39,9 @@ class DeviceLibraryRepositoryTest {
             assertEquals("2026-09-08", rows.first().fileCreatedAt.take(10))
             assertEquals(1, repo.albums().size)
             assertEquals(2, repo.albums().single().assetCount)
+            // The camera's folder is the system's: shown, never changed from here.
+            assertTrue(repo.albums().single().isFolder)
+            assertFalse(repo.albums().single().canEditContent)
             assertEquals(3000L, rows.first { it.type == "VIDEO" }.durationMs)
             val photo = rows.first { it.type == "IMAGE" }
             database.recipeDao().upsert(RecipeEntity(DEVICE_LIBRARY_ID, photo.id, "{}", "2026-09-08"))
@@ -80,7 +83,8 @@ private class TestMediaProvider : ContentProvider() {
             MediaStore.Images.ImageColumns.DATE_TAKEN to Instant.parse("2026-09-08T12:00:00Z").toEpochMilli(),
             "date_added" to 0L, "date_modified" to 10L, "_size" to 1024L, "width" to 100L, "height" to 200L,
             "mime_type" to if (video) "video/mp4" else "image/jpeg", "is_favorite" to 1L, "bucket_id" to 42L,
-            "bucket_display_name" to "Camera", "volume_name" to "external_primary", "duration" to 3000L)
+            "bucket_display_name" to "Camera", "volume_name" to "external_primary", "duration" to 3000L,
+            MediaStore.MediaColumns.RELATIVE_PATH to "DCIM/Camera/")
         val columns = checkNotNull(projection)
         require(columns.all { it in values }) { "Unknown MediaStore column" }
         return MatrixCursor(columns).apply { addRow(columns.map { values[it] }.toTypedArray()) }

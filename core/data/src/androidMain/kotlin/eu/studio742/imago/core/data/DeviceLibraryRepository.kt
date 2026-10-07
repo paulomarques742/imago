@@ -72,39 +72,73 @@ class DeviceLibraryRepository @Inject constructor(
     override suspend fun syncCatalog() = withContext(Dispatchers.IO) {
         refreshing {
             try {
-                val rows = mutableListOf<AssetEntity>()
-                for ((collection, type) in listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI to AssetType.IMAGE,
-                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI to AssetType.VIDEO)) {
-                    val columns = arrayOf("_id", "_display_name", MediaStore.Images.ImageColumns.DATE_TAKEN, "date_added", "date_modified", "_size",
-                        "width", "height", "mime_type", "is_favorite", "bucket_id", "bucket_display_name", "volume_name") +
-                        if (type == AssetType.VIDEO) arrayOf("duration") else emptyArray()
-                    val cursorResult = try { resolver.query(collection, columns, "is_trashed = 0 AND is_pending = 0", null, null) } catch (_: SecurityException) { null }
-                    cursorResult?.use { cursor ->
-                        fun str(name: String) = cursor.getColumnIndex(name).takeIf { it >= 0 }?.let { cursor.getString(it) }
-                        fun number(name: String) = str(name)?.toLongOrNull()
-                        while (cursor.moveToNext()) {
-                            val volume = str("volume_name") ?: MediaStore.VOLUME_EXTERNAL_PRIMARY
-                            val itemCollection = if (type == AssetType.VIDEO) MediaStore.Video.Media.getContentUri(volume) else MediaStore.Images.Media.getContentUri(volume)
-                            val id = ContentUris.withAppendedId(itemCollection, checkNotNull(number("_id"))).toString()
-                            val time = (number(MediaStore.Images.ImageColumns.DATE_TAKEN)?.takeIf { it > 0 } ?: ((number("date_added") ?: 0) * 1000))
-                            val instant = Instant.ofEpochMilli(time)
-                            val folder = "$volume:${str("bucket_id")}"
-                            rows += AssetEntity(DEVICE_LIBRARY_ID, id,
-                                "local:${number("_size")}:${number("date_modified")}", str("_display_name").orEmpty(),
-                                java.time.format.DateTimeFormatterBuilder().appendInstant(3).toFormatter().format(instant),
-                                instant.atZone(ZoneId.systemDefault()).toLocalDateTime().toString(), number("width"), number("height"),
-                                number("is_favorite") == 1L, false, false, type.name, str("mime_type"),
-                                number("duration").takeIf { type == AssetType.VIDEO }, folder, str("bucket_display_name") ?: "/",
-                                sizeBytes = number("_size"))
-                        }
-                    }
-                }
+                val (rows, paths) = readMedia(null, null)
                 replaceCatalog(rows)
+                // The whole picture: a folder no longer listed has emptied.
+                folderPathCache = paths
             } catch (error: SecurityException) {
                 // A revoked grant must never leave inaccessible cached items in the grid.
                 database.assetDao().deleteLibrary(DEVICE_LIBRARY_ID)
             }
         }
+    }
+
+    /**
+     * Each folder (`volume:bucket`) and its path as MediaStore writes it (`Pictures/Trip/`), kept from
+     * the last full read: asking MediaStore for them went through every photo, several times per
+     * album action.
+     */
+    @Volatile private var folderPathCache: Map<String, String> = emptyMap()
+
+    /** Reads again only these photos, after IMAGO itself moved, copied, marked or deleted them. */
+    private suspend fun refreshRows(assetIds: Collection<String>) = withContext(Dispatchers.IO) {
+        if (assetIds.isEmpty()) return@withContext
+        val rows = mutableListOf<AssetEntity>()
+        val paths = mutableMapOf<String, String>()
+        // MediaStore ids are unique across images and videos; the batches keep the IN list under SQLite's limit.
+        assetIds.mapNotNull { runCatching { ContentUris.parseId(Uri.parse(it)) }.getOrNull() }.distinct().chunked(500).forEach { batch ->
+            val (found, foundPaths) = readMedia("_id IN (${batch.joinToString(",")})", null)
+            rows += found
+            paths += foundPaths
+        }
+        replaceRows(assetIds, rows)
+        folderPathCache = folderPathCache + paths
+    }
+
+    /** The photos and videos [selection] picks, as catalogue rows, with the path of each one's folder. */
+    private fun readMedia(selection: String?, args: Array<String>?): Pair<List<AssetEntity>, Map<String, String>> {
+        val rows = mutableListOf<AssetEntity>()
+        val paths = mutableMapOf<String, String>()
+        val where = listOfNotNull("is_trashed = 0 AND is_pending = 0", selection).joinToString(" AND ") { "($it)" }
+        for ((collection, type) in listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI to AssetType.IMAGE,
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI to AssetType.VIDEO)) {
+            val columns = arrayOf("_id", "_display_name", MediaStore.Images.ImageColumns.DATE_TAKEN, "date_added", "date_modified", "_size",
+                "width", "height", "mime_type", "is_favorite", "bucket_id", "bucket_display_name", "volume_name",
+                MediaStore.MediaColumns.RELATIVE_PATH) +
+                if (type == AssetType.VIDEO) arrayOf("duration") else emptyArray()
+            val cursorResult = try { resolver.query(collection, columns, where, args, null) } catch (_: SecurityException) { null }
+            cursorResult?.use { cursor ->
+                fun str(name: String) = cursor.getColumnIndex(name).takeIf { it >= 0 }?.let { cursor.getString(it) }
+                fun number(name: String) = str(name)?.toLongOrNull()
+                while (cursor.moveToNext()) {
+                    val volume = str("volume_name") ?: MediaStore.VOLUME_EXTERNAL_PRIMARY
+                    val itemCollection = if (type == AssetType.VIDEO) MediaStore.Video.Media.getContentUri(volume) else MediaStore.Images.Media.getContentUri(volume)
+                    val id = ContentUris.withAppendedId(itemCollection, checkNotNull(number("_id"))).toString()
+                    val time = (number(MediaStore.Images.ImageColumns.DATE_TAKEN)?.takeIf { it > 0 } ?: ((number("date_added") ?: 0) * 1000))
+                    val instant = Instant.ofEpochMilli(time)
+                    val folder = "$volume:${str("bucket_id")}"
+                    str(MediaStore.MediaColumns.RELATIVE_PATH)?.let { paths.putIfAbsent(folder, it) }
+                    rows += AssetEntity(DEVICE_LIBRARY_ID, id,
+                        "local:${number("_size")}:${number("date_modified")}", str("_display_name").orEmpty(),
+                        java.time.format.DateTimeFormatterBuilder().appendInstant(3).toFormatter().format(instant),
+                        instant.atZone(ZoneId.systemDefault()).toLocalDateTime().toString(), number("width"), number("height"),
+                        number("is_favorite") == 1L, false, false, type.name, str("mime_type"),
+                        number("duration").takeIf { type == AssetType.VIDEO }, folder, str("bucket_display_name") ?: "/",
+                        sizeBytes = number("_size"))
+                }
+            }
+        }
+        return rows to paths
     }
     override suspend fun assetDetail(assetId: String): ImmichAssetDetail = withContext(Dispatchers.IO) {
         val asset = (database.assetDao().asset(DEVICE_LIBRARY_ID, assetId) ?: throw UserMessageException(UserMessage.FILE_UNAVAILABLE)).toDomain()
@@ -116,21 +150,24 @@ class DeviceLibraryRepository @Inject constructor(
         } }.getOrNull() ?: AssetExif()
         ImmichAssetDetail(asset, exif)
     }
-    private suspend fun request(intent: PendingIntent) {
+    /** Asks Android (a dialog, or not as a media management app) and reads again what it touched. */
+    private suspend fun request(intent: PendingIntent, touched: Collection<String>) {
+        consent(intent)
+        refreshRows(touched)
+    }
+
+    private suspend fun consent(intent: PendingIntent) {
         val result = CompletableDeferred<Boolean>()
         actionChannel.send(PendingMediaAction(intent, result))
         if (!result.await()) throw CancellationException("Operation cancelled")
-        syncCatalog()
     }
-    override suspend fun setFavorite(assetId: String, isFavorite: Boolean) = request(
-        MediaStore.createFavoriteRequest(resolver, listOf(Uri.parse(assetId)), isFavorite))
-    override suspend fun deleteAsset(assetId: String) = request(
-        MediaStore.createTrashRequest(resolver, listOf(Uri.parse(assetId)), true))
+    override suspend fun setFavorite(assetId: String, isFavorite: Boolean) = setFavorites(listOf(assetId), isFavorite)
+    override suspend fun deleteAsset(assetId: String) = deleteAssets(listOf(assetId))
     override suspend fun setFavorites(assetIds: List<String>, isFavorite: Boolean) {
-        if (assetIds.isNotEmpty()) request(MediaStore.createFavoriteRequest(resolver, assetIds.map(Uri::parse), isFavorite))
+        if (assetIds.isNotEmpty()) request(MediaStore.createFavoriteRequest(resolver, assetIds.map(Uri::parse), isFavorite), assetIds)
     }
     override suspend fun deleteAssets(assetIds: List<String>) {
-        if (assetIds.isNotEmpty()) request(MediaStore.createTrashRequest(resolver, assetIds.map(Uri::parse), true))
+        if (assetIds.isNotEmpty()) request(MediaStore.createTrashRequest(resolver, assetIds.map(Uri::parse), true), assetIds)
     }
     override fun rememberTransfer(transfer: FolderTransfer?) {
         preferences.edit().apply { if (transfer == null) remove(TRANSFER_KEY) else putString(TRANSFER_KEY, transfer.name) }.apply()
@@ -148,14 +185,13 @@ class DeviceLibraryRepository @Inject constructor(
 
     override suspend fun fileIntoAlbum(albumId: String, assetIds: List<String>, transfer: FolderTransfer): AlbumAddition {
         val target = editableFolder(albumId)
-        return transferTo(target, assetIds, transfer).also { syncCatalog() }
+        return transferTo(target, assetIds, transfer)
     }
 
     override suspend fun createFolderAlbum(name: String, assetIds: List<String>, transfer: FolderTransfer): ImmichAlbum {
         val target = deviceAlbumFolder(name) ?: throw UserMessageException(UserMessage.FILE_UNAVAILABLE)
         val result = transferTo(target, assetIds, transfer)
         check(result.added + result.alreadyThere > 0) { "No photo reached the new album" }
-        syncCatalog()
         val folderId = folderPaths().entries.firstOrNull { it.value.equals(target, ignoreCase = true) }?.key
         return albums().first { it.id == folderId }
     }
@@ -165,7 +201,6 @@ class DeviceLibraryRepository @Inject constructor(
         editableFolder(albumId)
         val target = deviceAlbumFolder(name) ?: throw UserMessageException(UserMessage.FILE_UNAVAILABLE)
         val result = transferTo(target, idsIn(albumId), FolderTransfer.MOVE)
-        syncCatalog()
         check(result.failed == 0) { "${result.failed} files could not be moved to $target" }
     }
 
@@ -175,26 +210,15 @@ class DeviceLibraryRepository @Inject constructor(
         deleteAssets(idsIn(albumId))
     }
 
-    private suspend fun idsIn(albumId: String): List<String> =
-        database.assetDao().allAssets(DEVICE_LIBRARY_ID).filter { it.folderId == albumId }.map { it.id }
+    private suspend fun idsIn(albumId: String): List<String> = database.assetDao().idsInFolder(DEVICE_LIBRARY_ID, albumId)
 
     private suspend fun editableFolder(albumId: String): String =
         folderPaths()[albumId]?.takeIf(::isEditableDeviceFolder) ?: throw UserMessageException(UserMessage.FILE_UNAVAILABLE)
 
-    /** Each folder of the catalogue (`volume:bucket`) and its path, as MediaStore writes it: `Pictures/Trip/`. */
-    private suspend fun folderPaths(): Map<String, String> = withContext(Dispatchers.IO) {
-        val paths = mutableMapOf<String, String>()
-        for (collection in listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)) {
-            val columns = arrayOf("volume_name", "bucket_id", MediaStore.MediaColumns.RELATIVE_PATH)
-            runCatching { resolver.query(collection, columns, "is_trashed = 0 AND is_pending = 0", null, null) }.getOrNull()?.use { cursor ->
-                while (cursor.moveToNext()) {
-                    val volume = cursor.getString(0) ?: MediaStore.VOLUME_EXTERNAL_PRIMARY
-                    val path = cursor.getString(2) ?: continue
-                    paths.putIfAbsent("$volume:${cursor.getString(1)}", path)
-                }
-            }
-        }
-        paths
+    /** The folders' paths; read in full only when no catalogue read has kept them yet. */
+    private suspend fun folderPaths(): Map<String, String> {
+        if (folderPathCache.isEmpty()) syncCatalog()
+        return folderPathCache
     }
 
     /**
@@ -207,24 +231,25 @@ class DeviceLibraryRepository @Inject constructor(
         val paths = folderPaths()
         val (already, pending) = rows.partition { paths[it.folderId]?.equals(target, ignoreCase = true) == true }
         if (pending.isEmpty()) return AlbumAddition(0, already.size, assetIds.size - rows.size)
-        if (transfer == FolderTransfer.MOVE) {
-            val result = CompletableDeferred<Boolean>()
-            actionChannel.send(PendingMediaAction(MediaStore.createWriteRequest(resolver, pending.map { Uri.parse(it.id) }), result))
-            if (!result.await()) throw CancellationException("Operation cancelled")
-        }
-        val moved = withContext(Dispatchers.IO) {
-            pending.count { row ->
-                runCatching { if (transfer == FolderTransfer.MOVE) move(row, target) else copy(row, target) }.getOrDefault(false)
+        if (transfer == FolderTransfer.MOVE) consent(MediaStore.createWriteRequest(resolver, pending.map { Uri.parse(it.id) }))
+        val touched = withContext(Dispatchers.IO) {
+            pending.mapNotNull { row ->
+                runCatching { if (transfer == FolderTransfer.MOVE) move(row, target) else copy(row, target) }.getOrNull()
             }
         }
+        refreshRows(touched)
+        val moved = touched.size
         return AlbumAddition(added = moved, alreadyThere = already.size, failed = assetIds.size - already.size - moved)
     }
 
-    private fun move(row: AssetEntity, target: String): Boolean =
-        resolver.update(Uri.parse(row.id), ContentValues().apply { put(MediaStore.MediaColumns.RELATIVE_PATH, target) }, null, null) > 0
+    /** The moved photo's id, which does not change; null when it did not move. */
+    private fun move(row: AssetEntity, target: String): String? =
+        row.id.takeIf {
+            resolver.update(Uri.parse(row.id), ContentValues().apply { put(MediaStore.MediaColumns.RELATIVE_PATH, target) }, null, null) > 0
+        }
 
-    /** A new file of the same kind, with the same name and date; left pending until it is whole. */
-    private fun copy(row: AssetEntity, target: String): Boolean {
+    /** A new file of the same kind, with the same name and date; left pending until it is whole. Its id, or null. */
+    private fun copy(row: AssetEntity, target: String): String? {
         val collection = if (row.type == AssetType.VIDEO.name) {
             MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         } else {
@@ -237,15 +262,15 @@ class DeviceLibraryRepository @Inject constructor(
             runCatching { Instant.parse(row.fileCreatedAt).toEpochMilli() }.getOrNull()?.let { put(MediaStore.MediaColumns.DATE_TAKEN, it) }
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
-        val copy = resolver.insert(collection, values) ?: return false
+        val copy = resolver.insert(collection, values) ?: return null
         return try {
             val source = resolver.openInputStream(Uri.parse(row.id)) ?: error("The original is no longer readable")
             source.use { input -> resolver.openOutputStream(copy)?.use { input.copyTo(it) } ?: error("The copy cannot be written") }
             resolver.update(copy, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-            true
+            copy.toString()
         } catch (error: Exception) {
             resolver.delete(copy, null, null)
-            false
+            null
         }
     }
 

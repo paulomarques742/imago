@@ -43,11 +43,25 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
                 month?.let { "${LocalDate.parse(it).withDayOfMonth(1).plusMonths(1)}T00:00:00.000Z" }, query, albumId)
         }.flow.map { page -> page.map(AssetEntity::toDomain) }
     }
-    override suspend fun albums(): List<ImmichAlbum> = database.assetDao().allAssets(DEVICE_LIBRARY_ID)
-        .groupBy { it.folderId.orEmpty() }.map { (_, rows) ->
-            ImmichAlbum(rows.first().folderId.orEmpty(), rows.first().folderName.orEmpty(), "", rows.first().id,
-                rows.size, rows.last().fileCreatedAt, rows.first().fileCreatedAt, false)
+    override suspend fun albums(): List<ImmichAlbum> {
+        val starts = database.assetDao().folderStarts(DEVICE_LIBRARY_ID).associate { it.folderId.orEmpty() to it.startDate }
+        return database.assetDao().folders(DEVICE_LIBRARY_ID).map { folder ->
+            val id = folder.folderId.orEmpty()
+            ImmichAlbum(id, folder.folderName.orEmpty(), "", folder.coverId, folder.assetCount, starts[id], folder.endDate, false)
         }
+    }
+
+    /**
+     * Swaps the catalogue rows of these photos for what the source says now, and drops the ones it
+     * no longer has. After moving, copying, marking or deleting a few photos this is all that
+     * changed — reading the whole catalogue again took seconds on a phone with tens of thousands.
+     */
+    protected suspend fun replaceRows(ids: Collection<String>, rows: List<AssetEntity>) = database.withTransaction {
+        val found = rows.map { it.id }.toSet()
+        ids.filterNot(found::contains).forEach { database.assetDao().delete(DEVICE_LIBRARY_ID, it) }
+        database.assetDao().upsertAll(rows)
+        database.assetDao().restoreLocalRecipeFlags(DEVICE_LIBRARY_ID)
+    }
     override suspend fun timeBuckets() = database.assetDao().timeBuckets(DEVICE_LIBRARY_ID).map { ImmichTimeBucket(it.month, it.assetCount) }
     override suspend fun loadMonth(month: String) = syncCatalog()
     override suspend fun indexOfAsset(

@@ -15,6 +15,28 @@ interface AssetDao {
     @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey ORDER BY fileCreatedAt DESC, id DESC")
     suspend fun allAssets(libraryKey: String): List<AssetEntity>
 
+    /**
+     * One row per folder, with its newest photo as the cover. With a single MAX() and no MIN(),
+     * SQLite takes the other columns from the row that has it, which is what makes `coverId` the
+     * newest one. Counted here and not by loading every row: a phone has tens of thousands.
+     */
+    @Query(
+        """
+        SELECT folderId, folderName, id AS coverId, MAX(fileCreatedAt) AS endDate, COUNT(*) AS assetCount
+        FROM assets WHERE libraryKey = :libraryKey
+        GROUP BY folderId
+        ORDER BY endDate DESC
+        """,
+    )
+    suspend fun folders(libraryKey: String): List<FolderSummary>
+
+    @Query("SELECT id FROM assets WHERE libraryKey = :libraryKey AND folderId = :folderId")
+    suspend fun idsInFolder(libraryKey: String, folderId: String): List<String>
+
+    /** Each folder's oldest date, apart: a MIN() next to the MAX() above would lose the cover. */
+    @Query("SELECT folderId, MIN(fileCreatedAt) AS startDate FROM assets WHERE libraryKey = :libraryKey GROUP BY folderId")
+    suspend fun folderStarts(libraryKey: String): List<FolderStart>
+
     /** The Immich photos with this `checksum` (the SHA-1 in Base64, as the server gives it). */
     @Query("SELECT * FROM assets WHERE checksum = :checksum AND libraryKey != 'device'")
     suspend fun byChecksum(checksum: String): List<AssetEntity>
@@ -236,3 +258,13 @@ interface AssetDao {
 }
 
 data class LocalTimeBucket(val month: String, val assetCount: Int)
+
+data class FolderSummary(
+    val folderId: String?,
+    val folderName: String?,
+    val coverId: String,
+    val endDate: String,
+    val assetCount: Int,
+)
+
+data class FolderStart(val folderId: String?, val startDate: String)

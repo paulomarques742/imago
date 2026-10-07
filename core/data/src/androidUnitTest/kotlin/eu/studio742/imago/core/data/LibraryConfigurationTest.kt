@@ -91,7 +91,10 @@ class LibraryConfigurationTest {
 
         repo.saveLibrary(null, "Home", "https://example.test", "read-only")
         assertEquals(
-            listOf("album.read", "asset.upload", "stack.create", "asset.update", "asset.delete"),
+            listOf(
+                "album.read", "asset.upload", "stack.create", "asset.update", "asset.delete",
+                "album.create", "albumAsset.create", "albumAsset.delete", "album.update", "album.delete",
+            ),
             repo.missingOptionalPermissions(ImmichConnection("https://example.test", "read-only")),
         )
         assertEquals(emptyList<String>(), repo.missingOptionalPermissions(ImmichConnection("https://example.test", "everything")))
