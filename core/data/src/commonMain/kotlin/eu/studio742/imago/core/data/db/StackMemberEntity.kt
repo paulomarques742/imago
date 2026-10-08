@@ -8,7 +8,8 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 
 /**
- * A photo of an Immich stack, as the server's list of stacks says.
+ * A photo of an Immich stack, as the server's list of stacks says and as IMAGO shows it: this app's
+ * exports are left out, and [primaryAssetId] is the original standing in for an export cover.
  *
  * The timeline only names the covers. This is what tells the other photos of a stack apart when an
  * album or a search brings them — the search does not say which stack a photo is in — so they stay
@@ -44,6 +45,9 @@ interface StackMemberDao {
 
     @Query("SELECT * FROM stack_members WHERE libraryKey = :libraryKey AND assetId IN (:assetIds)")
     suspend fun ofAssets(libraryKey: String, assetIds: List<String>): List<StackMemberEntity>
+
+    @Query("SELECT * FROM stack_members WHERE libraryKey = :libraryKey AND stackId IN (:stackIds)")
+    suspend fun ofStacks(libraryKey: String, stackIds: List<String>): List<StackMemberEntity>
 
     @Query(
         """

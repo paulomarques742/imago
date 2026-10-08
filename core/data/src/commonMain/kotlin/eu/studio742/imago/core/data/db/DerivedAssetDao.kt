@@ -21,6 +21,9 @@ interface DerivedAssetDao {
     @Query("SELECT derivedAssetId FROM derived_assets WHERE libraryKey = :libraryKey AND deletedAt IS NULL")
     suspend fun ids(libraryKey: String): List<String>
 
+    @Query("SELECT * FROM derived_assets WHERE libraryKey = :libraryKey AND deletedAt IS NULL")
+    suspend fun live(libraryKey: String): List<DerivedAssetEntity>
+
     @Query("DELETE FROM derived_assets WHERE libraryKey = :libraryKey AND derivedAssetId = :derivedAssetId")
     suspend fun delete(libraryKey: String, derivedAssetId: String)
 

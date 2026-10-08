@@ -101,13 +101,12 @@ class StackCatalogueTest {
         }
     }
 
-    @Test fun anExportShowsOnlyAsTheCoverOfItsStack() = runBlocking {
+    @Test fun anExportNeverShowsInASearch() = runBlocking {
         val database = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), ImmichRoomDatabase::class.java)
             .allowMainThreadQueries().build()
         try {
-            // "edit" is an export that became the cover over its original; "stray" an export that
-            // never got stacked.
-            database.stackMemberDao().insertAll(listOf("edit", "original").map { StackMemberEntity(library, it, "s1", "edit") })
+            // "edit" is Immich's cover over "original"; here the original stands for the stack.
+            database.stackMemberDao().insertAll(listOf(StackMemberEntity(library, "original", "s1", "original")))
 
             val returned = database.upsertFromSearch(
                 library,
@@ -115,30 +114,9 @@ class StackCatalogueTest {
                 derivedIds = setOf("edit", "stray"),
             )
 
-            assertEquals(listOf("edit"), returned.map { it.id })
-            assertEquals(2, returned.single().stackCount)
-        } finally {
-            database.close()
-        }
-    }
-
-    @Test fun clearingTheExportsLeavesTheOnesThatAreCovers() = runBlocking {
-        val database = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), ImmichRoomDatabase::class.java)
-            .allowMainThreadQueries().build()
-        try {
-            database.assetDao().upsertAll(
-                listOf(
-                    AssetEntity.fromDomain(library, asset("cover_ImmichRoom", "s1", 2).copy(originalFileName = "a_ImmichRoom.jpg")),
-                    AssetEntity.fromDomain(library, asset("loose").copy(originalFileName = "b_ImmichRoom.jpg")),
-                ),
-            )
-
-            database.assetDao().purgeAppExports(library)
-
-            assertEquals(
-                listOf("cover_ImmichRoom"),
-                database.assetDao().byIds(library, listOf("cover_ImmichRoom", "loose")).map { it.id },
-            )
+            assertEquals(listOf("original"), returned.map { it.id })
+            // A stack of one photo once the exports are out: no badge.
+            assertNull(returned.single().stackCount)
         } finally {
             database.close()
         }

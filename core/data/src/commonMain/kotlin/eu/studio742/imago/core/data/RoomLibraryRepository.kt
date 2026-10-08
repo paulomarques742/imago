@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import eu.studio742.imago.core.data.db.AssetEntity
-import eu.studio742.imago.core.data.db.StackMemberEntity
 import eu.studio742.imago.core.data.db.CatalogMonthEntity
 import eu.studio742.imago.core.data.db.ImmichRoomDatabase
 import eu.studio742.imago.core.data.db.RemoteKeyEntity
@@ -349,14 +348,22 @@ class RoomLibraryRepository @Inject constructor(
         val assets = runCatching { api.getTimeBucketAssets(connection, bucket.month) }
             .onFailure { syncLog("W", "month ${bucket.month} failed: ${it.message}") }
             .getOrNull() ?: return
-        val derivedIds = derivedAssets.derivedIds()
+        val originalOf = derivedOriginals(libraryKey)
         val month = bucket.month.take(MONTH_PREFIX)
+        val shown = assets.filter { it.type in LIBRARY_ASSET_TYPES }
+        val stacks = shown.mapNotNull { it.stackId }.distinct().chunked(SQL_VARIABLES_PER_QUERY)
+            .flatMap { database.stackMemberDao().ofStacks(libraryKey, it) }
+            .groupBy { it.stackId }
+        val existing = database.assetDao().byMonth(libraryKey, month).associateBy { it.id }
+        // An export the timeline gives as its stack's cover is shown as its original, which the
+        // timeline does not give: what the catalogue has of it, or what the server says.
+        val missing = standInsNeeded(shown, stacks, originalOf).filter { it !in existing }
+        val elsewhere = missing.chunked(SQL_VARIABLES_PER_QUERY).flatMap { database.assetDao().byIds(libraryKey, it) }.associateBy { it.id }
+        val fetched = (missing - elsewhere.keys).mapNotNull { id ->
+            runCatching { AssetEntity.fromDomain(libraryKey, api.getAssetDetail(connection, id).asset.copy(id = id)) }.getOrNull()
+        }.associateBy { it.id }
+        val rows = timelineRows(libraryKey, shown, existing + elsewhere + fetched, stacks, originalOf)
         database.withTransaction {
-            val existing = database.assetDao().byMonth(libraryKey, month).associateBy { it.id }
-            val rows = assets
-                // An export of this app shows only as the cover of its original's stack.
-                .filter { it.type in LIBRARY_ASSET_TYPES && (it.id !in derivedIds || it.stackId != null) }
-                .map { asset -> AssetEntity.fromDomain(libraryKey, asset).keeping(existing[asset.id]) }
             database.assetDao().deleteMonth(libraryKey, month)
             database.assetDao().upsertAll(rows)
             database.assetDao().restoreLocalRecipeFlags(libraryKey)
@@ -446,11 +453,31 @@ class RoomLibraryRepository @Inject constructor(
             syncLog("W", "no stacks: ${error.message}")
             return
         }
+        val seen = stacks.mapNotNull { it.seenHere(derivedOriginals(libraryKey)) }
         database.withTransaction {
             database.stackMemberDao().clear(libraryKey)
-            database.stackMemberDao().insertAll(stacks.flatMap { it.members(libraryKey) })
+            database.stackMemberDao().insertAll(seen.flatMap { it.members(libraryKey) })
             database.stackMemberDao().removeCoveredFromCatalogue(libraryKey)
+            database.assetDao().purgeAppExports(libraryKey)
+            // Every cover with what its stack is here; an original standing in for an export goes in
+            // now, as the timeline will not bring it.
+            val known = seen.map { it.cover.id }.chunked(SQL_VARIABLES_PER_QUERY)
+                .flatMap { database.assetDao().byIds(libraryKey, it) }
+                .associateBy { it.id }
+            val covers = seen.mapNotNull { stack ->
+                val row = known[stack.cover.id] ?: AssetEntity.fromDomain(libraryKey, stack.cover).takeIf { stack.coverIsStandIn }
+                row?.copy(stackId = stack.id.takeIf { stack.isStack }, stackCount = stack.size)
+            }
+            database.assetDao().upsertAll(covers)
+            database.assetDao().restoreLocalRecipeFlags(libraryKey)
         }
+    }
+
+    /** Each export of this app, by the photo it came from. */
+    private suspend fun derivedOriginals(libraryKey: String): Map<String, String> {
+        // Reading the ids first brings in the exports only recorded in older recipes.
+        derivedAssets.derivedIds()
+        return database.derivedAssetDao().live(libraryKey).associate { it.derivedAssetId to it.originalAssetId }
     }
 
     override suspend fun exportOriginal(assetId: String): String? {
@@ -475,20 +502,24 @@ class RoomLibraryRepository @Inject constructor(
     override suspend fun stackMembers(assetId: String): List<ImmichAsset> {
         val connection = requireConnection()
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
-        val stackId = database.assetDao().byIds(libraryKey, listOf(assetId)).firstOrNull()?.stackId
-            ?: database.stackMemberDao().ofAssets(libraryKey, listOf(assetId)).firstOrNull()?.stackId
+        val member = database.stackMemberDao().ofAssets(libraryKey, listOf(assetId)).firstOrNull()
+        // A photo with only its exports beside it is in no stack here, and nothing is asked for.
+        if (member != null && (database.stackMemberDao().sizes(libraryKey, listOf(member.stackId)).firstOrNull()?.assetCount ?: 0) < 2) {
+            return emptyList()
+        }
+        val stackId = member?.stackId
+            ?: database.assetDao().byIds(libraryKey, listOf(assetId)).firstOrNull()?.stackId
             ?: return emptyList()
         // Asked for again every time: a stack changes from the web or another device, and this is
         // the moment it is looked at.
-        val stack = api.stack(connection, stackId)
+        val seen = api.stack(connection, stackId).seenHere(derivedOriginals(libraryKey)) ?: return emptyList()
         database.withTransaction {
             database.stackMemberDao().clearStack(libraryKey, stackId)
-            database.stackMemberDao().insertAll(stack.members(libraryKey))
+            database.stackMemberDao().insertAll(seen.members(libraryKey))
         }
+        if (!seen.isStack) return emptyList()
         val recipes = database.recipeDao()
-        return stack.assets
-            .sortedByDescending { it.id == stack.primaryAssetId }
-            .map { it.copy(hasLocalRecipe = recipes.get(libraryKey, it.id) != null) }
+        return seen.photos.map { it.copy(hasLocalRecipe = recipes.get(libraryKey, it.id) != null) }
     }
 
     override suspend fun assetDetail(assetId: String): ImmichAssetDetail {
@@ -579,15 +610,9 @@ internal suspend fun ImmichRoomDatabase.upsertFromSearch(
     val membership = ids.flatMap { stackMemberDao().ofAssets(libraryKey, it) }.associateBy { it.assetId }
     val shown = assets.filter { asset ->
         val member = membership[asset.id]
-        val isCover = member?.isCover == true || known[asset.id]?.stackId != null
-        when {
-            // The photos under a cover stay under it: a search brings them, the grid does not.
-            member != null && !member.isCover -> false
-            // An export of this app shows only as the cover of its original's stack; loose, it
-            // would be a second copy of the photo beside the original.
-            asset.isAppExport(derivedIds) -> isCover
-            else -> true
-        }
+        // The photos under a cover stay under it: a search brings them, the grid does not. And this
+        // app's exports never show: their original stands for them.
+        (member == null || member.isCover) && !asset.isAppExport(derivedIds)
     }
     val sizes = membership.values.filter { it.isCover }.map { it.stackId }.distinct().chunked(SQL_VARIABLES_PER_QUERY)
         .flatMap { stackMemberDao().sizes(libraryKey, it) }
@@ -595,14 +620,12 @@ internal suspend fun ImmichRoomDatabase.upsertFromSearch(
     val rows = shown.map { asset ->
         val row = AssetEntity.fromDomain(libraryKey, asset).keepingStackOf(known[asset.id])
         val member = membership[asset.id]
-        if (row.stackId == null && member != null) row.copy(stackId = member.stackId, stackCount = sizes[member.stackId]) else row
+        val size = member?.let { sizes[it.stackId] }
+        if (row.stackId == null && size != null && size >= 2) row.copy(stackId = member.stackId, stackCount = size) else row
     }
     assetDao().upsertAll(rows)
     return shown.zip(rows) { asset, row -> asset.copy(stackId = row.stackId, stackCount = row.stackCount) }
 }
-
-private fun eu.studio742.imago.core.model.ImmichStack.members(libraryKey: String) =
-    assets.map { StackMemberEntity(libraryKey, it.id, id, primaryAssetId) }
 
 /** Under SQLite's limit on the variables of one statement, which older Androids keep at 999. */
 private const val SQL_VARIABLES_PER_QUERY = 500
