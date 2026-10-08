@@ -147,6 +147,7 @@ internal enum class AlbumSlot { NONE, ADD, REMOVE }
  */
 internal fun albumSlotFor(selection: List<AssetUiModel>, openAlbum: AlbumUiModel?, deviceFolders: Boolean): AlbumSlot = when {
     selection.isEmpty() -> AlbumSlot.NONE
+    selection.any { it.isOnDevice() } && !selection.all { it.isOnDevice() } -> AlbumSlot.NONE
     selection.any { it.isOnDevice() } -> if (deviceFolders) AlbumSlot.ADD else AlbumSlot.NONE
     openAlbum?.canEditContent == true && !openAlbum.isFolder -> AlbumSlot.REMOVE
     else -> AlbumSlot.ADD

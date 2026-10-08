@@ -24,7 +24,7 @@ import androidx.room.RoomDatabaseConstructor
         RecipeConflictEntity::class,
         CandidateRejectionEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 @ConstructedBy(ImmichRoomDatabaseConstructor::class)

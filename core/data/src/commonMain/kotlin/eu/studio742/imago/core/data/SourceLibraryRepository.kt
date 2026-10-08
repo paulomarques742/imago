@@ -27,6 +27,7 @@ class SourceLibraryRepository @Inject constructor(
     @Synchronized private fun provider(id: String): LibraryRepository {
         if (id == DEVICE_LIBRARY_ID) return device
         if (id == OPENED_LIBRARY_ID) return checkNotNull(device.openedFiles) { "Nothing opens files here" }
+        if (id == UNIFIED_LIBRARY_ID) return unified()
         val source = configuration.source(id)
         requireUser(source.isConnected, UserMessage.LIBRARY_DISCONNECTED, source.messageName())
         return providers.getOrPut(source) {
@@ -34,15 +35,30 @@ class SourceLibraryRepository @Inject constructor(
             RoomLibraryRepository(database, bound, api, RoomDerivedAssetRepository(database, bound))
         }
     }
+    private var unifiedLibrary: Pair<String, UnifiedLibrary>? = null
+
+    /** The unified library with the partner chosen now; a new one when the partner changes. */
+    @Synchronized private fun unified(): UnifiedLibrary {
+        val partner = configuration.unifiedPartnerId ?: throw UserMessageException(UserMessage.LIBRARY_DISCONNECTED, listOf(""))
+        unifiedLibrary?.takeIf { it.first == partner }?.let { return it.second }
+        return UnifiedLibrary(database, device, provider(partner), partner).also { unifiedLibrary = partner to it }
+    }
+
+    private val unifiedSelected get() = configuration.selectedLibraryId.value == UNIFIED_LIBRARY_ID
+
+    override suspend fun counterpartOf(assetId: String): String? = if (unifiedSelected) unified().counterpartOf(assetId) else null
+
     override val catalogSync: StateFlow<CatalogSyncState> = configuration.activeSource()
         .flatMapLatest { provider(it.id).catalogSync }.stateIn(scope, SharingStarted.Eagerly, CatalogSyncState())
     override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?): Flow<PagingData<ImmichAsset>> {
         val id = configuration.selectedLibraryId.value
+        if (id == UNIFIED_LIBRARY_ID) return unified().assets(filter, month, albumId, query)
         return provider(id).assets(filter, month, albumId?.let { AssetReference.parse(it).localId }, query)
             .map { page -> page.map { it.copy(id = AssetReference(id, it.id).encode()) } }
     }
     override suspend fun albums(): List<ImmichAlbum> {
         val id = configuration.selectedLibraryId.value
+        if (id == UNIFIED_LIBRARY_ID) return unified().albums()
         return provider(id).albums().map { it.encodedFor(id) }
     }
     override suspend fun createAlbum(name: String, assetIds: List<String>): ImmichAlbum {
@@ -83,6 +99,7 @@ class SourceLibraryRepository @Inject constructor(
 
     override fun searchByContent(query: String, filter: LibraryFilter, month: String?, albumId: String?): Flow<PagingData<ImmichAsset>> {
         val id = configuration.selectedLibraryId.value
+        if (id == UNIFIED_LIBRARY_ID) return unified().searchByContent(query, filter, month, albumId)
         return provider(id).searchByContent(query, filter, month, albumId?.let { AssetReference.parse(it).localId })
             .map { page -> page.map { it.copy(id = AssetReference(id, it.id).encode()) } }
     }
@@ -113,6 +130,7 @@ class SourceLibraryRepository @Inject constructor(
     override suspend fun syncCatalog() = provider(configuration.selectedLibraryId.value).syncCatalog()
     override suspend fun loadMonth(month: String) = provider(configuration.selectedLibraryId.value).loadMonth(month)
     override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?): Int? {
+        if (unifiedSelected) return unified().indexOfAsset(assetId, filter, month, query)
         val ref = AssetReference.parse(assetId)
         return provider(ref.libraryId).indexOfAsset(ref.localId, filter, month, query)
     }

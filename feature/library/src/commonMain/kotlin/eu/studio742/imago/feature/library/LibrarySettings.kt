@@ -37,6 +37,8 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Layers
+import eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -117,10 +119,14 @@ fun LibrarySourceButton(viewModel: LibrarySettingsViewModel = librarySettingsVie
     val revision by viewModel.device.accessRevision.collectAsStateWithLifecycle()
     val requestAccess = rememberRequestMediaAccess(viewModel)
     var expanded by remember { mutableStateOf(false) }
+    // The unified library joins the phone with a server: without one, it is not offered.
+    val canUnify = sources.any { !it.isDevice && it.isConnected }
+    val selectedName = if (selected == UNIFIED_LIBRARY_ID) stringResource(Res.string.library_unified_name, stringResource(DeviceLibraryName))
+        else sources.firstOrNull { it.id == selected }?.displayName() ?: stringResource(DeviceLibraryName)
     Box {
         IconButton(onClick = { expanded = true }) {
             Icon(Icons.Outlined.PhotoLibrary,
-                contentDescription = stringResource(Res.string.library_libraries_selected, sources.firstOrNull { it.id == selected }?.displayName() ?: stringResource(DeviceLibraryName)),
+                contentDescription = stringResource(Res.string.library_libraries_selected, selectedName),
                 tint = ImagoColors.TextPrimary)
         }
         DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
@@ -130,6 +136,14 @@ fun LibrarySourceButton(viewModel: LibrarySettingsViewModel = librarySettingsVie
                     leadingIcon = { Icon(if (source.isDevice) DeviceLibraryIcon else Icons.Outlined.CloudQueue, null) },
                     trailingIcon = { if (source.id == selected) Icon(Icons.Outlined.Check, stringResource(Res.string.library_selected_single)) },
                     onClick = { expanded = false; viewModel.configuration.selectLibrary(source.id) },
+                )
+            }
+            if (canUnify) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(Res.string.library_unified_name, stringResource(DeviceLibraryName))) },
+                    leadingIcon = { Icon(Icons.Outlined.Layers, null) },
+                    trailingIcon = { if (selected == UNIFIED_LIBRARY_ID) Icon(Icons.Outlined.Check, stringResource(Res.string.library_selected_single)) },
+                    onClick = { expanded = false; viewModel.configuration.selectLibrary(UNIFIED_LIBRARY_ID) },
                 )
             }
             if (selected == DEVICE_LIBRARY_ID) {
@@ -229,6 +243,27 @@ fun LibrarySettingsRoute(
                             Text(stringResource(DeviceLibraryName), style = MaterialTheme.typography.titleMedium)
                         }
                         DeviceLibraryAccess(viewModel, revision, requestAccess)
+                    }
+                    // With more than one server, the unified library needs to know which one joins the phone.
+                    val servers = sources.filter { !it.isDevice && it.isConnected }
+                    if (servers.size > 1) {
+                        LibrarySettingsCard {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
+                                Icon(Icons.Outlined.Layers, null, tint = ImagoColors.Ivory)
+                                Text(stringResource(Res.string.library_unified_name, stringResource(DeviceLibraryName)), style = MaterialTheme.typography.titleMedium)
+                            }
+                            Text(stringResource(Res.string.library_unified_partner), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
+                            var partner by remember(servers) { mutableStateOf(viewModel.configuration.unifiedPartnerId) }
+                            Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
+                                servers.forEach { source ->
+                                    androidx.compose.material3.FilterChip(
+                                        selected = partner == source.id,
+                                        onClick = { viewModel.configuration.setUnifiedPartner(source.id); partner = source.id },
+                                        label = { Text(source.displayName()) },
+                                    )
+                                }
+                            }
+                        }
                     }
                     sources.filterNot { it.isDevice }.forEach { source ->
                         LibrarySettingsCard {

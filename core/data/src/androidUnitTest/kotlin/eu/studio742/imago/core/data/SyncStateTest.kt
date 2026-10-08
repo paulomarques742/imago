@@ -75,7 +75,7 @@ class SyncStateTest {
         old.version = 10
         old.close()
         val upgraded = Room.databaseBuilder(context, ImmichRoomDatabase::class.java, name)
-            .addMigrations(SyncMigration.MIGRATION_10_11).allowMainThreadQueries().build()
+            .addMigrations(SyncMigration.MIGRATION_10_11, UnifiedMigration.MIGRATION_11_12).allowMainThreadQueries().build()
         try {
             val sql = upgraded.openHelper.writableDatabase // Room validates the whole schema here.
             val recipe = upgraded.recipeDao().get("lib", "photo")!!
@@ -91,6 +91,9 @@ class SyncStateTest {
                 sql.query("SELECT COUNT(*) FROM $table WHERE dirty = 0").use { it.moveToFirst(); assertEquals(table, 1, it.getInt(0)) }
             }
             assertNull(upgraded.assetDao().asset("lib", "photo")!!.sizeBytes)
+            // Version 12: the unified library's index, looked for by name.
+            sql.query("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'index_assets_libraryKey_originalFileName'")
+                .use { it.moveToFirst(); assertEquals(1, it.getInt(0)) }
         } finally { upgraded.close(); context.deleteDatabase(name) }
     }
 

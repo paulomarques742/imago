@@ -30,6 +30,105 @@ interface AssetDao {
     )
     suspend fun folders(libraryKey: String): List<FolderSummary>
 
+    /**
+     * The unified timeline: the phone's photos and the server's, a photo on both sides shown once —
+     * the phone's copy. [UnifiedAssetRow.alsoOnServer] says which are on the server too. The filters
+     * are [pagingSource]'s and have to stay so, or [unifiedCountBefore] counts another list.
+     */
+    @Query(
+        """
+        SELECT a.*, (a.libraryKey = :server OR EXISTS (SELECT 1 FROM assets s WHERE s.libraryKey = :server AND s.originalFileName = a.originalFileName AND ABS(julianday(s.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)) AS alsoOnServer
+        FROM assets a
+        WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
+          AND (:favoritesOnly = 0 OR a.isFavorite = 1)
+          AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
+          AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
+          AND (:monthEnd IS NULL OR a.fileCreatedAt < :monthEnd)
+          AND (:query IS NULL OR a.originalFileName LIKE '%' || :query || '%')
+        ORDER BY a.fileCreatedAt DESC, a.id DESC
+        """,
+    )
+    fun unifiedPagingSource(
+        device: String,
+        server: String,
+        favoritesOnly: Boolean,
+        editedOnly: Boolean,
+        monthStart: String?,
+        monthEnd: String?,
+        query: String?,
+    ): PagingSource<Int, UnifiedAssetRow>
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM assets a
+        WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
+          AND (:favoritesOnly = 0 OR a.isFavorite = 1)
+          AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
+          AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
+          AND (:monthEnd IS NULL OR a.fileCreatedAt < :monthEnd)
+          AND (:query IS NULL OR a.originalFileName LIKE '%' || :query || '%')
+          AND (a.fileCreatedAt > :anchorCreatedAt OR (a.fileCreatedAt = :anchorCreatedAt AND a.id > :anchorId))
+        """,
+    )
+    suspend fun unifiedCountBefore(
+        device: String,
+        server: String,
+        favoritesOnly: Boolean,
+        editedOnly: Boolean,
+        monthStart: String?,
+        monthEnd: String?,
+        query: String?,
+        anchorCreatedAt: String,
+        anchorId: String,
+    ): Int
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM assets a
+        WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
+          AND (:favoritesOnly = 0 OR a.isFavorite = 1)
+          AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
+          AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
+          AND (:monthEnd IS NULL OR a.fileCreatedAt < :monthEnd)
+          AND (:query IS NULL OR a.originalFileName LIKE '%' || :query || '%')
+          AND a.fileCreatedAt > :boundary
+        """,
+    )
+    suspend fun unifiedCountNewerThan(
+        device: String,
+        server: String,
+        favoritesOnly: Boolean,
+        editedOnly: Boolean,
+        monthStart: String?,
+        monthEnd: String?,
+        query: String?,
+        boundary: String,
+    ): Int
+
+    @Query(
+        """
+        SELECT substr(CASE WHEN a.localDateTime = '' THEN a.fileCreatedAt ELSE a.localDateTime END, 1, 7) || '-01' AS month,
+               COUNT(*) AS assetCount
+        FROM assets a
+        WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
+        GROUP BY substr(CASE WHEN a.localDateTime = '' THEN a.fileCreatedAt ELSE a.localDateTime END, 1, 7)
+        ORDER BY month DESC
+        """,
+    )
+    suspend fun unifiedTimeBuckets(device: String, server: String): List<LocalTimeBucket>
+
+    /** The same photo on the other side: the server's copy of a phone photo, or the phone's of a server one. */
+    @Query(
+        """
+        SELECT o.id FROM assets a, assets o
+        WHERE a.libraryKey = :libraryKey AND a.id = :id
+          AND o.libraryKey = :otherKey AND o.originalFileName = a.originalFileName
+          AND ABS(julianday(o.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1
+        LIMIT 1
+        """,
+    )
+    suspend fun counterpart(libraryKey: String, id: String, otherKey: String): String?
+
     /** A gallery row by the end of its `Uri` (`%/media/123`): the volume in the middle varies by who asks. */
     @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey AND id LIKE :suffix LIMIT 1")
     suspend fun byIdSuffix(libraryKey: String, suffix: String): AssetEntity?
@@ -276,3 +375,9 @@ data class FolderSummary(
 )
 
 data class FolderStart(val folderId: String?, val startDate: String)
+
+/** A row of the unified timeline: the photo, and whether the server has it too. */
+data class UnifiedAssetRow(
+    @androidx.room.Embedded val asset: AssetEntity,
+    val alsoOnServer: Boolean,
+)

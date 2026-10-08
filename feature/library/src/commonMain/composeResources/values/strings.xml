@@ -365,4 +365,16 @@
     <string name="library_search_content_hint">What’s in the photo</string>
     <string name="library_selection_rotate">Rotate</string>
     <string name="library_selection_rotate_failed">Couldn’t rotate every photo.</string>
+    <!-- The unified library -->
+    <string name="library_unified_name">%1$s and Immich</string>
+    <string name="library_unified_partner">Joins this device with:</string>
+    <string name="library_on_server">On Immich</string>
+    <string name="library_delete_where_question">Delete from where?</string>
+    <string name="library_delete_where_device">Only from this device</string>
+    <string name="library_delete_where_server">Only from Immich</string>
+    <string name="library_delete_where_both">From both</string>
+    <plurals name="library_delete_where_body">
+        <item quantity="one">This photo is on this device and on Immich.</item>
+        <item quantity="other">%1$d of these photos are on this device and on Immich.</item>
+    </plurals>
 </resources>

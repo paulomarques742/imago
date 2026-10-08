@@ -365,4 +365,16 @@
     <string name="library_search_content_hint">O que está na fotografia</string>
     <string name="library_selection_rotate">Rodar</string>
     <string name="library_selection_rotate_failed">Não foi possível rodar todas as fotografias.</string>
+    <!-- A biblioteca unificada -->
+    <string name="library_unified_name">%1$s e Immich</string>
+    <string name="library_unified_partner">Junta este dispositivo com:</string>
+    <string name="library_on_server">No Immich</string>
+    <string name="library_delete_where_question">Eliminar de onde?</string>
+    <string name="library_delete_where_device">Só deste dispositivo</string>
+    <string name="library_delete_where_server">Só do Immich</string>
+    <string name="library_delete_where_both">Dos dois</string>
+    <plurals name="library_delete_where_body">
+        <item quantity="one">Esta fotografia está neste dispositivo e no Immich.</item>
+        <item quantity="other">%1$d destas fotografias estão neste dispositivo e no Immich.</item>
+    </plurals>
 </resources>

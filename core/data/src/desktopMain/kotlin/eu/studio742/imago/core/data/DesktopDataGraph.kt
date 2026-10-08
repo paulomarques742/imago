@@ -1,5 +1,7 @@
 package eu.studio742.imago.core.data
 
+import androidx.sqlite.execSQL
+
 import androidx.room.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +28,12 @@ class DesktopDataGraph(root: Path) : AutoCloseable {
 
     val database: ImmichRoomDatabase = Room.databaseBuilder<ImmichRoomDatabase>(name = root.resolve(DATABASE_FILE).toString())
         .setDriver(BundledSQLiteDriver())
+        // The desktop database started at version 11; what comes after it is migrated here.
+        .addMigrations(object : androidx.room.migration.Migration(11, 12) {
+            override fun migrate(connection: androidx.sqlite.SQLiteConnection) {
+                connection.execSQL(UNIFIED_INDEX_SQL)
+            }
+        })
         .setQueryCoroutineContext(Dispatchers.IO)
         .build()
 

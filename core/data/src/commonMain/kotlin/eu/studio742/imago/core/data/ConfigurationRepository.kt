@@ -8,6 +8,15 @@ interface ConfigurationRepository {
     val libraries: kotlinx.coroutines.flow.StateFlow<List<eu.studio742.imago.core.model.LibrarySource>>
     val selectedLibraryId: kotlinx.coroutines.flow.StateFlow<String>
     fun selectLibrary(id: String)
+
+    /**
+     * The server library the unified one joins the phone with: the one chosen in Settings, or the
+     * first connected. Null when there is none, and then there is no unified library either.
+     */
+    val unifiedPartnerId: String?
+        get() = libraries.value.firstOrNull { !it.isDevice && !it.isUnified && it.isConnected }?.id
+
+    fun setUnifiedPartner(id: String) = Unit
     fun source(id: String): eu.studio742.imago.core.model.LibrarySource
     suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String): ServerVersion
     suspend fun testLibrary(id: String): ServerVersion

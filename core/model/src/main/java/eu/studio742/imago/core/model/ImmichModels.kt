@@ -24,6 +24,8 @@ data class ImmichAsset(
     val type: AssetType,
     val mimeType: String? = null,
     val durationMs: Long? = null,
+    /** In the unified library: this photo is also on the server (or only there). Nowhere else set. */
+    val isOnServer: Boolean = false,
 )
 
 @Serializable

@@ -6,6 +6,12 @@ import java.util.Base64
 
 const val DEVICE_LIBRARY_ID = "device"
 
+/**
+ * The phone and one server library in a single timeline. It has no photos of its own: every photo in
+ * it keeps the reference of the library it comes from.
+ */
+const val UNIFIED_LIBRARY_ID = "unified"
+
 /** Files another app opened with IMAGO that are not in any library: each one's id is its `Uri`. */
 const val OPENED_LIBRARY_ID = "opened"
 const val GLOBAL_LIBRARY_ID = "application"
@@ -38,7 +44,8 @@ data class LibrarySource(
     /** The address in use: the active one, if it still belongs to the list, or the first. */
     val serverUrl: String? get() = activeUrl?.takeIf { it in serverUrls } ?: serverUrls.firstOrNull()
     val isDevice: Boolean get() = id == DEVICE_LIBRARY_ID
-    val isConnected: Boolean get() = isDevice || !apiKey.isNullOrBlank()
+    val isUnified: Boolean get() = id == UNIFIED_LIBRARY_ID
+    val isConnected: Boolean get() = isDevice || isUnified || !apiKey.isNullOrBlank()
     fun connection(): ImmichConnection = ImmichConnection(
         checkNotNull(serverUrl), checkNotNull(apiKey) { "Reconnect this library in Settings." }, id,
     )

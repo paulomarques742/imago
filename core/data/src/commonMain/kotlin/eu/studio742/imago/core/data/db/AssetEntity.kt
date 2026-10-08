@@ -19,6 +19,8 @@ import eu.studio742.imago.core.model.ImmichAsset
         Index(value = ["libraryKey", "fileCreatedAt", "id"]),
         // The candidates for "the same photo" are looked up by size and date, without reading files.
         Index(value = ["libraryKey", "sizeBytes", "fileCreatedAt"]),
+        // The unified library finds the same photo on the phone and on the server by its name.
+        Index(value = ["libraryKey", "originalFileName"]),
     ],
 )
 data class AssetEntity(

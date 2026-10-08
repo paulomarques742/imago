@@ -123,6 +123,12 @@ interface LibraryRepository {
     /** The album goes. A server's keeps its photos; a folder's go to the device's trash. */
     suspend fun deleteAlbum(albumId: String): Unit = error("This library cannot delete albums")
 
+    /**
+     * The same photo on the other side, in the unified library: the server's copy of a phone photo,
+     * or the phone's of a server one. Null outside it, or when there is none.
+     */
+    suspend fun counterpartOf(assetId: String): String? = null
+
     /** Whether this library searches by what is in the photos; a server with it on does. */
     suspend fun contentSearchAvailable(): Boolean = false
 

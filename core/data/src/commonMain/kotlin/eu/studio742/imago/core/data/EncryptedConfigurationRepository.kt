@@ -56,7 +56,10 @@ class EncryptedConfigurationRepository(
     private val sources = MutableStateFlow(readSources())
     override val libraries = sources.asStateFlow()
     private val selected = MutableStateFlow(preferences.getString("selected_library")
-        ?.takeIf { id -> sources.value.any { it.id == id && it.isConnected } }
+        ?.takeIf { id ->
+            sources.value.any { it.id == id && it.isConnected } ||
+                (id == UNIFIED_LIBRARY_ID && sources.value.any { !it.isDevice && it.isConnected })
+        }
         ?: sources.value.firstOrNull { !it.isDevice && it.isConnected }?.id ?: DEVICE_LIBRARY_ID)
     override val selectedLibraryId = selected.asStateFlow()
     private val state = MutableStateFlow(currentConnection())
@@ -109,9 +112,22 @@ class EncryptedConfigurationRepository(
     }
     override fun source(id: String) = sources.value.firstOrNull { it.id == id }
         ?: LibrarySource(id, "")
-    override fun currentConnection() = source(selected.value).takeIf { !it.isDevice && it.isConnected }?.connection()
+    // The unified library has no connection of its own: each of its photos goes through its library.
+    override fun currentConnection() = source(selected.value).takeIf { !it.isDevice && !it.isUnified && it.isConnected }?.connection()
+    override val unifiedPartnerId: String?
+        get() = preferences.getString("unified_partner")?.takeIf { id -> sources.value.any { it.id == id && !it.isDevice && it.isConnected } }
+            ?: sources.value.firstOrNull { !it.isDevice && it.isConnected }?.id
+    override fun setUnifiedPartner(id: String) {
+        require(sources.value.any { it.id == id && !it.isDevice && it.isConnected })
+        preferences.write(mapOf("unified_partner" to id))
+        // A unified library open with the old partner has to read the new one.
+        if (selected.value == UNIFIED_LIBRARY_ID) {
+            selected.value = DEVICE_LIBRARY_ID
+            selected.value = UNIFIED_LIBRARY_ID
+        }
+    }
     override fun selectLibrary(id: String) {
-        require(source(id).isConnected)
+        require(if (id == UNIFIED_LIBRARY_ID) unifiedPartnerId != null else source(id).isConnected)
         selected.value = id
         state.value = currentConnection()
         persist()

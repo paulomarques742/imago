@@ -85,7 +85,7 @@ object DataProviders {
     @Singleton
     fun database(@ApplicationContext context: Context): ImmichRoomDatabase =
         Room.databaseBuilder(context, ImmichRoomDatabase::class.java, "immich-room.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, eu.studio742.imago.core.data.LibraryMigration.MIGRATION_8_9, eu.studio742.imago.core.data.LibraryMigration.MIGRATION_9_10, eu.studio742.imago.core.data.SyncMigration.MIGRATION_10_11)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, eu.studio742.imago.core.data.LibraryMigration.MIGRATION_8_9, eu.studio742.imago.core.data.LibraryMigration.MIGRATION_9_10, eu.studio742.imago.core.data.SyncMigration.MIGRATION_10_11, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_11_12)
             .build()
 
     /** The grid's order gets an index: without it, every page sorted the whole table. */

@@ -201,18 +201,32 @@ open class DetailViewModel(
      * Opens the confirmation only if the library lets this asset be deleted. A key created without the
      * permission hears which one is missing instead of confirming something that will fail.
      */
-    fun requestDelete(assetId: String, confirm: () -> Unit) {
+    fun requestDelete(assetId: String, confirm: (counterpart: String?) -> Unit) {
         viewModelScope.launch {
-            runCatching { library.checkCanDelete(assetId) }
-                .onSuccess { confirm() }
+            runCatching {
+                // In the unified library a photo may be on both sides: the confirmation then asks where.
+                val counterpart = library.counterpartOf(assetId)
+                library.checkCanDelete(assetId)
+                counterpart?.let { library.checkCanDelete(it) }
+                counterpart
+            }
+                .onSuccess { confirm(it) }
                 .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(Res.string.detail_delete_failed)) } }
         }
     }
 
-    fun delete(assetId: String, onDeleted: () -> Unit) {
+    fun delete(
+        assetId: String,
+        onDeleted: () -> Unit,
+        counterpart: String? = null,
+        where: eu.studio742.imago.feature.library.DeleteWhere = eu.studio742.imago.feature.library.DeleteWhere.BOTH,
+    ) {
         mutableState.update { it.copy(isBusy = true, busyLabel = uiText(Res.string.detail_deleting)) }
         viewModelScope.launch {
-            runCatching { library.deleteAsset(assetId) }
+            val ids = eu.studio742.imago.feature.library.idsToDelete(
+                listOf(assetId), counterpart?.let { mapOf(assetId to it) }.orEmpty(), where,
+            )
+            runCatching { library.deleteAssets(ids) }
                 .onSuccess {
                     mutableState.update { it.copy(isBusy = false, busyLabel = null) }
                     onDeleted()

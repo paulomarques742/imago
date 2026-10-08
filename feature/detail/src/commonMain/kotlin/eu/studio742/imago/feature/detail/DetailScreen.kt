@@ -8,6 +8,8 @@ import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.core.model.OPENED_LIBRARY_ID
 import eu.studio742.imago.core.designsystem.LocalActionGate
 import eu.studio742.imago.feature.library.AddToAlbumSheet
+import eu.studio742.imago.feature.library.DeleteWhere
+import eu.studio742.imago.feature.library.DeleteWhereDialog
 import eu.studio742.imago.feature.library.DeviceFolderAlbums
 import eu.studio742.imago.feature.library.rememberMediaManagement
 import androidx.compose.material.icons.outlined.PhotoAlbum
@@ -184,7 +186,7 @@ fun DetailRoute(
         onToggleFavorite = viewModel::toggleFavorite,
         onFavorite = viewModel::favorite,
         onRequestDelete = { confirm -> viewModel.requestDelete(asset.id, confirm) },
-        onDelete = { viewModel.delete(asset.id) { onDeleted(asset.id) } },
+        onDelete = { counterpart, where -> viewModel.delete(asset.id, { onDeleted(asset.id) }, counterpart, where) },
         onShare = viewModel::share,
         onSaveOriginal = viewModel::saveOriginalToDevice,
         onSaveEdited = viewModel::saveEditedToDevice,
@@ -207,9 +209,12 @@ private fun DetailScreen(
     onAddToComposition: () -> Unit,
     onToggleFavorite: () -> Unit,
     onFavorite: () -> Unit,
-    /** Asks to delete; [confirm][onRequestDelete] opens the confirmation only if deleting is allowed. */
-    onRequestDelete: (confirm: () -> Unit) -> Unit,
-    onDelete: () -> Unit,
+    /**
+     * Asks to delete; [confirm][onRequestDelete] opens the confirmation only if deleting is allowed,
+     * with the copy on the other side when the photo is on both (the unified library).
+     */
+    onRequestDelete: (confirm: (counterpart: String?) -> Unit) -> Unit,
+    onDelete: (counterpart: String?, where: DeleteWhere) -> Unit,
     onShare: (DetailAsset, (java.io.File, String) -> Unit) -> Unit,
     onSaveOriginal: (DetailAsset) -> Unit,
     onSaveEdited: (DetailAsset) -> Unit,
@@ -227,6 +232,7 @@ private fun DetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showInfo by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var deleteCounterpart by remember { mutableStateOf<String?>(null) }
     var showMenu by remember { mutableStateOf(false) }
     var showVersionChoice by remember { mutableStateOf(false) }
     var showAlbums by remember { mutableStateOf(false) }
@@ -458,7 +464,11 @@ private fun DetailScreen(
                         onEdit = { gate.run(onEdit) },
                         onCompose = { gate.run(onAddToComposition) },
                         onInfo = { showInfo = true },
-                        onDelete = { gate.run { onRequestDelete { showDeleteConfirmation = true } } },
+                        onDelete = {
+                            gate.run {
+                                onRequestDelete { counterpart -> if (counterpart == null) showDeleteConfirmation = true else deleteCounterpart = counterpart }
+                            }
+                        },
                     )
                 }
             }
@@ -516,6 +526,13 @@ private fun DetailScreen(
             },
         )
     }
+    deleteCounterpart?.let { counterpart ->
+        DeleteWhereDialog(
+            count = 1,
+            onChoose = { where -> deleteCounterpart = null; onDelete(counterpart, where) },
+            onDismiss = { deleteCounterpart = null },
+        )
+    }
     if (showDeleteConfirmation) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
@@ -534,7 +551,7 @@ private fun DetailScreen(
                 TextButton(
                     onClick = {
                         showDeleteConfirmation = false
-                        onDelete()
+                        onDelete(null, DeleteWhere.BOTH)
                     },
                 ) { Text(stringResource(Res.string.detail_delete), color = ImagoColors.Danger) }
             },

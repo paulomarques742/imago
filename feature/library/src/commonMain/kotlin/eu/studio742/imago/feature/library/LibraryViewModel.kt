@@ -70,6 +70,8 @@ data class AssetUiModel(
      * longer the one the user left in the editor.
      */
     val recipe: EditRecipe? = null,
+    /** In the unified library: also on the server, or only there. The tile shows a small cloud. */
+    val isOnServer: Boolean = false,
 )
 
 data class AlbumUiModel(
@@ -114,6 +116,7 @@ fun ImmichAsset.toAssetUiModel(library: LibraryRepository, recipe: EditRecipe?):
         durationMs = durationMs,
         videoUrl = if (isVideo) library.videoPlaybackUrl(id) else null,
         recipe = recipe,
+        isOnServer = isOnServer,
     )
 }
 
@@ -390,21 +393,28 @@ open class LibraryViewModel(
      * Opens the confirmation only if every library in the selection lets its photos be deleted: a key
      * without the permission hears which one is missing before confirming something that will fail.
      */
-    fun requestDeleteSelection(confirm: () -> Unit) {
+    /**
+     * [confirm] gets the copies on the other side of the photos that are on both — only in the
+     * unified library; empty everywhere else — so the confirmation can ask where they go from.
+     */
+    fun requestDeleteSelection(confirm: (counterparts: Map<String, String>) -> Unit) {
         val selection = chosen
         viewModelScope.launch {
             runCatching {
-                selection.groupBy { AssetReference.parse(it.id).libraryId }.values.forEach { library.checkCanDelete(it.first().id) }
+                val counterparts = selection.mapNotNull { asset -> library.counterpartOf(asset.id)?.let { asset.id to it } }.toMap()
+                (selection.map { it.id } + counterparts.values).groupBy { AssetReference.parse(it).libraryId }
+                    .values.forEach { library.checkCanDelete(it.first()) }
+                counterparts
             }
-                .onSuccess { confirm() }
+                .onSuccess { confirm(it) }
                 .onFailure { error -> uiState.update { it.copy(actionError = error.toUiText(Res.string.library_selection_delete_failed)) } }
         }
     }
 
-    fun deleteSelection() {
+    fun deleteSelection(counterparts: Map<String, String> = emptyMap(), where: DeleteWhere = DeleteWhere.BOTH) {
         val selection = chosen
         runOnSelection(uiText(Res.string.library_selection_deleting), Res.string.library_selection_delete_failed) {
-            library.deleteAssets(selection.map { it.id })
+            library.deleteAssets(idsToDelete(selection.map { it.id }, counterparts, where))
             null
         }
     }

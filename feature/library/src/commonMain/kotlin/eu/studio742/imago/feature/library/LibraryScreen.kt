@@ -44,6 +44,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
@@ -450,7 +451,11 @@ private fun LibraryHost(
             onOpenComposer = onOpenComposer,
             selectionBar = { selection, work -> LibrarySelectionBar(viewModel, selection, work, onComposeSelection) },
             // The device's albums are its folders, which only the phone changes from here.
-            albumEditing = albumEditing?.takeIf { sourceId != eu.studio742.imago.core.model.DEVICE_LIBRARY_ID || DeviceFolderAlbums },
+            // In the unified library a new album would have to be on one side or the other: it is made in that library.
+            albumEditing = albumEditing?.takeIf {
+                sourceId != eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID &&
+                    (sourceId != eu.studio742.imago.core.model.DEVICE_LIBRARY_ID || DeviceFolderAlbums)
+            },
             onToggleSelection = viewModel::toggleSelection,
             onClearSelection = viewModel::clearSelection,
             onToggleFavorite = viewModel::toggleFavorite,
@@ -1664,6 +1669,15 @@ private fun AssetTile(
                 modifier = Modifier.align(Alignment.TopEnd).padding(ImagoSpacing.Sm),
             )
         }
+        // In the unified library: this one is on the server too, or only there.
+        if (asset.isOnServer) {
+            PhotoOverlayIcon(
+                size = ImagoSizes.IconSmall,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(ImagoSpacing.Sm),
+            ) {
+                Icon(Icons.Outlined.CloudQueue, contentDescription = stringResource(Res.string.library_on_server), tint = ImagoColors.BrandWhite)
+            }
+        }
         if (showsSelection) {
             Icon(
                 imageVector = if (checked) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
@@ -1889,6 +1903,8 @@ private fun LibrarySelectionBar(
     val share = rememberSelectionShare()
     val sendToImmich = rememberSendToImmich()
     var confirmDelete by remember { mutableStateOf(false) }
+    // The copies on the other side, when some of the chosen photos are on both: then it asks where.
+    var deleteCounterparts by remember { mutableStateOf<Map<String, String>?>(null) }
     var askWhich by remember { mutableStateOf(false) }
     var pickAlbum by remember { mutableStateOf(false) }
     val openAlbum = viewModel.uiState.collectAsStateWithLifecycle().value.selectedAlbum
@@ -1905,7 +1921,11 @@ private fun LibrarySelectionBar(
         onCompose = { onComposeSelection(selection) },
         onAddToAlbum = { pickAlbum = true },
         onRemoveFromAlbum = viewModel::removeSelectionFromAlbum,
-        onRequestDelete = { viewModel.requestDeleteSelection { confirmDelete = true } },
+        onRequestDelete = {
+            viewModel.requestDeleteSelection { counterparts ->
+                if (counterparts.isEmpty()) confirmDelete = true else deleteCounterparts = counterparts
+            }
+        },
         onSaveToDevice = {
             if (deviceCopyNeedsChoice(selection)) askWhich = true else viewModel.saveSelectionToDevice(edited = true)
         },
@@ -1919,6 +1939,13 @@ private fun LibrarySelectionBar(
             selection = selection,
             onConfirm = { confirmDelete = false; viewModel.deleteSelection() },
             onDismiss = { confirmDelete = false },
+        )
+    }
+    deleteCounterparts?.let { counterparts ->
+        DeleteWhereDialog(
+            count = counterparts.size,
+            onChoose = { where -> deleteCounterparts = null; viewModel.deleteSelection(counterparts, where) },
+            onDismiss = { deleteCounterparts = null },
         )
     }
     if (askWhich) {
