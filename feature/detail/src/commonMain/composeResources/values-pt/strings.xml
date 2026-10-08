@@ -67,4 +67,6 @@
     <string name="detail_archive_failed">Não foi possível mudar o arquivo.</string>
     <string name="detail_set_as">Definir como…</string>
     <string name="detail_rotate_failed">Não foi possível rodar a fotografia.</string>
+    <string name="detail_stack">Pilha de %1$d fotografias</string>
+    <string name="detail_stack_cover">Capa da pilha</string>
 </resources>

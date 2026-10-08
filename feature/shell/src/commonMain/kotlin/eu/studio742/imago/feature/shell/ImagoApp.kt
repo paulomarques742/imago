@@ -478,7 +478,14 @@ private fun PhotoDetail(
         onBack = {
             onDestination(AppDestination.Library(current.assets.getOrNull(current.index)?.id))
         },
-        onEdit = { onDestination(current.copy(editing = true)) },
+        // The editor opens on the list's photo at this index; editing an IMAGO export opens its
+        // original, which takes the export's place there.
+        onEdit = { instead ->
+            onDestination(current.copy(assets = instead?.let { current.assets.replacing(current.index, it) } ?: current.assets, editing = true))
+        },
+        // Another photo of the stack takes the cover's place in the list: the detail and the editor
+        // both read it from there.
+        onOpenStackMember = { member -> onDestination(current.copy(assets = current.assets.replacing(current.index, member))) },
         onAddToComposition = {
             current.assets.getOrNull(current.index)?.let {
                 onComposerRequest(ComposerRequest(listOf(it.toComposerMedia())))
@@ -519,6 +526,9 @@ private fun PhotoDetail(
         },
     )
 }
+
+private fun List<AssetUiModel>.replacing(index: Int, item: AssetUiModel) =
+    toMutableList().also { if (index in it.indices) it[index] = item }
 
 private fun AssetUiModel.toEditorAsset() = EditorAsset(
     id = id,

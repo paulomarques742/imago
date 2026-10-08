@@ -67,4 +67,6 @@
     <string name="detail_archive_failed">Couldn’t change the archive.</string>
     <string name="detail_set_as">Set as…</string>
     <string name="detail_rotate_failed">Couldn’t rotate the photo.</string>
+    <string name="detail_stack">Stack of %1$d photos</string>
+    <string name="detail_stack_cover">Stack cover</string>
 </resources>

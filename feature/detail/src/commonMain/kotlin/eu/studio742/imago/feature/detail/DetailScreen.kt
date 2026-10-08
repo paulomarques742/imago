@@ -2,6 +2,8 @@
 
 package eu.studio742.imago.feature.detail
 
+import androidx.compose.material.icons.outlined.Layers
+import eu.studio742.imago.feature.library.AssetUiModel
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.model.AssetReference
 import eu.studio742.imago.core.model.OPENED_LIBRARY_ID
@@ -168,7 +170,13 @@ fun DetailRoute(
     selectedIndex: Int,
     onSelectIndex: (Int) -> Unit,
     onBack: () -> Unit,
-    onEdit: (DetailAsset) -> Unit,
+    /**
+     * Opens the editor; with a photo, on that one instead of the one shown — the original an IMAGO
+     * export was made from.
+     */
+    onEdit: (instead: AssetUiModel?) -> Unit,
+    /** Shows another photo of the stack in place of this one. */
+    onOpenStackMember: (AssetUiModel) -> Unit,
     /** Sends this photo to a composition, new or existing. */
     onAddToComposition: () -> Unit,
     onDeleted: (String) -> Unit,
@@ -198,7 +206,9 @@ fun DetailRoute(
         state = state,
         onSelectIndex = onSelectIndex,
         onBack = onBack,
-        onEdit = { onEdit(asset) },
+        onEdit = { onEdit(state.editInstead.takeIf { state.assetId == asset.id }) },
+        stack = state.stack.takeIf { stack -> state.assetId == asset.id && stack.size > 1 }.orEmpty(),
+        onOpenStackMember = onOpenStackMember,
         onAddToComposition = onAddToComposition,
         onToggleFavorite = viewModel::toggleFavorite,
         onFavorite = viewModel::favorite,
@@ -230,6 +240,8 @@ private fun DetailScreen(
     onSelectIndex: (Int) -> Unit,
     onBack: () -> Unit,
     onEdit: () -> Unit,
+    stack: List<AssetUiModel>,
+    onOpenStackMember: (AssetUiModel) -> Unit,
     onAddToComposition: () -> Unit,
     onToggleFavorite: () -> Unit,
     onFavorite: () -> Unit,
@@ -516,6 +528,13 @@ private fun DetailScreen(
                     // In the middle of a swipe, the player is still the page's we left.
                     if (playback != null && settledAsset?.id == asset.id) {
                         VideoControls(playback, Modifier.padding(bottom = ImagoSpacing.Sm))
+                    }
+                    if (stack.isNotEmpty()) {
+                        StackStrip(
+                            members = stack,
+                            shownId = asset.id,
+                            onSelect = { member -> if (member.id != asset.id) onOpenStackMember(member) },
+                        )
                     }
                     Filmstrip(
                         assets = assets,
@@ -1044,7 +1063,6 @@ private fun Filmstrip(
     listState: androidx.compose.foundation.lazy.LazyListState,
     onSelect: (Int) -> Unit,
 ) {
-    val context = LocalPlatformContext.current
     LazyRow(
         state = listState,
         modifier = Modifier.fillMaxWidth().padding(vertical = ImagoSpacing.Sm),
@@ -1052,45 +1070,108 @@ private fun Filmstrip(
         horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
     ) {
         itemsIndexed(assets, key = { _, item -> item.id }) { index, item ->
-            val isSelected = index == selectedIndex
-            Box(
-                modifier = Modifier
-                    .size(FILMSTRIP_THUMB)
-                    .clip(RoundedCornerShape(ImagoRadii.Small))
-                    // The white frame is what identifies the current one; without it the strip is just
-                    // a row of thumbnails with no position.
-                    .border(
-                        width = if (isSelected) 2.dp else 0.dp,
-                        color = if (isSelected) ImagoColors.BrandWhite else Color.Transparent,
-                        shape = RoundedCornerShape(ImagoRadii.Small),
-                    )
-                    .clickable(role = Role.Tab) { onSelect(index) },
-            ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(item.thumbnailUrl)
-                        .libraryAuth(item.apiKey)
-                        .crossfade(false)
-                        .withRecipe(item.recipe)
-                        .build(),
-                    contentDescription = item.fileName,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(if (isSelected) 2.dp else 0.dp)
-                        .clip(RoundedCornerShape(ImagoRadii.Small)),
+            StripThumbnail(
+                url = item.thumbnailUrl,
+                apiKey = item.apiKey,
+                recipe = item.recipe,
+                isVideo = item.isVideo,
+                description = item.fileName,
+                isSelected = index == selectedIndex,
+                onClick = { onSelect(index) },
+            )
+        }
+    }
+}
+
+/**
+ * The photos of the stack the one shown is in, the cover first. Tapping one shows it in this one's
+ * place — to look at it, or to edit it.
+ */
+@Composable
+private fun StackStrip(
+    members: List<AssetUiModel>,
+    shownId: String,
+    onSelect: (AssetUiModel) -> Unit,
+) {
+    val coverDescription = stringResource(Res.string.detail_stack_cover)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = ImagoSpacing.Sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Outlined.Layers,
+            contentDescription = stringResource(Res.string.detail_stack, members.size),
+            tint = ImagoColors.TextSecondary,
+            modifier = Modifier.padding(start = ImagoSpacing.Lg).size(ImagoSizes.IconSmall),
+        )
+        LazyRow(
+            modifier = Modifier.weight(1f),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = ImagoSpacing.Sm),
+            horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+        ) {
+            itemsIndexed(members, key = { _, item -> item.id }) { index, item ->
+                StripThumbnail(
+                    url = item.thumbnailUrl,
+                    apiKey = item.apiKey,
+                    recipe = item.recipe,
+                    isVideo = item.isVideo,
+                    description = if (index == 0) "$coverDescription, ${item.fileName}" else item.fileName,
+                    isSelected = item.id == shownId,
+                    onClick = { onSelect(item) },
                 )
-                if (item.isVideo) {
-                    Icon(
-                        Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        tint = ImagoColors.BrandWhite,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .size(ImagoSizes.IconDefault),
-                    )
-                }
             }
+        }
+    }
+}
+
+/** A thumbnail of the detail's strips; the white frame is what marks the one shown. */
+@Composable
+private fun StripThumbnail(
+    url: String,
+    apiKey: String,
+    recipe: EditRecipe?,
+    isVideo: Boolean,
+    description: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    val context = LocalPlatformContext.current
+    Box(
+        modifier = Modifier
+            .size(FILMSTRIP_THUMB)
+            .clip(RoundedCornerShape(ImagoRadii.Small))
+            // The white frame is what identifies the current one; without it the strip is just
+            // a row of thumbnails with no position.
+            .border(
+                width = if (isSelected) 2.dp else 0.dp,
+                color = if (isSelected) ImagoColors.BrandWhite else Color.Transparent,
+                shape = RoundedCornerShape(ImagoRadii.Small),
+            )
+            .clickable(role = Role.Tab, onClick = onClick),
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(url)
+                .libraryAuth(apiKey)
+                .crossfade(false)
+                .withRecipe(recipe)
+                .build(),
+            contentDescription = description,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(if (isSelected) 2.dp else 0.dp)
+                .clip(RoundedCornerShape(ImagoRadii.Small)),
+        )
+        if (isVideo) {
+            Icon(
+                Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = ImagoColors.BrandWhite,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(ImagoSizes.IconDefault),
+            )
         }
     }
 }

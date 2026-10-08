@@ -50,6 +50,7 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.junit4)
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

@@ -99,6 +99,9 @@ interface LibraryRepository {
      */
     suspend fun stackMembers(assetId: String): List<ImmichAsset> = emptyList()
 
+    /** The photo [assetId] was exported from by this app; null when it is not one of its exports. */
+    suspend fun exportOriginal(assetId: String): String? = null
+
     /** Writes to Immich and to the local catalogue, so the grid reacts without a refetch. */
     suspend fun setFavorite(assetId: String, isFavorite: Boolean)
     suspend fun deleteAsset(assetId: String)

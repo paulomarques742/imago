@@ -452,6 +452,14 @@ class RoomLibraryRepository @Inject constructor(
         }
     }
 
+    override suspend fun exportOriginal(assetId: String): String? {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        return database.derivedAssetDao().getAny(libraryKey, assetId)
+            ?.takeIf { it.sync.deletedAt == null }
+            ?.originalAssetId
+    }
+
     override suspend fun stackMembers(assetId: String): List<ImmichAsset> {
         val connection = requireConnection()
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)

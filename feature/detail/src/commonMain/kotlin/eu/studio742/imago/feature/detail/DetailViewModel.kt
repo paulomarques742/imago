@@ -22,6 +22,8 @@ import eu.studio742.imago.feature.editor.EditorAsset
 import eu.studio742.imago.feature.editor.EditorExporter
 import eu.studio742.imago.feature.editor.saveEditedToDevice
 import java.io.File
+import eu.studio742.imago.feature.library.toAssetUiModel
+import eu.studio742.imago.feature.library.AssetUiModel
 
 /** What the detail screen receives from the library — photo or video. */
 data class DetailAsset(
@@ -101,6 +103,13 @@ data class DetailUiState(
      * editor brings a more recent one, and that is what the preview has to show.
      */
     val recipe: EditRecipe? = null,
+    /**
+     * The photos of the Immich stack this one is in, the cover first; empty when it is in none, or
+     * the key cannot read stacks. It survives moving between the photos of the same stack.
+     */
+    val stack: List<AssetUiModel> = emptyList(),
+    /** What Edit opens instead of the photo shown: the original an IMAGO export was made from. */
+    val editInstead: AssetUiModel? = null,
     val isLoading: Boolean = false,
     val isBusy: Boolean = false,
     val busyLabel: UiText? = null,
@@ -180,6 +189,8 @@ open class DetailViewModel(
                 recipe = asset.recipe,
                 isLoading = true,
                 canRename = runCatching { library.canRename(asset.id) }.getOrDefault(false),
+                // Moving to another photo of the same stack keeps the strip where it is.
+                stack = mutableState.value.stack.takeIf { stack -> stack.any { it.id == asset.id } }.orEmpty(),
             )
         }
         loadJob = viewModelScope.launch {
@@ -190,6 +201,7 @@ open class DetailViewModel(
                 if (current.assetId != asset.id) current else current.copy(recipe = recipe)
             }
             if (sameAsset) return@launch
+            launch { loadStack(asset.id) }
             runCatching { library.assetDetail(asset.id) }
                 .onSuccess { detail ->
                     mutableState.update { current ->
@@ -214,6 +226,27 @@ open class DetailViewModel(
                         current.copy(isLoading = false, error = error.toUiText(Res.string.detail_load_failed))
                     }
                 }
+        }
+    }
+
+    /**
+     * The stack around [assetId], and what Edit should open. A key without `stack.read` has no
+     * strip, and an export whose original cannot be read is edited as itself.
+     */
+    private suspend fun loadStack(assetId: String) {
+        val known = mutableState.value.stack.takeIf { stack -> stack.any { it.id == assetId } }
+        val stack = known ?: runCatching { library.stackMembers(assetId) }.getOrDefault(emptyList()).map { member ->
+            member.toAssetUiModel(library, runCatching { recipes.get(member.id) }.getOrNull()?.takeIf(EditRecipe::changesTheImage))
+        }
+        val originalId = runCatching { library.exportOriginal(assetId) }.getOrNull()
+        val original = originalId?.let { id ->
+            stack.firstOrNull { it.id == id } ?: runCatching {
+                library.assetDetail(id).asset.copy(id = id)
+                    .toAssetUiModel(library, runCatching { recipes.get(id) }.getOrNull()?.takeIf(EditRecipe::changesTheImage))
+            }.getOrNull()
+        }
+        mutableState.update { current ->
+            if (current.assetId != assetId) current else current.copy(stack = stack, editInstead = original)
         }
     }
 
