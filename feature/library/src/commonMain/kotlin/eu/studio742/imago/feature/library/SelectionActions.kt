@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.PhotoAlbum
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
@@ -168,6 +169,9 @@ internal fun SelectionActionsBar(
     canSaveToDevice: Boolean,
     canSendToImmich: Boolean,
     canRotate: Boolean,
+    /** Two photos or more, all of one Immich library. */
+    canStack: Boolean,
+    onStack: () -> Unit,
     /** True archives, false brings back from the archive; null where there is no archive. */
     archive: Boolean?,
     onArchive: () -> Unit,
@@ -239,6 +243,13 @@ internal fun SelectionActionsBar(
                                 text = { Text(stringResource(Res.string.library_selection_rotate)) },
                                 leadingIcon = { Icon(Icons.Outlined.RotateRight, contentDescription = null) },
                                 onClick = { menu = false; onRotate() },
+                            )
+                        }
+                        if (canStack) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.library_selection_stack)) },
+                                leadingIcon = { Icon(Icons.Outlined.Layers, contentDescription = null) },
+                                onClick = { menu = false; onStack() },
                             )
                         }
                         if (archive != null) {

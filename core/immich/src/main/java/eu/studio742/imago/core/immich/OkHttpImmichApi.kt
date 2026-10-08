@@ -700,6 +700,51 @@ class OkHttpImmichApi(
         )
     }
 
+    override suspend fun createStack(connection: ImmichConnection, assetIds: List<String>): eu.studio742.imago.core.model.ImmichStack =
+        withContext(Dispatchers.IO) {
+            val covers = assetIds.map { coverOfStackOf(connection, it) }.distinct()
+            require(covers.size >= 2) { "A stack needs two photos" }
+            executeJson<StackResponseDto>(
+                request = Request.Builder()
+                    .url(endpoint(connection, ImmichContract.CREATE_STACK))
+                    .post(json.encodeToString(StackCreateDto(covers)).toRequestBody(JSON_MEDIA_TYPE))
+                    .build(),
+                apiKey = connection.apiKey,
+                permission = ImmichKeyPermissions.CREATE_STACK,
+            ).toDomain()
+        }
+
+    override suspend fun setStackCover(connection: ImmichConnection, stackId: String, assetId: String): Unit =
+        withContext(Dispatchers.IO) {
+            execute(
+                request = Request.Builder()
+                    .url(endpoint(connection, ImmichContract.UPDATE_STACK.replace("{id}", stackId)))
+                    .put(json.encodeToString(StackUpdateDto(assetId)).toRequestBody(JSON_MEDIA_TYPE))
+                    .build(),
+                apiKey = connection.apiKey,
+                permission = ImmichKeyPermissions.UPDATE_STACK,
+            ).close()
+        }
+
+    override suspend fun removeFromStack(connection: ImmichConnection, stackId: String, assetId: String): Unit =
+        withContext(Dispatchers.IO) {
+            val path = ImmichContract.REMOVE_ASSET_FROM_STACK.replace("{id}", stackId).replace("{assetId}", assetId)
+            execute(
+                request = Request.Builder().url(endpoint(connection, path)).delete().build(),
+                apiKey = connection.apiKey,
+                permission = ImmichKeyPermissions.REMOVE_ASSET_FROM_STACK,
+            ).close()
+        }
+
+    override suspend fun deleteStack(connection: ImmichConnection, stackId: String): Unit =
+        withContext(Dispatchers.IO) {
+            execute(
+                request = Request.Builder().url(endpoint(connection, ImmichContract.DELETE_STACK.replace("{id}", stackId))).delete().build(),
+                apiKey = connection.apiKey,
+                permission = ImmichKeyPermissions.DELETE_STACK,
+            ).close()
+        }
+
     /** The cover of the stack [assetId] is in, or [assetId] itself when it is in none. */
     private fun coverOfStackOf(connection: ImmichConnection, assetId: String): String = runCatching {
         executeJson<AssetStackOnlyDto>(
@@ -814,6 +859,9 @@ private data class AssetMediaResponseDto(val id: String, val status: String)
 
 @Serializable
 private data class StackCreateDto(val assetIds: List<String>)
+
+@Serializable
+private data class StackUpdateDto(val primaryAssetId: String)
 
 /** Of an asset, only the stack it is in; Immich fills it in on `GET /assets/{id}`. */
 @Serializable

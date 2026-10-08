@@ -69,4 +69,12 @@
     <string name="detail_rotate_failed">Couldn’t rotate the photo.</string>
     <string name="detail_stack">Stack of %1$d photos</string>
     <string name="detail_stack_cover">Stack cover</string>
+    <string name="detail_stack_make_cover">Make the stack’s cover</string>
+    <string name="detail_stack_remove">Take out of the stack</string>
+    <string name="detail_unstack">Undo the stack</string>
+    <string name="detail_stack_working">Changing the stack…</string>
+    <string name="detail_stack_failed">Could not change the stack</string>
+    <string name="detail_stack_cover_changed">This is the stack’s cover now</string>
+    <string name="detail_stack_removed">Taken out of the stack</string>
+    <string name="detail_stack_undone">Stack undone</string>
 </resources>

@@ -1,6 +1,7 @@
 package eu.studio742.imago.core.data
 
 import eu.studio742.imago.core.data.db.AssetEntity
+import eu.studio742.imago.core.data.db.DerivedAssetEntity
 import eu.studio742.imago.core.data.db.StackMemberEntity
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichStack
@@ -89,3 +90,58 @@ internal fun standInsNeeded(
     .filter { it.id in originalOf && it.stackId != null }
     .map { stacks[it.stackId]?.firstOrNull()?.primaryAssetId ?: originalOf.getValue(it.id) }
     .distinct()
+
+/**
+ * What stands for [photo] on the server: its newest export in [assetIds], or the photo itself.
+ *
+ * On the server an export goes on top of its original — that is what the web and other apps show —
+ * so a photo made a stack's cover there is made so through it.
+ */
+internal fun faceOf(photo: String, assetIds: Collection<String>, exports: List<DerivedAssetEntity>): String =
+    exports.filter { it.originalAssetId == photo && it.derivedAssetId in assetIds }
+        .maxByOrNull { it.createdAt }
+        ?.derivedAssetId
+        ?: photo
+
+/**
+ * Taking [photo] out of [stack]: it leaves with its exports, which stay stacked over it.
+ *
+ * @param leaving what leaves the stack, the photo and its exports.
+ * @param newCover the stack's new cover on the server, when the old one is leaving — Immich will not
+ *   take a stack's cover out of it.
+ * @param undo the stack is left with fewer than two photos, and is undone instead.
+ * @param regroup the photo and its exports, to stack again on their own, the newest export first;
+ *   empty when it had none.
+ */
+internal data class StackRemoval(
+    val leaving: List<String>,
+    val newCover: String?,
+    val undo: Boolean,
+    val regroup: List<String>,
+)
+
+internal fun ImmichStack.removing(photo: String, exports: List<DerivedAssetEntity>): StackRemoval {
+    val ids = assets.map { it.id }
+    val ownExports = exports.filter { it.originalAssetId == photo && it.derivedAssetId in ids }.map { it.derivedAssetId }
+    val leaving = listOf(photo) + ownExports
+    val staying = ids - leaving.toSet()
+    val exportIds = exports.map { it.derivedAssetId }.toSet()
+    val newCover = if (primaryAssetId in leaving) {
+        staying.firstOrNull { it !in exportIds }?.let { faceOf(it, staying, exports) } ?: staying.firstOrNull()
+    } else {
+        null
+    }
+    val regroup = if (ownExports.isEmpty()) emptyList() else faceOf(photo, ids, exports).let { face -> listOf(face) + (leaving - face) }
+    return StackRemoval(leaving, newCover, undo = staying.size < 2, regroup = regroup)
+}
+
+/** Undoing [stack]: each original that had exports in it stays stacked with them, the newest on top. */
+internal fun ImmichStack.pairsAfterUndoing(exports: List<DerivedAssetEntity>): List<List<String>> {
+    val ids = assets.map { it.id }.toSet()
+    return exports.filter { it.derivedAssetId in ids && it.originalAssetId in ids }
+        .groupBy { it.originalAssetId }
+        .map { (original, own) ->
+            val face = faceOf(original, ids, exports)
+            listOf(face) + (listOf(original) + own.map { it.derivedAssetId } - face)
+        }
+}

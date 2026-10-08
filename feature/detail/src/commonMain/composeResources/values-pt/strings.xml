@@ -69,4 +69,12 @@
     <string name="detail_rotate_failed">Não foi possível rodar a fotografia.</string>
     <string name="detail_stack">Pilha de %1$d fotografias</string>
     <string name="detail_stack_cover">Capa da pilha</string>
+    <string name="detail_stack_make_cover">Tornar capa da pilha</string>
+    <string name="detail_stack_remove">Tirar da pilha</string>
+    <string name="detail_unstack">Desfazer a pilha</string>
+    <string name="detail_stack_working">A mudar a pilha…</string>
+    <string name="detail_stack_failed">Não foi possível mudar a pilha</string>
+    <string name="detail_stack_cover_changed">Esta é agora a capa da pilha</string>
+    <string name="detail_stack_removed">Tirada da pilha</string>
+    <string name="detail_stack_undone">Pilha desfeita</string>
 </resources>

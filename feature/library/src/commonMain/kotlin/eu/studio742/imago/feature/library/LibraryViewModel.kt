@@ -704,6 +704,25 @@ open class LibraryViewModel(
         )
     }
 
+    /** Stacking takes two photos or more, all of one Immich library. */
+    fun canStackSelection(selection: List<AssetUiModel>): Boolean {
+        if (selection.size < 2 || !library.canStack) return false
+        val libraryId = selection.map { runCatching { AssetReference.parse(it.id).libraryId }.getOrNull() }.toSet().singleOrNull()
+        return libraryId != null &&
+            libraryId != eu.studio742.imago.core.model.DEVICE_LIBRARY_ID &&
+            libraryId != eu.studio742.imago.core.model.OPENED_LIBRARY_ID
+    }
+
+    /** Stacks the chosen photos, the first one chosen as the cover, as in Immich. */
+    fun stackSelection() {
+        val selection = chosen
+        runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_stack_failed) {
+            library.stackTogether(selection.map { it.id })
+            uiState.update { it.copy(gridRevision = it.gridRevision + 1) }
+            uiPlural(Res.plurals.library_stacked, selection.size, selection.size)
+        }
+    }
+
     /** In the archive the chosen photos come back; anywhere else they go into it. */
     fun archiveSelection() {
         val selection = chosen

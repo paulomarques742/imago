@@ -145,7 +145,7 @@
     <string name="library_permission_album_delete">Deletes the albums you ask it to delete, keeping their photos</string>
     <string name="library_permission_asset_upload">Sends exported photos, compositions and what you share with IMAGO to the server</string>
     <string name="library_permission_stack_read">Shows each stack once, under its cover, with the photos it holds</string>
-    <string name="library_permission_stack_create">Stacks each exported edit with its original</string>
+    <string name="library_permission_stack_create">Stacks photos, and each exported edit over its original</string>
     <string name="library_permission_asset_update">Marks and unmarks favorites</string>
     <string name="library_permission_asset_delete">Deletes the photos you ask it to delete</string>
     <string name="library_permission_asset_edit_get">Reads the crop, rotation and mirror Immich already has, so only what changed is sent</string>
@@ -426,4 +426,12 @@
         <item quantity="other">%1$d of these photos are on this device and on Immich.</item>
     </plurals>
     <string name="library_stack_count">Stack of %1$d photos</string>
+    <string name="library_selection_stack">Stack</string>
+    <string name="library_stack_failed">Could not stack the photos</string>
+    <plurals name="library_stacked">
+        <item quantity="one">Stacked.</item>
+        <item quantity="other">%1$d stacked, the first chosen on top.</item>
+    </plurals>
+    <string name="library_permission_stack_update">Changes a stack’s cover and takes photos out of it</string>
+    <string name="library_permission_stack_delete">Undoes stacks</string>
 </resources>

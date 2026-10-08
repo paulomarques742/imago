@@ -1,6 +1,7 @@
 package eu.studio742.imago.core.data
 
 import eu.studio742.imago.core.data.db.AssetEntity
+import eu.studio742.imago.core.data.db.DerivedAssetEntity
 import eu.studio742.imago.core.data.db.StackMemberEntity
 import eu.studio742.imago.core.model.AssetType
 import eu.studio742.imago.core.model.ImmichAsset
@@ -104,5 +105,42 @@ class StacksSeenHereTest {
             originalOf = emptyMap(),
         )
         assertEquals(3, rows.single().stackCount)
+    }
+
+    private fun export(id: String, of: String, at: String) = DerivedAssetEntity(library, id, of, createdAt = at)
+
+    @Test fun aPhotoIsCoveredOnTheServerByItsNewestExport() {
+        val exports = listOf(export("e1", "o", "2026-10-01T00:00:00Z"), export("e2", "o", "2026-10-08T00:00:00Z"))
+        assertEquals("e2", faceOf("o", listOf("o", "e1", "e2"), exports))
+        // Only an export in the stack counts.
+        assertEquals("e1", faceOf("o", listOf("o", "e1"), exports))
+        assertEquals("x", faceOf("x", listOf("x", "o", "e2"), exports))
+    }
+
+    @Test fun takingAPhotoOutTakesItsExportsAlongAndStacksThemAgain() {
+        // Immich's cover is o's edit; raw and jpeg stay.
+        val stack = ImmichStack("s1", "e1", listOf(asset("e1"), asset("o"), asset("raw"), asset("jpeg")))
+        val plan = stack.removing("o", listOf(export("e1", "o", "2026-10-08T00:00:00Z")))
+
+        assertEquals(listOf("o", "e1"), plan.leaving)
+        // The cover is leaving: Immich will not take it out, so another one first.
+        assertEquals("raw", plan.newCover)
+        assertFalse(plan.undo)
+        assertEquals(listOf("e1", "o"), plan.regroup)
+    }
+
+    @Test fun aStackLeftWithOnePhotoIsUndone() {
+        val stack = ImmichStack("s1", "a", listOf(asset("a"), asset("b")))
+        val plan = stack.removing("b", emptyList())
+
+        assertTrue(plan.undo)
+        assertTrue(plan.regroup.isEmpty())
+    }
+
+    @Test fun undoingAStackKeepsEachOriginalUnderItsEdits() {
+        val stack = ImmichStack("s1", "e2", listOf(asset("e2"), asset("e1"), asset("o"), asset("raw")))
+        val exports = listOf(export("e1", "o", "2026-10-01T00:00:00Z"), export("e2", "o", "2026-10-08T00:00:00Z"))
+
+        assertEquals(listOf(listOf("e2", "o", "e1")), stack.pairsAfterUndoing(exports))
     }
 }

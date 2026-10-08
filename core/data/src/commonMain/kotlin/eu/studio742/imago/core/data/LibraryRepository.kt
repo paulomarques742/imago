@@ -105,6 +105,21 @@ interface LibraryRepository {
      */
     suspend fun stackChanged(assetId: String) = Unit
 
+    /** Whether this library's photos can be stacked: Immich's can, the phone's and the folders' cannot. */
+    val canStack: Boolean get() = false
+
+    /** Stacks [assetIds], all of one library, the first as the cover. */
+    suspend fun stackTogether(assetIds: List<String>): Unit = error("This library has no stacks")
+
+    /** Makes [assetId] the cover of the stack it is in. */
+    suspend fun makeStackCover(assetId: String): Unit = error("This library has no stacks")
+
+    /** Takes [assetId] out of the stack it is in. */
+    suspend fun removeFromStack(assetId: String): Unit = error("This library has no stacks")
+
+    /** Undoes the stack [assetId] is in. */
+    suspend fun unstack(assetId: String): Unit = error("This library has no stacks")
+
     /** The photo [assetId] was exported from by this app; null when it is not one of its exports. */
     suspend fun exportOriginal(assetId: String): String? = null
 

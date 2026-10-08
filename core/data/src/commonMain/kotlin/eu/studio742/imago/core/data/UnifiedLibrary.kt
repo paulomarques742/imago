@@ -242,6 +242,30 @@ class UnifiedLibrary(
     override fun previewUrl(assetId: String) = routed(assetId) { previewUrl(it) }
     override fun videoPlaybackUrl(assetId: String) = routed(assetId) { videoPlaybackUrl(it) }
     override fun apiKey(assetId: String) = routed(assetId) { apiKey(it) }
+    override val canStack: Boolean get() = server.canStack
+
+    override suspend fun stackTogether(assetIds: List<String>) {
+        val refs = assetIds.map(AssetReference::parse)
+        val libraryId = refs.first().libraryId
+        require(refs.all { it.libraryId == libraryId }) { "A stack is of one library" }
+        libraryOf(libraryId).stackTogether(refs.map { it.localId })
+    }
+
+    override suspend fun makeStackCover(assetId: String) {
+        val reference = AssetReference.parse(assetId)
+        libraryOf(reference.libraryId).makeStackCover(reference.localId)
+    }
+
+    override suspend fun removeFromStack(assetId: String) {
+        val reference = AssetReference.parse(assetId)
+        libraryOf(reference.libraryId).removeFromStack(reference.localId)
+    }
+
+    override suspend fun unstack(assetId: String) {
+        val reference = AssetReference.parse(assetId)
+        libraryOf(reference.libraryId).unstack(reference.localId)
+    }
+
     override suspend fun stackChanged(assetId: String) {
         val reference = AssetReference.parse(assetId)
         libraryOf(reference.libraryId).stackChanged(reference.localId)

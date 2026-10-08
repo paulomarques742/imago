@@ -61,6 +61,25 @@ interface ImmichApi {
     suspend fun stack(connection: ImmichConnection, stackId: String): eu.studio742.imago.core.model.ImmichStack =
         error("Stacks are not available here")
 
+    /**
+     * Stacks [assetIds], the first as the cover. Each goes in through the cover of the stack it is
+     * already in, so that stack comes along whole instead of losing the photo to the new one.
+     */
+    suspend fun createStack(connection: ImmichConnection, assetIds: List<String>): eu.studio742.imago.core.model.ImmichStack =
+        error("Stacks are not available here")
+
+    /** Makes [assetId], already in the stack, its cover. */
+    suspend fun setStackCover(connection: ImmichConnection, stackId: String, assetId: String): Unit =
+        error("Stacks are not available here")
+
+    /** Takes [assetId] out of the stack; Immich refuses it for the cover. */
+    suspend fun removeFromStack(connection: ImmichConnection, stackId: String, assetId: String): Unit =
+        error("Stacks are not available here")
+
+    /** Undoes the stack; its photos stay, each on its own. */
+    suspend fun deleteStack(connection: ImmichConnection, stackId: String): Unit =
+        error("Stacks are not available here")
+
     /** The people the server recognises, the named ones first, without the ones hidden in Immich. */
     suspend fun people(connection: ImmichConnection): List<ImmichPerson> = error("People are not available here")
 

@@ -50,6 +50,11 @@ class DetailStackTest {
         private val exports: Map<String, String> = emptyMap(),
     ) : LibraryRepository {
         var stackReads = 0
+        val changes = mutableListOf<String>()
+
+        override suspend fun makeStackCover(assetId: String) { changes += "cover:$assetId" }
+        override suspend fun removeFromStack(assetId: String) { changes += "remove:$assetId" }
+        override suspend fun unstack(assetId: String) { changes += "unstack:$assetId" }
 
         override suspend fun stackMembers(assetId: String): List<ImmichAsset> {
             stackReads++
@@ -126,5 +131,18 @@ class DetailStackTest {
 
         model.open(detailAsset("cover"))
         assertTrue(model.state.value.stack.isEmpty())
+    }
+
+    @Test fun changingTheStackReadsItsStripAgain() {
+        val library = StackLibrary(stack = listOf("cover", "second"))
+        val model = viewModel(library)
+        model.open(detailAsset("second"))
+        assertEquals(1, library.stackReads)
+
+        model.makeStackCover(detailAsset("second"))
+
+        assertEquals(listOf("cover:second"), library.changes)
+        assertEquals(2, library.stackReads)
+        assertEquals(listOf("cover", "second"), model.state.value.stack.map { it.id })
     }
 }

@@ -2,6 +2,8 @@
 
 package eu.studio742.imago.feature.detail
 
+import androidx.compose.material.icons.outlined.RemoveCircleOutline
+import androidx.compose.material.icons.outlined.LayersClear
 import androidx.compose.material.icons.outlined.Layers
 import eu.studio742.imago.feature.library.AssetUiModel
 import eu.studio742.imago.core.designsystem.i18n.UiText
@@ -209,6 +211,9 @@ fun DetailRoute(
         onEdit = { onEdit(state.editInstead.takeIf { state.assetId == asset.id }) },
         stack = state.stack.takeIf { stack -> state.assetId == asset.id && stack.size > 1 }.orEmpty(),
         onOpenStackMember = onOpenStackMember,
+        onMakeStackCover = { viewModel.makeStackCover(asset) },
+        onRemoveFromStack = { viewModel.removeFromStack(asset) },
+        onUnstack = { viewModel.unstack(asset) },
         onAddToComposition = onAddToComposition,
         onToggleFavorite = viewModel::toggleFavorite,
         onFavorite = viewModel::favorite,
@@ -242,6 +247,9 @@ private fun DetailScreen(
     onEdit: () -> Unit,
     stack: List<AssetUiModel>,
     onOpenStackMember: (AssetUiModel) -> Unit,
+    onMakeStackCover: () -> Unit,
+    onRemoveFromStack: () -> Unit,
+    onUnstack: () -> Unit,
     onAddToComposition: () -> Unit,
     onToggleFavorite: () -> Unit,
     onFavorite: () -> Unit,
@@ -413,6 +421,35 @@ private fun DetailScreen(
                                     onClick = {
                                         showMenu = false
                                         gate.run { onSetAs(asset, setAs) }
+                                    },
+                                )
+                            }
+                            // The stack the photo shown is in; the strip says which one it is.
+                            if (stack.isNotEmpty()) {
+                                if (stack.first().id != asset.id) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(Res.string.detail_stack_make_cover)) },
+                                        leadingIcon = { Icon(Icons.Outlined.Layers, contentDescription = null) },
+                                        onClick = {
+                                            showMenu = false
+                                            gate.run(onMakeStackCover)
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(Res.string.detail_stack_remove)) },
+                                    leadingIcon = { Icon(Icons.Outlined.RemoveCircleOutline, contentDescription = null) },
+                                    onClick = {
+                                        showMenu = false
+                                        gate.run(onRemoveFromStack)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(Res.string.detail_unstack)) },
+                                    leadingIcon = { Icon(Icons.Outlined.LayersClear, contentDescription = null) },
+                                    onClick = {
+                                        showMenu = false
+                                        gate.run(onUnstack)
                                     },
                                 )
                             }

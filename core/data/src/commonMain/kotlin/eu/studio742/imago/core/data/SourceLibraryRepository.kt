@@ -205,6 +205,31 @@ class SourceLibraryRepository @Inject constructor(
     override fun previewUrl(assetId: String) = location(assetId) { previewUrl(it) }
     override fun videoPlaybackUrl(assetId: String) = location(assetId) { videoPlaybackUrl(it) }
     override fun apiKey(assetId: String): String = configuration.source(AssetReference.parse(assetId).libraryId).apiKey.orEmpty()
+    override val canStack: Boolean
+        get() = if (unifiedSelected) unified().canStack else runCatching { provider(configuration.selectedLibraryId.value).canStack }.getOrDefault(false)
+
+    override suspend fun stackTogether(assetIds: List<String>) {
+        val refs = assetIds.map(AssetReference::parse)
+        val libraryId = refs.first().libraryId
+        require(refs.all { it.libraryId == libraryId }) { "A stack is of one library" }
+        provider(libraryId).stackTogether(refs.map { it.localId })
+    }
+
+    override suspend fun makeStackCover(assetId: String) {
+        val ref = AssetReference.parse(assetId)
+        provider(ref.libraryId).makeStackCover(ref.localId)
+    }
+
+    override suspend fun removeFromStack(assetId: String) {
+        val ref = AssetReference.parse(assetId)
+        provider(ref.libraryId).removeFromStack(ref.localId)
+    }
+
+    override suspend fun unstack(assetId: String) {
+        val ref = AssetReference.parse(assetId)
+        provider(ref.libraryId).unstack(ref.localId)
+    }
+
     override suspend fun stackChanged(assetId: String) {
         val ref = AssetReference.parse(assetId)
         provider(ref.libraryId).stackChanged(ref.localId)

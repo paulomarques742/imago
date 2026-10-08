@@ -75,6 +75,9 @@ val generateImmichContract by tasks.registering {
             "createStack",
             "searchStacks",
             "getStack",
+            "updateStack",
+            "removeAssetFromStack",
+            "deleteStack",
             "getAssetInfo",
             "updateAsset",
             "updateAssets",
@@ -106,7 +109,7 @@ val generateImmichContract by tasks.registering {
          */
         val allPermission = "all"
         val optionalOperationIds = setOf(
-            "getAllAlbums", "uploadAsset", "createStack", "searchStacks", "getStack", "updateAsset", "updateAssets", "deleteAssets",
+            "getAllAlbums", "uploadAsset", "createStack", "searchStacks", "getStack", "updateStack", "removeAssetFromStack", "deleteStack", "updateAsset", "updateAssets", "deleteAssets",
             "createAlbum", "addAssetsToAlbum", "removeAssetFromAlbum", "updateAlbumInfo", "deleteAlbum",
             "restoreAssets", "emptyTrash",
             "getAssetEdits", "editAsset", "removeAssetEdits",
@@ -357,6 +360,9 @@ val generateImmichContract by tasks.registering {
             |    const val CREATE_STACK = "${pathFor("createStack")}"
             |    const val SEARCH_STACKS = "${pathFor("searchStacks")}"
             |    const val GET_STACK = "${pathFor("getStack")}"
+            |    const val UPDATE_STACK = "${pathFor("updateStack")}"
+            |    const val REMOVE_ASSET_FROM_STACK = "${pathFor("removeAssetFromStack")}"
+            |    const val DELETE_STACK = "${pathFor("deleteStack")}"
             |    const val GET_ASSET_INFO = "${pathFor("getAssetInfo")}"
             |    const val UPDATE_ASSET = "${pathFor("updateAsset")}"
             |    const val UPDATE_ASSETS = "${pathFor("updateAssets")}"

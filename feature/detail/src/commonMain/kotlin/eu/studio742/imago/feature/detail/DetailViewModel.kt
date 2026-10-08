@@ -22,6 +22,7 @@ import eu.studio742.imago.feature.editor.EditorAsset
 import eu.studio742.imago.feature.editor.EditorExporter
 import eu.studio742.imago.feature.editor.saveEditedToDevice
 import java.io.File
+import org.jetbrains.compose.resources.StringResource
 import eu.studio742.imago.feature.library.toAssetUiModel
 import eu.studio742.imago.feature.library.AssetUiModel
 
@@ -247,6 +248,24 @@ open class DetailViewModel(
         }
         mutableState.update { current ->
             if (current.assetId != assetId) current else current.copy(stack = stack, editInstead = original)
+        }
+    }
+
+    fun makeStackCover(asset: DetailAsset) = changeStack(asset, Res.string.detail_stack_cover_changed) { library.makeStackCover(asset.id) }
+    fun removeFromStack(asset: DetailAsset) = changeStack(asset, Res.string.detail_stack_removed) { library.removeFromStack(asset.id) }
+    fun unstack(asset: DetailAsset) = changeStack(asset, Res.string.detail_stack_undone) { library.unstack(asset.id) }
+
+    /** A change to the stack the photo shown is in, and the strip read again after it. */
+    private fun changeStack(asset: DetailAsset, done: StringResource, change: suspend () -> Unit) {
+        viewModelScope.launch {
+            mutableState.update { it.copy(isBusy = true, busyLabel = uiText(Res.string.detail_stack_working)) }
+            val result = runCatching { change() }
+            result.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
+            mutableState.update { it.copy(isBusy = false, busyLabel = null, stack = emptyList()) }
+            result
+                .onSuccess { show(uiText(done), failed = false) }
+                .onFailure { show(it.toUiText(Res.string.detail_stack_failed), failed = true) }
+            loadStack(asset.id)
         }
     }
 

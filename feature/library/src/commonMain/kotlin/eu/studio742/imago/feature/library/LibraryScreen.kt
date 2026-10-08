@@ -2125,6 +2125,8 @@ private fun LibrarySelectionBar(
         canSendToImmich = sendToImmich != null && viewModel.canSendToImmich(selection),
         canRotate = viewModel.canRotateSelection(selection),
         onRotate = viewModel::rotateSelection,
+        canStack = viewModel.canStackSelection(selection),
+        onStack = viewModel::stackSelection,
         archive = when {
             !viewModel.uiState.collectAsStateWithLifecycle().value.canArchive -> null
             openAlbum?.isArchive == true -> false

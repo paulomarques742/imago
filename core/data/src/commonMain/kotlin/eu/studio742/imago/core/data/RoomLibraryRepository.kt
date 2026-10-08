@@ -488,6 +488,70 @@ class RoomLibraryRepository @Inject constructor(
             ?.originalAssetId
     }
 
+    override val canStack: Boolean get() = true
+
+    override suspend fun stackTogether(assetIds: List<String>) {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        val stack = api.createStack(connection, assetIds)
+        stacksChanged(connection, libraryKey, stack.assets)
+    }
+
+    override suspend fun makeStackCover(assetId: String) {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        val stack = stackOf(connection, libraryKey, assetId)
+        api.setStackCover(connection, stack.id, faceOf(assetId, stack.assets.map { it.id }, exports(libraryKey)))
+        stacksChanged(connection, libraryKey, stack.assets)
+    }
+
+    override suspend fun removeFromStack(assetId: String) {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        val stack = stackOf(connection, libraryKey, assetId)
+        val plan = stack.removing(assetId, exports(libraryKey))
+        if (plan.undo) {
+            api.deleteStack(connection, stack.id)
+        } else {
+            plan.newCover?.let { api.setStackCover(connection, stack.id, it) }
+            plan.leaving.forEach { api.removeFromStack(connection, stack.id, it) }
+        }
+        if (plan.regroup.size >= 2) api.createStack(connection, plan.regroup)
+        stacksChanged(connection, libraryKey, stack.assets)
+    }
+
+    override suspend fun unstack(assetId: String) {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        val stack = stackOf(connection, libraryKey, assetId)
+        val pairs = stack.pairsAfterUndoing(exports(libraryKey))
+        api.deleteStack(connection, stack.id)
+        pairs.forEach { api.createStack(connection, it) }
+        stacksChanged(connection, libraryKey, stack.assets)
+    }
+
+    /** The stack [assetId] is in, as the server has it now. */
+    private suspend fun stackOf(connection: ImmichConnection, libraryKey: String, assetId: String): eu.studio742.imago.core.model.ImmichStack {
+        val stackId = database.stackMemberDao().ofAssets(libraryKey, listOf(assetId)).firstOrNull()?.stackId
+            ?: database.assetDao().byIds(libraryKey, listOf(assetId)).firstOrNull()?.stackId
+            ?: error("The photo is in no stack")
+        return api.stack(connection, stackId)
+    }
+
+    private suspend fun exports(libraryKey: String): List<eu.studio742.imago.core.data.db.DerivedAssetEntity> {
+        derivedAssets.derivedIds()
+        return database.derivedAssetDao().live(libraryKey)
+    }
+
+    /**
+     * The stacks, and every month [assets] are in, read again. A stack made or undone changes the
+     * months' counts and the sync would see it; a new cover does not, and it would not.
+     */
+    private suspend fun stacksChanged(connection: ImmichConnection, libraryKey: String, assets: List<ImmichAsset>) {
+        catalogSyncLock.withLock { refreshStacks(connection, libraryKey) }
+        assets.map { it.localDateTime.ifBlank { it.fileCreatedAt }.take(MONTH_PREFIX) }.distinct().forEach { loadMonth(it) }
+    }
+
     override suspend fun stackChanged(assetId: String) {
         val connection = requireConnection()
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)

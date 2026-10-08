@@ -509,6 +509,42 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun stackingSendsEachPhotoThroughTheCoverOfTheStackItIsIn() = runTest {
+        // "a" is on its own; "b" is under "b-cover".
+        server.enqueue(MockResponse().setBody("""{"id":"a","stack":null}"""))
+        server.enqueue(MockResponse().setBody("""{"id":"b","stack":{"id":"s0","primaryAssetId":"b-cover","assetCount":2}}"""))
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"s1","primaryAssetId":"a","assets":[]}"""))
+
+        api.createStack(connection(), listOf("a", "b"))
+
+        assertEquals("/api/assets/a", server.takeRequest().path)
+        assertEquals("/api/assets/b", server.takeRequest().path)
+        val create = server.takeRequest()
+        assertEquals("/api/stacks", create.path)
+        assertEquals("""{"assetIds":["a","b-cover"]}""", create.body.readUtf8())
+    }
+
+    @Test
+    fun changesTheCoverTakesOutAndUndoesAStack() = runTest {
+        repeat(3) { server.enqueue(MockResponse().setResponseCode(200).setBody("{}")) }
+
+        api.setStackCover(connection(), "s1", "b")
+        api.removeFromStack(connection(), "s1", "c")
+        api.deleteStack(connection(), "s1")
+
+        val cover = server.takeRequest()
+        assertEquals("PUT", cover.method)
+        assertEquals("/api/stacks/s1", cover.path)
+        assertEquals("""{"primaryAssetId":"b"}""", cover.body.readUtf8())
+        val remove = server.takeRequest()
+        assertEquals("DELETE", remove.method)
+        assertEquals("/api/stacks/s1/assets/c", remove.path)
+        val undo = server.takeRequest()
+        assertEquals("DELETE", undo.method)
+        assertEquals("/api/stacks/s1", undo.path)
+    }
+
+    @Test
     fun searchCanFilterByMonth() = runTest {
         server.enqueue(MockResponse().setBody(EMPTY_SEARCH_RESPONSE))
 
