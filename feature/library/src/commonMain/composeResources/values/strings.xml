@@ -150,6 +150,7 @@
     <string name="library_permission_asset_edit_get">Reads the crop, rotation and mirror Immich already has, so only what changed is sent</string>
     <string name="library_permission_asset_edit_create">Sends the crop, rotation and mirror you set in IMAGO, so Immich shows the photo framed the same way</string>
     <string name="library_permission_asset_edit_delete">Removes them from Immich when you undo them in IMAGO</string>
+    <string name="library_permission_map_read">Shows your photos on the map</string>
     <string name="library_permission_person_read">Shows the people Immich recognizes, and the photos of each one</string>
     <!-- Sharing from other apps to Immich -->
     <string name="library_share_title">Send to Immich</string>

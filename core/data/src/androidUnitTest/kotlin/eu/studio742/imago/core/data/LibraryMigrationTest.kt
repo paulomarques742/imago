@@ -38,7 +38,7 @@ class LibraryMigrationTest {
         old.version = 8
         old.close()
         val upgraded = Room.databaseBuilder(context, ImmichRoomDatabase::class.java, "migration-test.db")
-            .addMigrations(LibraryMigration.MIGRATION_8_9, LibraryMigration.MIGRATION_9_10, SyncMigration.MIGRATION_10_11, UnifiedMigration.MIGRATION_11_12).allowMainThreadQueries().build()
+            .addMigrations(LibraryMigration.MIGRATION_8_9, LibraryMigration.MIGRATION_9_10, SyncMigration.MIGRATION_10_11, UnifiedMigration.MIGRATION_11_12, UnifiedMigration.MIGRATION_12_13).allowMainThreadQueries().build()
         try {
             val sql = upgraded.openHelper.writableDatabase // Room validates the complete new schema here.
             assertEquals(setOf("server-a", "server-b"), upgraded.libraryIdentityDao().ids().toSet())

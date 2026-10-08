@@ -28,6 +28,7 @@ import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.ImmichPerson
+import eu.studio742.imago.core.model.MapContents
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.ImmichConnection
 import eu.studio742.imago.core.model.AssetType
@@ -159,6 +160,12 @@ class RoomLibraryRepository @Inject constructor(
     override val hasTrash: Boolean get() = true
 
     override val hasPeople: Boolean get() = true
+
+    override val hasMap: Boolean get() = true
+
+    override fun mapContents(): Flow<MapContents> = kotlinx.coroutines.flow.flow {
+        emit(MapContents(api.mapMarkers(requireConnection())))
+    }
 
     override suspend fun people(): List<ImmichPerson> = api.people(requireConnection())
 

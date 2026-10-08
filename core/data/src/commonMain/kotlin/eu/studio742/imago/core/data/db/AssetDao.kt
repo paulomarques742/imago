@@ -117,6 +117,19 @@ interface AssetDao {
     )
     suspend fun unifiedTimeBuckets(device: String, server: String): List<LocalTimeBucket>
 
+    @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey AND id IN (:ids)")
+    suspend fun byIds(libraryKey: String, ids: List<String>): List<AssetEntity>
+
+    /** The server's photos that are on the phone too, by the unified library's rule. */
+    @Query(
+        """
+        SELECT DISTINCT o.id FROM assets a, assets o
+        WHERE a.libraryKey = :device AND o.libraryKey = :server AND o.originalFileName = a.originalFileName
+          AND ABS(julianday(o.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1
+        """,
+    )
+    suspend fun serverCopiesOfDevice(device: String, server: String): List<String>
+
     /** The same photo on the other side: the server's copy of a phone photo, or the phone's of a server one. */
     @Query(
         """

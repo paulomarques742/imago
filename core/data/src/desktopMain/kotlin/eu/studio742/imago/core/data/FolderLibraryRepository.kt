@@ -7,6 +7,7 @@ import eu.studio742.imago.core.model.requireUser
 import com.drew.imaging.ImageMetadataReader
 import com.drew.metadata.exif.ExifIFD0Directory
 import com.drew.metadata.exif.ExifSubIFDDirectory
+import com.drew.metadata.exif.GpsDirectory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -195,6 +196,11 @@ class FolderLibraryRepository(
         } finally {
             syncCatalog()
         }
+    }
+
+    override suspend fun readLocation(assetId: String): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+        ImageMetadataReader.readMetadata(fileOf(assetId).toFile()).getFirstDirectoryOfType(GpsDirectory::class.java)
+            ?.geoLocation?.takeUnless { it.isZero }?.let { it.latitude to it.longitude }
     }
 
     override fun rememberTransfer(transfer: FolderTransfer?) {

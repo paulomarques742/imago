@@ -11,6 +11,7 @@ import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichPerson
+import eu.studio742.imago.core.model.MapContents
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.LibraryFilter
 import eu.studio742.imago.core.model.RECENT_FILTER_DAYS
@@ -26,6 +27,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -157,6 +160,22 @@ class UnifiedLibrary(
         if (album != null && album.libraryId != serverId) return emptyFlow()
         return server.searchByContent(query, filter, month, album?.localId)
             .map { page -> page.map { it.copy(id = AssetReference(serverId, it.id).encode(), isOnServer = true) } }
+    }
+
+    override val hasMap: Boolean get() = true
+
+    /** Both sides; a photo on both is the phone's, as in the timeline. */
+    override fun mapContents(): Flow<MapContents> {
+        val cloud = kotlinx.coroutines.flow.flow {
+            val onPhone = database.assetDao().serverCopiesOfDevice(DEVICE_LIBRARY_ID, serverId).toHashSet()
+            emit(runCatching { server.mapContents().last() }.getOrDefault(MapContents(emptyList())).markers.filterNot { it.assetId in onPhone })
+        }
+        return combine(device.mapContents(), cloud.onStart { emit(emptyList()) }) { phone, server ->
+            phone.copy(
+                markers = phone.markers.map { it.copy(assetId = AssetReference(DEVICE_LIBRARY_ID, it.assetId).encode()) } +
+                    server.map { it.copy(assetId = AssetReference(serverId, it.assetId).encode()) },
+            )
+        }
     }
 
     // Who is in the photos only the server knows.

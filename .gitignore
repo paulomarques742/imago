@@ -8,3 +8,6 @@ captures/
 .cxx/
 
 artifacts/
+
+# Kotlin daemon logs
+.kotlin/

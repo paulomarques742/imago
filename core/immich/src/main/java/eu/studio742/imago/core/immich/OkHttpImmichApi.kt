@@ -26,6 +26,7 @@ import okhttp3.RequestBody.Companion.asRequestBody
 import eu.studio742.imago.core.immich.generated.ImmichContract
 import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
 import eu.studio742.imago.core.model.ImmichPerson
+import eu.studio742.imago.core.model.MapMarker
 import eu.studio742.imago.core.model.AssetExif
 import eu.studio742.imago.core.model.AssetPage
 import eu.studio742.imago.core.model.AssetType
@@ -263,6 +264,14 @@ class OkHttpImmichApi(
         } while (response.hasNextPage && people.size < PEOPLE_LIMIT)
         // The server's order within each group: as in its own app, the people with a name come first.
         people.filterNot { it.isHidden }.sortedBy { it.name.isBlank() }.map { ImmichPerson(it.id, it.name.trim()) }
+    }
+
+    override suspend fun mapMarkers(connection: ImmichConnection): List<MapMarker> = withContext(Dispatchers.IO) {
+        executeJson<List<MapMarkerResponseDto>>(
+            request = Request.Builder().url(endpoint(connection, ImmichContract.GET_MAP_MARKERS)).get().build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.GET_MAP_MARKERS,
+        ).map { MapMarker(it.id, it.lat, it.lon, it.city?.takeIf(String::isNotBlank)) }
     }
 
     override fun personThumbnailUrl(connection: ImmichConnection, personId: String): String =
@@ -800,6 +809,9 @@ private data class MetadataSearchDto(
 
 @Serializable
 private data class PeopleResponseDto(val people: List<PersonResponseDto> = emptyList(), val hasNextPage: Boolean = false)
+
+@Serializable
+private data class MapMarkerResponseDto(val id: String, val lat: Double, val lon: Double, val city: String? = null)
 
 @Serializable
 private data class PersonResponseDto(val id: String, val name: String = "", val isHidden: Boolean = false)

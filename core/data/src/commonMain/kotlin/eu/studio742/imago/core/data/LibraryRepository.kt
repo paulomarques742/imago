@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.ImmichPerson
+import eu.studio742.imago.core.model.MapContents
 import eu.studio742.imago.core.model.AlbumAddition
 import eu.studio742.imago.core.model.AlbumPlace
 import eu.studio742.imago.core.model.FolderTransfer
@@ -141,6 +142,18 @@ interface LibraryRepository {
      */
     fun searchByContent(query: String, filter: LibraryFilter, month: String? = null, albumId: String? = null): Flow<PagingData<ImmichAsset>> =
         kotlinx.coroutines.flow.flowOf(PagingData.empty())
+
+    /** Whether this library can put its photos on a map. */
+    val hasMap: Boolean get() = false
+
+    /**
+     * The photos with a place, as they become known: a server says them at once, this device reads
+     * them from its files the first time, a batch at a time.
+     */
+    fun mapContents(): Flow<MapContents> = kotlinx.coroutines.flow.flowOf(MapContents(emptyList()))
+
+    /** These photos, the newest first, from the catalogue: the ones of a place on the map. */
+    fun assetsWithIds(ids: List<String>): Flow<PagingData<ImmichAsset>> = kotlinx.coroutines.flow.flowOf(PagingData.empty())
 
     /** Whether this library knows who is in its photos: a server does, this device does not. */
     val hasPeople: Boolean get() = false

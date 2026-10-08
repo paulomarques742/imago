@@ -93,6 +93,7 @@ val generateImmichContract by tasks.registering {
             "removeAssetEdits",
             "getAllPeople",
             "getPersonThumbnail",
+            "getMapMarkers",
         )
 
         /**
@@ -106,7 +107,7 @@ val generateImmichContract by tasks.registering {
             "createAlbum", "addAssetsToAlbum", "removeAssetFromAlbum", "updateAlbumInfo", "deleteAlbum",
             "restoreAssets", "emptyTrash",
             "getAssetEdits", "editAsset", "removeAssetEdits",
-            "getAllPeople", "getPersonThumbnail",
+            "getAllPeople", "getPersonThumbnail", "getMapMarkers",
         )
         check(operationIds.containsAll(optionalOperationIds))
         validatedDocuments.forEach { validatedDocument ->
@@ -171,6 +172,8 @@ val generateImmichContract by tasks.registering {
         check(propertiesOf("PeopleResponseDto").containsAll(setOf("people", "hasNextPage")))
         check(propertiesOf("PersonResponseDto").containsAll(setOf("id", "name", "isHidden")))
         check(propertiesOf("MetadataSearchDto").contains("personIds"))
+        // Where the photos were taken.
+        check(propertiesOf("MapMarkerResponseDto").containsAll(setOf("id", "lat", "lon", "city")))
         check(
             propertiesOf("AlbumResponseDto").containsAll(
                 setOf("id", "albumName", "albumThumbnailAssetId", "assetCount", "description", "shared"),
@@ -243,6 +246,7 @@ val generateImmichContract by tasks.registering {
             check(validatedProperties("PeopleResponseDto").containsAll(setOf("people", "hasNextPage")))
             check(validatedProperties("PersonResponseDto").containsAll(setOf("id", "name", "isHidden")))
             check(validatedProperties("MetadataSearchDto").contains("personIds"))
+            check(validatedProperties("MapMarkerResponseDto").containsAll(setOf("id", "lat", "lon", "city")))
         }
 
         fun pathFor(operationId: String) = operationFor(document, operationId).second
@@ -347,6 +351,7 @@ val generateImmichContract by tasks.registering {
             |    const val ASSET_EDITS = "${pathFor("editAsset")}"
             |    const val GET_ALL_PEOPLE = "${pathFor("getAllPeople")}"
             |    const val GET_PERSON_THUMBNAIL = "${pathFor("getPersonThumbnail")}"
+            |    const val GET_MAP_MARKERS = "${pathFor("getMapMarkers")}"
             |}
             |
             |/** The API key permissions the endpoints the app uses ask for. */

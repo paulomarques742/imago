@@ -10,4 +10,11 @@ object UnifiedMigration {
             db.execSQL(UNIFIED_INDEX_SQL)
         }
     }
+
+    /** Where the device's photos were taken, kept apart from the catalogue, which syncs rewrite. */
+    val MIGRATION_12_13 = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(ASSET_LOCATIONS_SQL)
+        }
+    }
 }

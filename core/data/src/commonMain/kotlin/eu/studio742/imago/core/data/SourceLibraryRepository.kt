@@ -110,6 +110,22 @@ class SourceLibraryRepository @Inject constructor(
             .map { page -> page.map { it.copy(id = AssetReference(id, it.id).encode()) } }
     }
 
+    override val hasMap: Boolean
+        get() = runCatching { provider(configuration.selectedLibraryId.value).hasMap }.getOrDefault(false)
+
+    override fun mapContents(): Flow<MapContents> {
+        val id = configuration.selectedLibraryId.value
+        if (id == UNIFIED_LIBRARY_ID) return unified().mapContents()
+        return provider(id).mapContents()
+            .map { contents -> contents.copy(markers = contents.markers.map { it.copy(assetId = AssetReference(id, it.assetId).encode()) }) }
+    }
+
+    /** Straight from the catalogue, whichever libraries the ids are of: a place in the unified library has both. */
+    override fun assetsWithIds(ids: List<String>): Flow<PagingData<ImmichAsset>> =
+        androidx.paging.Pager(androidx.paging.PagingConfig(pageSize = 100, enablePlaceholders = false)) {
+            CatalogListPagingSource(database, ids)
+        }.flow
+
     override val hasPeople: Boolean
         get() = runCatching { provider(configuration.selectedLibraryId.value).hasPeople }.getOrDefault(false)
 

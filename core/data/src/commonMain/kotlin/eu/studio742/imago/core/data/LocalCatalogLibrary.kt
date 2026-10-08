@@ -111,8 +111,61 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
         )
     }
 
+    override val hasMap: Boolean get() = true
+
+    /** Whether the places in the files can be read now; Android hides them until it is allowed. */
+    protected open fun canReadLocations(): Boolean = true
+
+    /** Where the photo was taken, from its file; null when it does not say. */
+    protected open suspend fun readLocation(assetId: String): Pair<Double, Double>? = null
+
+    private val locationLock = Mutex()
+
+    override fun mapContents(): Flow<MapContents> = flow {
+        val dao = database.assetLocationDao()
+        suspend fun known() = dao.located(DEVICE_LIBRARY_ID).map { MapMarker(it.assetId, it.latitude, it.longitude) }
+        if (!canReadLocations()) {
+            emit(MapContents(known(), needsLocationAccess = true))
+            return@flow
+        }
+        locationLock.withLock {
+            val total = dao.unreadCount(DEVICE_LIBRARY_ID)
+            var done = 0
+            emit(MapContents(known(), reading = MapReading(0, total).takeIf { total > 0 }))
+            while (true) {
+                val batch = dao.unread(DEVICE_LIBRARY_ID, LOCATION_BATCH)
+                if (batch.isEmpty()) break
+                dao.upsertAll(batch.map { row ->
+                    val place = readLocationOrNull(row.id)
+                    AssetLocationEntity(DEVICE_LIBRARY_ID, row.id, row.checksum, place?.first, place?.second)
+                })
+                done += batch.size
+                if (done < total) emit(MapContents(known(), reading = MapReading(done, total)))
+            }
+        }
+        emit(MapContents(known()))
+    }
+
+    /**
+     * A file that cannot be read keeps no place, and is not read again until it changes. Losing the
+     * permission halfway is not that: it stops the reading, and nothing is written for the rest.
+     */
+    private suspend fun readLocationOrNull(assetId: String): Pair<Double, Double>? = try {
+        readLocation(assetId)?.takeUnless { (latitude, longitude) -> latitude == 0.0 && longitude == 0.0 }
+    } catch (error: SecurityException) {
+        throw error
+    } catch (error: kotlinx.coroutines.CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        null
+    }
+
     override fun thumbnailUrl(assetId: String) = assetId
     override fun previewUrl(assetId: String) = assetId
     override fun videoPlaybackUrl(assetId: String) = assetId
     override fun apiKey(assetId: String) = ""
+
+    private companion object {
+        const val LOCATION_BATCH = 300
+    }
 }

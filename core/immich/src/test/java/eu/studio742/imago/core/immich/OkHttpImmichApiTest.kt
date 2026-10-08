@@ -16,6 +16,7 @@ import eu.studio742.imago.core.model.ImageSize
 import eu.studio742.imago.core.model.ImmichConnection
 import eu.studio742.imago.core.model.ImmichEdit
 import eu.studio742.imago.core.model.LibraryFilter
+import eu.studio742.imago.core.model.MapMarker
 import eu.studio742.imago.core.model.RECENT_FILTER_DAYS
 import java.io.File
 import java.time.LocalDate
@@ -769,6 +770,20 @@ class OkHttpImmichApiTest {
 
         val body = server.takeRequest().body.readUtf8()
         assertTrue(body, body.contains("\"personIds\":[\"p2\"]"))
+    }
+
+    @Test
+    fun readsWhereThePhotosWereTaken() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """[{"id":"a1","lat":38.7,"lon":-9.1,"city":"Lisbon","state":null,"country":"Portugal"},{"id":"a2","lat":41.1,"lon":-8.6,"city":null,"state":null,"country":null}]""",
+            ),
+        )
+
+        val markers = api.mapMarkers(connection())
+
+        assertEquals("/api/map/markers", server.takeRequest().path)
+        assertEquals(listOf(MapMarker("a1", 38.7, -9.1, "Lisbon"), MapMarker("a2", 41.1, -8.6, null)), markers)
     }
 
     @Test

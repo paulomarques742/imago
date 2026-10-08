@@ -379,6 +379,18 @@ class DeviceLibraryRepository @Inject constructor(
         }
     }
 
+    /** Without this permission Android hands out the files with the GPS of the EXIF wiped. */
+    override fun canReadLocations(): Boolean =
+        context.checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    override suspend fun readLocation(assetId: String): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+        val original = MediaStore.setRequireOriginal(Uri.parse(assetId))
+        resolver.openInputStream(original)?.use { input ->
+            val place = FloatArray(2)
+            if (ExifInterface(input).getLatLong(place)) place[0].toDouble() to place[1].toDouble() else null
+        }
+    }
+
     override suspend fun downloadOriginal(assetId: String, destination: File) = withContext(Dispatchers.IO) {
         val input = resolver.openInputStream(Uri.parse(assetId)) ?: throw UserMessageException(UserMessage.FILE_UNAVAILABLE)
         input.use { source -> destination.outputStream().use { source.copyTo(it) } }

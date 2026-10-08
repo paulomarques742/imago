@@ -69,6 +69,7 @@ internal val ImmichKeyPermissionList = listOf(
     ImmichKeyPermission("asset.edit.create", Res.string.library_permission_asset_edit_create, optional = true),
     ImmichKeyPermission("asset.edit.delete", Res.string.library_permission_asset_edit_delete, optional = true),
     ImmichKeyPermission("person.read", Res.string.library_permission_person_read, optional = true),
+    ImmichKeyPermission("map.read", Res.string.library_permission_map_read, optional = true),
 )
 
 /**

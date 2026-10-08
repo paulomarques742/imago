@@ -132,6 +132,21 @@ data class ImmichAlbum(
     val isFolder: Boolean = false,
 )
 
+/** Where a photo was taken. [city] when the server knows it. */
+data class MapMarker(val assetId: String, val latitude: Double, val longitude: Double, val city: String? = null)
+
+/**
+ * What a library can put on the map now. [reading] is how far it is in reading the locations of
+ * its photos, while it still is; [needsLocationAccess] when Android hides them until it is allowed.
+ */
+data class MapContents(
+    val markers: List<MapMarker>,
+    val reading: MapReading? = null,
+    val needsLocationAccess: Boolean = false,
+)
+
+data class MapReading(val done: Int, val total: Int)
+
 /** Someone the server recognises in the photos. [name] is empty while nobody named them. */
 data class ImmichPerson(val id: String, val name: String)
 
