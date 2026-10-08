@@ -3,9 +3,7 @@ package eu.studio742.imago.core.designsystem
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,10 +25,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -319,8 +318,16 @@ fun ImagoParameterSlider(
     Column(
         modifier = Modifier
             .alpha(contentAlpha)
-            .clip(RoundedCornerShape(ImagoRadii.Medium))
-            .background(Color.Black.copy(alpha = scrim))
+            // Painted, not clipped: at rest the row has no side padding, and a rounded clip cut the
+            // first letter of every name.
+            .drawBehind {
+                if (scrim > 0f) {
+                    drawRoundRect(
+                        color = Color.Black.copy(alpha = scrim),
+                        cornerRadius = CornerRadius(ImagoRadii.Medium.toPx()),
+                    )
+                }
+            }
             .padding(horizontal = if (isActive) ImagoSpacing.Md else 0.dp)
             .pointerInput(pointerKey, enabled) {
                 if (enabled) detectTapGestures(onDoubleTap = { onReset() })

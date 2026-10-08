@@ -81,6 +81,40 @@ class ImagoParameterSliderTest {
         assertTrue("nothing drawn at the bottom", bottom > 200)
     }
 
+    /**
+     * The row's rounded background used to be a clip, and at rest the row has no side padding: the
+     * corner cut off the first letter of every name. This counts the ink in the bit of the corner a clip
+     * would cut away — a letter drawn whole leaves some there.
+     */
+    @Test
+    fun `at rest, the rounded corner does not cut the first letter`() {
+        val density = 3f
+        val sceneWidth = 600
+        val sceneHeight = 240
+        val scene = ImageComposeScene(width = sceneWidth, height = sceneHeight, density = Density(density)) {
+            Column(Modifier.fillMaxSize().background(Color.Black)) { Slider("W", "w", editingKey = null) }
+        }
+        val image = try { scene.render() } finally { scene.close() }
+        val bitmap = org.jetbrains.skia.Bitmap().also {
+            it.allocN32Pixels(sceneWidth, sceneHeight)
+            image.readPixels(it)
+        }
+        val radius = ImagoRadii.Medium.value * density
+        var cutAway = 0
+        for (y in 0 until radius.toInt()) for (x in 0 until radius.toInt()) {
+            val dx = radius - x - 0.5f
+            val dy = radius - y - 0.5f
+            // A clip is anti-aliased: the pixels it half covers still show. Only those well clear of
+            // the arc are ones a clip can never paint.
+            val clear = radius + 1.5f
+            if (dx * dx + dy * dy <= clear * clear) continue
+            val pixel = bitmap.getColor(x, y)
+            val luma = (0..2).sumOf { (pixel shr (it * 8)) and 0xFF }
+            if (luma > 90) cutAway++
+        }
+        assertTrue("the corner cut the first letter of the name", cutAway > 0)
+    }
+
     @Test
     fun `while dragging a value, the other adjustment disappears`() {
         val (top, bottom) = render(editingKey = "exposure").inkPerHalf()
