@@ -313,7 +313,6 @@
     </plurals>
     <string name="library_on_this_day_setting">Show “On this day”</string>
     <string name="library_on_this_day_setting_body">Photos taken on this day in earlier years, above the timeline.</string>
-    <string name="library_back_to_timeline">Back to the timeline</string>
     <string name="library_map_close">Close the map</string>
     <string name="library_map_failed">The map couldn’t be loaded.</string>
     <string name="library_map_zoom_in">Zoom in</string>

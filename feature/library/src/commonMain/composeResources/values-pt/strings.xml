@@ -313,7 +313,6 @@
     </plurals>
     <string name="library_on_this_day_setting">Mostrar «Neste dia»</string>
     <string name="library_on_this_day_setting_body">Fotografias tiradas neste dia em anos anteriores, por cima da cronologia.</string>
-    <string name="library_back_to_timeline">Voltar à cronologia</string>
     <string name="library_map_close">Fechar o mapa</string>
     <string name="library_map_failed">Não foi possível carregar o mapa.</string>
     <string name="library_map_zoom_in">Aproximar</string>

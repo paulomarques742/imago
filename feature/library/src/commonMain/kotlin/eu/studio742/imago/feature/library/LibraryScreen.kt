@@ -1236,7 +1236,6 @@ private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit, editing: Album
                 Icons.AutoMirrored.Outlined.ArrowBack,
                 contentDescription = stringResource(
                     when {
-                        album?.isMemory == true -> Res.string.library_back_to_timeline
                         album?.isPerson == true -> Res.string.library_back_to_people
                         album?.placeAssetIds != null -> Res.string.library_back_to_map
                         else -> Res.string.library_back_to_albums

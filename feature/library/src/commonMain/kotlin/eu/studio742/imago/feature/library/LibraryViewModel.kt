@@ -93,10 +93,8 @@ data class AlbumUiModel(
     val isFolder: Boolean = false,
     /** Not an album: a person the server recognises, open with the photos they are in. */
     val isPerson: Boolean = false,
-    /** Not an album either: a place on the map, or a day of an earlier year, with its photos. */
+    /** Not an album either: a place on the map, with the photos taken there. */
     val placeAssetIds: List<String>? = null,
-    /** The photos of this day in an earlier year: closing them goes back to the timeline. */
-    val isMemory: Boolean = false,
 )
 
 /** Someone the server recognises; [name] is empty while nobody named them. */
@@ -141,8 +139,11 @@ enum class SearchMode { CONTENT, FILE_NAME }
  * The album the grid asks the library for. One left open from another library has nothing to show
  * here; the unified library holds the phone's albums and the server's, each with its own reference.
  */
+/** This day in [year]; the 29th of February of a year without one is the 28th. */
+internal fun memoryDate(today: LocalDate, year: Int): LocalDate = today.withYear(year)
+
 internal fun gridAlbumId(album: AlbumUiModel, selectedLibraryId: String): String? {
-    // A person, a place on the map and a day of an earlier year open like albums but are read by their own photos.
+    // A person and a place on the map open like albums but are read by their own photos.
     if (album.isPerson || album.placeAssetIds != null) return null
     val libraryId = runCatching { eu.studio742.imago.core.model.AssetReference.parse(album.id).libraryId }.getOrNull() ?: return null
     return album.id.takeIf { selectedLibraryId == eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID || libraryId == selectedLibraryId }
@@ -438,18 +439,11 @@ open class LibraryViewModel(
         }
     }
 
-    /** A year opens like an album over the timeline, with its photos of this day. */
-    fun openMemory(memory: MemoryUiModel) = uiState.update {
-        it.copy(
-            selectedAlbum = AlbumUiModel(
-                id = "memory-${memory.year}", name = memory.year.toString(), description = "", thumbnailUrl = memory.coverUrl,
-                assetCount = memory.assetIds.size, startDate = null, endDate = null, shared = false, apiKey = memory.apiKey,
-                placeAssetIds = memory.assetIds, isMemory = true,
-            ),
-            isSearching = false,
-            query = "",
-        )
-    }
+    /**
+     * The timeline, at this day of that year: a trip is more than its one day, and the days around it
+     * are a scroll away.
+     */
+    fun openMemory(memory: MemoryUiModel) = jumpToDate(memoryDate(LocalDate.now(), memory.year))
 
     private var mapJob: kotlinx.coroutines.Job? = null
 
@@ -832,6 +826,7 @@ open class LibraryViewModel(
                 // being stuck in a month with a chip explaining it.
                 selectedMonth = null,
                 selectedAlbum = null,
+                showingPeople = false,
                 isSearching = false,
                 query = "",
                 pendingScrollDate = date,
