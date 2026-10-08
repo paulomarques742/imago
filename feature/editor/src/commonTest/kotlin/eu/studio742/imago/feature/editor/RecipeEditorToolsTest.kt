@@ -1,28 +1,26 @@
 package eu.studio742.imago.feature.editor
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RecipeEditorToolsTest {
+    /**
+     * The bar holds only what opens a panel, and the recipes. Compare, copy, paste, save and export
+     * have their places elsewhere — the top bar, its menu and the recipe library.
+     */
     @Test
-    fun photoHasEveryToolButTheRecipeSave() {
-        val tools = editorTools(recipeMode = false)
-        assertEquals(EditorTool.entries - EditorTool.SAVE_EDITS, tools)
+    fun theBarHoldsOnlyTheTools() {
+        assertEquals(
+            listOf(EditorTool.ADJUSTMENTS, EditorTool.CROP, EditorTool.RECIPES, EditorTool.HISTORY),
+            editorTools(recipeMode = false),
+        )
     }
 
     @Test
-    fun recipeHasNoCropAndSaveStandsWhereExportWas() {
-        val photo = editorTools(recipeMode = false)
-        val recipe = editorTools(recipeMode = true)
-
-        assertFalse(EditorTool.CROP in recipe)
-        assertFalse(EditorTool.EXPORT in recipe)
-        assertFalse("Save and Duplicate already cover it", EditorTool.SAVE_RECIPE in recipe)
-        assertTrue(EditorTool.SAVE_EDITS in recipe)
-        // Same place in the bar: the tools before Export are still before Save.
-        val beforeExport = photo.takeWhile { it != EditorTool.EXPORT } - EditorTool.CROP
-        assertEquals(beforeExport, recipe.takeWhile { it != EditorTool.SAVE_EDITS })
+    fun aRecipeHasNoCrop() {
+        assertEquals(
+            listOf(EditorTool.ADJUSTMENTS, EditorTool.RECIPES, EditorTool.HISTORY),
+            editorTools(recipeMode = true),
+        )
     }
 }

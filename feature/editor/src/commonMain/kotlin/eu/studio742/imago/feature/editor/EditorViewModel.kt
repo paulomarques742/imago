@@ -180,42 +180,21 @@ enum class EditorPanel { LIGHT, COLOR, DETAIL, EFFECTS, MASKS }
 enum class EditorSheet { ADJUSTMENTS, CURVE, HSL, COLOR_GRADING, CROP, PERSPECTIVE, HISTORY, MASKS, MASK_ADJUSTMENTS }
 
 /**
- * The buttons of the tools drawer.
+ * The buttons of the bar under the photo, in its order.
  *
- * The [isPrimary] ones are those seen with the drawer closed; the others only appear when it is
- * opened. Curve and HSL are not here on purpose — they belong to Light and Colour, and that is where
- * they open from.
+ * Curve and HSL are not here on purpose — they belong to Light and Colour, and that is where they
+ * open from.
  */
-/** The order is the bar's, which shows them all in a single row. */
 enum class EditorTool {
     ADJUSTMENTS,
     CROP,
     RECIPES,
     HISTORY,
-    COMPARE,
-    EXPORT,
-    COPY_RECIPE,
-    PASTE_RECIPE,
-    SAVE_RECIPE,
-    /** The recipe editor's save, which takes Export's place: there is no real photo to export there. */
-    SAVE_EDITS,
 }
 
-/**
- * The bar's tools. Editing a recipe there is no crop — a frame belongs to one photo, not to a look
- * meant for any — and Save stands where Export was.
- */
-internal fun editorTools(recipeMode: Boolean): List<EditorTool> = if (recipeMode) {
-    EditorTool.entries.mapNotNull {
-        when (it) {
-            EditorTool.CROP, EditorTool.SAVE_RECIPE, EditorTool.SAVE_EDITS -> null
-            EditorTool.EXPORT -> EditorTool.SAVE_EDITS
-            else -> it
-        }
-    }
-} else {
-    EditorTool.entries - EditorTool.SAVE_EDITS
-}
+/** The bar's tools. Editing a recipe there is no crop — a frame belongs to one photo, not to a look meant for any. */
+internal fun editorTools(recipeMode: Boolean): List<EditorTool> =
+    if (recipeMode) EditorTool.entries - EditorTool.CROP else EditorTool.entries
 
 enum class HslColorBand { RED, ORANGE, YELLOW, GREEN, AQUA, BLUE, PURPLE, MAGENTA }
 enum class HslComponent { HUE, SATURATION, LUMINANCE }

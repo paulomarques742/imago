@@ -215,9 +215,10 @@ import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.Density
-
-/** How long without touches until the interface steps back and leaves only the photo. */
-private const val CHROME_IDLE_TIMEOUT_MS = 3_000L
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 
 /** How long the mask's red stays lit after the finger lets go. */
 private const val MASK_FLASH_MILLIS = 900L
@@ -551,27 +552,27 @@ private fun EditorScreen(
     val editorWindow = LocalImagoWindow.current
     val rail = editorWindow.prefersSidePanel
     val railWidth = (editorWindow.width * RAIL_WIDTH_FRACTION).coerceIn(RAIL_WIDTH_MIN, RAIL_WIDTH_MAX)
-    var panelVisible by rememberSaveable(assetId) { mutableStateOf(false) }
+    // A photo opens with the bar in view and no tool open: the bar says what can be done, and the
+    // photo is still almost all there is.
+    var drawer by rememberSaveable(assetId) { mutableStateOf(DrawerDetent.CLOSED) }
+    // A tap on the photo hides the whole interface, and another brings it back as it was. In a rail
+    // only the top bar goes: the column covers no photo, and taking it away would resize the stage.
+    var chromeHidden by rememberSaveable(assetId) { mutableStateOf(false) }
     /**
-     * The tools are in view — either because the drawer is open, or because there is no drawer at
-     * all and they live in the rail.
+     * A tool's panel is in view — either because the drawer is open, or because there is no drawer at
+     * all and the tools live in the rail.
      *
-     * Whoever wants to know that asks here and never [panelVisible], which in a rail stays false
-     * forever: no tap turns it on because there is nothing to open. That is how crop stopped arming
-     * on a tablet — the button was in view in the column, but the condition that turns it on was
-     * still looking at a drawer that does not exist there.
+     * Whoever wants to know that asks here and never [drawer], which in a rail means nothing. That is
+     * how crop once stopped arming on a tablet: the button was in view in the column, but the
+     * condition that turns it on was looking at a drawer that does not exist there.
      */
-    val toolsVisible = panelVisible || rail
+    val toolsVisible = rail || (drawer != DrawerDetent.CLOSED && !chromeHidden)
     // Declared here, and not next to the layout, because the framing effects observe it.
     val cropMode = toolsVisible && state.isCropping
-    /** The tools drawer: closed it shows the five main ones, open it shows them all. */
     // While a value is being dragged, the panel fades and lets the whole photo show: only the
     // focused mode's ruler survives. It lives here, and not inside the panel, because that ruler —
     // drawn outside it — is what needs to know what is being moved.
     var editingKey by remember(assetId, state.panel, state.sheet) { mutableStateOf<Any?>(null) }
-    var chromeVisible by rememberSaveable(assetId) { mutableStateOf(true) }
-    // Incremented on every touch; it is what restarts the auto-hide timer.
-    var chromeInteraction by remember(assetId) { mutableIntStateOf(0) }
     var transform by remember(assetId) { mutableStateOf(PhotoTransform()) }
     // The last adjustment touched in the panel. With mouse and keyboard this is the one the arrows
     // fine-tune — on the phone it serves no purpose, and does not get in the way.
@@ -589,6 +590,27 @@ private fun EditorScreen(
         else -> (editorWindow.height * ImagoSizes.PanelHeightFraction)
             .coerceIn(ImagoSizes.PanelHeightMin, ImagoSizes.PanelHeightMax)
     }
+    // Expanded, the panel shows the whole category at once instead of a slice of it. Only the panels
+    // that are lists grow; the others have the height their control needs, and no more.
+    val expandedPanelHeight = if (state.sheet in EXPANDABLE_SHEETS) {
+        (editorWindow.height * EXPANDED_PANEL_FRACTION).coerceAtLeast(panelHeight)
+    } else {
+        panelHeight
+    }
+    val detentHeight = when (drawer) {
+        DrawerDetent.CLOSED -> 0.dp
+        DrawerDetent.NORMAL -> panelHeight
+        DrawerDetent.EXPANDED -> expandedPanelHeight
+    }
+    // The height the panel is drawn at: the detent's, eased there, or the finger's while the handle is
+    // being dragged.
+    val drawerHeight = remember(assetId) { Animatable(detentHeight.value) }
+    val drawerMotion = imagoTween<Float>(ImagoMotion.Default)
+    var handleDragHeight by remember(assetId) { mutableStateOf<Float?>(null) }
+    LaunchedEffect(detentHeight) {
+        if (handleDragHeight == null) drawerHeight.animateTo(detentHeight.value, drawerMotion)
+    }
+    val shownDrawerHeight = (handleDragHeight ?: drawerHeight.value).dp
     // Measured by the chrome blocks themselves, not estimated. The initial value is a seed so the
     // first frame does not jump — from then on the measurement rules.
     var chromeInsets by remember { mutableStateOf(EditorChromeInsets(bottom = panelHeight + 104.dp)) }
@@ -643,7 +665,7 @@ private fun EditorScreen(
     val maskFrameGeometry by rememberUpdatedState(
         state.bitmap?.let { state.renderParameters.frameGeometry(it.pixelWidth, it.pixelHeight) },
     )
-    // Without `panelVisible`, unlike crop. Lowering the drawer is precisely how one reaches the bottom
+    // Not tied to the drawer, unlike crop. Lowering the drawer is precisely how one reaches the bottom
     // of the photo, and that is where a foreground mask has to be placeable; requiring the panel open
     // made the lower half unreachable. Crop is different because the drawer is the mode's only way out.
     val maskingNow by rememberUpdatedState(state.isMaskEditing)
@@ -757,18 +779,9 @@ private fun EditorScreen(
             onSelectIndex(settledPage)
         }
     }
-    // The editor's best state is the one where almost only the photo is seen. With the tools in view,
-    // or with a menu open, the chrome stays — disappearing under the finger would be worse. In a rail
-    // this means the top bar never hides, and that is what we want: there it covers no photo, and
-    // undo and compare are worth more at hand than hidden.
-    LaunchedEffect(chromeInteraction, toolsVisible, showContextMenu, state.isSaving) {
-        if (toolsVisible || showContextMenu || state.isSaving) {
-            chromeVisible = true
-            return@LaunchedEffect
-        }
-        chromeVisible = true
-        delay(CHROME_IDLE_TIMEOUT_MS)
-        chromeVisible = false
+    // Back closes the open tool before it leaves the photo — the same as tapping the tool again.
+    BackHandler(enabled = !rail && drawer != DrawerDetent.CLOSED && !chromeHidden) {
+        drawer = DrawerDetent.CLOSED
     }
     // The source of the recipe previews is the same bitmap as the preview, reduced once. Switching
     // photos throws away the previous ones, which no longer describe anything.
@@ -1370,16 +1383,10 @@ private fun EditorScreen(
                                     .pointerInput(assetId) {
                                         detectTapGestures(
                                             onTap = {
-                                                // While cropping, a tap cannot close the panel: it is
-                                                // the mode's only way out. In a rail neither, but for
-                                                // another reason: there is no drawer to open.
-                                                if (!croppingNow && !railNow) {
-                                                    panelVisible = !panelVisible
-                                                }
-                                                // Outside the condition above because the top bar
-                                                // hides on its own in both modes, and it is this tap
-                                                // that brings it back.
-                                                if (!croppingNow) chromeInteraction++
+                                                // While cropping, a tap cannot hide the interface:
+                                                // the frame is being worked on, and its way out is
+                                                // in the panel.
+                                                if (!croppingNow) chromeHidden = !chromeHidden
                                             },
                                             onDoubleTap = { position ->
                                                 if (croppingNow) {
@@ -1442,10 +1449,9 @@ private fun EditorScreen(
             // The panel and the toolbar are a single piece stacked at the bottom. Aligning them
             // separately put the bar over the panel's bottom.
             AnimatedVisibility(
-                // In a rail it is always in view. Hiding it was what gave the whole photo back when the
-                // panel was over it; beside it, it covers nothing, and closing it would only leave an
-                // empty column.
-                visible = toolsVisible,
+                // In a rail it is always in view: beside the photo it covers nothing, and hiding it
+                // would only resize the stage.
+                visible = rail || !chromeHidden,
                 modifier = Modifier
                     .align(if (rail) Alignment.TopEnd else Alignment.BottomCenter)
                     .then(
@@ -1511,16 +1517,47 @@ private fun EditorScreen(
                             modifier = Modifier.padding(bottom = ImagoSpacing.Sm),
                         )
                     }
-                    AdjustmentPanel(
+                    if (rail || shownDrawerHeight > 0.dp) AdjustmentPanel(
                         state = state,
-                        // In the drawer it is a slice of the screen; in the rail it is all that is left
-                        // between the top tools and the bottom bar.
+                        // In the drawer it is as tall as the drawer is open; in the rail it is all
+                        // that is left between the top tools and the bottom bar.
                         modifier = if (rail) {
                             Modifier.fillMaxWidth().weight(1f)
                         } else {
-                            Modifier.fillMaxWidth().height(panelHeight)
+                            Modifier.fillMaxWidth().height(shownDrawerHeight)
                         },
                         rail = rail,
+                        handle = if (rail) {
+                            null
+                        } else {
+                            Modifier.drawerHandle(
+                                height = { handleDragHeight ?: drawerHeight.value },
+                                normal = panelHeight.value,
+                                expanded = expandedPanelHeight.value,
+                                onDrag = { handleDragHeight = it },
+                                onSettle = { detent, from ->
+                                    drawer = detent
+                                    drawerHeight.snapTo(from)
+                                    handleDragHeight = null
+                                    drawerHeight.animateTo(
+                                        when (detent) {
+                                            DrawerDetent.CLOSED -> 0f
+                                            DrawerDetent.NORMAL -> panelHeight.value
+                                            DrawerDetent.EXPANDED -> expandedPanelHeight.value
+                                        },
+                                        drawerMotion,
+                                    )
+                                },
+                                onToggle = {
+                                    drawer = if (drawer == DrawerDetent.EXPANDED || expandedPanelHeight <= panelHeight) {
+                                        DrawerDetent.NORMAL
+                                    } else {
+                                        DrawerDetent.EXPANDED
+                                    }
+                                },
+                                onClose = { drawer = DrawerDetent.CLOSED },
+                            )
+                        },
                         editingKey = editingKey,
                         onEditing = { key ->
                             editingKey = key
@@ -1553,32 +1590,22 @@ private fun EditorScreen(
                         colorGradeActions = colorGradeActions,
                         perspectiveActions = perspectiveActions,
                     )
+                    val openTool = when (state.sheet) {
+                        EditorSheet.CROP, EditorSheet.PERSPECTIVE -> EditorTool.CROP
+                        EditorSheet.HISTORY -> EditorTool.HISTORY
+                        else -> EditorTool.ADJUSTMENTS
+                    }
                     EditorToolBar(
-                        selected = when (state.sheet) {
-                            EditorSheet.CROP, EditorSheet.PERSPECTIVE -> EditorTool.CROP
-                            EditorSheet.HISTORY -> EditorTool.HISTORY
-                            else -> EditorTool.ADJUSTMENTS
-                        },
-                        isComparing = state.showOriginal,
-                        canPasteRecipe = state.canPasteRecipe && state.recipe != null,
-                        canExport = !compositionMode && state.bitmap != null && !state.isExporting,
+                        selected = openTool.takeIf { rail || drawer != DrawerDetent.CLOSED },
                         tools = editorTools(recipeMode),
-                        // A recipe that is not the user's yet can always be saved — that is how it
-                        // becomes theirs; one that is only saves when something changed.
-                        canSaveEdits = state.recipe != null && !state.needsNewerApp &&
-                            (state.hasUnsavedRecipeChanges || state.recipeEdit?.saved == null),
                         onSelect = { tool ->
-                            when (tool) {
-                                EditorTool.ADJUSTMENTS -> onSelectSheet(EditorSheet.ADJUSTMENTS)
-                                EditorTool.CROP -> onSelectSheet(EditorSheet.CROP)
-                                EditorTool.HISTORY -> onSelectSheet(EditorSheet.HISTORY)
-                                EditorTool.RECIPES -> showRecipeLibrary = true
-                                EditorTool.COMPARE -> onShowOriginal(!state.showOriginal)
-                                EditorTool.EXPORT -> if (!compositionMode) showExportDialog = true
-                                EditorTool.COPY_RECIPE -> onCopyRecipe()
-                                EditorTool.PASTE_RECIPE -> onPasteRecipe()
-                                EditorTool.SAVE_RECIPE -> showSaveRecipeDialog = true
-                                EditorTool.SAVE_EDITS -> recipeActions?.onSave?.invoke()
+                            when (val tap = toolTap(tool, openTool, drawer, rail)) {
+                                ToolTap.OpenLibrary -> showRecipeLibrary = true
+                                ToolTap.Close -> drawer = DrawerDetent.CLOSED
+                                is ToolTap.Open -> {
+                                    onSelectSheet(tap.sheet)
+                                    if (drawer == DrawerDetent.CLOSED) drawer = DrawerDetent.NORMAL
+                                }
                             }
                         },
                         modifier = Modifier.alpha(if (rail || editingKey == null) 1f else 0f),
@@ -1637,7 +1664,7 @@ private fun EditorScreen(
             }
 
             AnimatedVisibility(
-                visible = chromeVisible,
+                visible = !chromeHidden,
                 // The bar belongs to the photo, not to the screen. Full width it crossed the rail and put
                 // its actions — compare, undo, redo, menu — exactly over the row of categories, which
                 // could no longer be tapped. It ends where the photo ends.
@@ -1707,6 +1734,24 @@ private fun EditorScreen(
                     IconButton(onClick = onRedo, enabled = state.canRedo) {
                         Icon(Icons.AutoMirrored.Outlined.Redo, contentDescription = stringResource(Res.string.editor_redo))
                     }
+                    // Export is not a tool — it is where the photo goes when it is done — and so it
+                    // sits up here and not in the bar of tools. Editing a recipe, Save takes its place.
+                    if (recipeMode) {
+                        TextButton(
+                            onClick = { recipeActions?.onSave?.invoke() },
+                            // A recipe that is not the user's yet can always be saved — that is how
+                            // it becomes theirs; one that is only saves when something changed.
+                            enabled = state.recipe != null && !state.needsNewerApp &&
+                                (state.hasUnsavedRecipeChanges || state.recipeEdit?.saved == null),
+                        ) { Text(stringResource(Res.string.editor_tool_save)) }
+                    } else if (!compositionMode) {
+                        IconButton(
+                            onClick = { showExportDialog = true },
+                            enabled = state.bitmap != null && !state.isExporting,
+                        ) {
+                            Icon(Icons.Outlined.Share, contentDescription = stringResource(Res.string.editor_tool_export))
+                        }
+                    }
                     Box {
                         IconButton(onClick = { showContextMenu = true }) {
                             Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(Res.string.editor_more_options))
@@ -1773,17 +1818,6 @@ private fun EditorScreen(
                                     )
                                 }
                             }
-                            if (!compositionMode && !recipeMode) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(Res.string.editor_tool_export)) },
-                                    leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null) },
-                                    enabled = state.bitmap != null && !state.isExporting,
-                                    onClick = {
-                                        showContextMenu = false
-                                        showExportDialog = true
-                                    },
-                                )
-                            }
                         }
                     }
                 },
@@ -1830,7 +1864,7 @@ private fun EditorScreen(
                         // not count the toolbar, and the badge was hidden behind it.
                         // `chromeInsets.bottom` already includes the navigation bar.
                         .padding(
-                            bottom = if (panelVisible && !rail) {
+                            bottom = if (!chromeHidden && !rail) {
                                 stageInsets.bottom + ImagoSpacing.Md
                             } else {
                                 ImagoSpacing.Xl
@@ -2050,6 +2084,8 @@ private fun AdjustmentPanel(
     state: EditorUiState,
     modifier: Modifier,
     rail: Boolean,
+    /** The drawer's gestures for the handle; null in a rail, where there is no drawer. */
+    handle: Modifier?,
     editingKey: Any?,
     onEditing: (Any?) -> Unit,
     onSelectPanel: (EditorPanel) -> Unit,
@@ -2134,7 +2170,13 @@ private fun AdjustmentPanel(
         ) {
             // The handle and the categories are panel chrome: while a value is dragged they leave the
             // scene with the rest, so the screen keeps only the photo and the active control.
-            SheetHandle(Modifier.fillMaxWidth().alpha(chromeAlpha))
+            if (handle != null) {
+                // Taller than the bar it draws, so a thumb finds it.
+                Box(
+                    Modifier.fillMaxWidth().then(handle).padding(vertical = ImagoSpacing.Xs).alpha(chromeAlpha),
+                    contentAlignment = Alignment.Center,
+                ) { SheetHandle() }
+            }
             when (state.sheet) {
                 EditorSheet.ADJUSTMENTS -> {
                     AdjustmentPanelHeader(
@@ -3374,6 +3416,99 @@ private fun HslColorBand.selectorColor() = when (this) {
 
 /** The curve's edit key; its handles are not sliders but fade the panel all the same. */
 private const val CURVE_EDITING_KEY = "curve"
+
+/** How far the drawer is open. The bar under it is always there; this is only the tool's panel. */
+internal enum class DrawerDetent { CLOSED, NORMAL, EXPANDED }
+
+/** The panels that are lists, and so have more to show when the drawer is pulled up. */
+private val EXPANDABLE_SHEETS = setOf(
+    EditorSheet.ADJUSTMENTS,
+    EditorSheet.HSL,
+    EditorSheet.HISTORY,
+    EditorSheet.MASKS,
+    EditorSheet.MASK_ADJUSTMENTS,
+    EditorSheet.PERSPECTIVE,
+)
+
+/** The share of the window an expanded panel takes; the top bar and some photo stay above it. */
+private const val EXPANDED_PANEL_FRACTION = 0.7f
+
+/** Faster than this, in dp per second, a released handle goes on to the next detent. */
+private const val DRAWER_FLING_VELOCITY = 400f
+
+/** What a tap on a button of the bar does. */
+internal sealed interface ToolTap {
+    data object OpenLibrary : ToolTap
+    data object Close : ToolTap
+    data class Open(val sheet: EditorSheet) : ToolTap
+}
+
+/**
+ * A tap on the bar opens the tool, or closes it if it is the one already open — the bar stays, only
+ * the panel goes. In a rail nothing closes: there is no drawer, and the column would be left empty.
+ */
+internal fun toolTap(tool: EditorTool, openTool: EditorTool, drawer: DrawerDetent, rail: Boolean): ToolTap {
+    val sheet = when (tool) {
+        EditorTool.ADJUSTMENTS -> EditorSheet.ADJUSTMENTS
+        EditorTool.CROP -> EditorSheet.CROP
+        EditorTool.HISTORY -> EditorSheet.HISTORY
+        EditorTool.RECIPES -> return ToolTap.OpenLibrary
+    }
+    return if (!rail && drawer != DrawerDetent.CLOSED && tool == openTool) ToolTap.Close else ToolTap.Open(sheet)
+}
+
+/**
+ * Where a released handle lands: on the nearest detent, or on the next one in the direction of a
+ * flick. Heights in dp, the velocity in dp per second, negative upwards.
+ */
+internal fun settleDetent(height: Float, velocity: Float, normal: Float, expanded: Float): DrawerDetent {
+    val detents = buildList {
+        add(DrawerDetent.CLOSED to 0f)
+        add(DrawerDetent.NORMAL to normal)
+        if (expanded > normal + 1f) add(DrawerDetent.EXPANDED to expanded)
+    }
+    return when {
+        velocity < -DRAWER_FLING_VELOCITY -> (detents.firstOrNull { it.second > height + 1f } ?: detents.last()).first
+        velocity > DRAWER_FLING_VELOCITY -> (detents.lastOrNull { it.second < height - 1f } ?: detents.first()).first
+        else -> detents.minBy { kotlin.math.abs(it.second - height) }.first
+    }
+}
+
+/**
+ * The drawer's handle: dragged, the panel follows the finger and lands on a detent when released;
+ * tapped, it grows to show the whole list, or goes back to its usual height. TalkBack also gets a way
+ * to close it.
+ */
+@Composable
+private fun Modifier.drawerHandle(
+    height: () -> Float,
+    normal: Float,
+    expanded: Float,
+    onDrag: (Float) -> Unit,
+    onSettle: suspend (DrawerDetent, from: Float) -> Unit,
+    onToggle: () -> Unit,
+    onClose: () -> Unit,
+): Modifier {
+    val density = LocalDensity.current.density
+    val growsNow = height() < expanded - 1f
+    val toggleLabel = stringResource(if (growsNow) Res.string.editor_panel_expand else Res.string.editor_panel_shrink)
+    val closeLabel = stringResource(Res.string.editor_panel_close)
+    val dragState = rememberDraggableState { delta -> onDrag((height() - delta / density).coerceIn(0f, expanded)) }
+    return this
+        .draggable(
+            state = dragState,
+            orientation = Orientation.Vertical,
+            onDragStarted = { onDrag(height()) },
+            onDragStopped = { velocity ->
+                val from = height()
+                onSettle(settleDetent(from, velocity / density, normal, expanded), from)
+            },
+        )
+        .clickable(onClickLabel = toggleLabel, role = Role.Button, onClick = onToggle)
+        .semantics {
+            customActions = listOf(CustomAccessibilityAction(closeLabel) { onClose(); true })
+        }
+}
 
 /** The drawer's height with the curve open: the handle, the header and the hint. */
 private val CURVE_PANEL_HEIGHT = 120.dp

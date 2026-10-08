@@ -29,10 +29,7 @@
     <string name="editor_tool_adjust">Adjust</string>
     <string name="editor_tool_crop">Crop</string>
     <string name="editor_tool_recipes">Recipes</string>
-    <string name="editor_tool_compare">Compare</string>
     <string name="editor_tool_export">Export</string>
-    <string name="editor_tool_copy">Copy</string>
-    <string name="editor_tool_paste">Paste</string>
     <string name="editor_tool_save">Save</string>
     <string name="editor_gallery_permission_needed">Saving to the gallery on Android 9 needs permission.</string>
     <string name="editor_state_cropping">Cropping</string>
@@ -304,4 +301,7 @@
     <string name="editor_upright_vertical">Vertical</string>
     <string name="editor_upright_full">Full</string>
     <string name="editor_upright_no_lines">No lines this mode can use were found in this photo.</string>
+    <string name="editor_panel_expand">Expand the panel</string>
+    <string name="editor_panel_shrink">Shrink the panel</string>
+    <string name="editor_panel_close">Close the panel</string>
 </resources>

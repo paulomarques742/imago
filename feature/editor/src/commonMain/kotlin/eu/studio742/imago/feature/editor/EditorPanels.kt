@@ -391,50 +391,33 @@ fun SubToolHeader(
 /**
  * The editor's toolbar.
  *
- * A single row that slides. Splitting nine tools into rows of four required a drawer to reach the
- * rest, and the bar changed height when opening it — the stage stepped back and forward again, with
- * the photo jumping in size in the middle of an edit. Sliding, the height is always the same and no
- * tool is behind a second tap.
- *
- * The mockup shows five buttons. Auto, Select and Masks do not exist in the app and were left out;
- * their place is taken by tools that do exist — recipes, history and compare.
+ * It holds the tools that open a panel — and the recipes, which open their library. It is always in
+ * view, with nothing selected until a tool is opened; tapping the open tool again closes its panel and
+ * leaves the bar. What used to sit here as well had a place of its own already: compare is at the top
+ * and under a long press on the photo, copy and paste in the menu, saving a recipe in the library,
+ * and export — which is not a tool — went up to the top bar.
  */
 @Composable
 fun EditorToolBar(
-    selected: EditorTool,
-    isComparing: Boolean,
-    canPasteRecipe: Boolean,
-    canExport: Boolean,
+    selected: EditorTool?,
     onSelect: (EditorTool) -> Unit,
     modifier: Modifier = Modifier,
     tools: List<EditorTool> = editorTools(recipeMode = false),
-    canSaveEdits: Boolean = false,
 ) {
     ImagoNavBarSurface(modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = ImagoSpacing.Sm, vertical = ImagoSpacing.Sm),
-            horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             tools.forEach { tool ->
-                val active = when (tool) {
-                    EditorTool.COMPARE -> isComparing
-                    else -> selected == tool
-                }
-                val enabled = when (tool) {
-                    EditorTool.PASTE_RECIPE -> canPasteRecipe
-                    EditorTool.EXPORT -> canExport
-                    EditorTool.SAVE_EDITS -> canSaveEdits
-                    else -> true
-                }
                 EditorToolButton(
                     icon = tool.vector(),
                     label = tool.label(),
-                    selected = active,
-                    enabled = enabled,
+                    selected = selected == tool,
+                    enabled = true,
                     onClick = { onSelect(tool) },
                 )
             }
@@ -494,12 +477,6 @@ private fun EditorTool.label() = when (this) {
     EditorTool.CROP -> stringResource(Res.string.editor_tool_crop)
     EditorTool.RECIPES -> stringResource(Res.string.editor_tool_recipes)
     EditorTool.HISTORY -> stringResource(Res.string.editor_history)
-    EditorTool.COMPARE -> stringResource(Res.string.editor_tool_compare)
-    EditorTool.EXPORT -> stringResource(Res.string.editor_tool_export)
-    EditorTool.COPY_RECIPE -> stringResource(Res.string.editor_tool_copy)
-    EditorTool.PASTE_RECIPE -> stringResource(Res.string.editor_tool_paste)
-    EditorTool.SAVE_RECIPE -> stringResource(Res.string.editor_tool_save)
-    EditorTool.SAVE_EDITS -> stringResource(Res.string.editor_tool_save)
 }
 
 private fun EditorTool.vector(): ImageVector = when (this) {
@@ -507,10 +484,4 @@ private fun EditorTool.vector(): ImageVector = when (this) {
     EditorTool.CROP -> Icons.Outlined.Crop
     EditorTool.RECIPES -> Icons.Outlined.AutoAwesome
     EditorTool.HISTORY -> Icons.Outlined.History
-    EditorTool.COMPARE -> Icons.Outlined.Compare
-    EditorTool.EXPORT -> Icons.Outlined.Share
-    EditorTool.COPY_RECIPE -> Icons.Outlined.ContentCopy
-    EditorTool.PASTE_RECIPE -> Icons.Outlined.ContentPaste
-    EditorTool.SAVE_RECIPE -> Icons.Outlined.BookmarkAdd
-    EditorTool.SAVE_EDITS -> Icons.Outlined.Save
 }

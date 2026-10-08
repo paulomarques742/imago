@@ -29,10 +29,7 @@
     <string name="editor_tool_adjust">Ajustes</string>
     <string name="editor_tool_crop">Cortar</string>
     <string name="editor_tool_recipes">Receitas</string>
-    <string name="editor_tool_compare">Comparar</string>
     <string name="editor_tool_export">Exportar</string>
-    <string name="editor_tool_copy">Copiar</string>
-    <string name="editor_tool_paste">Colar</string>
     <string name="editor_tool_save">Guardar</string>
     <string name="editor_gallery_permission_needed">É necessária permissão para guardar na galeria no Android 9.</string>
     <string name="editor_state_cropping">A cortar</string>
@@ -304,4 +301,7 @@
     <string name="editor_upright_vertical">Vertical</string>
     <string name="editor_upright_full">Total</string>
     <string name="editor_upright_no_lines">Não se encontraram nesta fotografia linhas que este modo possa usar.</string>
+    <string name="editor_panel_expand">Expandir o painel</string>
+    <string name="editor_panel_shrink">Encolher o painel</string>
+    <string name="editor_panel_close">Fechar o painel</string>
 </resources>
