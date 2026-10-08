@@ -64,7 +64,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.items
@@ -2129,36 +2128,12 @@ private fun AdjustmentPanel(
             }
             when (state.sheet) {
                 EditorSheet.ADJUSTMENTS -> {
-                    // The curve belongs to light and HSL to colour: they are refinements of the same
-                    // matter, and that is where they open from. They stay fixed beside the categories,
-                    // and not at the end of the slider list — there they were only found after scrolling to the bottom.
-                    val subTools = when (state.panel) {
-                        EditorPanel.LIGHT -> listOf(EditorSheet.CURVE)
-                        EditorPanel.COLOR -> listOf(EditorSheet.HSL, EditorSheet.COLOR_GRADING)
-                        else -> emptyList()
-                    }
-                    Row(
+                    AdjustmentPanelHeader(
+                        panel = state.panel,
+                        onSelectPanel = onSelectPanel,
+                        onSelectSheet = onSelectSheet,
                         modifier = Modifier.fillMaxWidth().alpha(chromeAlpha),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ToolCategoryBar(
-                            selected = state.panel,
-                            onSelect = onSelectPanel,
-                            modifier = Modifier.weight(1f),
-                        )
-                        // With none, the chip's place stays reserved: the category bar cannot change
-                        // width when switching categories.
-                        if (subTools.isEmpty()) {
-                            SubToolChip(label = null, onClick = {})
-                        }
-                        subTools.forEach { sheet ->
-                            SubToolChip(
-                                label = sheet.subToolLabel(),
-                                icon = sheet.subToolIcon(),
-                                onClick = { onSelectSheet(sheet) },
-                            )
-                        }
-                    }
+                    )
                     SliderPanel(
                         state = state,
                         groups = state.panel.adjustmentGroups(),
@@ -2425,11 +2400,53 @@ private fun SliderPanel(
 }
 
 /**
- * The door to the active category's precision tool.
- *
- * Detail and Effects have none; in that case it takes the same empty width, so the row of
- * categories beside it does not jump when switching tabs.
+ * The precision tools that open from inside a category. The curve belongs to light, HSL and grading
+ * to colour: they are refinements of the same matter, and that is where they open from.
  */
+internal fun EditorPanel.subTools(): List<EditorSheet> = when (this) {
+    EditorPanel.LIGHT -> listOf(EditorSheet.CURVE)
+    EditorPanel.COLOR -> listOf(EditorSheet.HSL, EditorSheet.COLOR_GRADING)
+    else -> emptyList()
+}
+
+/**
+ * The top of the adjustments panel: the categories across the whole width, and under them the
+ * active category's precision tools.
+ *
+ * The tools used to sit in the categories' row. With two of them, in Colour, the row ran out of width
+ * and the last category — Masks — fell off the screen; and side by side with the categories they read
+ * as one more category instead of something inside the selected one.
+ */
+@Composable
+internal fun AdjustmentPanelHeader(
+    panel: EditorPanel,
+    onSelectPanel: (EditorPanel) -> Unit,
+    onSelectSheet: (EditorSheet) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        ToolCategoryBar(selected = panel, onSelect = onSelectPanel)
+        val subTools = panel.subTools()
+        if (subTools.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = ImagoSpacing.Lg),
+                horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+            ) {
+                subTools.forEach { sheet ->
+                    SubToolChip(
+                        label = sheet.subToolLabel(),
+                        icon = sheet.subToolIcon(),
+                        onClick = { onSelectSheet(sheet) },
+                    )
+                }
+            }
+        }
+    }
+}
+
 /** The name of each mode with its own interface, as the chip that opens it shows it. */
 @Composable
 private fun EditorSheet.subToolLabel(): String = when (this) {
@@ -2447,40 +2464,48 @@ private fun EditorSheet.subToolIcon(): ImageVector = when (this) {
     else -> Icons.Outlined.Timeline
 }
 
+/**
+ * The door to a precision tool.
+ *
+ * Gold and a chevron, where the categories are white icons: it has to read as a tool that opens from
+ * the category, not as one more category beside it.
+ */
 @Composable
 private fun SubToolChip(
-    label: String?,
+    label: String,
     onClick: () -> Unit,
-    icon: ImageVector = Icons.Outlined.Timeline,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
 ) {
-    if (label == null) {
-        Box(Modifier.width(72.dp))
-        return
-    }
+    val shape = RoundedCornerShape(ImagoRadii.Pill)
     Row(
-        modifier = Modifier
-            .padding(end = ImagoSpacing.Lg)
-            .widthIn(min = 60.dp)
-            .clip(RoundedCornerShape(ImagoRadii.Pill))
-            .background(ImagoColors.Charcoal)
+        modifier = modifier
+            .clip(shape)
+            .background(ImagoColors.Gold.copy(alpha = 0.10f))
+            .border(1.dp, ImagoColors.Gold.copy(alpha = 0.35f), shape)
             .clickable(role = Role.Button, onClick = onClick)
             .sizeIn(minHeight = ImagoSizes.TouchTarget)
-            .padding(horizontal = ImagoSpacing.Md),
+            .padding(start = ImagoSpacing.Md, end = ImagoSpacing.Sm),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
     ) {
         Icon(
             icon,
             contentDescription = null,
-            tint = ImagoColors.TextSecondary,
+            tint = ImagoColors.Gold,
             modifier = Modifier.size(ImagoSizes.IconSmall),
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelLarge,
-            color = ImagoColors.TextSecondary,
+            color = ImagoColors.Gold,
             maxLines = 1,
             modifier = Modifier.padding(start = ImagoSpacing.Xs),
+        )
+        Icon(
+            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = ImagoColors.Gold,
+            modifier = Modifier.size(ImagoSizes.IconSmall),
         )
     }
 }
@@ -2905,6 +2930,7 @@ private fun CropAspectSheet(
         label = EditorSheet.PERSPECTIVE.subToolLabel(),
         icon = EditorSheet.PERSPECTIVE.subToolIcon(),
         onClick = onOpenPerspective,
+        modifier = Modifier.padding(end = ImagoSpacing.Lg),
     )
     }
 }

@@ -40,6 +40,10 @@ kotlin {
             // Skia's native library, which in a Compose app comes with the window; desktop is Windows.
             implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.9.4.2")
             implementation(libs.kotlinx.coroutines.test)
+            // What the panel shows and where, asked through semantics: a category off the screen
+            // is a node outside the root.
+            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+            implementation(compose.uiTest)
         }
         androidMain.dependencies {
             implementation(libs.androidx.core.ktx)
