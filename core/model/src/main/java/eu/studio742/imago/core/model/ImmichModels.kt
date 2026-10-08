@@ -54,6 +54,15 @@ data class AssetExif(
     val imageHeight: Int? = null,
     /** Immich's text: `1`..`8`, or `90` and `-90` from some sources. */
     val orientation: String? = null,
+    val fileSizeBytes: Long? = null,
+    /** Exposure compensation, in stops. */
+    val exposureBias: Float? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    /** Where the server placed it; the device has to ask the system for an address. */
+    val city: String? = null,
+    val state: String? = null,
+    val country: String? = null,
 ) {
     /**
      * The size Immich checks a crop against: the stored one, swapped when the orientation turns the
@@ -96,6 +105,10 @@ sealed interface ImmichEdit {
 data class ImmichAssetDetail(
     val asset: ImmichAsset,
     val exif: AssetExif = AssetExif(),
+    /** The folder the file is in, as the person knows it ("DCIM/Camera"); null on a server. */
+    val folder: String? = null,
+    /** Who the server recognises in it. */
+    val people: List<ImmichPerson> = emptyList(),
 )
 
 data class ServerVersion(
@@ -153,6 +166,7 @@ data class MapContents(
 data class MapReading(val done: Int, val total: Int)
 
 /** Someone the server recognises in the photos. [name] is empty while nobody named them. */
+@Serializable
 data class ImmichPerson(val id: String, val name: String)
 
 /** How photos go into a folder album: moved out of where they were, or copied and left there too. */

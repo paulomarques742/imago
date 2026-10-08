@@ -140,6 +140,14 @@ expect fun PhotoMap(
     modifier: Modifier = Modifier,
 )
 
+/** A small map that only shows where [latitude], [longitude] is, for the detail's information. */
+@Composable
+expect fun PlaceMap(latitude: Double, longitude: Double, modifier: Modifier = Modifier)
+
+/** The address of a place, from the system's geocoder; null where there is none, or while it answers. */
+@Composable
+expect fun rememberAddress(latitude: Double, longitude: Double): String?
+
 /** Asks for the places Android hides in the files; null where nothing hides them. */
 @Composable
 expect fun rememberLocationAccess(onGranted: () -> Unit): (() -> Unit)?

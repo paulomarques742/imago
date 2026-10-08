@@ -20,6 +20,16 @@ fun isEditableDeviceFolder(relativePath: String): Boolean {
 fun deviceAlbumFolder(name: String): String? = albumFolderName(name)?.let { "Pictures/$it/" }
 
 /**
+ * [name] with [fileName]'s extension, or null when nothing usable is left of [name]. The same
+ * characters are refused as in a folder's name.
+ */
+fun renamedFile(fileName: String, name: String): String? {
+    val base = albumFolderName(name) ?: return null
+    val extension = fileName.substringAfterLast('.', "").takeIf { it.isNotEmpty() && fileName.contains('.') }
+    return if (extension == null) base else "$base.$extension"
+}
+
+/**
  * The name of the folder for an album called [name], or null when nothing usable is left of it.
  * Separators and the characters file systems refuse become spaces: a "/" in the name would
  * otherwise make a folder inside a folder.

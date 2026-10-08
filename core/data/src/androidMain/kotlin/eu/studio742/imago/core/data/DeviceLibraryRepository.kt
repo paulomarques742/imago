@@ -140,15 +140,69 @@ class DeviceLibraryRepository @Inject constructor(
         }
         return rows to paths
     }
+    /**
+     * What the file says about itself, the catalogue's size and dimensions, the folder as the Files
+     * app shows it, and — when Android lets it be seen — where it was taken.
+     */
     override suspend fun assetDetail(assetId: String): ImmichAssetDetail = withContext(Dispatchers.IO) {
-        val asset = (database.assetDao().asset(DEVICE_LIBRARY_ID, assetId) ?: throw UserMessageException(UserMessage.FILE_UNAVAILABLE)).toDomain()
+        val row = database.assetDao().asset(DEVICE_LIBRARY_ID, assetId) ?: throw UserMessageException(UserMessage.FILE_UNAVAILABLE)
         val exif = runCatching { resolver.openInputStream(Uri.parse(assetId))?.use { stream ->
             val data = ExifInterface(stream)
+            fun number(tag: String) = data.getAttributeDouble(tag, Double.NaN).takeUnless { it.isNaN() }
             AssetExif(fNumber = data.getAttribute(ExifInterface.TAG_F_NUMBER)?.toFloatOrNull(),
                 exposureTime = data.getAttribute(ExifInterface.TAG_EXPOSURE_TIME), iso = data.getAttribute(ExifInterface.TAG_ISO_SPEED_RATINGS)?.toIntOrNull(),
-                make = data.getAttribute(ExifInterface.TAG_MAKE), model = data.getAttribute(ExifInterface.TAG_MODEL))
+                make = data.getAttribute(ExifInterface.TAG_MAKE), model = data.getAttribute(ExifInterface.TAG_MODEL),
+                focalLength = number(ExifInterface.TAG_FOCAL_LENGTH)?.toFloat(),
+                exposureBias = number(ExifInterface.TAG_EXPOSURE_BIAS_VALUE)?.toFloat())
         } }.getOrNull() ?: AssetExif()
-        ImmichAssetDetail(asset, exif)
+        val place = if (row.type == AssetType.IMAGE.name && canReadLocations()) runCatching { readLocation(assetId) }.getOrNull() else null
+        val folder = runCatching { folderPaths()[row.folderId] }.getOrNull()?.trim('/')
+        ImmichAssetDetail(
+            asset = row.toDomain(),
+            exif = exif.copy(
+                fileSizeBytes = row.sizeBytes,
+                imageWidth = exif.imageWidth ?: row.width?.toInt(),
+                imageHeight = exif.imageHeight ?: row.height?.toInt(),
+                latitude = place?.first,
+                longitude = place?.second,
+            ),
+            folder = folder,
+        )
+    }
+
+    override fun canRename(assetId: String): Boolean = true
+
+    /**
+     * The file's name in MediaStore, which moves the file itself. A name another photo of the folder
+     * already has is refused before Android is asked; a file of another app it cannot see, Android
+     * refuses itself.
+     */
+    override suspend fun renameAsset(assetId: String, name: String): String {
+        val row = database.assetDao().asset(DEVICE_LIBRARY_ID, assetId) ?: throw UserMessageException(UserMessage.FILE_UNAVAILABLE)
+        val target = requireNotNull(renamedFile(row.originalFileName, name)) { "Nothing of \"$name\" makes a file name" }
+        if (target == row.originalFileName) return assetId
+        val folder = folderPaths()[row.folderId]
+        if (folder != null && withContext(Dispatchers.IO) { nameTaken(folder, target, assetId) }) {
+            throw UserMessageException(UserMessage.FILE_NAME_TAKEN)
+        }
+        consent(MediaStore.createWriteRequest(resolver, listOf(Uri.parse(assetId))))
+        val changed = withContext(Dispatchers.IO) {
+            resolver.update(Uri.parse(assetId), ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, target) }, null, null)
+        }
+        check(changed > 0) { "MediaStore did not rename $assetId" }
+        refreshRows(listOf(assetId))
+        return assetId
+    }
+
+    private fun nameTaken(folder: String, name: String, assetId: String): Boolean {
+        val id = ContentUris.parseId(Uri.parse(assetId)).toString()
+        return resolver.query(
+            MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
+            arrayOf(MediaStore.MediaColumns._ID),
+            "${MediaStore.MediaColumns.RELATIVE_PATH} = ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} = ? COLLATE NOCASE AND ${MediaStore.MediaColumns._ID} != ?",
+            arrayOf(folder, name, id),
+            null,
+        )?.use { it.count > 0 } ?: false
     }
     /** Asks Android (a dialog, or not as a media management app) and reads again what it touched. */
     private suspend fun request(intent: PendingIntent, touched: Collection<String>) {

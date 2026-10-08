@@ -236,6 +236,8 @@ class UnifiedLibrary(
         return libraryOf(reference.libraryId).block(reference.localId)
     }
 
+    override fun canRename(assetId: String) = routed(assetId) { canRename(it) }
+
     override fun thumbnailUrl(assetId: String) = routed(assetId) { thumbnailUrl(it) }
     override fun previewUrl(assetId: String) = routed(assetId) { previewUrl(it) }
     override fun videoPlaybackUrl(assetId: String) = routed(assetId) { videoPlaybackUrl(it) }

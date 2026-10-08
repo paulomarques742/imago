@@ -24,6 +24,7 @@ private fun UserMessage.resource(): StringResource = when (this) {
     UserMessage.FOLDER_FILE_UNAVAILABLE -> Res.string.message_folder_file_unavailable
     UserMessage.TRASH_FAILED -> Res.string.message_trash_failed
     UserMessage.FOLDER_RENAME_FAILED -> Res.string.message_folder_rename_failed
+    UserMessage.FILE_NAME_TAKEN -> Res.string.message_file_name_taken
     UserMessage.ADDRESS_OTHER_ACCOUNT -> Res.string.message_address_other_account
     UserMessage.ACCOUNT_UNCONFIRMED -> Res.string.message_account_unconfirmed
     UserMessage.LIBRARY_NOT_LINKED -> Res.string.message_library_not_linked

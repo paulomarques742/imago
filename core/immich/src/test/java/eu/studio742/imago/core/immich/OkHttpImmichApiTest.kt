@@ -495,6 +495,25 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun theDetailBringsThePlaceTheSizeThePeopleAndWhetherItIsArchived() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"id":"a1","originalFileName":"cake.jpg","fileCreatedAt":"2026-10-03T16:31:26Z","localDateTime":"2026-10-03T17:31:26Z","width":3000,"height":4000,"isFavorite":false,"isEdited":false,"type":"IMAGE","visibility":"archive",""" +
+                    """"exifInfo":{"latitude":41.41,"longitude":-8.62,"city":"Esposende","state":"Braga","country":"Portugal","fileSizeInByte":3208642},""" +
+                    """"people":[{"id":"p1","name":"","isHidden":false,"faces":[]},{"id":"p2","name":"Ana","isHidden":false,"faces":[]},{"id":"p3","name":"Old","isHidden":true,"faces":[]}]}""",
+            ),
+        )
+
+        val detail = api.getAssetDetail(connection(), "a1")
+
+        assertEquals(41.41 to -8.62, detail.exif.latitude to detail.exif.longitude)
+        assertEquals(listOf("Esposende", "Braga", "Portugal"), listOf(detail.exif.city, detail.exif.state, detail.exif.country))
+        assertEquals(3208642L, detail.exif.fileSizeBytes)
+        assertEquals(listOf("p2" to "Ana", "p1" to ""), detail.people.map { it.id to it.name })
+        assertTrue(detail.asset.isArchived)
+    }
+
+    @Test
     fun readsExifFromAssetDetail() = runTest {
         server.enqueue(
             MockResponse().setBody(

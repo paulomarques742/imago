@@ -227,3 +227,39 @@ private fun radiusOf(count: Int): Float {
 private const val CAMERA_REPORT_DELAY_MS = 400L
 private const val WHEEL_ZOOM_STEP = 0.5
 private const val TAP_SLOP = 6f
+
+/** The same renderer, still: the place in the middle at street level, a dot on it. */
+@Composable
+actual fun PlaceMap(latitude: Double, longitude: Double, modifier: Modifier) {
+    val graph = LocalDesktopDataGraph.current
+    val density = LocalDensity.current.density
+    val textMeasurer = rememberTextMeasurer()
+    val resources = remember { MapResources(graph.root.resolve("map-cache")) }
+    var setup by remember { mutableStateOf<MapSetup?>(null) }
+    var redraw by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { runCatching { resources.load(MAP_STYLE_URL, density) }.onSuccess { setup = it } }
+    val store = remember(setup) { setup?.let { TileStore(resources, it.tileTemplate) { redraw++ } } }
+    DisposableEffect(store) { onDispose { store?.close() } }
+    val renderer = remember(setup, store) { setup?.let { ready -> store?.let { VectorMapRenderer(ready, it, textMeasurer) } } }
+    val viewport = Viewport(mercatorX(longitude), mercatorY(latitude), PLACE_ZOOM)
+    Box(modifier) {
+        Canvas(Modifier.fillMaxSize()) {
+            @Suppress("UNUSED_EXPRESSION") redraw
+            if (renderer == null) drawRect(ImagoColors.SurfaceElevated) else renderer.draw(this, viewport)
+            drawCircle(ImagoColors.BrandBlack, 8 * density, center)
+            drawCircle(Color.White, 8 * density, center, style = Stroke(width = 3 * density))
+        }
+        Text(
+            MAP_ATTRIBUTION,
+            style = MaterialTheme.typography.labelSmall,
+            color = ImagoColors.TextSecondary,
+            modifier = Modifier.align(Alignment.BottomEnd).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 4.dp, vertical = 1.dp),
+        )
+    }
+}
+
+private const val PLACE_ZOOM = 14.0
+
+/** No geocoder here without a paid key: the information shows the place's name only when a server gave it. */
+@Composable
+actual fun rememberAddress(latitude: Double, longitude: Double): String? = null

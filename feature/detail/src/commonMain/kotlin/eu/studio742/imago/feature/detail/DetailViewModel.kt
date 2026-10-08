@@ -87,6 +87,13 @@ data class DetailUiState(
     val isFavorite: Boolean = false,
     /** In the archive: out of the timeline, not deleted. */
     val isArchived: Boolean = false,
+    /** The file's name as the library has it now; null until the detail arrives. */
+    val fileName: String? = null,
+    /** The folder the file is in, as the person knows it; null on a server. */
+    val folder: String? = null,
+    val people: List<DetailPerson> = emptyList(),
+    /** Whether the file can take another name: the device's can, a server's original cannot. */
+    val canRename: Boolean = false,
     /**
      * This photo's local recipe, read again every time the screen opens.
      *
@@ -116,6 +123,24 @@ open class DetailViewModel(
 ) : ViewModel() {
     /** Whether photos turn here without the editor. */
     val canRotate: Boolean get() = rotation != null
+
+    /**
+     * A new name for the file, its extension kept. [onResult] gets the reason it was refused, or null;
+     * [onRenamed] what the list around the detail has to know — on a computer the id is the path.
+     */
+    fun rename(asset: DetailAsset, name: String, onResult: (UiText?) -> Unit, onRenamed: (RenamedAsset) -> Unit) {
+        viewModelScope.launch {
+            val before = mutableState.value.fileName ?: asset.fileName
+            runCatching { library.renameAsset(asset.id, name) }
+                .onSuccess { id ->
+                    val fileName = eu.studio742.imago.core.data.renamedFile(before, name) ?: before
+                    mutableState.update { if (it.assetId == asset.id) it.copy(assetId = id, fileName = fileName) else it }
+                    onRenamed(RenamedAsset(asset.id, id, fileName, library.thumbnailUrl(id), library.previewUrl(id)))
+                    onResult(null)
+                }
+                .onFailure { error -> onResult(error.toUiText(Res.string.detail_rename_failed)) }
+        }
+    }
 
     /** Whether this library has an archive: a server's, or this device's own. */
     val canArchive: Boolean get() = library.canArchive
@@ -154,6 +179,7 @@ open class DetailViewModel(
                 isFavorite = asset.isFavorite,
                 recipe = asset.recipe,
                 isLoading = true,
+                canRename = runCatching { library.canRename(asset.id) }.getOrDefault(false),
             )
         }
         loadJob = viewModelScope.launch {
@@ -173,6 +199,9 @@ open class DetailViewModel(
                             description = detail.exif.description.orEmpty(),
                             isFavorite = detail.asset.isFavorite,
                             isArchived = detail.asset.isArchived,
+                            fileName = detail.asset.originalFileName.takeIf(String::isNotBlank),
+                            folder = detail.folder,
+                            people = detail.people.map { DetailPerson(it.id, it.name, library.personThumbnailUrl(it.id), library.apiKey(it.id)) },
                             isLoading = false,
                         )
                     }
@@ -393,3 +422,9 @@ open class DetailViewModel(
     fun show(message: UiText, failed: Boolean) =
         mutableState.update { if (failed) it.copy(error = message) else it.copy(message = message) }
 }
+
+/** Someone the server recognises in the photo, with the face it shows for them. */
+data class DetailPerson(val id: String, val name: String, val thumbnailUrl: String, val apiKey: String)
+
+/** A file that took another name: [oldId] was its id, [id] is now — the same on a phone. */
+data class RenamedAsset(val oldId: String, val id: String, val fileName: String, val thumbnailUrl: String, val previewUrl: String)

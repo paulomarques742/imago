@@ -931,6 +931,12 @@ private data class ExifResponseDto(
     val exifImageWidth: Double? = null,
     val exifImageHeight: Double? = null,
     val orientation: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val country: String? = null,
+    val fileSizeInByte: Long? = null,
 ) {
     fun toDomain() = AssetExif(
         fNumber = fNumber,
@@ -944,6 +950,12 @@ private data class ExifResponseDto(
         imageWidth = exifImageWidth?.toInt(),
         imageHeight = exifImageHeight?.toInt(),
         orientation = orientation?.takeIf(String::isNotBlank),
+        fileSizeBytes = fileSizeInByte,
+        latitude = latitude,
+        longitude = longitude,
+        city = city?.takeIf(String::isNotBlank),
+        state = state?.takeIf(String::isNotBlank),
+        country = country?.takeIf(String::isNotBlank),
     )
 }
 
@@ -968,8 +980,12 @@ private data class AssetDetailResponseDto(
     val originalMimeType: String? = null,
     val duration: JsonElement? = null,
     val exifInfo: ExifResponseDto? = null,
+    val visibility: String? = null,
+    val isArchived: Boolean? = null,
+    val people: List<PersonResponseDto> = emptyList(),
 ) {
     fun toDomain() = ImmichAssetDetail(
+        people = people.filterNot { it.isHidden }.sortedBy { it.name.isBlank() }.map { ImmichPerson(it.id, it.name.trim()) },
         asset = ImmichAsset(
             id = id,
             checksum = checksum,
@@ -988,6 +1004,7 @@ private data class AssetDetailResponseDto(
             },
             mimeType = originalMimeType,
             durationMs = duration.toDurationMs(),
+            isArchived = visibility.equals("archive", ignoreCase = true) || isArchived == true,
         ),
         exif = exifInfo?.toDomain() ?: AssetExif(),
     )

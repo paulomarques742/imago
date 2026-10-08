@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -172,6 +173,8 @@ fun DetailRoute(
     onAddToComposition: () -> Unit,
     onDeleted: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** A file of this list took another name; on a computer, another id too. */
+    onRenamed: (RenamedAsset) -> Unit = {},
     /**
      * Whether the list beside the detail is showing, or null when there is none — a narrow screen,
      * a viewer opened by another app. Only with a list beside it does the detail offer to hide it.
@@ -203,6 +206,8 @@ fun DetailRoute(
         onAlbumResult = viewModel::show,
         onRotate = viewModel::rotate.takeIf { viewModel.canRotate },
         onSetAs = viewModel::setAs,
+        onRename = { name: String, onResult: (UiText?) -> Unit -> viewModel.rename(asset, name, onResult, onRenamed) }
+            .takeIf { state.canRename && state.assetId == asset.id },
         onArchive = { archived: Boolean -> viewModel.setArchived(asset.id, archived) { onDeleted(asset.id) } }.takeIf { viewModel.canArchive },
         onConsumeMessage = viewModel::consumeMessage,
         listPaneShown = listPaneShown,
@@ -237,6 +242,8 @@ private fun DetailScreen(
     onSetAs: (DetailAsset, (java.io.File, String) -> Unit) -> Unit,
     /** True archives, false brings back; null where the library has no archive. */
     onArchive: ((archived: Boolean) -> Unit)?,
+    /** Null where the file keeps its name: a server's original. */
+    onRename: ((name: String, onResult: (UiText?) -> Unit) -> Unit)?,
     onConsumeMessage: () -> Unit,
     listPaneShown: Boolean?,
     onToggleListPane: () -> Unit,
@@ -247,7 +254,13 @@ private fun DetailScreen(
     val pagerState = rememberPagerState(initialPage = selectedIndex) { assets.size }
     val filmstripState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
+    // The information opens under the photo, which makes room for it, as in the system gallery.
     var showInfo by remember { mutableStateOf(false) }
+    val photoFraction by androidx.compose.animation.core.animateFloatAsState(if (showInfo) INFO_PHOTO_FRACTION else 1f)
+    BackHandler(enabled = showInfo) { showInfo = false }
+    var renaming by remember { mutableStateOf(false) }
+    var renameError by remember { mutableStateOf<UiText?>(null) }
+    var renameBusy by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var deleteCounterpart by remember { mutableStateOf<String?>(null) }
     var showMenu by remember { mutableStateOf(false) }
@@ -305,7 +318,7 @@ private fun DetailScreen(
                 key = { page -> assets[page].id },
                 beyondViewportPageCount = 1,
                 userScrollEnabled = !zoomed,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(photoFraction),
             ) { page ->
                 val isCurrent = page == pagerState.settledPage
                 DetailPage(
@@ -362,7 +375,7 @@ private fun DetailScreen(
                                 leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) },
                                 onClick = {
                                     showMenu = false
-                                    showInfo = true
+                                    showInfo = !showInfo
                                 },
                             )
                             if (onRotate != null && !asset.isVideo) {
@@ -431,8 +444,22 @@ private fun DetailScreen(
                 }
             }
 
+            if (photoFraction < 1f) {
+                DetailInfoPanel(
+                    asset = asset,
+                    state = state,
+                    onRename = { renameError = null; renaming = true }.takeIf { onRename != null && !isOpenedFile },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .fillMaxHeight(1f - photoFraction)
+                        .background(Color.Black)
+                        .navigationBarsPadding(),
+                )
+            }
+
             AnimatedVisibility(
-                visible = chromeVisible,
+                visible = chromeVisible && !showInfo,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter),
@@ -493,7 +520,7 @@ private fun DetailScreen(
                         onShare = { gate.run { onShare(asset, shareFile) } },
                         onEdit = { gate.run(onEdit) },
                         onCompose = { gate.run(onAddToComposition) },
-                        onInfo = { showInfo = true },
+                        onInfo = { showInfo = !showInfo },
                         onDelete = {
                             gate.run {
                                 onRequestDelete { counterpart -> if (counterpart == null) showDeleteConfirmation = true else deleteCounterpart = counterpart }
@@ -543,8 +570,22 @@ private fun DetailScreen(
             onDismiss = { showAlbums = false },
         )
     }
-    if (showInfo) {
-        InfoDialog(asset = asset, exif = state.exif, onDismiss = { showInfo = false })
+    if (renaming && onRename != null) {
+        RenameDialog(
+            fileName = state.fileName ?: asset.fileName,
+            error = renameError,
+            busy = renameBusy,
+            onConfirm = { name ->
+                renameBusy = true
+                renameError = null
+                onRename(name) { error ->
+                    renameBusy = false
+                    renameError = error
+                    if (error == null) renaming = false
+                }
+            },
+            onDismiss = { renaming = false; renameError = null },
+        )
     }
     if (showVersionChoice) {
         AlertDialog(
@@ -1096,49 +1137,13 @@ private fun DetailAction(
     }
 }
 
-@Composable
-private fun InfoDialog(asset: DetailAsset, exif: AssetExif, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.detail_info)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
-                InfoRow(stringResource(Res.string.detail_info_file), asset.fileName)
-                InfoRow(stringResource(Res.string.detail_info_date), formatTakenAt(asset.date.ifBlank { asset.fileCreatedAt }))
-                exif.lensModel?.let { InfoRow(stringResource(Res.string.detail_info_lens), it) }
-                exif.fNumber?.let { InfoRow(stringResource(Res.string.detail_info_aperture), "ƒ/%.1f".format(Locale.getDefault(), it)) }
-                exif.exposureTime?.let { InfoRow(stringResource(Res.string.detail_info_shutter), it) }
-                exif.iso?.let { InfoRow("ISO", it.toString()) }
-                exif.focalLength?.let { InfoRow(stringResource(Res.string.detail_info_focal_length), "%.0f mm".format(Locale.getDefault(), it)) }
-                listOfNotNull(exif.make, exif.model).takeIf { it.isNotEmpty() }?.let {
-                    InfoRow(stringResource(Res.string.detail_info_camera), it.joinToString(" "))
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.detail_close)) } },
-    )
-}
-
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = ImagoColors.TextTertiary,
-            modifier = Modifier.width(120.dp),
-        )
-        Text(text = value, style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
-    }
-}
-
 /**
  * "16 de mai. de 2024 · 18:42" in Portuguese, "May 16, 2024 · 6:42 PM" in English: the day pattern
  * is a text of each language, and the time comes from its clock. If the date makes no sense, it
  * returns it raw.
  */
 @Composable
-private fun formatTakenAt(value: String): String {
+internal fun formatTakenAt(value: String): String {
     val locale = LocalAppLocale.current
     val day = DateTimeFormatter.ofPattern(stringResource(Res.string.detail_date_pattern), locale)
     val clock = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale)
@@ -1193,3 +1198,6 @@ private fun ListPaneTab(shown: Boolean, onClick: () -> Unit) {
 private val LIST_PANE_TAB_WIDTH = 22.dp
 private val LIST_PANE_TAB_HEIGHT = 56.dp
 private val LIST_PANE_TAB_RADIUS = 12.dp
+
+/** How much of the screen the photo keeps while the information is open under it. */
+private const val INFO_PHOTO_FRACTION = 0.45f

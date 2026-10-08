@@ -179,3 +179,85 @@ actual fun rememberLocationAccess(onGranted: () -> Unit): (() -> Unit)? {
         }
     }
 }
+
+/** MapLibre again, still: no gestures, the place in the middle at street level, a dot on it. */
+@Composable
+actual fun PlaceMap(latitude: Double, longitude: Double, modifier: Modifier) {
+    val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val mapView = remember {
+        MapLibre.getInstance(context)
+        MapView(context).apply { onCreate(null) }
+    }
+    DisposableEffect(lifecycle, mapView) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> mapView.onStart()
+                Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+                Lifecycle.Event.ON_STOP -> mapView.onStop()
+                else -> Unit
+            }
+        }
+        lifecycle.addObserver(observer)
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) mapView.onStart()
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) mapView.onResume()
+        onDispose {
+            lifecycle.removeObserver(observer)
+            mapView.onPause()
+            mapView.onStop()
+            mapView.onDestroy()
+        }
+    }
+    AndroidView(factory = { mapView }, modifier = modifier)
+    LaunchedEffect(mapView, latitude, longitude) {
+        mapView.getMapAsync { map ->
+            map.uiSettings.setAllGesturesEnabled(false)
+            map.uiSettings.isAttributionEnabled = true
+            map.uiSettings.isLogoEnabled = false
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(MapCamera(latitude, longitude, PLACE_ZOOM).toPosition()))
+            map.setStyle(Style.Builder().fromUri(MAP_STYLE_URL)) { style ->
+                style.addSource(GeoJsonSource(PLACE_SOURCE, Feature.fromGeometry(Point.fromLngLat(longitude, latitude))))
+                style.addLayer(
+                    CircleLayer(PLACE_DOT, PLACE_SOURCE).withProperties(
+                        PropertyFactory.circleRadius(8f),
+                        PropertyFactory.circleColor(ImagoColors.BrandBlack.toArgb()),
+                        PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
+                        PropertyFactory.circleStrokeWidth(3f),
+                    ),
+                )
+            }
+        }
+    }
+}
+
+private const val PLACE_ZOOM = 14.0
+private const val PLACE_SOURCE = "imago-place"
+private const val PLACE_DOT = "imago-place-dot"
+
+/** Android's geocoder, the one the system gallery uses; its first line is the whole address. */
+@Composable
+actual fun rememberAddress(latitude: Double, longitude: Double): String? {
+    val context = LocalContext.current
+    var address by remember(latitude, longitude) { mutableStateOf<String?>(null) }
+    LaunchedEffect(latitude, longitude) {
+        if (!android.location.Geocoder.isPresent()) return@LaunchedEffect
+        val geocoder = android.location.Geocoder(context, java.util.Locale.getDefault())
+        address = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            kotlinx.coroutines.suspendCancellableCoroutine { done ->
+                geocoder.getFromLocation(latitude, longitude, 1, object : android.location.Geocoder.GeocodeListener {
+                    override fun onGeocode(addresses: MutableList<android.location.Address>) {
+                        done.resume(addresses.firstOrNull()?.getAddressLine(0)) {}
+                    }
+                    override fun onError(errorMessage: String?) { done.resume(null) {} }
+                })
+            }
+        } else {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                @Suppress("DEPRECATION")
+                runCatching { geocoder.getFromLocation(latitude, longitude, 1)?.firstOrNull()?.getAddressLine(0) }.getOrNull()
+            }
+        }
+    }
+    return address
+}

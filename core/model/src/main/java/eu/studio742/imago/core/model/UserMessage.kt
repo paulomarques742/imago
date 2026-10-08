@@ -27,6 +27,9 @@ enum class UserMessage {
     /** A folder of the computer library could not be renamed; something has it open. */
     FOLDER_RENAME_FAILED,
 
+    /** Another file of the same folder already has the name asked for. */
+    FILE_NAME_TAKEN,
+
     /** A new address of an Immich library answers for another server or another account. */
     ADDRESS_OTHER_ACCOUNT,
 

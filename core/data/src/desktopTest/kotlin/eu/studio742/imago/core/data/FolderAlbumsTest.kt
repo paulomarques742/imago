@@ -155,6 +155,35 @@ class FolderAlbumsTest {
     }
 
     @Test
+    fun `a file takes a new name with its extension, its recipe follows, and a name the folder has is refused`() = runBlocking {
+        val cake = photo(home.resolve("Party"), "20261003_173126.png")
+        photo(home.resolve("Party"), "taken.png")
+        graph().use { graph ->
+            graph.folders.addFolder(home)
+            val id = graph.idOf(cake)
+            val reference = AssetReference(DEVICE_LIBRARY_ID, id).encode()
+            graph.recipes.save(EditRecipe(assetId = reference, originalChecksum = "", createdAt = "2026-10-08T10:00:00Z",
+                updatedAt = "2026-10-08T10:00:00Z", tone = Tone(exposure = 0.3f)))
+
+            val renamed = graph.folders.renameAsset(id, "Birthday cake")
+
+            val file = home.resolve("Party").resolve("Birthday cake.png")
+            assertTrue(file.exists())
+            assertFalse(cake.exists())
+            assertEquals(graph.idOf(file), renamed)
+            assertEquals("Birthday cake.png", graph.database.assetDao().asset(DEVICE_LIBRARY_ID, renamed)!!.originalFileName)
+            assertEquals(0.3f, graph.recipes.get(AssetReference(DEVICE_LIBRARY_ID, renamed).encode())!!.tone.exposure)
+
+            val error = runCatching { graph.folders.renameAsset(renamed, "TAKEN") }.exceptionOrNull()
+            assertEquals(UserMessage.FILE_NAME_TAKEN, (error as UserMessageException).userMessage)
+
+            // Only the case changes: Windows would otherwise see the same file and do nothing.
+            graph.folders.renameAsset(renamed, "birthday cake")
+            assertTrue(Files.list(home.resolve("Party")).use { list -> list.anyMatch { it.name == "birthday cake.png" } })
+        }
+    }
+
+    @Test
     fun `move or copy, once remembered, survives reopening`() {
         graph().use { it.folders.rememberTransfer(FolderTransfer.COPY) }
         graph().use { assertEquals(FolderTransfer.COPY, it.folders.rememberedTransfer.value) }

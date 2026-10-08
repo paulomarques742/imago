@@ -208,7 +208,20 @@ class SourceLibraryRepository @Inject constructor(
     override suspend fun assetDetail(assetId: String): ImmichAssetDetail {
         val ref = AssetReference.parse(assetId)
         val detail = provider(ref.libraryId).assetDetail(ref.localId)
-        return detail.copy(asset = detail.asset.copy(id = assetId))
+        return detail.copy(
+            asset = detail.asset.copy(id = assetId),
+            people = detail.people.map { it.copy(id = AssetReference(ref.libraryId, it.id).encode()) },
+        )
+    }
+
+    override fun canRename(assetId: String): Boolean = runCatching {
+        val ref = AssetReference.parse(assetId)
+        provider(ref.libraryId).canRename(ref.localId)
+    }.getOrDefault(false)
+
+    override suspend fun renameAsset(assetId: String, name: String): String {
+        val ref = AssetReference.parse(assetId)
+        return AssetReference(ref.libraryId, provider(ref.libraryId).renameAsset(ref.localId, name)).encode()
     }
     override suspend fun setFavorite(assetId: String, isFavorite: Boolean) {
         val ref = AssetReference.parse(assetId); provider(ref.libraryId).setFavorite(ref.localId, isFavorite)

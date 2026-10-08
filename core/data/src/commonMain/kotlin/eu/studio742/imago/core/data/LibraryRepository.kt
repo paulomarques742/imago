@@ -147,6 +147,15 @@ interface LibraryRepository {
     /** The photos of [today] in earlier years, one memory per year, the most recent year first. */
     suspend fun onThisDay(today: java.time.LocalDate): List<DayMemory> = emptyList()
 
+    /** Whether this photo's file can be renamed: the device's can; Immich keeps the original's name. */
+    fun canRename(assetId: String): Boolean = false
+
+    /**
+     * Gives the file a new name, keeping its extension. Returns the photo's id afterwards: on a
+     * computer it is the file's path, which the name is part of.
+     */
+    suspend fun renameAsset(assetId: String, name: String): String = error("This library cannot rename files")
+
     /** Whether this library has an archive: a server's, or this device's own. */
     val canArchive: Boolean get() = false
 

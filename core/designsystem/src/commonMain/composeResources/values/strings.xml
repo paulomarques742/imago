@@ -63,6 +63,7 @@
     <string name="message_file_unavailable">The file is no longer available. Check that the app can still access the library.</string>
     <string name="message_folder_file_unavailable">The file is no longer available. Check the library folder.</string>
     <string name="message_trash_failed">Couldn’t move it to the Recycle Bin.</string>
+    <string name="message_file_name_taken">There’s already a file with that name in this folder.</string>
     <string name="message_folder_rename_failed">Couldn’t rename the folder. Close any window or app that has it open and try again.</string>
     <string name="message_address_other_account">This address doesn’t accept this library’s key: it belongs to another server or another account.</string>
     <string name="message_account_unconfirmed">Couldn’t confirm this library’s account at the current address. Try again when it’s available.</string>

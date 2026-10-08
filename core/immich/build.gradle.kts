@@ -182,6 +182,9 @@ val generateImmichContract by tasks.registering {
         check(propertiesOf("AssetBulkUpdateDto").contains("visibility"))
         check(propertiesOf("MetadataSearchDto").contains("visibility"))
         check(propertiesOf("AssetResponseDto").contains("visibility"))
+        // The detail's information: the place, the size, the people.
+        check(propertiesOf("ExifResponseDto").containsAll(setOf("latitude", "longitude", "city", "state", "country", "fileSizeInByte")))
+        check(propertiesOf("AssetResponseDto").contains("people"))
         check((schemas.getValue("AssetVisibility")["enum"] as List<*>).containsAll(listOf("archive", "timeline")))
         check("on_this_day" in (schemas.getValue("MemoryType")["enum"] as List<*>))
         check(
@@ -262,6 +265,8 @@ val generateImmichContract by tasks.registering {
             check(validatedProperties("AssetBulkUpdateDto").contains("visibility"))
             check(validatedProperties("MetadataSearchDto").contains("visibility"))
             check(validatedProperties("AssetResponseDto").contains("visibility"))
+            check(validatedProperties("ExifResponseDto").containsAll(setOf("latitude", "longitude", "city", "state", "country", "fileSizeInByte")))
+            check(validatedProperties("AssetResponseDto").contains("people"))
         }
 
         fun pathFor(operationId: String) = operationFor(document, operationId).second

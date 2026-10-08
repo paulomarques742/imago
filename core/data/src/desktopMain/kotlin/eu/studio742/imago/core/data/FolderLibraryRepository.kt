@@ -149,20 +149,59 @@ class FolderLibraryRepository(
     }
 
     override suspend fun assetDetail(assetId: String): ImmichAssetDetail = withContext(Dispatchers.IO) {
-        val asset = (database.assetDao().asset(DEVICE_LIBRARY_ID, assetId) ?: throw UserMessageException(UserMessage.FOLDER_FILE_UNAVAILABLE)).toDomain()
+        val row = database.assetDao().asset(DEVICE_LIBRARY_ID, assetId) ?: throw UserMessageException(UserMessage.FOLDER_FILE_UNAVAILABLE)
+        val file = fileOf(assetId)
         val exif = runCatching {
-            val metadata = ImageMetadataReader.readMetadata(fileOf(assetId).toFile())
+            val metadata = ImageMetadataReader.readMetadata(file.toFile())
             val camera = metadata.getFirstDirectoryOfType(ExifIFD0Directory::class.java)
             val shot = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory::class.java)
+            val place = metadata.getFirstDirectoryOfType(GpsDirectory::class.java)?.geoLocation?.takeUnless { it.isZero }
             AssetExif(
                 fNumber = shot?.getString(ExifSubIFDDirectory.TAG_FNUMBER)?.toFloatOrNull(),
                 exposureTime = shot?.getString(ExifSubIFDDirectory.TAG_EXPOSURE_TIME),
                 iso = shot?.getString(ExifSubIFDDirectory.TAG_ISO_EQUIVALENT)?.toIntOrNull(),
                 make = camera?.getString(ExifIFD0Directory.TAG_MAKE),
                 model = camera?.getString(ExifIFD0Directory.TAG_MODEL),
+                focalLength = shot?.getRational(ExifSubIFDDirectory.TAG_FOCAL_LENGTH)?.toFloat(),
+                exposureBias = shot?.getRational(ExifSubIFDDirectory.TAG_EXPOSURE_BIAS)?.toFloat(),
+                latitude = place?.latitude,
+                longitude = place?.longitude,
             )
         }.getOrNull() ?: AssetExif()
-        ImmichAssetDetail(asset, exif)
+        ImmichAssetDetail(
+            asset = row.toDomain(),
+            exif = exif.copy(
+                fileSizeBytes = row.sizeBytes,
+                imageWidth = exif.imageWidth ?: row.width?.toInt(),
+                imageHeight = exif.imageHeight ?: row.height?.toInt(),
+            ),
+            folder = file.parent?.toString(),
+        )
+    }
+
+    override fun canRename(assetId: String): Boolean = true
+
+    /** The file takes the new name in its folder; the photo's id is its path, so it changes with it. */
+    override suspend fun renameAsset(assetId: String, name: String): String {
+        val file = fileOf(assetId)
+        val target = file.resolveSibling(requireNotNull(renamedFile(file.name, name)) { "Nothing of \"$name\" makes a file name" })
+        if (target.name == file.name) return assetId
+        withContext(Dispatchers.IO) {
+            if (target.exists() && !Files.isSameFile(target, file)) throw UserMessageException(UserMessage.FILE_NAME_TAKEN)
+            // Here a target that exists is this file: Windows takes a change of case alone as moving it onto itself.
+            if (target.exists()) {
+                val step = file.resolveSibling(".imago-rename-${System.nanoTime()}")
+                Files.move(file, step)
+                Files.move(step, target)
+            } else {
+                Files.move(file, target)
+            }
+        }
+        val renamed = target.toUri().toString()
+        followMoves(mapOf(assetId to renamed))
+        val favorites = readList(FAVORITES_KEY).toSet()
+        replaceRows(listOf(assetId, renamed), listOfNotNull(withContext(Dispatchers.IO) { entity(target, favorites) }))
+        return renamed
     }
 
     override suspend fun setFavorite(assetId: String, isFavorite: Boolean) {

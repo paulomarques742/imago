@@ -470,6 +470,17 @@ private fun PhotoDetail(
                 onComposerRequest(ComposerRequest(listOf(it.toComposerMedia())))
             }
         },
+        // The list keeps the new name; on a computer the id and the address of the file changed too.
+        onRenamed = { renamed ->
+            onDestination(
+                current.copy(
+                    assets = current.assets.map {
+                        if (it.id != renamed.oldId) it
+                        else it.copy(id = renamed.id, fileName = renamed.fileName, thumbnailUrl = renamed.thumbnailUrl, previewUrl = renamed.previewUrl)
+                    },
+                ),
+            )
+        },
         onDeleted = { deletedId ->
             // The photo no longer exists: it leaves the list and the screen moves to the next one.
             // If it was the only one, there is no detail left to show.
