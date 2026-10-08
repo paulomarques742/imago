@@ -186,7 +186,7 @@ class RoomLibraryRepository @Inject constructor(
         while (page != null && read < ARCHIVE_LIMIT) {
             val result = api.archivedAssets(connection, page, PAGE_SIZE)
             database.withTransaction {
-                database.assetDao().upsertAll(result.items.map { AssetEntity.fromDomain(libraryKey, it.copy(isArchived = true)) })
+                database.upsertFromSearch(libraryKey, result.items.map { it.copy(isArchived = true) })
                 database.assetDao().restoreLocalRecipeFlags(libraryKey)
             }
             read += result.items.size
@@ -214,7 +214,7 @@ class RoomLibraryRepository @Inject constructor(
         val derivedIds = derivedAssets.derivedIds()
         val visible = memories.map { memory -> memory.year to memory.assets.filterNot { it.isAppExport(derivedIds) } }.filter { it.second.isNotEmpty() }
         database.withTransaction {
-            database.assetDao().upsertAll(visible.flatMap { (_, assets) -> assets.map { AssetEntity.fromDomain(libraryKey, it) } })
+            database.upsertFromSearch(libraryKey, visible.flatMap { (_, assets) -> assets })
             database.assetDao().restoreLocalRecipeFlags(libraryKey)
         }
         return visible.map { (year, assets) -> DayMemory(year, assets.map { it.id }) }
@@ -498,6 +498,24 @@ class RoomLibraryRepository @Inject constructor(
 }
 
 /**
+ * Writes a search's photos into the catalogue without erasing the stack the timeline gave each one,
+ * and returns them carrying it — a search knows nothing of stacks, and without this a cover opened
+ * from an album lost its badge.
+ */
+internal suspend fun ImmichRoomDatabase.upsertFromSearch(libraryKey: String, assets: List<ImmichAsset>): List<ImmichAsset> {
+    if (assets.isEmpty()) return assets
+    val known = assets.map { it.id }.chunked(SQL_VARIABLES_PER_QUERY)
+        .flatMap { ids -> assetDao().byIds(libraryKey, ids) }
+        .associateBy { it.id }
+    val rows = assets.map { AssetEntity.fromDomain(libraryKey, it).keepingStackOf(known[it.id]) }
+    assetDao().upsertAll(rows)
+    return assets.zip(rows) { asset, row -> asset.copy(stackId = row.stackId, stackCount = row.stackCount) }
+}
+
+/** Under SQLite's limit on the variables of one statement, which older Androids keep at 999. */
+private const val SQL_VARIABLES_PER_QUERY = 500
+
+/**
  * A photo that went from this app to Immich. It reappears in the library's next reads as an
  * independent asset, next to the original — and that is what is filtered here.
  *
@@ -573,10 +591,9 @@ private class AssetRemoteMediator(
                     // hundred photos at a time.
                     database.assetDao().purgeAppExports(libraryKey)
                 }
-                database.assetDao().upsertAll(
-                    result.items
-                        .filter { it.type in LIBRARY_ASSET_TYPES && !it.isAppExport(derivedIds) }
-                        .map { AssetEntity.fromDomain(libraryKey, it) },
+                database.upsertFromSearch(
+                    libraryKey,
+                    result.items.filter { it.type in LIBRARY_ASSET_TYPES && !it.isAppExport(derivedIds) },
                 )
                 database.assetDao().restoreLocalRecipeFlags(libraryKey)
                 database.remoteKeyDao().upsert(RemoteKeyEntity(libraryKey, queryKey, result.nextPage))
@@ -627,13 +644,12 @@ private class SmartSearchPagingSource(
             )
             val derivedIds = derivedAssets.derivedIds()
             val visible = result.items.filterNot { it.isAppExport(derivedIds) }
-            database.withTransaction {
-                database.assetDao().upsertAll(visible.map { AssetEntity.fromDomain(libraryKey, it) })
-                database.assetDao().restoreLocalRecipeFlags(libraryKey)
+            val stacked = database.withTransaction {
+                database.upsertFromSearch(libraryKey, visible).also { database.assetDao().restoreLocalRecipeFlags(libraryKey) }
             }
             val recipes = database.recipeDao()
             LoadResult.Page(
-                data = visible
+                data = stacked
                     .map { asset -> asset.copy(hasLocalRecipe = recipes.get(libraryKey, asset.id) != null) }
                     // "Edited" is not a criterion Immich knows: it is applied to what came back.
                     .filter { filter != LibraryFilter.EDITED || it.isEdited || it.hasLocalRecipe },
@@ -676,13 +692,12 @@ private class AlbumAssetPagingSource(
             val visible = result.items.filterNot { it.isAppExport(derivedIds) }
             // The catalogue receives the whole album; it is the returned list that the chip slices.
             // Filtering before the upsert would leave holes in the library when going back.
-            database.withTransaction {
-                database.assetDao().upsertAll(visible.map { AssetEntity.fromDomain(libraryKey, it) })
-                database.assetDao().restoreLocalRecipeFlags(libraryKey)
+            val stacked = database.withTransaction {
+                database.upsertFromSearch(libraryKey, visible).also { database.assetDao().restoreLocalRecipeFlags(libraryKey) }
             }
             val recipes = database.recipeDao()
             LoadResult.Page(
-                data = visible
+                data = stacked
                     .map { asset -> asset.copy(hasLocalRecipe = recipes.get(libraryKey, asset.id) != null) }
                     // "Edited" does not exist as a criterion in Immich and inside an album the list
                     // comes straight from the network: this is where the chip has to be applied.

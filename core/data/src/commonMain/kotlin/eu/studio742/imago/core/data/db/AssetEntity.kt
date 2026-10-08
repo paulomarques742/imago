@@ -45,6 +45,9 @@ data class AssetEntity(
     val sizeBytes: Long? = null,
     /** Out of the timeline: Immich's archive, or for the device the app's own list (`archived_assets`). */
     @ColumnInfo(defaultValue = "0") val isArchived: Boolean = false,
+    /** The stack this row is the cover of, as the timeline says; see [ImmichAsset.stackId]. */
+    val stackId: String? = null,
+    val stackCount: Int? = null,
 ) {
     fun toDomain() = ImmichAsset(
         id = id,
@@ -61,6 +64,8 @@ data class AssetEntity(
         mimeType = mimeType,
         durationMs = durationMs,
         isArchived = isArchived,
+        stackId = stackId,
+        stackCount = stackCount,
     )
 
     /**
@@ -89,6 +94,16 @@ data class AssetEntity(
         )
     }
 
+    /**
+     * This row from a search, with the stack the timeline gave the same photo.
+     *
+     * A search does not say which stack a photo is in — Immich only maps it when asked, and the
+     * search does not ask. Writing its rows as they come erased what the timeline had said, and the
+     * cover lost its badge as soon as an album with it was opened.
+     */
+    fun keepingStackOf(previous: AssetEntity?): AssetEntity =
+        if (previous == null || stackId != null) this else copy(stackId = previous.stackId, stackCount = previous.stackCount)
+
     companion object {
         fun fromDomain(libraryKey: String, asset: ImmichAsset) = AssetEntity(
             libraryKey = libraryKey,
@@ -106,6 +121,8 @@ data class AssetEntity(
             mimeType = asset.mimeType,
             durationMs = asset.durationMs,
             isArchived = asset.isArchived,
+            stackId = asset.stackId,
+            stackCount = asset.stackCount,
         )
     }
 }

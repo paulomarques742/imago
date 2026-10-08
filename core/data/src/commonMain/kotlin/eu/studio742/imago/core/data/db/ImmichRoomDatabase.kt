@@ -26,7 +26,7 @@ import androidx.room.RoomDatabaseConstructor
         AssetLocationEntity::class,
         ArchivedAssetEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 @ConstructedBy(ImmichRoomDatabaseConstructor::class)

@@ -1084,6 +1084,11 @@ private data class TimeBucketAssetsDto(
     val ratio: List<Double?> = emptyList(),
     val localOffsetHours: List<Double?> = emptyList(),
     val visibility: List<String?> = emptyList(),
+    /**
+     * `[stackId, assetCount]` for a stack's cover, null for a photo on its own. With `withStacked`
+     * only the covers come; the count is how many the stack holds, the cover included.
+     */
+    val stack: List<List<JsonElement>?> = emptyList(),
 ) {
     fun toDomain(): List<ImmichAsset> = id.indices.mapNotNull { index ->
         // Trash and archive do not go into the grid; letting them in here would put them there
@@ -1108,6 +1113,9 @@ private data class TimeBucketAssetsDto(
             isEdited = false,
             type = if (image) AssetType.IMAGE else AssetType.VIDEO,
             durationMs = duration.getOrNull(index).toDurationMs(),
+            stackId = stack.getOrNull(index)?.getOrNull(0)?.let { (it as? JsonPrimitive)?.contentOrNull },
+            // The contract declares both as text; read as a number either way.
+            stackCount = stack.getOrNull(index)?.getOrNull(1)?.let { (it as? JsonPrimitive)?.contentOrNull?.toIntOrNull() },
         )
     }
 }

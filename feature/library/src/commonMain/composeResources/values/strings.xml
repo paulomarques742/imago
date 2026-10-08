@@ -424,4 +424,5 @@
         <item quantity="one">This photo is on this device and on Immich.</item>
         <item quantity="other">%1$d of these photos are on this device and on Immich.</item>
     </plurals>
+    <string name="library_stack_count">Stack of %1$d photos</string>
 </resources>

@@ -28,6 +28,12 @@ data class ImmichAsset(
     val isOnServer: Boolean = false,
     /** Out of the timeline without being deleted: Immich's archive, or this app's for the device. */
     val isArchived: Boolean = false,
+    /**
+     * The Immich stack this photo is the cover of, and how many photos it holds. Only covers carry
+     * it: the timeline returns one photo per stack, and the others are reached from the cover.
+     */
+    val stackId: String? = null,
+    val stackCount: Int? = null,
 )
 
 @Serializable

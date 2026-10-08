@@ -75,6 +75,8 @@ data class AssetUiModel(
     val isOnServer: Boolean = false,
     /** In the archive: out of the timeline, not deleted. */
     val isArchived: Boolean = false,
+    /** The cover of an Immich stack of this many photos; null for a photo on its own. */
+    val stackCount: Int? = null,
 )
 
 data class AlbumUiModel(
@@ -130,6 +132,7 @@ fun ImmichAsset.toAssetUiModel(library: LibraryRepository, recipe: EditRecipe?):
         recipe = recipe,
         isOnServer = isOnServer,
         isArchived = isArchived,
+        stackCount = stackCount?.takeIf { stackId != null && it > 1 },
     )
 }
 

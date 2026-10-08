@@ -24,4 +24,11 @@ object UnifiedMigration {
             ARCHIVE_SQL.forEach(db::execSQL)
         }
     }
+
+    /** The stack each cover holds, and the timeline read again to bring it. */
+    val MIGRATION_14_15 = object : Migration(14, 15) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            STACK_SQL.forEach(db::execSQL)
+        }
+    }
 }

@@ -49,6 +49,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
@@ -1838,11 +1839,14 @@ private fun AssetTile(
         if (checked) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.38f)))
         }
-        if (asset.isVideo) {
-            VideoBadge(
-                durationMs = asset.durationMs,
+        if (asset.isVideo || asset.stackCount != null) {
+            Row(
                 modifier = Modifier.align(Alignment.TopEnd).padding(ImagoSpacing.Sm),
-            )
+                horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs),
+            ) {
+                asset.stackCount?.let { StackBadge(it) }
+                if (asset.isVideo) VideoBadge(durationMs = asset.durationMs)
+            }
         }
         // In the unified library: this one is on the server too, or only there.
         if (asset.isOnServer) {
@@ -1952,6 +1956,36 @@ private fun CatalogSyncBar(state: CatalogSyncState) {
                 .fillMaxWidth()
                 .padding(top = ImagoSpacing.Xs)
                 .height(2.dp),
+        )
+    }
+}
+
+/**
+ * The cover of a stack: the photos under it are not in the grid, and this says how many there are.
+ * It has the video badge's look because it sits beside it, in the same corner.
+ */
+@Composable
+private fun StackBadge(count: Int, modifier: Modifier = Modifier) {
+    val description = stringResource(Res.string.library_stack_count, count)
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(ImagoRadii.Small))
+            .background(Color.Black.copy(alpha = 0.55f))
+            .padding(horizontal = ImagoSpacing.Xs, vertical = 2.dp)
+            .semantics(mergeDescendants = true) { contentDescription = description },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Outlined.Layers,
+            contentDescription = null,
+            tint = ImagoColors.BrandWhite,
+            modifier = Modifier.size(ImagoSizes.IconSmall),
+        )
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.labelSmall,
+            color = ImagoColors.BrandWhite,
+            modifier = Modifier.padding(start = 2.dp),
         )
     }
 }

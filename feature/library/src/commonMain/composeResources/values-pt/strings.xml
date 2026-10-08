@@ -424,4 +424,5 @@
         <item quantity="one">Esta fotografia está neste dispositivo e no Immich.</item>
         <item quantity="other">%1$d destas fotografias estão neste dispositivo e no Immich.</item>
     </plurals>
+    <string name="library_stack_count">Pilha de %1$d fotografias</string>
 </resources>

@@ -441,6 +441,25 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun aMonthSaysWhichPhotosAreStackCoversAndHowManyTheyHold() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"id":["cover","loose"],"fileCreatedAt":["2026-08-02T10:00:00.000Z","2026-08-01T09:00:00.000Z"],
+                   "isFavorite":[false,false],"isImage":[true,true],"isTrashed":[false,false],
+                   "duration":[null,null],"ratio":[1.5,1.0],"localOffsetHours":[1.0,1.0],
+                   "visibility":["timeline","timeline"],"stack":[["stack-1","3"],null]}""".trimIndent(),
+            ),
+        )
+
+        val assets = api.getTimeBucketAssets(connection(), "2026-08-01").associateBy { it.id }
+
+        assertEquals("stack-1", assets.getValue("cover").stackId)
+        assertEquals(3, assets.getValue("cover").stackCount)
+        assertEquals(null, assets.getValue("loose").stackId)
+        assertEquals(null, assets.getValue("loose").stackCount)
+    }
+
+    @Test
     fun searchCanFilterByMonth() = runTest {
         server.enqueue(MockResponse().setBody(EMPTY_SEARCH_RESPONSE))
 
