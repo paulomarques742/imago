@@ -73,7 +73,7 @@ class VectorMapRenderer(
                 for (tx in floor(left / tilePx).toInt()..floor((left + canvas.width) / tilePx).toInt()) {
                     val key = TileKey(tileZoom, Math.floorMod(tx, count), ty)
                     val rect = Rect((tx * tilePx - left).toFloat(), (ty * tilePx - top).toFloat(), ((tx + 1) * tilePx - left).toFloat(), ((ty + 1) * tilePx - top).toFloat())
-                    add(placed(key, rect))
+                    add(placed(key, rect).let { tile -> PlacedTile(tile.entry, tile.drawn, tile.clip.snapped(), own = tile.drawn == tile.clip) })
                 }
             }
         }
@@ -101,11 +101,17 @@ class VectorMapRenderer(
                 }
             }
         }
-        drawSymbols(visible.filter { it.entry != null && it.drawn == it.clip }, viewport, bucket, styleZoom)
+        drawSymbols(visible.filter { it.entry != null && it.own }, viewport, bucket, styleZoom)
     }
 
     /** A visible slot of the grid, drawn with its own tile or, while that one loads, with an ancestor's. */
-    private class PlacedTile(val entry: TileEntry?, val drawn: Rect, val clip: Rect)
+    private class PlacedTile(val entry: TileEntry?, val drawn: Rect, val clip: Rect, val own: Boolean = drawn == clip)
+
+    /**
+     * Cut on whole pixels: two neighbours then share the same edge exactly. Cut between pixels, each
+     * softened its own edge and a faint line showed where tiles meet.
+     */
+    private fun Rect.snapped() = Rect(left.roundToInt().toFloat(), top.roundToInt().toFloat(), right.roundToInt().toFloat(), bottom.roundToInt().toFloat())
 
     private fun placed(key: TileKey, rect: Rect): PlacedTile {
         tiles.get(key)?.let { return PlacedTile(it, rect, rect) }

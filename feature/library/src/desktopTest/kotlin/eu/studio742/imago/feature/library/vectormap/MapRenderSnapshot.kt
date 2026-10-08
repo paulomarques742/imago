@@ -32,7 +32,8 @@ class MapRenderSnapshot {
         val folder = Files.createDirectories(Path.of(out!!))
         val density = 2f
         val resources = MapResources(folder.resolve("cache"))
-        val setup = resources.load(MAP_STYLE_URL_FOR_TESTS, density)
+        // IMAGO_MAP_STYLE_URL tries another style.
+        val setup = resources.load(System.getenv("IMAGO_MAP_STYLE_URL") ?: MAP_STYLE_URL_FOR_TESTS, density)
         val store = TileStore(resources, setup.tileTemplate) {}
         val measurer = TextMeasurer(createFontFamilyResolver(), Density(density), LayoutDirection.Ltr)
         val renderer = VectorMapRenderer(setup, store, measurer)

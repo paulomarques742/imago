@@ -133,6 +133,10 @@ class AlbumActionsTest {
         assertEquals(serverAlbum.id, gridAlbumId(serverAlbum, "home"))
         // Left open in another library, it is not this one's.
         assertNull(gridAlbumId(serverAlbum, DEVICE_LIBRARY_ID))
+        // A place on the map and a day of an earlier year are not albums of any library.
+        val place = album(canEditContent = false).copy(id = "place", placeAssetIds = listOf(serverAlbum.id))
+        assertNull(gridAlbumId(place, "home"))
+        assertNull(gridAlbumId(place.copy(id = "memory-2025", isMemory = true), eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID))
     }
 
     @Test

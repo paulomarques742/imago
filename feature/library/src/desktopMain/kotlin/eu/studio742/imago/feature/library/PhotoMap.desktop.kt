@@ -180,10 +180,11 @@ actual fun PhotoMap(
                 val center = screenOf(cluster)
                 val radius = radiusOf(cluster.assetIds.size) * density
                 if (center.x < -radius || center.y < -radius || center.x > size.width + radius || center.y > size.height + radius) continue
-                drawCircle(ImagoColors.Ivory, radius, center)
-                drawCircle(ImagoColors.BrandBlack, radius, center, style = Stroke(width = 2 * density))
+                // Dark on the light map, with a white edge for where a street runs dark underneath.
+                drawCircle(ImagoColors.BrandBlack, radius, center)
+                drawCircle(Color.White, radius, center, style = Stroke(width = 2 * density))
                 val count = textMeasurer.measure(cluster.assetIds.size.toString(), TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium))
-                drawText(count, color = ImagoColors.BrandBlack, topLeft = center - Offset(count.size.width / 2f, count.size.height / 2f))
+                drawText(count, color = ImagoColors.Ivory, topLeft = center - Offset(count.size.width / 2f, count.size.height / 2f))
             }
         }
         Column(

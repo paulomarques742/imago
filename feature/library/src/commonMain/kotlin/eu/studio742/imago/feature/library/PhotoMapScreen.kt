@@ -147,8 +147,8 @@ expect fun rememberLocationAccess(onGranted: () -> Unit): (() -> Unit)?
 /** What the map's tiles must credit, wherever the map is drawn. */
 internal const val MAP_ATTRIBUTION = "OpenFreeMap © OpenMapTiles Data from OpenStreetMap"
 
-/** The dark style of OpenFreeMap: the app is dark, and the photos stand out on it. */
-internal const val MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/dark"
+/** OpenFreeMap's "bright": colour reads at a glance where the dark style was all black. */
+internal const val MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/bright"
 
 /** The same style, for the snapshots the desktop tests draw. */
 const val MAP_STYLE_URL_FOR_TESTS = MAP_STYLE_URL

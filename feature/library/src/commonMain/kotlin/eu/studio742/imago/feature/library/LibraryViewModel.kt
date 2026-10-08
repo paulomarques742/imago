@@ -142,7 +142,9 @@ enum class SearchMode { CONTENT, FILE_NAME }
  * here; the unified library holds the phone's albums and the server's, each with its own reference.
  */
 internal fun gridAlbumId(album: AlbumUiModel, selectedLibraryId: String): String? {
-    val libraryId = eu.studio742.imago.core.model.AssetReference.parse(album.id).libraryId
+    // A person, a place on the map and a day of an earlier year open like albums but are read by their own photos.
+    if (album.isPerson || album.placeAssetIds != null) return null
+    val libraryId = runCatching { eu.studio742.imago.core.model.AssetReference.parse(album.id).libraryId }.getOrNull() ?: return null
     return album.id.takeIf { selectedLibraryId == eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID || libraryId == selectedLibraryId }
 }
 

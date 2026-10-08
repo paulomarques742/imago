@@ -99,8 +99,9 @@ actual fun PhotoMap(
                                 Expression.stop(1, 9f), Expression.stop(10, 14f), Expression.stop(100, 20f), Expression.stop(1000, 26f),
                             ),
                         ),
-                        PropertyFactory.circleColor(ImagoColors.Ivory.toArgb()),
-                        PropertyFactory.circleStrokeColor(ImagoColors.BrandBlack.toArgb()),
+                        // Dark on the light map, with a white edge for where a street runs dark underneath.
+                        PropertyFactory.circleColor(ImagoColors.BrandBlack.toArgb()),
+                        PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
                         PropertyFactory.circleStrokeWidth(2f),
                     ),
                 )
@@ -109,7 +110,7 @@ actual fun PhotoMap(
                         PropertyFactory.textField(Expression.toString(Expression.get(COUNT))),
                         PropertyFactory.textFont(arrayOf("Noto Sans Regular")),
                         PropertyFactory.textSize(12f),
-                        PropertyFactory.textColor(ImagoColors.BrandBlack.toArgb()),
+                        PropertyFactory.textColor(ImagoColors.Ivory.toArgb()),
                         PropertyFactory.textAllowOverlap(true),
                         PropertyFactory.textIgnorePlacement(true),
                     ),
