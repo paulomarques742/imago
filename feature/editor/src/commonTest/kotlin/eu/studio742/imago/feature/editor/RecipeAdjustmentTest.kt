@@ -8,6 +8,7 @@ import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.ColorGrading
 import eu.studio742.imago.core.model.ColorWheel
 import eu.studio742.imago.core.model.CurvePoint
+import eu.studio742.imago.core.model.ToneCurve
 import eu.studio742.imago.core.model.HslBand
 import eu.studio742.imago.core.model.CURRENT_PROCESS_VERSION
 import eu.studio742.imago.core.render.toRenderParameters
@@ -135,10 +136,48 @@ class RecipeAdjustmentTest {
         val moved = added.withMovedCurvePoint(index = 1, x = 300, y = -20)
         assertEquals(254, moved[1].x)
         assertEquals(0, moved[1].y)
-        assertEquals(0, moved.withMovedCurvePoint(index = 0, x = 90, y = 30).first().x)
 
         assertEquals(endpoints, moved.withRemovedCurvePoint(1))
         assertEquals(endpoints, endpoints.withRemovedCurvePoint(0))
+    }
+
+    @Test
+    fun theEndPointsMoveOnBothAxesWithoutPassingTheirNeighbours() {
+        val points = listOf(CurvePoint(0, 0), CurvePoint(128, 128), CurvePoint(255, 255))
+        // The black point in to 20 and up to 10, as in Lightroom.
+        assertEquals(CurvePoint(20, 10), points.withMovedCurvePoint(index = 0, x = 20, y = 10).first())
+        assertEquals(CurvePoint(230, 240), points.withMovedCurvePoint(index = 2, x = 230, y = 240).last())
+        // Never past the point beside them, nor out of the range.
+        assertEquals(127, points.withMovedCurvePoint(index = 0, x = 200, y = 0).first().x)
+        assertEquals(129, points.withMovedCurvePoint(index = 2, x = 40, y = 255).last().x)
+        assertEquals(0, points.withMovedCurvePoint(index = 0, x = -30, y = 0).first().x)
+        // Two points only: each stops one short of the other.
+        val two = listOf(CurvePoint(0, 0), CurvePoint(255, 255))
+        assertEquals(254, two.withMovedCurvePoint(index = 0, x = 255, y = 0).first().x)
+    }
+
+    @Test
+    fun aPointIsOnlyAddedBetweenTheEndPoints() {
+        val points = listOf(CurvePoint(30, 0), CurvePoint(220, 255))
+        // Outside them the curve is flat on purpose; a tap there adds nothing.
+        assertEquals(points, points.withAddedCurvePoint(10, 0))
+        assertEquals(points, points.withAddedCurvePoint(240, 255))
+        assertEquals(listOf(30, 100, 220), points.withAddedCurvePoint(100, 90).map { it.x })
+    }
+
+    @Test
+    fun freedEndPointsStayWhereTheyWereFromProcessElevenOn() {
+        val freed = EditRecipe(
+            assetId = "a",
+            originalChecksum = "c",
+            createdAt = "2026-10-08T00:00:00Z",
+            updatedAt = "2026-10-08T00:00:00Z",
+            processVersion = 11,
+            toneCurve = ToneCurve(rgb = listOf(CurvePoint(20, 0), CurvePoint(235, 255))),
+        )
+        assertEquals(listOf(20, 235), freed.editableCurvePoints().map { it.x })
+        // Before 11 the corners were always there, drawn even when not stored.
+        assertEquals(listOf(0, 20, 235, 255), freed.copy(processVersion = 10).editableCurvePoints().map { it.x })
     }
 
     @Test

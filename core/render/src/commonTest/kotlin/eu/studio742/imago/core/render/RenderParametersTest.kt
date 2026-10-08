@@ -35,6 +35,27 @@ class RenderParametersTest {
         assertTrue(curve.zipWithNext().all { (left, right) -> right >= left })
     }
 
+    @Test fun freedEndPointsHoldTheCurveFlatBeyondThem() {
+        // The black point in to 20 and the white point in to 235: Lightroom clips both ends.
+        val points = listOf(20 to 0, 235 to 255)
+        listOf(ToneCurveInterpolation.LINEAR, ToneCurveInterpolation.PCHIP).forEach { interpolation ->
+            val curve = buildToneCurveLut(points, interpolation, flatBeyondEnds = true)
+            assertTrue(curve.subList(0, 21).all { it == 0f })
+            assertTrue(curve.subList(235, 256).all { it == 1f })
+            assertEquals(0.5f, curve[128], 0.01f)
+        }
+        // A raised black point holds its height to the left as well.
+        val lifted = buildToneCurveLut(listOf(30 to 40, 255 to 255), flatBeyondEnds = true)
+        assertTrue(lifted.subList(0, 31).all { it == 40f / 255f })
+    }
+
+    @Test fun beforeProcessElevenTheCurveIsPinnedToTheCorners() {
+        // A raised black point at (30, 40): pinned, the curve still starts at (0, 0) and climbs to it.
+        val raised = buildToneCurveLut(listOf(30 to 40, 255 to 255), ToneCurveInterpolation.LINEAR)
+        assertEquals(0f, raised[0])
+        assertEquals(20f / 255f, raised[15], 0.0001f)
+    }
+
     @Test fun pchipCurveIsSmoothShapePreservingAndPassesThroughPoints() {
         val points = listOf(0 to 0, 64 to 20, 128 to 200, 255 to 255)
         val smooth = buildToneCurveLut(points, ToneCurveInterpolation.PCHIP)

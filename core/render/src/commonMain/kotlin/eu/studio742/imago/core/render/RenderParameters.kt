@@ -267,17 +267,38 @@ fun neutralHslBands(): List<HslRenderBand> = List(HSL_BAND_COUNT) { HslRenderBan
 
 enum class ToneCurveInterpolation { LINEAR, PCHIP }
 
+/**
+ * The 256 samples of a point curve.
+ *
+ * With [flatBeyondEnds] the end points are free, as in Lightroom: below the first point the curve
+ * holds its height, and above the last one too — dragging the black point in to 20 sends everything
+ * under 20 to black. Without it (process versions before 11) the curve is always pinned to (0, 0)
+ * and (255, 255), and an end point moved inwards is joined to the corner by a line.
+ */
 fun buildToneCurveLut(
     points: List<Pair<Int, Int>>,
     interpolation: ToneCurveInterpolation = ToneCurveInterpolation.PCHIP,
+    flatBeyondEnds: Boolean = false,
 ): List<Float> {
-    val normalized = (points + listOf(0 to 0, 255 to 255))
+    val pinned = if (flatBeyondEnds) points else points + listOf(0 to 0, 255 to 255)
+    val normalized = pinned
         .map { (x, y) -> x.coerceIn(0, 255) to y.coerceIn(0, 255) }
         .distinctBy { it.first }
         .sortedBy { it.first }
-    return when (interpolation) {
+        .ifEmpty { listOf(0 to 0, 255 to 255) }
+    if (normalized.size == 1) return List(CURVE_SAMPLE_COUNT) { normalized.single().second / 255f }
+    val lut = when (interpolation) {
         ToneCurveInterpolation.LINEAR -> buildLinearToneCurveLut(normalized)
         ToneCurveInterpolation.PCHIP -> buildPchipToneCurveLut(normalized)
+    }
+    val first = normalized.first()
+    val last = normalized.last()
+    return lut.mapIndexed { sample, value ->
+        when {
+            sample < first.first -> first.second / 255f
+            sample > last.first -> last.second / 255f
+            else -> value
+        }
     }
 }
 

@@ -35,6 +35,7 @@ fun EditRecipe.toRenderParameters() = RenderParameters(
     toneCurveRgb = buildToneCurveLut(
         points = toneCurve.rgb.map { it.x to it.y },
         interpolation = if (processVersion >= 2) ToneCurveInterpolation.PCHIP else ToneCurveInterpolation.LINEAR,
+        flatBeyondEnds = processVersion >= 11,
     ),
     hslBands = listOf(hsl.red, hsl.orange, hsl.yellow, hsl.green, hsl.aqua, hsl.blue, hsl.purple, hsl.magenta)
         .map { HslRenderBand(it.hue, it.saturation, it.luminance) },

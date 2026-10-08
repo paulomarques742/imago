@@ -2081,32 +2081,42 @@ private fun Geometry.activeAtProcess(processVersion: Int): Geometry = copy(
 )
 
 fun EditRecipe.editableCurvePoints(): List<eu.studio742.imago.core.model.CurvePoint> {
-    return normalizeCurvePoints(toneCurve.rgb)
+    // Before process 11 the curve was always pinned to the corners; a recipe from then that lacked a
+    // corner point drew one anyway, and editing it has to start from what was drawn.
+    return normalizeCurvePoints(toneCurve.rgb, pinnedToCorners = processVersion < 11)
 }
 
 private fun normalizeCurvePoints(
     source: List<eu.studio742.imago.core.model.CurvePoint>,
+    pinnedToCorners: Boolean = false,
 ): List<eu.studio742.imago.core.model.CurvePoint> {
     val normalized = source
         .map { it.copy(x = it.x.coerceIn(0, 255), y = it.y.coerceIn(0, 255)) }
         .distinctBy { it.x }
         .sortedBy { it.x }
         .toMutableList()
-    if (normalized.none { it.x == 0 }) normalized.add(eu.studio742.imago.core.model.CurvePoint(0, 0))
-    if (normalized.none { it.x == 255 }) normalized.add(eu.studio742.imago.core.model.CurvePoint(255, 255))
+    if (pinnedToCorners || normalized.size < 2) {
+        if (normalized.none { it.x == 0 }) normalized.add(eu.studio742.imago.core.model.CurvePoint(0, 0))
+        if (normalized.none { it.x == 255 }) normalized.add(eu.studio742.imago.core.model.CurvePoint(255, 255))
+    }
     return normalized.sortedBy { it.x }
 }
 
+/** A new point goes between the end points: outside them the curve is flat, and that is their job. */
 internal fun List<eu.studio742.imago.core.model.CurvePoint>.withAddedCurvePoint(
     x: Int,
     y: Int,
 ): List<eu.studio742.imago.core.model.CurvePoint> {
     val points = normalizeCurvePoints(this)
-    val clampedX = x.coerceIn(1, 254)
-    if (points.size >= 16 || points.any { kotlin.math.abs(it.x - clampedX) < 4 }) return points
-    return (points + eu.studio742.imago.core.model.CurvePoint(clampedX, y.coerceIn(0, 255))).sortedBy { it.x }
+    if (x <= points.first().x || x >= points.last().x) return points
+    if (points.size >= 16 || points.any { kotlin.math.abs(it.x - x) < 4 }) return points
+    return (points + eu.studio742.imago.core.model.CurvePoint(x, y.coerceIn(0, 255))).sortedBy { it.x }
 }
 
+/**
+ * Every point moves on both axes without passing its neighbours. The end points too, as in
+ * Lightroom: the black point dragged in to 20 sends everything under 20 to black.
+ */
 internal fun List<eu.studio742.imago.core.model.CurvePoint>.withMovedCurvePoint(
     index: Int,
     x: Int,
@@ -2114,10 +2124,9 @@ internal fun List<eu.studio742.imago.core.model.CurvePoint>.withMovedCurvePoint(
 ): List<eu.studio742.imago.core.model.CurvePoint> {
     if (index !in indices) return this
     val point = this[index]
-    val movedX = when (index) {
-        0, lastIndex -> point.x
-        else -> x.coerceIn(this[index - 1].x + 1, this[index + 1].x - 1)
-    }
+    val lowest = if (index == 0) 0 else this[index - 1].x + 1
+    val highest = if (index == lastIndex) 255 else this[index + 1].x - 1
+    val movedX = if (lowest <= highest) x.coerceIn(lowest, highest) else point.x
     return toMutableList().apply { this[index] = point.copy(x = movedX, y = y.coerceIn(0, 255)) }
 }
 

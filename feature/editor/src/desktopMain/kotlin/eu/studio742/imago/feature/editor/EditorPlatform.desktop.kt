@@ -26,6 +26,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import javax.imageio.ImageIO
+import androidx.compose.ui.Modifier
 
 /**
  * The export on desktop: the original downloaded and decoded by Skia (or by ImageIO, for TIFF), the
@@ -96,3 +97,5 @@ actual fun recipeLibraryViewModel(): RecipeLibraryViewModel {
 actual fun rememberSaveToDevice(onSave: () -> Unit, onDenied: () -> Unit): () -> Unit = onSave
 
 actual val SaveToDeviceLabel: StringResource get() = Res.string.editor_save_as
+
+actual fun Modifier.excludeSystemGestures(): Modifier = this

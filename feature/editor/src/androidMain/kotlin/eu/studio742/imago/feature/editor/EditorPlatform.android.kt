@@ -34,6 +34,8 @@ import eu.studio742.imago.core.immich.ImmichApi
 import eu.studio742.imago.core.model.EditRecipe
 import java.io.File
 import javax.inject.Inject
+import androidx.compose.foundation.systemGestureExclusion
+import androidx.compose.ui.Modifier
 
 /** The export on Android: the original at full resolution through BitmapFactory, and the gallery. */
 class AndroidEditorExporter @Inject constructor(
@@ -128,3 +130,5 @@ actual fun rememberSaveToDevice(onSave: () -> Unit, onDenied: () -> Unit): () ->
 }
 
 actual val SaveToDeviceLabel: StringResource get() = Res.string.editor_save_to_gallery
+
+actual fun Modifier.excludeSystemGestures(): Modifier = systemGestureExclusion()

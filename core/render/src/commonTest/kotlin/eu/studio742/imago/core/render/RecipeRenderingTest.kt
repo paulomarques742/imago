@@ -13,12 +13,15 @@ import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.Geometry
 import eu.studio742.imago.core.model.Perspective
 import eu.studio742.imago.core.model.Tone
+import eu.studio742.imago.core.model.ToneCurve
+import eu.studio742.imago.core.model.CurvePoint
 
 private fun recipe(
     processVersion: Int = CURRENT_PROCESS_VERSION,
     geometry: Geometry = Geometry(),
     tone: Tone = Tone(),
     colorGrading: ColorGrading = ColorGrading(),
+    toneCurve: ToneCurve = ToneCurve(),
 ) = EditRecipe(
     assetId = "a1",
     originalChecksum = "c1",
@@ -28,9 +31,19 @@ private fun recipe(
     geometry = geometry,
     tone = tone,
     colorGrading = colorGrading,
+    toneCurve = toneCurve,
 )
 
 class RecipeRenderingTest {
+    /** The curve's end points are free from process 11; before it, the corners are still pinned. */
+    @Test
+    fun freedCurveEndPointsOnlyCountFromProcessEleven() {
+        val curve = ToneCurve(rgb = listOf(CurvePoint(30, 40), CurvePoint(255, 255)))
+
+        assertEquals(0f, recipe(processVersion = 10, toneCurve = curve).toRenderParameters().toneCurveRgb.first())
+        assertEquals(40f / 255f, recipe(processVersion = 11, toneCurve = curve).toRenderParameters().toneCurveRgb.first(), 0.0001f)
+    }
+
     /** A recipe from before version 10 cannot carry a perspective; if one arrives, it stays inert. */
     @Test
     fun perspectiveOnlyCountsFromProcessTen() {

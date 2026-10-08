@@ -5,6 +5,12 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 11 frees the tone curve's end points. Below the first point and above the last the curve holds
+ * its height, as in Lightroom, instead of being pinned to (0, 0) and (255, 255). Earlier editors
+ * always kept a point at 0 and one at 255, and every built-in look has them, so no recipe already
+ * saved changes; the gate is for the recipes written from now on, which an older app would draw
+ * with a line down to the corner.
+ *
  * 10 activates `geometry.perspective`. The straighten becomes the roll of the same virtual camera
  * that the perspective tilts, and with the perspective neutral the matrix is exactly the rotation
  * there was before — but the gate stays, as in 6, 7 and 9, so that this is checked and not assumed.
@@ -23,7 +29,7 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 10
+const val CURRENT_PROCESS_VERSION = 11
 
 @Serializable
 data class EditRecipe(

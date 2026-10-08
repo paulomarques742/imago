@@ -210,6 +210,11 @@ import eu.studio742.imago.core.model.UprightGuide
 import eu.studio742.imago.core.render.asComposeImage
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.unit.Density
 
 /** How long without touches until the interface steps back and leaves only the photo. */
 private const val CHROME_IDLE_TIMEOUT_MS = 3_000L
@@ -573,6 +578,8 @@ private fun EditorScreen(
     var lastAdjustment by remember(assetId) { mutableStateOf<Adjustment?>(null) }
     val panelHeight = when (state.sheet) {
         EditorSheet.CROP -> ImagoSizes.CropPanelHeight
+        // The curve itself is over the photo; down here only its name and its way out are left.
+        EditorSheet.CURVE -> CURVE_PANEL_HEIGHT
         // Colour grading is the only tool whose control is a circle, and a circle cannot be cut: the
         // angle is half of what it says. It asks for more height than the sliders, and gives it back
         // while dragging, which is when the panel fades.
@@ -1447,14 +1454,6 @@ private fun EditorScreen(
                         } else {
                             Modifier
                         },
-                    )
-                    // The curve floats over the photo and so steps back from the edges — but only in the
-                    // drawer. In the rail the curve is one more sheet of the column, and stepping back
-                    // here would only steal its width.
-                    .padding(
-                        start = if (!rail && state.sheet == EditorSheet.CURVE) ImagoSpacing.Md else 0.dp,
-                        end = if (!rail && state.sheet == EditorSheet.CURVE) ImagoSpacing.Md else 0.dp,
-                        bottom = if (!rail && state.sheet == EditorSheet.CURVE) ImagoSpacing.Xxxl else 0.dp,
                     ),
                 enter = fadeIn(imagoTween(ImagoMotion.Default)) +
                     slideInVertically(imagoTween(ImagoMotion.Default)) { it / 3 },
@@ -1554,44 +1553,58 @@ private fun EditorScreen(
                         colorGradeActions = colorGradeActions,
                         perspectiveActions = perspectiveActions,
                     )
-                    // The curve floats over the photo; there the bar would get in the way — and as it
-                    // is the bar that now brings the system bar's inset, without it a spacer stands in
-                    // for it.
-                    if (state.sheet == EditorSheet.CURVE) {
-                        Spacer(Modifier.navigationBarsPadding())
-                    } else {
-                        EditorToolBar(
-                            selected = when (state.sheet) {
-                                EditorSheet.CROP, EditorSheet.PERSPECTIVE -> EditorTool.CROP
-                                EditorSheet.HISTORY -> EditorTool.HISTORY
-                                else -> EditorTool.ADJUSTMENTS
-                            },
-                            isComparing = state.showOriginal,
-                            canPasteRecipe = state.canPasteRecipe && state.recipe != null,
-                            canExport = !compositionMode && state.bitmap != null && !state.isExporting,
-                            tools = editorTools(recipeMode),
-                            // A recipe that is not the user's yet can always be saved — that is how it
-                            // becomes theirs; one that is only saves when something changed.
-                            canSaveEdits = state.recipe != null && !state.needsNewerApp &&
-                                (state.hasUnsavedRecipeChanges || state.recipeEdit?.saved == null),
-                            onSelect = { tool ->
-                                when (tool) {
-                                    EditorTool.ADJUSTMENTS -> onSelectSheet(EditorSheet.ADJUSTMENTS)
-                                    EditorTool.CROP -> onSelectSheet(EditorSheet.CROP)
-                                    EditorTool.HISTORY -> onSelectSheet(EditorSheet.HISTORY)
-                                    EditorTool.RECIPES -> showRecipeLibrary = true
-                                    EditorTool.COMPARE -> onShowOriginal(!state.showOriginal)
-                                    EditorTool.EXPORT -> if (!compositionMode) showExportDialog = true
-                                    EditorTool.COPY_RECIPE -> onCopyRecipe()
-                                    EditorTool.PASTE_RECIPE -> onPasteRecipe()
-                                    EditorTool.SAVE_RECIPE -> showSaveRecipeDialog = true
-                                    EditorTool.SAVE_EDITS -> recipeActions?.onSave?.invoke()
-                                }
-                            },
-                            modifier = Modifier.alpha(if (rail || editingKey == null) 1f else 0f),
-                        )
-                    }
+                    EditorToolBar(
+                        selected = when (state.sheet) {
+                            EditorSheet.CROP, EditorSheet.PERSPECTIVE -> EditorTool.CROP
+                            EditorSheet.HISTORY -> EditorTool.HISTORY
+                            else -> EditorTool.ADJUSTMENTS
+                        },
+                        isComparing = state.showOriginal,
+                        canPasteRecipe = state.canPasteRecipe && state.recipe != null,
+                        canExport = !compositionMode && state.bitmap != null && !state.isExporting,
+                        tools = editorTools(recipeMode),
+                        // A recipe that is not the user's yet can always be saved — that is how it
+                        // becomes theirs; one that is only saves when something changed.
+                        canSaveEdits = state.recipe != null && !state.needsNewerApp &&
+                            (state.hasUnsavedRecipeChanges || state.recipeEdit?.saved == null),
+                        onSelect = { tool ->
+                            when (tool) {
+                                EditorTool.ADJUSTMENTS -> onSelectSheet(EditorSheet.ADJUSTMENTS)
+                                EditorTool.CROP -> onSelectSheet(EditorSheet.CROP)
+                                EditorTool.HISTORY -> onSelectSheet(EditorSheet.HISTORY)
+                                EditorTool.RECIPES -> showRecipeLibrary = true
+                                EditorTool.COMPARE -> onShowOriginal(!state.showOriginal)
+                                EditorTool.EXPORT -> if (!compositionMode) showExportDialog = true
+                                EditorTool.COPY_RECIPE -> onCopyRecipe()
+                                EditorTool.PASTE_RECIPE -> onPasteRecipe()
+                                EditorTool.SAVE_RECIPE -> showSaveRecipeDialog = true
+                                EditorTool.SAVE_EDITS -> recipeActions?.onSave?.invoke()
+                            }
+                        },
+                        modifier = Modifier.alpha(if (rail || editingKey == null) 1f else 0f),
+                    )
                 }
+            }
+
+            val curvePoints = state.recipe?.editableCurvePoints()
+            if (toolsVisible && state.sheet == EditorSheet.CURVE && curvePoints != null) {
+                CurveOverlay(
+                    lut = state.renderParameters.toneCurveRgb,
+                    points = curvePoints,
+                    onEditing = { editingKey = it },
+                    onAddPoint = onAddCurvePoint,
+                    onMovePoint = onMoveCurvePoint,
+                    onRemovePoint = onRemoveCurvePoint,
+                    onGestureFinished = onAdjustmentFinished,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            top = stageInsets.top,
+                            bottom = stageInsets.bottom,
+                            end = stageInsets.end,
+                        )
+                        .padding(ImagoSpacing.Lg),
+                )
             }
 
             // With a value being dragged, the panel left — only the parameter, the value and the ruler
@@ -2079,7 +2092,6 @@ private fun AdjustmentPanel(
     val panelColor by animateColorAsState(
         targetValue = when {
             isEditing -> Color.Transparent
-            state.sheet == EditorSheet.CURVE -> Color.Black.copy(alpha = 0.42f)
             else -> ImagoColors.Glass
         },
         animationSpec = imagoTween(ImagoMotion.Instant),
@@ -2095,7 +2107,6 @@ private fun AdjustmentPanel(
         // rounding the corners left background gaps against the screen's edges. The 1dp outline
         // stays, and its inner edge is what separates the photo from the tools.
         rail -> RectangleShape
-        state.sheet == EditorSheet.CURVE -> RoundedCornerShape(ImagoRadii.Panel)
         else -> RoundedCornerShape(topStart = ImagoRadii.Panel, topEnd = ImagoRadii.Panel)
     }
     Box(modifier) {
@@ -2123,9 +2134,7 @@ private fun AdjustmentPanel(
         ) {
             // The handle and the categories are panel chrome: while a value is dragged they leave the
             // scene with the rest, so the screen keeps only the photo and the active control.
-            if (state.sheet != EditorSheet.CURVE) {
-                SheetHandle(Modifier.fillMaxWidth().alpha(chromeAlpha))
-            }
+            SheetHandle(Modifier.fillMaxWidth().alpha(chromeAlpha))
             when (state.sheet) {
                 EditorSheet.ADJUSTMENTS -> {
                     AdjustmentPanelHeader(
@@ -2145,13 +2154,7 @@ private fun AdjustmentPanel(
                     )
                 }
                 EditorSheet.CURVE -> CurvePanel(
-                    state = state,
                     editingKey = editingKey,
-                    onEditing = onEditing,
-                    onAddPoint = onAddCurvePoint,
-                    onMovePoint = onMoveCurvePoint,
-                    onRemovePoint = onRemoveCurvePoint,
-                    onGestureFinished = onAdjustmentFinished,
                     onReset = onResetCurve,
                     onClose = { onSelectSheet(EditorSheet.ADJUSTMENTS) },
                 )
@@ -2576,145 +2579,169 @@ private fun EditorPanel.vector() = when (this) {
     EditorPanel.MASKS -> Icons.Outlined.Adjust
 }
 
+/**
+ * The curve's place in the drawer: its name, the way back and the reset. The curve itself is drawn
+ * over the photo ([CurveOverlay]), large, as Lightroom does it — in a slice of the drawer it was too
+ * small for a finger to place a point with any precision.
+ */
 @Composable
 private fun CurvePanel(
-    state: EditorUiState,
     editingKey: Any?,
-    onEditing: (Any?) -> Unit,
-    onAddPoint: (Int, Int) -> Unit,
-    onMovePoint: (Int, Int, Int) -> Unit,
-    onRemovePoint: (Int) -> Unit,
-    onGestureFinished: () -> Unit,
     onReset: () -> Unit,
     onClose: () -> Unit,
 ) {
-    val curve = state.renderParameters.toneCurveRgb
-    val points = state.recipe?.editableCurvePoints().orEmpty()
-    val currentPoints by rememberUpdatedState(points)
-    var activePoint by remember { mutableStateOf<Int?>(null) }
-    val gridColor = ImagoColors.BorderVisible
-    val curveColor = ImagoColors.Ivory
     val hintAlpha by animateFloatAsState(
         targetValue = if (editingKey == null) 1f else 0f,
         animationSpec = tween(durationMillis = 160),
         label = "curveHint",
     )
-    val gridAlpha by animateFloatAsState(
-        targetValue = if (editingKey == null) 0.16f else 0f,
-        animationSpec = tween(durationMillis = 160),
-        label = "curveGrid",
-    )
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = ImagoSpacing.Lg).alpha(hintAlpha),
+        verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs),
     ) {
         SubToolHeader(
             title = stringResource(Res.string.editor_tone_curve),
             onClose = onClose,
             onReset = onReset,
-            modifier = Modifier.alpha(hintAlpha),
         )
         Text(
             stringResource(Res.string.editor_curve_hint),
             style = MaterialTheme.typography.bodySmall,
             color = ImagoColors.TextTertiary,
-            modifier = Modifier.alpha(hintAlpha),
         )
+    }
+}
+
+/**
+ * The tone curve, drawn large over the photo.
+ *
+ * It takes the biggest square that fits between the chrome, and sits above the photo's own gestures:
+ * inside the square a finger belongs to the curve. There is no background — the photo under it is
+ * what the curve is changing — so the lines carry a dark edge to stay legible over light areas.
+ *
+ * A point is dragged by how far the finger moves, not taken to where the finger is: grabbing one at
+ * the edge of its reach no longer makes it jump.
+ */
+@Composable
+private fun CurveOverlay(
+    lut: List<Float>,
+    points: List<eu.studio742.imago.core.model.CurvePoint>,
+    onEditing: (Any?) -> Unit,
+    onAddPoint: (Int, Int) -> Unit,
+    onMovePoint: (Int, Int, Int) -> Unit,
+    onRemovePoint: (Int) -> Unit,
+    onGestureFinished: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val currentPoints by rememberUpdatedState(points)
+    var activePoint by remember { mutableStateOf<Int?>(null) }
+    val description = stringResource(Res.string.editor_tone_curve)
+    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+        val side = minOf(maxWidth, maxHeight)
         Canvas(
             Modifier
-                .fillMaxWidth()
-                .height(176.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.Black.copy(alpha = gridAlpha))
-                .border(1.dp, ImagoColors.BorderVisible.copy(alpha = 0.14f * hintAlpha), RoundedCornerShape(8.dp))
+                .size(side)
+                // On Android the left edge is the back gesture's, and the black point lives there.
+                .excludeSystemGestures()
+                .semantics { contentDescription = description }
                 .pointerInput(Unit) {
-                    val hitRadius = 24.dp.toPx()
-                    fun pointIndexAt(position: Offset): Int? = currentPoints
-                        .mapIndexed { index, point ->
-                            val pointPosition = Offset(point.x / 255f * size.width, (1f - point.y / 255f) * size.height)
-                            index to (pointPosition - position).getDistance()
-                        }
-                        .filter { it.second <= hitRadius }
-                        .minByOrNull { it.second }
-                        ?.first
-                    fun curveCoordinates(position: Offset) =
-                        ((position.x / size.width * 255f).toInt().coerceIn(0, 255)) to
-                            (((1f - position.y / size.height) * 255f).toInt().coerceIn(0, 255))
                     detectTapGestures(
                         onTap = { position ->
-                            if (pointIndexAt(position) == null) {
-                                val (x, y) = curveCoordinates(position)
+                            val plot = curvePlot(size.width.toFloat(), size.height.toFloat())
+                            if (plot.pointIndexAt(currentPoints, position) == null) {
+                                val (x, y) = plot.toCurve(position)
                                 onAddPoint(x, y)
                                 onGestureFinished()
                             }
                         },
-                        onDoubleTap = { position -> pointIndexAt(position)?.let(onRemovePoint) },
+                        onDoubleTap = { position ->
+                            val plot = curvePlot(size.width.toFloat(), size.height.toFloat())
+                            plot.pointIndexAt(currentPoints, position)?.let(onRemovePoint)
+                        },
                     )
                 }
                 .pointerInput(Unit) {
-                    val hitRadius = 24.dp.toPx()
-                    fun pointIndexAt(position: Offset): Int? = currentPoints
-                        .mapIndexed { index, point ->
-                            val pointPosition = Offset(point.x / 255f * size.width, (1f - point.y / 255f) * size.height)
-                            index to (pointPosition - position).getDistance()
-                        }
-                        .filter { it.second <= hitRadius }
-                        .minByOrNull { it.second }
-                        ?.first
-                    detectDragGestures(
-                        onDragStart = { position ->
-                            activePoint = pointIndexAt(position)
-                            if (activePoint != null) onEditing(CURVE_EDITING_KEY)
-                        },
-                        onDragEnd = {
-                            if (activePoint != null) onGestureFinished()
-                            activePoint = null
-                            onEditing(null)
-                        },
-                        onDragCancel = {
-                            if (activePoint != null) onGestureFinished()
-                            activePoint = null
-                            onEditing(null)
-                        },
-                    ) { change, _ ->
-                        activePoint?.let { index ->
-                            val x = (change.position.x / size.width * 255f).toInt().coerceIn(0, 255)
-                            val y = ((1f - change.position.y / size.height) * 255f).toInt().coerceIn(0, 255)
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val plot = curvePlot(size.width.toFloat(), size.height.toFloat())
+                        val index = plot.pointIndexAt(currentPoints, down.position) ?: return@awaitEachGesture
+                        // Where the point is relative to the finger; kept for the whole drag.
+                        val grab = plot.toScreen(currentPoints[index]) - down.position
+                        val start = awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+                            ?: return@awaitEachGesture
+                        activePoint = index
+                        onEditing(CURVE_EDITING_KEY)
+                        val (startX, startY) = plot.toCurve(start.position + grab)
+                        onMovePoint(index, startX, startY)
+                        drag(start.id) { change ->
+                            val (x, y) = plot.toCurve(change.position + grab)
                             onMovePoint(index, x, y)
                             change.consume()
                         }
+                        activePoint = null
+                        onEditing(null)
+                        onGestureFinished()
                     }
                 },
         ) {
+            val plot = curvePlot(size.width, size.height)
+            val gridLine = Color.White.copy(alpha = 0.32f)
             repeat(5) { index ->
-                val line = gridColor.copy(alpha = gridColor.alpha * hintAlpha)
-                val position = index * size.width / 4f
-                drawLine(line, Offset(position, 0f), Offset(position, size.height))
-                val vertical = index * size.height / 4f
-                drawLine(line, Offset(0f, vertical), Offset(size.width, vertical))
+                val x = plot.left + index * plot.width / 4f
+                val y = plot.top + index * plot.height / 4f
+                drawLine(gridLine, Offset(x, plot.top), Offset(x, plot.bottom), strokeWidth = 1.dp.toPx())
+                drawLine(gridLine, Offset(plot.left, y), Offset(plot.right, y), strokeWidth = 1.dp.toPx())
             }
-            for (index in 0 until curve.lastIndex) {
-                drawLine(
-                    color = curveColor,
-                    start = Offset(index / 255f * size.width, (1f - curve[index]) * size.height),
-                    end = Offset((index + 1) / 255f * size.width, (1f - curve[index + 1]) * size.height),
-                    strokeWidth = 3.dp.toPx(),
-                )
+            val curve = Path().apply {
+                lut.forEachIndexed { sample, value ->
+                    val x = plot.left + sample / 255f * plot.width
+                    val y = plot.bottom - value.coerceIn(0f, 1f) * plot.height
+                    if (sample == 0) moveTo(x, y) else lineTo(x, y)
+                }
             }
+            drawPath(curve, Color.Black.copy(alpha = 0.45f), style = Stroke(width = 4.dp.toPx()))
+            drawPath(curve, ImagoColors.BrandWhite, style = Stroke(width = 2.dp.toPx()))
             points.forEachIndexed { index, point ->
-                drawCircle(
-                    color = if (activePoint == index) Color.White else curveColor,
-                    radius = if (activePoint == index) 9.dp.toPx() else 7.dp.toPx(),
-                    center = Offset(point.x / 255f * size.width, (1f - point.y / 255f) * size.height),
-                )
-                drawCircle(
-                    color = Color.Black.copy(alpha = 0.75f),
-                    radius = if (activePoint == index) 5.dp.toPx() else 3.5.dp.toPx(),
-                    center = Offset(point.x / 255f * size.width, (1f - point.y / 255f) * size.height),
-                )
+                val center = plot.toScreen(point)
+                val active = activePoint == index
+                val radius = if (active) 10.dp.toPx() else 8.dp.toPx()
+                drawCircle(Color.Black.copy(alpha = 0.45f), radius = radius + 1.5.dp.toPx(), center = center)
+                drawCircle(ImagoColors.BrandWhite, radius = radius, center = center)
             }
         }
     }
+}
+
+/** The curve's plot inside its box, and the conversions between curve values and the screen. */
+private class CurvePlot(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    /** How close to a point a finger has to land to take it, in pixels. */
+    private val reach: Float,
+) {
+    val width get() = right - left
+    val height get() = bottom - top
+
+    fun toScreen(point: eu.studio742.imago.core.model.CurvePoint) =
+        Offset(left + point.x / 255f * width, bottom - point.y / 255f * height)
+
+    fun toCurve(position: Offset): Pair<Int, Int> =
+        ((position.x - left) / width * 255f).roundToInt().coerceIn(0, 255) to
+            ((bottom - position.y) / height * 255f).roundToInt().coerceIn(0, 255)
+
+    fun pointIndexAt(points: List<eu.studio742.imago.core.model.CurvePoint>, position: Offset): Int? =
+        points.indices
+            .map { it to (toScreen(points[it]) - position).getDistance() }
+            .filter { it.second <= reach }
+            .minByOrNull { it.second }
+            ?.first
+}
+
+private fun Density.curvePlot(width: Float, height: Float): CurvePlot {
+    val inset = CURVE_TOUCH_INSET.toPx()
+    return CurvePlot(inset, inset, width - inset, height - inset, reach = CURVE_POINT_HIT_RADIUS.toPx())
 }
 
 /**
@@ -3347,3 +3374,15 @@ private fun HslColorBand.selectorColor() = when (this) {
 
 /** The curve's edit key; its handles are not sliders but fade the panel all the same. */
 private const val CURVE_EDITING_KEY = "curve"
+
+/** The drawer's height with the curve open: the handle, the header and the hint. */
+private val CURVE_PANEL_HEIGHT = 120.dp
+
+/**
+ * How far the plot steps in from the curve's own box. The end points sit on the plot's edge, and
+ * without this margin half of the circle a finger can grab would fall outside the box.
+ */
+private val CURVE_TOUCH_INSET = 16.dp
+
+/** How close to a point a finger has to land to take it. */
+private val CURVE_POINT_HIT_RADIUS = 24.dp
