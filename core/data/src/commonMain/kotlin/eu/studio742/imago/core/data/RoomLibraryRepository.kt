@@ -213,9 +213,9 @@ class RoomLibraryRepository @Inject constructor(
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
         val memories = api.onThisDay(connection, today)
         val derivedIds = derivedAssets.derivedIds()
-        val visible = memories.map { memory -> memory.year to memory.assets.filterNot { it.isAppExport(derivedIds) } }.filter { it.second.isNotEmpty() }
+        val visible = memories.map { memory -> memory.year to memory.assets }.filter { it.second.isNotEmpty() }
         val kept = database.withTransaction {
-            database.upsertFromSearch(libraryKey, visible.flatMap { (_, assets) -> assets })
+            database.upsertFromSearch(libraryKey, visible.flatMap { (_, assets) -> assets }, derivedIds)
                 .also { database.assetDao().restoreLocalRecipeFlags(libraryKey) }
                 .map { it.id }
                 .toSet()
@@ -354,7 +354,8 @@ class RoomLibraryRepository @Inject constructor(
         database.withTransaction {
             val existing = database.assetDao().byMonth(libraryKey, month).associateBy { it.id }
             val rows = assets
-                .filter { it.type in LIBRARY_ASSET_TYPES && it.id !in derivedIds }
+                // An export of this app shows only as the cover of its original's stack.
+                .filter { it.type in LIBRARY_ASSET_TYPES && (it.id !in derivedIds || it.stackId != null) }
                 .map { asset -> AssetEntity.fromDomain(libraryKey, asset).keeping(existing[asset.id]) }
             database.assetDao().deleteMonth(libraryKey, month)
             database.assetDao().upsertAll(rows)
@@ -460,6 +461,17 @@ class RoomLibraryRepository @Inject constructor(
             ?.originalAssetId
     }
 
+    override suspend fun stackChanged(assetId: String) {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        val row = database.assetDao().byIds(libraryKey, listOf(assetId)).firstOrNull() ?: return
+        val month = row.localDateTime.ifBlank { row.fileCreatedAt }.take(MONTH_PREFIX)
+        catalogSyncLock.withLock { refreshStacks(connection, libraryKey) }
+        // The month's count may not change — a photo loose before is a stack's cover now — and the
+        // sync would never go back to it on its own.
+        loadMonth(month)
+    }
+
     override suspend fun stackMembers(assetId: String): List<ImmichAsset> {
         val connection = requireConnection()
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
@@ -556,13 +568,27 @@ class RoomLibraryRepository @Inject constructor(
  * and returns them carrying it — a search knows nothing of stacks, and without this a cover opened
  * from an album lost its badge.
  */
-internal suspend fun ImmichRoomDatabase.upsertFromSearch(libraryKey: String, assets: List<ImmichAsset>): List<ImmichAsset> {
+internal suspend fun ImmichRoomDatabase.upsertFromSearch(
+    libraryKey: String,
+    assets: List<ImmichAsset>,
+    derivedIds: Set<String> = emptySet(),
+): List<ImmichAsset> {
     if (assets.isEmpty()) return assets
     val ids = assets.map { it.id }.chunked(SQL_VARIABLES_PER_QUERY)
     val known = ids.flatMap { assetDao().byIds(libraryKey, it) }.associateBy { it.id }
     val membership = ids.flatMap { stackMemberDao().ofAssets(libraryKey, it) }.associateBy { it.assetId }
-    // The photos under a cover stay under it: a search brings them, the grid does not show them.
-    val shown = assets.filter { membership[it.id]?.isCover ?: true }
+    val shown = assets.filter { asset ->
+        val member = membership[asset.id]
+        val isCover = member?.isCover == true || known[asset.id]?.stackId != null
+        when {
+            // The photos under a cover stay under it: a search brings them, the grid does not.
+            member != null && !member.isCover -> false
+            // An export of this app shows only as the cover of its original's stack; loose, it
+            // would be a second copy of the photo beside the original.
+            asset.isAppExport(derivedIds) -> isCover
+            else -> true
+        }
+    }
     val sizes = membership.values.filter { it.isCover }.map { it.stackId }.distinct().chunked(SQL_VARIABLES_PER_QUERY)
         .flatMap { stackMemberDao().sizes(libraryKey, it) }
         .associate { it.stackId to it.assetCount }
@@ -659,7 +685,8 @@ private class AssetRemoteMediator(
                 }
                 database.upsertFromSearch(
                     libraryKey,
-                    result.items.filter { it.type in LIBRARY_ASSET_TYPES && !it.isAppExport(derivedIds) },
+                    result.items.filter { it.type in LIBRARY_ASSET_TYPES },
+                    derivedIds,
                 )
                 database.assetDao().restoreLocalRecipeFlags(libraryKey)
                 database.remoteKeyDao().upsert(RemoteKeyEntity(libraryKey, queryKey, result.nextPage))
@@ -709,9 +736,9 @@ private class SmartSearchPagingSource(
                 language = java.util.Locale.getDefault().language,
             )
             val derivedIds = derivedAssets.derivedIds()
-            val visible = result.items.filterNot { it.isAppExport(derivedIds) }
+            val visible = result.items
             val stacked = database.withTransaction {
-                database.upsertFromSearch(libraryKey, visible).also { database.assetDao().restoreLocalRecipeFlags(libraryKey) }
+                database.upsertFromSearch(libraryKey, visible, derivedIds).also { database.assetDao().restoreLocalRecipeFlags(libraryKey) }
             }
             val recipes = database.recipeDao()
             LoadResult.Page(
@@ -755,11 +782,11 @@ private class AlbumAssetPagingSource(
                 personId = personId,
             )
             val derivedIds = derivedAssets.derivedIds()
-            val visible = result.items.filterNot { it.isAppExport(derivedIds) }
+            val visible = result.items
             // The catalogue receives the whole album; it is the returned list that the chip slices.
             // Filtering before the upsert would leave holes in the library when going back.
             val stacked = database.withTransaction {
-                database.upsertFromSearch(libraryKey, visible).also { database.assetDao().restoreLocalRecipeFlags(libraryKey) }
+                database.upsertFromSearch(libraryKey, visible, derivedIds).also { database.assetDao().restoreLocalRecipeFlags(libraryKey) }
             }
             val recipes = database.recipeDao()
             LoadResult.Page(

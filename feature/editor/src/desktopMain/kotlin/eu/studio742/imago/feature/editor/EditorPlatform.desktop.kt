@@ -83,7 +83,7 @@ actual fun editorViewModel(): EditorViewModel {
     val graph = LocalDesktopDataGraph.current
     return viewModel {
         EditorViewModel(PlatformContext.INSTANCE, graph.recipes, graph.savedRecipes, graph.derivedAssets,
-            graph.configuration, graph.api, DesktopEditorExporter(graph.library))
+            graph.configuration, graph.api, DesktopEditorExporter(graph.library), graph.library)
     }
 }
 

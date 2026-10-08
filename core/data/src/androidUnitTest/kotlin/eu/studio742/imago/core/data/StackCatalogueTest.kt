@@ -101,6 +101,49 @@ class StackCatalogueTest {
         }
     }
 
+    @Test fun anExportShowsOnlyAsTheCoverOfItsStack() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), ImmichRoomDatabase::class.java)
+            .allowMainThreadQueries().build()
+        try {
+            // "edit" is an export that became the cover over its original; "stray" an export that
+            // never got stacked.
+            database.stackMemberDao().insertAll(listOf("edit", "original").map { StackMemberEntity(library, it, "s1", "edit") })
+
+            val returned = database.upsertFromSearch(
+                library,
+                listOf(asset("edit"), asset("original"), asset("stray")),
+                derivedIds = setOf("edit", "stray"),
+            )
+
+            assertEquals(listOf("edit"), returned.map { it.id })
+            assertEquals(2, returned.single().stackCount)
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test fun clearingTheExportsLeavesTheOnesThatAreCovers() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), ImmichRoomDatabase::class.java)
+            .allowMainThreadQueries().build()
+        try {
+            database.assetDao().upsertAll(
+                listOf(
+                    AssetEntity.fromDomain(library, asset("cover_ImmichRoom", "s1", 2).copy(originalFileName = "a_ImmichRoom.jpg")),
+                    AssetEntity.fromDomain(library, asset("loose").copy(originalFileName = "b_ImmichRoom.jpg")),
+                ),
+            )
+
+            database.assetDao().purgeAppExports(library)
+
+            assertEquals(
+                listOf("cover_ImmichRoom"),
+                database.assetDao().byIds(library, listOf("cover_ImmichRoom", "loose")).map { it.id },
+            )
+        } finally {
+            database.close()
+        }
+    }
+
     @Test fun theTimelineStaysTheAuthority() {
         // A month read again from the timeline says what the stack is now — even that there is none.
         val before = AssetEntity.fromDomain(library, asset("cover", "s1", 3))

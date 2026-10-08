@@ -99,6 +99,12 @@ interface LibraryRepository {
      */
     suspend fun stackMembers(assetId: String): List<ImmichAsset> = emptyList()
 
+    /**
+     * The stack [assetId] is in changed from this app — an export became its cover. The stacks and
+     * the photo's month are read again, so the grid shows the new cover.
+     */
+    suspend fun stackChanged(assetId: String) = Unit
+
     /** The photo [assetId] was exported from by this app; null when it is not one of its exports. */
     suspend fun exportOriginal(assetId: String): String? = null
 

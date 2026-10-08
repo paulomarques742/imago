@@ -673,7 +673,12 @@ class OkHttpImmichApi(
         val canStack = uploaded.status != "duplicate" && uploaded.id != originalAssetId
         val stacked = if (canStack) {
             runCatching {
-                val body = json.encodeToString(StackCreateDto(listOf(originalAssetId, uploaded.id)))
+                // The edit goes first, so it is the cover. Immich merges a stack only when its cover
+                // is in the list: with the original's stack's cover there — the original itself when
+                // it is in none, or the previous export — that whole stack comes under the edit,
+                // instead of the original being pulled out into a new one.
+                val cover = coverOfStackOf(connection, originalAssetId)
+                val body = json.encodeToString(StackCreateDto(listOf(uploaded.id, cover).distinct()))
                     .toRequestBody(JSON_MEDIA_TYPE)
                 execute(
                     request = Request.Builder()
@@ -694,6 +699,15 @@ class OkHttpImmichApi(
             stackingFailed = canStack && !stacked,
         )
     }
+
+    /** The cover of the stack [assetId] is in, or [assetId] itself when it is in none. */
+    private fun coverOfStackOf(connection: ImmichConnection, assetId: String): String = runCatching {
+        executeJson<AssetStackOnlyDto>(
+            request = Request.Builder().url(endpoint(connection, ImmichContract.GET_ASSET_INFO.replace("{id}", assetId))).get().build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.GET_ASSET_INFO,
+        ).stack?.primaryAssetId
+    }.getOrNull() ?: assetId
 
     override suspend fun uploadAsset(
         connection: ImmichConnection,
@@ -800,6 +814,13 @@ private data class AssetMediaResponseDto(val id: String, val status: String)
 
 @Serializable
 private data class StackCreateDto(val assetIds: List<String>)
+
+/** Of an asset, only the stack it is in; Immich fills it in on `GET /assets/{id}`. */
+@Serializable
+private data class AssetStackOnlyDto(val stack: AssetStackDto? = null)
+
+@Serializable
+private data class AssetStackDto(val id: String, val primaryAssetId: String)
 
 @Serializable
 private data class AssetEditsCreateDto(val edits: List<AssetEditActionItemDto>)

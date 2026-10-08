@@ -242,6 +242,11 @@ class UnifiedLibrary(
     override fun previewUrl(assetId: String) = routed(assetId) { previewUrl(it) }
     override fun videoPlaybackUrl(assetId: String) = routed(assetId) { videoPlaybackUrl(it) }
     override fun apiKey(assetId: String) = routed(assetId) { apiKey(it) }
+    override suspend fun stackChanged(assetId: String) {
+        val reference = AssetReference.parse(assetId)
+        libraryOf(reference.libraryId).stackChanged(reference.localId)
+    }
+
     override suspend fun exportOriginal(assetId: String): String? {
         val reference = AssetReference.parse(assetId)
         return libraryOf(reference.libraryId).exportOriginal(reference.localId)?.let { AssetReference(reference.libraryId, it).encode() }

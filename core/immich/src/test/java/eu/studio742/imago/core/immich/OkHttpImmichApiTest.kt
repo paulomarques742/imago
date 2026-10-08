@@ -115,13 +115,15 @@ class OkHttpImmichApiTest {
     }
 
     @Test
-    fun exportOnImmich26SendsLegacyFieldsAndStacksUnderOriginal() = runTest {
+    fun exportOnImmich26SendsLegacyFieldsAndBecomesTheCoverOverTheOriginal() = runTest {
         server.enqueue(MockResponse().setBody("""{"major":2,"minor":6,"patch":3}"""))
         server.enqueue(MockResponse().setBody("{}"))
         server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"derived-1","status":"created"}"""))
+        // The original is in no stack.
+        server.enqueue(MockResponse().setBody("""{"id":"original-1","stack":null}"""))
         server.enqueue(
             MockResponse().setResponseCode(201)
-                .setBody("""{"id":"stack-1","primaryAssetId":"original-1","assets":[]}"""),
+                .setBody("""{"id":"stack-1","primaryAssetId":"derived-1","assets":[]}"""),
         )
 
         val result = api.exportEditedAsset(
@@ -141,11 +143,38 @@ class OkHttpImmichApiTest {
         assertTrue(multipart.contains("name=\"deviceAssetId\""))
         assertTrue(multipart.contains("name=\"deviceId\""))
         assertTrue(multipart.contains("filename=\"photo_ImmichRoom.jpg\""))
+        assertEquals("/api/assets/original-1", server.takeRequest().path)
         val stack = server.takeRequest()
         assertEquals("/api/stacks", stack.path)
-        assertEquals("""{"assetIds":["original-1","derived-1"]}""", stack.body.readUtf8())
+        // The edit first: Immich makes the first one the cover.
+        assertEquals("""{"assetIds":["derived-1","original-1"]}""", stack.body.readUtf8())
         assertTrue(result.stackedWithOriginal)
         assertFalse(result.stackingFailed)
+    }
+
+    @Test
+    fun exportingAgainPutsTheNewEditOverTheStackTheOriginalIsIn() = runTest {
+        server.enqueue(MockResponse().setBody("""{"major":3,"minor":1,"patch":0}"""))
+        server.enqueue(MockResponse().setBody("{}"))
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"derived-2","status":"created"}"""))
+        // The original is already under an earlier export, the stack's cover.
+        server.enqueue(MockResponse().setBody("""{"id":"original-1","stack":{"id":"stack-1","primaryAssetId":"derived-1","assetCount":2}}"""))
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"stack-2","primaryAssetId":"derived-2","assets":[]}"""))
+
+        val result = api.exportEditedAsset(
+            connection(),
+            originalAssetId = "original-1",
+            jpeg = jpegFile(),
+            fileName = "photo_ImmichRoom.jpg",
+            fileCreatedAt = "2026-01-01T10:00:00Z",
+        )
+
+        repeat(3) { server.takeRequest() }
+        assertEquals("/api/assets/original-1", server.takeRequest().path)
+        // The cover goes along, not the original: Immich merges a stack only through its cover, and
+        // the original sent alone would be pulled out of it into a new one.
+        assertEquals("""{"assetIds":["derived-2","derived-1"]}""", server.takeRequest().body.readUtf8())
+        assertTrue(result.stackedWithOriginal)
     }
 
     @Test

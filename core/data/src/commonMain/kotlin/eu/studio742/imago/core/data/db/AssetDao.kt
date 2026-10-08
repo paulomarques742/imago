@@ -391,6 +391,7 @@ interface AssetDao {
         WHERE libraryKey = :libraryKey
           AND (id IN (SELECT derivedAssetId FROM derived_assets WHERE libraryKey = :libraryKey)
                OR originalFileName LIKE '%\_ImmichRoom.jpg' ESCAPE '\')
+          AND stackId IS NULL
         """,
     )
     suspend fun purgeAppExports(libraryKey: String)

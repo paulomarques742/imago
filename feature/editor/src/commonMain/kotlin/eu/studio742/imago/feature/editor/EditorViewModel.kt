@@ -514,6 +514,8 @@ open class EditorViewModel(
     private val configuration: ConfigurationRepository,
     private val immichApi: ImmichApi,
     private val exporter: EditorExporter,
+    /** Told when an export changes a stack, so the grid shows the new cover; tests leave it out. */
+    private val library: eu.studio742.imago.core.data.LibraryRepository? = null,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(EditorUiState())
     val state = mutableState.asStateFlow()
@@ -1611,6 +1613,7 @@ open class EditorViewModel(
             // Without this record, the export shows up again in the grid as an independent photo on
             // the library's next read.
             derivedAssets.record(asset.id, eu.studio742.imago.core.model.AssetReference(targetLibraryId, result.assetId).encode())
+            if (result.stackedWithOriginal) runCatching { library?.stackChanged(asset.id) }
             val saved = recipe.copy(derivedAssetId = result.assetId, updatedAt = Instant.now().toString())
             recipes.save(saved)
             shouldPersist = true
