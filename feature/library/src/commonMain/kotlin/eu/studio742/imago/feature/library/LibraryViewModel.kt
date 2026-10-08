@@ -132,6 +132,15 @@ enum class LibrarySection { TIMELINE, ALBUMS }
 /** What the search box looks for in a server's library: what is in the photo, or the file's name. */
 enum class SearchMode { CONTENT, FILE_NAME }
 
+/**
+ * The album the grid asks the library for. One left open from another library has nothing to show
+ * here; the unified library holds the phone's albums and the server's, each with its own reference.
+ */
+internal fun gridAlbumId(album: AlbumUiModel, selectedLibraryId: String): String? {
+    val libraryId = eu.studio742.imago.core.model.AssetReference.parse(album.id).libraryId
+    return album.id.takeIf { selectedLibraryId == eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID || libraryId == selectedLibraryId }
+}
+
 data class LibraryUiState(
     val section: LibrarySection = LibrarySection.TIMELINE,
     val selectedMonth: String? = null,
@@ -218,7 +227,7 @@ open class LibraryViewModel(
     }
         .distinctUntilChanged()
         .flatMapLatest { (activeFilter, month, album, query, _, byContent) ->
-            val albumId = album?.id?.takeIf { eu.studio742.imago.core.model.AssetReference.parse(it).libraryId == configuration.selectedLibraryId.value }
+            val albumId = album?.let { gridAlbumId(it, configuration.selectedLibraryId.value) }
             if (album?.isPerson == true) {
                 library.personAssets(album.id, activeFilter)
             } else if (byContent && query.isNotEmpty()) {

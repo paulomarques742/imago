@@ -124,6 +124,18 @@ class AlbumActionsTest {
     }
 
     @Test
+    fun theUnifiedLibraryOpensThePhonesAlbumsAndTheServers() {
+        val phoneFolder = album(canEditContent = true, isFolder = true).copy(id = eu.studio742.imago.core.model.AssetReference(DEVICE_LIBRARY_ID, "f1").encode())
+        val serverAlbum = album(canEditContent = true).copy(id = eu.studio742.imago.core.model.AssetReference("home", "a1").encode())
+
+        assertEquals(phoneFolder.id, gridAlbumId(phoneFolder, eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID))
+        assertEquals(serverAlbum.id, gridAlbumId(serverAlbum, eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID))
+        assertEquals(serverAlbum.id, gridAlbumId(serverAlbum, "home"))
+        // Left open in another library, it is not this one's.
+        assertNull(gridAlbumId(serverAlbum, DEVICE_LIBRARY_ID))
+    }
+
+    @Test
     fun thePeopleChipIsNotAFilterOfTheTimeline() {
         assertEquals(TimelineChip.FAVORITES, TimelineChip.of(eu.studio742.imago.core.model.LibraryFilter.FAVORITES))
         assertNull(TimelineChip.PEOPLE.filter)
