@@ -150,6 +150,7 @@
     <string name="library_permission_asset_edit_get">Reads the crop, rotation and mirror Immich already has, so only what changed is sent</string>
     <string name="library_permission_asset_edit_create">Sends the crop, rotation and mirror you set in IMAGO, so Immich shows the photo framed the same way</string>
     <string name="library_permission_asset_edit_delete">Removes them from Immich when you undo them in IMAGO</string>
+    <string name="library_permission_memory_read">Shows the photos of this day in earlier years</string>
     <string name="library_permission_map_read">Shows your photos on the map</string>
     <string name="library_permission_person_read">Shows the people Immich recognizes, and the photos of each one</string>
     <!-- Sharing from other apps to Immich -->
@@ -306,6 +307,13 @@
     <string name="library_album_name">Album name</string>
     <string name="library_people">People</string>
     <string name="library_map">Map</string>
+    <plurals name="library_on_this_day_years_ago">
+        <item quantity="one">%1$d year ago</item>
+        <item quantity="other">%1$d years ago</item>
+    </plurals>
+    <string name="library_on_this_day_setting">Show “On this day”</string>
+    <string name="library_on_this_day_setting_body">Photos taken on this day in earlier years, above the timeline.</string>
+    <string name="library_back_to_timeline">Back to the timeline</string>
     <string name="library_map_close">Close the map</string>
     <string name="library_map_failed">The map couldn’t be loaded.</string>
     <string name="library_map_zoom_in">Zoom in</string>

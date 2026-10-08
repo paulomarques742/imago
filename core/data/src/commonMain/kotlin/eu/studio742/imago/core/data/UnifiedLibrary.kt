@@ -12,6 +12,7 @@ import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichPerson
 import eu.studio742.imago.core.model.MapContents
+import eu.studio742.imago.core.model.DayMemory
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.LibraryFilter
 import eu.studio742.imago.core.model.RECENT_FILTER_DAYS
@@ -20,6 +21,7 @@ import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -163,6 +165,19 @@ class UnifiedLibrary(
     }
 
     override val hasMap: Boolean get() = true
+
+    /** Both sides by year; a photo on both is the phone's, as in the timeline. */
+    override suspend fun onThisDay(today: LocalDate): List<DayMemory> = coroutineScope {
+        val phone = async { runCatching { device.onThisDay(today) }.getOrDefault(emptyList()) }
+        val cloud = async { runCatching { server.onThisDay(today) }.getOrDefault(emptyList()) }
+        val onPhone = database.assetDao().serverCopiesOfDevice(DEVICE_LIBRARY_ID, serverId).toHashSet()
+        val byYear = LinkedHashMap<Int, MutableList<String>>()
+        phone.await().forEach { memory -> byYear.getOrPut(memory.year) { mutableListOf() } += memory.assetIds.map { AssetReference(DEVICE_LIBRARY_ID, it).encode() } }
+        cloud.await().forEach { memory ->
+            byYear.getOrPut(memory.year) { mutableListOf() } += memory.assetIds.filterNot { it in onPhone }.map { AssetReference(serverId, it).encode() }
+        }
+        byYear.filterValues { it.isNotEmpty() }.map { (year, ids) -> DayMemory(year, ids) }.sortedByDescending { it.year }
+    }
 
     /** Both sides; a photo on both is the phone's, as in the timeline. */
     override fun mapContents(): Flow<MapContents> {

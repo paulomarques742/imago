@@ -773,6 +773,41 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun theMemoriesOfTheDayComeOnePerYearWithTheirPhotos() = runTest {
+        val asset = """{"id":"%s","originalFileName":"a.jpg","fileCreatedAt":"2025-10-08T10:00:00Z","localDateTime":"2025-10-08T11:00:00Z","width":1,"height":1,"isFavorite":false,"isEdited":false,"type":"IMAGE"}"""
+        server.enqueue(
+            MockResponse().setBody(
+                """[{"type":"on_this_day","data":{"year":2023},"assets":[${asset.format("a3")}],"showAt":"2026-10-08T00:00:00.000Z","hideAt":"2026-10-09T00:00:00.000Z"},""" +
+                    """{"type":"on_this_day","data":{"year":2025},"assets":[${asset.format("a1")},${asset.format("a2")}]},""" +
+                    """{"type":"on_this_day","data":{"year":2024},"assets":[]}]""",
+            ),
+        )
+
+        val memories = api.onThisDay(connection(), java.time.LocalDate.of(2026, 10, 8))
+
+        assertEquals("/api/memories?type=on_this_day&for=2026-10-08", server.takeRequest().path)
+        assertEquals(listOf(2025 to listOf("a1", "a2"), 2023 to listOf("a3")), memories.map { it.year to it.assets.map { a -> a.id } })
+    }
+
+    @Test
+    fun aServerThatRefusesTheDayIsAskedForAllAndTheDaysAreKept() = runTest {
+        server.enqueue(MockResponse().setResponseCode(400).setBody("""{"message":["for must be a Date instance"]}"""))
+        val asset = """{"id":"a1","originalFileName":"a.jpg","fileCreatedAt":"2025-10-08T10:00:00Z","localDateTime":"2025-10-08T11:00:00Z","width":1,"height":1,"isFavorite":false,"isEdited":false,"type":"IMAGE"}"""
+        server.enqueue(
+            MockResponse().setBody(
+                """[{"type":"on_this_day","data":{"year":2025},"assets":[$asset],"showAt":"2026-10-08T00:00:00.000Z","hideAt":"2026-10-09T00:00:00.000Z"},""" +
+                    """{"type":"on_this_day","data":{"year":2024},"assets":[$asset],"showAt":"2026-10-07T00:00:00.000Z","hideAt":"2026-10-08T00:00:00.000Z"}]""",
+            ),
+        )
+
+        val memories = api.onThisDay(connection(), java.time.LocalDate.of(2026, 10, 8))
+
+        server.takeRequest()
+        assertEquals("/api/memories?type=on_this_day", server.takeRequest().path)
+        assertEquals(listOf(2025), memories.map { it.year })
+    }
+
+    @Test
     fun readsWhereThePhotosWereTaken() = runTest {
         server.enqueue(
             MockResponse().setBody(

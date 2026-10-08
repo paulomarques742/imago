@@ -150,6 +150,7 @@
     <string name="library_permission_asset_edit_get">Lê o corte, a rotação e o espelho que o Immich já tem, para só enviar o que mudou</string>
     <string name="library_permission_asset_edit_create">Envia o corte, a rotação e o espelho que fizer no IMAGO, para o Immich mostrar a fotografia com o mesmo enquadramento</string>
     <string name="library_permission_asset_edit_delete">Retira-os do Immich quando os desfizer no IMAGO</string>
+    <string name="library_permission_memory_read">Mostra as fotografias deste dia em anos anteriores</string>
     <string name="library_permission_map_read">Mostra as fotografias no mapa</string>
     <string name="library_permission_person_read">Mostra as pessoas que o Immich reconhece e as fotografias de cada uma</string>
     <!-- Partilhar de outras apps para o Immich -->
@@ -306,6 +307,13 @@
     <string name="library_album_name">Nome do álbum</string>
     <string name="library_people">Pessoas</string>
     <string name="library_map">Mapa</string>
+    <plurals name="library_on_this_day_years_ago">
+        <item quantity="one">Há %1$d ano</item>
+        <item quantity="other">Há %1$d anos</item>
+    </plurals>
+    <string name="library_on_this_day_setting">Mostrar «Neste dia»</string>
+    <string name="library_on_this_day_setting_body">Fotografias tiradas neste dia em anos anteriores, por cima da cronologia.</string>
+    <string name="library_back_to_timeline">Voltar à cronologia</string>
     <string name="library_map_close">Fechar o mapa</string>
     <string name="library_map_failed">Não foi possível carregar o mapa.</string>
     <string name="library_map_zoom_in">Aproximar</string>

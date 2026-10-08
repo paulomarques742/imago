@@ -27,7 +27,7 @@ import org.junit.Test
 import java.io.File
 import java.time.LocalDate
 
-/** Where the photos were taken: read once from the files, and joined with a server's. */
+/** Where and when: the places read once from the files, the memories of this day, each joined with a server's. */
 class MapContentsTest {
     private val database: ImmichRoomDatabase = Room.inMemoryDatabaseBuilder<ImmichRoomDatabase>()
         .setDriver(BundledSQLiteDriver())
@@ -139,9 +139,56 @@ class MapContentsTest {
         assertEquals(null, second.nextKey)
     }
 
-    /** A server that only knows where its photos are. */
-    private class Server(private val markers: List<MapMarker>) : LibraryRepository {
+    @Test
+    fun theDevicesMemoriesAreThisDayInEarlierYearsByTheClockWhereTheyWereTaken() = runBlocking {
+        fun local(id: String, localDateTime: String) =
+            AssetEntity(DEVICE_LIBRARY_ID, id, "c", "$id.jpg", "${localDateTime}Z", localDateTime, null, null,
+                isFavorite = false, isEdited = false, hasLocalRecipe = false, type = "IMAGE")
+        database.assetDao().upsertAll(
+            listOf(
+                local("a", "2025-10-08T09:00:00"),
+                local("b", "2025-10-08T21:00:00"),
+                local("c", "2019-10-08T12:00:00"),
+                local("today", "2026-10-08T08:00:00"),
+                local("other-day", "2025-10-09T00:30:00"),
+            ),
+        )
+
+        val memories = Device(emptyMap()).onThisDay(LocalDate.of(2026, 10, 8))
+
+        assertEquals(listOf(2025 to listOf("b", "a"), 2019 to listOf("c")), memories.map { it.year to it.assetIds })
+    }
+
+    @Test
+    fun theUnifiedMemoriesJoinBothSidesByYearWithAPhotoOnBothOnceAsThePhones() = runBlocking {
+        database.assetDao().upsertAll(
+            listOf(
+                row(DEVICE_LIBRARY_ID, "p1", "20251008_100000.jpg", "2025-10-08T09:00:00.000Z"),
+                row(SERVER, "s1", "20251008_100000.jpg", "2025-10-08T10:00:00.000Z"),
+                row(SERVER, "s2", "IMG_0002.JPG", "2025-10-08T15:00:00.000Z"),
+                row(SERVER, "s3", "IMG_0003.JPG", "2024-10-08T15:00:00.000Z"),
+            ),
+        )
+        val server = Server(emptyList(), listOf(eu.studio742.imago.core.model.DayMemory(2025, listOf("s2", "s1")), eu.studio742.imago.core.model.DayMemory(2024, listOf("s3"))))
+
+        val memories = UnifiedLibrary(database, Device(emptyMap()), server, SERVER).onThisDay(LocalDate.of(2026, 10, 8))
+
+        assertEquals(
+            listOf(
+                2025 to listOf(AssetReference(DEVICE_LIBRARY_ID, "p1").encode(), AssetReference(SERVER, "s2").encode()),
+                2024 to listOf(AssetReference(SERVER, "s3").encode()),
+            ),
+            memories.map { it.year to it.assetIds },
+        )
+    }
+
+    /** A server that only knows where its photos are, and its memories. */
+    private class Server(
+        private val markers: List<MapMarker>,
+        private val memories: List<eu.studio742.imago.core.model.DayMemory> = emptyList(),
+    ) : LibraryRepository {
         override fun mapContents(): Flow<MapContents> = flowOf(MapContents(markers))
+        override suspend fun onThisDay(today: LocalDate) = memories
         override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?) = error("unused")
         override suspend fun albums() = emptyList<eu.studio742.imago.core.model.ImmichAlbum>()
         override suspend fun timeBuckets() = emptyList<eu.studio742.imago.core.model.ImmichTimeBucket>()

@@ -110,6 +110,12 @@ class SourceLibraryRepository @Inject constructor(
             .map { page -> page.map { it.copy(id = AssetReference(id, it.id).encode()) } }
     }
 
+    override suspend fun onThisDay(today: LocalDate): List<DayMemory> {
+        val id = configuration.selectedLibraryId.value
+        if (id == UNIFIED_LIBRARY_ID) return unified().onThisDay(today)
+        return provider(id).onThisDay(today).map { memory -> memory.copy(assetIds = memory.assetIds.map { AssetReference(id, it).encode() }) }
+    }
+
     override val hasMap: Boolean
         get() = runCatching { provider(configuration.selectedLibraryId.value).hasMap }.getOrDefault(false)
 

@@ -266,6 +266,47 @@ class OkHttpImmichApi(
         people.filterNot { it.isHidden }.sortedBy { it.name.isBlank() }.map { ImmichPerson(it.id, it.name.trim()) }
     }
 
+    /**
+     * Asked with the day: v2 takes it as a date-time and v3 only as a date, and a date is what v3
+     * accepts. A server that refuses it is asked for all its memories, and the ones showing on [day]
+     * are kept here, by the window each one carries.
+     */
+    override suspend fun onThisDay(connection: ImmichConnection, day: LocalDate): List<ServerDayMemory> = withContext(Dispatchers.IO) {
+        fun ask(forDay: Boolean): List<MemoryResponseDto> {
+            val url = endpoint(connection, ImmichContract.SEARCH_MEMORIES).newBuilder().apply {
+                addQueryParameter("type", "on_this_day")
+                if (forDay) addQueryParameter("for", day.toString())
+            }.build()
+            return executeJson(
+                request = Request.Builder().url(url).get().build(),
+                apiKey = connection.apiKey,
+                permission = ImmichKeyPermissions.SEARCH_MEMORIES,
+            )
+        }
+        val memories = try {
+            ask(forDay = true)
+        } catch (error: ImmichApiException.Server) {
+            if (error.status != 400) throw error
+            ask(forDay = false)
+        }
+        val start = day.atStartOfDay(java.time.ZoneOffset.UTC).toInstant()
+        val end = day.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant()
+        memories
+            .filter { memory ->
+                val shows = memory.showAt?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
+                val hides = memory.hideAt?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
+                (shows == null || shows < end) && (hides == null || hides > start)
+            }
+            .mapNotNull { memory ->
+                val year = memory.data?.year ?: return@mapNotNull null
+                val assets = memory.assets.map(AssetResponseDto::toDomain).filter { it.type == AssetType.IMAGE || it.type == AssetType.VIDEO }
+                ServerDayMemory(year, assets).takeIf { assets.isNotEmpty() }
+            }
+            .groupBy { it.year }
+            .map { (year, sameYear) -> ServerDayMemory(year, sameYear.flatMap { it.assets }.distinctBy { it.id }) }
+            .sortedByDescending { it.year }
+    }
+
     override suspend fun mapMarkers(connection: ImmichConnection): List<MapMarker> = withContext(Dispatchers.IO) {
         executeJson<List<MapMarkerResponseDto>>(
             request = Request.Builder().url(endpoint(connection, ImmichContract.GET_MAP_MARKERS)).get().build(),
@@ -809,6 +850,17 @@ private data class MetadataSearchDto(
 
 @Serializable
 private data class PeopleResponseDto(val people: List<PersonResponseDto> = emptyList(), val hasNextPage: Boolean = false)
+
+@Serializable
+private data class MemoryResponseDto(
+    val assets: List<AssetResponseDto> = emptyList(),
+    val data: OnThisDayDto? = null,
+    val showAt: String? = null,
+    val hideAt: String? = null,
+)
+
+@Serializable
+private data class OnThisDayDto(val year: Int? = null)
 
 @Serializable
 private data class MapMarkerResponseDto(val id: String, val lat: Double, val lon: Double, val city: String? = null)

@@ -113,6 +113,12 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
 
     override val hasMap: Boolean get() = true
 
+    override suspend fun onThisDay(today: LocalDate): List<DayMemory> =
+        database.assetDao().onThisDay(DEVICE_LIBRARY_ID, "%02d-%02d".format(today.monthValue, today.dayOfMonth), today.year.toString())
+            .groupBy { it.localDateTime.take(4).toInt() }
+            .map { (year, rows) -> DayMemory(year, rows.map { it.id }) }
+            .sortedByDescending { it.year }
+
     /** Whether the places in the files can be read now; Android hides them until it is allowed. */
     protected open fun canReadLocations(): Boolean = true
 

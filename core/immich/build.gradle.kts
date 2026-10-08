@@ -94,6 +94,7 @@ val generateImmichContract by tasks.registering {
             "getAllPeople",
             "getPersonThumbnail",
             "getMapMarkers",
+            "searchMemories",
         )
 
         /**
@@ -107,7 +108,7 @@ val generateImmichContract by tasks.registering {
             "createAlbum", "addAssetsToAlbum", "removeAssetFromAlbum", "updateAlbumInfo", "deleteAlbum",
             "restoreAssets", "emptyTrash",
             "getAssetEdits", "editAsset", "removeAssetEdits",
-            "getAllPeople", "getPersonThumbnail", "getMapMarkers",
+            "getAllPeople", "getPersonThumbnail", "getMapMarkers", "searchMemories",
         )
         check(operationIds.containsAll(optionalOperationIds))
         validatedDocuments.forEach { validatedDocument ->
@@ -174,6 +175,10 @@ val generateImmichContract by tasks.registering {
         check(propertiesOf("MetadataSearchDto").contains("personIds"))
         // Where the photos were taken.
         check(propertiesOf("MapMarkerResponseDto").containsAll(setOf("id", "lat", "lon", "city")))
+        // "On this day": the memories the server makes, one per earlier year.
+        check(propertiesOf("MemoryResponseDto").containsAll(setOf("assets", "data", "type", "showAt", "hideAt")))
+        check(propertiesOf("OnThisDayDto").contains("year"))
+        check("on_this_day" in (schemas.getValue("MemoryType")["enum"] as List<*>))
         check(
             propertiesOf("AlbumResponseDto").containsAll(
                 setOf("id", "albumName", "albumThumbnailAssetId", "assetCount", "description", "shared"),
@@ -247,6 +252,8 @@ val generateImmichContract by tasks.registering {
             check(validatedProperties("PersonResponseDto").containsAll(setOf("id", "name", "isHidden")))
             check(validatedProperties("MetadataSearchDto").contains("personIds"))
             check(validatedProperties("MapMarkerResponseDto").containsAll(setOf("id", "lat", "lon", "city")))
+            check(validatedProperties("MemoryResponseDto").containsAll(setOf("assets", "data", "type", "showAt", "hideAt")))
+            check(validatedProperties("OnThisDayDto").contains("year"))
         }
 
         fun pathFor(operationId: String) = operationFor(document, operationId).second
@@ -352,6 +359,7 @@ val generateImmichContract by tasks.registering {
             |    const val GET_ALL_PEOPLE = "${pathFor("getAllPeople")}"
             |    const val GET_PERSON_THUMBNAIL = "${pathFor("getPersonThumbnail")}"
             |    const val GET_MAP_MARKERS = "${pathFor("getMapMarkers")}"
+            |    const val SEARCH_MEMORIES = "${pathFor("searchMemories")}"
             |}
             |
             |/** The API key permissions the endpoints the app uses ask for. */

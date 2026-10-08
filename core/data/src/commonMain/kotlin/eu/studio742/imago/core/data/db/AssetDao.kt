@@ -117,6 +117,19 @@ interface AssetDao {
     )
     suspend fun unifiedTimeBuckets(device: String, server: String): List<LocalTimeBucket>
 
+    /**
+     * The photos taken on [monthDay] ("10-08") of a year before [year], by the time on the clock
+     * where they were taken, the newest first.
+     */
+    @Query(
+        """
+        SELECT * FROM assets
+        WHERE libraryKey = :libraryKey AND substr(localDateTime, 6, 5) = :monthDay AND substr(localDateTime, 1, 4) < :year
+        ORDER BY localDateTime DESC, id DESC
+        """,
+    )
+    suspend fun onThisDay(libraryKey: String, monthDay: String, year: String): List<AssetEntity>
+
     @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey AND id IN (:ids)")
     suspend fun byIds(libraryKey: String, ids: List<String>): List<AssetEntity>
 

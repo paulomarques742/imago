@@ -7,6 +7,7 @@ import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.ImmichPerson
 import eu.studio742.imago.core.model.MapContents
+import eu.studio742.imago.core.model.DayMemory
 import eu.studio742.imago.core.model.AlbumAddition
 import eu.studio742.imago.core.model.AlbumPlace
 import eu.studio742.imago.core.model.FolderTransfer
@@ -142,6 +143,9 @@ interface LibraryRepository {
      */
     fun searchByContent(query: String, filter: LibraryFilter, month: String? = null, albumId: String? = null): Flow<PagingData<ImmichAsset>> =
         kotlinx.coroutines.flow.flowOf(PagingData.empty())
+
+    /** The photos of [today] in earlier years, one memory per year, the most recent year first. */
+    suspend fun onThisDay(today: java.time.LocalDate): List<DayMemory> = emptyList()
 
     /** Whether this library can put its photos on a map. */
     val hasMap: Boolean get() = false

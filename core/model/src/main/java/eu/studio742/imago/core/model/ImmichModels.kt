@@ -132,6 +132,9 @@ data class ImmichAlbum(
     val isFolder: Boolean = false,
 )
 
+/** The photos of this day in an earlier [year], the most recent first. */
+data class DayMemory(val year: Int, val assetIds: List<String>)
+
 /** Where a photo was taken. [city] when the server knows it. */
 data class MapMarker(val assetId: String, val latitude: Double, val longitude: Double, val city: String? = null)
 

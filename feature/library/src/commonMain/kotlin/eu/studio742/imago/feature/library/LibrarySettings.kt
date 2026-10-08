@@ -215,6 +215,7 @@ fun LibrarySettingsRoute(
                 if (!editing) {
                     accountSection()
                     LanguageCard()
+                    LibrarySettingsCard { OnThisDaySetting(viewModel) }
                 }
                 Text(if (editing) { if (editId == null) stringResource(Res.string.library_add_immich_server) else stringResource(Res.string.library_edit_library) } else stringResource(Res.string.library_libraries),
                     style = MaterialTheme.typography.titleLarge, color = ImagoColors.TextPrimary)

@@ -2,6 +2,7 @@
 
 package eu.studio742.imago.feature.library
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.produceState
 import eu.studio742.imago.core.model.AlbumPlace
 import eu.studio742.imago.core.designsystem.i18n.resolve
@@ -462,6 +463,7 @@ private fun LibraryHost(
             // and losing the selection on every change kept it from gathering photos from different places.
             onFilterChange = { viewModel.selectFilter(it); if (picker == null) viewModel.clearSelection() },
             onShowPeople = { viewModel.showPeople(); if (picker == null) viewModel.clearSelection() },
+            onOpenMemory = { viewModel.openMemory(it); viewModel.clearSelection() },
             onOpenPerson = { viewModel.openPerson(it); if (picker == null) viewModel.clearSelection() },
             onSectionChange = { viewModel.selectSection(it); if (picker == null) viewModel.clearSelection() },
             onSelectMonth = viewModel::selectMonth,
@@ -487,6 +489,7 @@ private fun LibraryHost(
                 assets.refresh()
                 viewModel.refreshNavigation()
                 if (viewModel.uiState.value.showingPeople) viewModel.loadPeople()
+                viewModel.loadMemories()
                 // Pulling down asks the server what changed, and what changed in the timeline counts
                 // too: without this, a new month only appeared on the next launch.
                 viewModel.syncCatalog()
@@ -516,6 +519,7 @@ private fun LibraryScreen(
     uiState: LibraryUiState,
     onFilterChange: (LibraryFilter) -> Unit,
     onShowPeople: () -> Unit,
+    onOpenMemory: (MemoryUiModel) -> Unit,
     onOpenPerson: (PersonUiModel) -> Unit,
     onSectionChange: (LibrarySection) -> Unit,
     onSelectMonth: (String?) -> Unit,
@@ -757,6 +761,11 @@ private fun LibraryScreen(
                     timeline = if (catalogSync.syncing) LibraryTimeline(emptyList()) else timeline,
                     onOpenAsset = onOpenAsset,
                     onToggleFavorite = onToggleFavorite,
+                    // Over the whole timeline only: inside a slice, an album or a picker they say nothing.
+                    memories = uiState.memories.takeIf {
+                        picker == null && describesTheGrid && uiState.selectedMonth == null && uiState.section == LibrarySection.TIMELINE
+                    }.orEmpty(),
+                    onOpenMemory = onOpenMemory,
                 )
             }
         }
@@ -1227,6 +1236,7 @@ private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit, editing: Album
                 Icons.AutoMirrored.Outlined.ArrowBack,
                 contentDescription = stringResource(
                     when {
+                        album?.isMemory == true -> Res.string.library_back_to_timeline
                         album?.isPerson == true -> Res.string.library_back_to_people
                         album?.placeAssetIds != null -> Res.string.library_back_to_map
                         else -> Res.string.library_back_to_albums
@@ -1336,6 +1346,8 @@ private fun PhotoBrowser(
     timeline: LibraryTimeline,
     onOpenAsset: (AssetUiModel, List<AssetUiModel>) -> Unit,
     onToggleFavorite: (AssetUiModel) -> Unit,
+    memories: List<MemoryUiModel> = emptyList(),
+    onOpenMemory: (MemoryUiModel) -> Unit = {},
 ) {
     when {
         assets.loadState.refresh is LoadState.Loading && assets.itemCount == 0 -> LoadingState()
@@ -1345,7 +1357,21 @@ private fun PhotoBrowser(
         }
         assets.itemCount == 0 && assets.loadState.refresh is LoadState.NotLoading ->
             EmptyState(filter = filter, query = query)
-        else -> Box(Modifier.fillMaxSize()) {
+        else -> Column(Modifier.fillMaxSize()) {
+            // Above the grid and not in it: the grid's indices are the photos', which the fast scroll,
+            // the jump to a date and the way back to a photo count on. It folds away once the grid
+            // leaves the top, and comes back with it.
+            val atTop by remember(gridState) {
+                derivedStateOf { gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0 }
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = memories.isNotEmpty() && atTop,
+                enter = androidx.compose.animation.expandVertically(),
+                exit = androidx.compose.animation.shrinkVertically(),
+            ) {
+                OnThisDayStrip(memories, onOpenMemory)
+            }
+            Box(Modifier.fillMaxWidth().weight(1f)) {
             AssetGrid(
                 assets = assets,
                 gridState = gridState,
@@ -1364,6 +1390,7 @@ private fun PhotoBrowser(
                 timeline = timeline,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
+            }
         }
     }
 }

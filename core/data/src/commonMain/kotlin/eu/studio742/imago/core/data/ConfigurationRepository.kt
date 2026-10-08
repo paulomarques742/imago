@@ -17,6 +17,11 @@ interface ConfigurationRepository {
         get() = libraries.value.firstOrNull { !it.isDevice && !it.isUnified && it.isConnected }?.id
 
     fun setUnifiedPartner(id: String) = Unit
+
+    /** Whether the library shows "On this day" over the timeline: on unless turned off, for every library here. */
+    val showOnThisDay: kotlinx.coroutines.flow.StateFlow<Boolean> get() = AlwaysShown
+
+    fun setShowOnThisDay(show: Boolean) = Unit
     fun source(id: String): eu.studio742.imago.core.model.LibrarySource
     suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String): ServerVersion
     suspend fun testLibrary(id: String): ServerVersion
@@ -72,3 +77,5 @@ fun ConfigurationRepository.activeSource(): kotlinx.coroutines.flow.Flow<eu.stud
         sources.firstOrNull { it.id == id && it.isConnected }
             ?: sources.first { it.isDevice }
     }
+
+private val AlwaysShown: kotlinx.coroutines.flow.StateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(true)

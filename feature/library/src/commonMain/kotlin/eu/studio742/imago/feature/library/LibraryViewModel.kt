@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -92,8 +93,10 @@ data class AlbumUiModel(
     val isFolder: Boolean = false,
     /** Not an album: a person the server recognises, open with the photos they are in. */
     val isPerson: Boolean = false,
-    /** Not an album either: a place on the map, with the photos taken there. */
+    /** Not an album either: a place on the map, or a day of an earlier year, with its photos. */
     val placeAssetIds: List<String>? = null,
+    /** The photos of this day in an earlier year: closing them goes back to the timeline. */
+    val isMemory: Boolean = false,
 )
 
 /** Someone the server recognises; [name] is empty while nobody named them. */
@@ -196,6 +199,8 @@ data class LibraryUiState(
     val mapError: UiText? = null,
     /** Where the map was left; null fits every photo. */
     val mapCamera: MapCamera? = null,
+    /** "On this day": a memory per earlier year, over the timeline, when Settings say so. */
+    val memories: List<MemoryUiModel> = emptyList(),
 )
 
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -273,6 +278,7 @@ open class LibraryViewModel(
                 uiState.value = restored?.second ?: LibraryUiState()
                 previous = id
                 uiState.update { it.copy(hasPeople = library.hasPeople, hasMap = library.hasMap) }
+                loadMemories()
                 if (uiState.value.showingMap) loadMap()
                 if (uiState.value.showingPeople) loadPeople()
                 refreshNavigation()
@@ -283,6 +289,9 @@ open class LibraryViewModel(
                     if (configuration.selectedLibraryId.value == id) uiState.update { it.copy(contentSearchAvailable = available) }
                 }
             }
+        }
+        viewModelScope.launch {
+            configuration.showOnThisDay.drop(1).collect { loadMemories() }
         }
         viewModelScope.launch {
             device.accessRevision.collect {
@@ -400,6 +409,44 @@ open class LibraryViewModel(
                 )
             }
         }
+    }
+
+    private var memoriesJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * The memories of today in the open library. They are a nicety: one that cannot be read — a key
+     * without the permission, a server away — leaves the timeline as it was, without a word.
+     */
+    fun loadMemories() {
+        val sourceId = configuration.selectedLibraryId.value
+        memoriesJob?.cancel()
+        if (!configuration.showOnThisDay.value) {
+            uiState.update { it.copy(memories = emptyList()) }
+            return
+        }
+        memoriesJob = viewModelScope.launch {
+            val today = LocalDate.now()
+            val memories = runCatching { library.onThisDay(today) }.getOrDefault(emptyList())
+                .filter { it.assetIds.isNotEmpty() }
+                .map { memory ->
+                    val cover = memory.assetIds.first()
+                    MemoryUiModel(memory.year, today.year - memory.year, memory.assetIds, library.thumbnailUrl(cover), library.apiKey(cover))
+                }
+            if (sourceId == configuration.selectedLibraryId.value) uiState.update { it.copy(memories = memories) }
+        }
+    }
+
+    /** A year opens like an album over the timeline, with its photos of this day. */
+    fun openMemory(memory: MemoryUiModel) = uiState.update {
+        it.copy(
+            selectedAlbum = AlbumUiModel(
+                id = "memory-${memory.year}", name = memory.year.toString(), description = "", thumbnailUrl = memory.coverUrl,
+                assetCount = memory.assetIds.size, startDate = null, endDate = null, shared = false, apiKey = memory.apiKey,
+                placeAssetIds = memory.assetIds, isMemory = true,
+            ),
+            isSearching = false,
+            query = "",
+        )
     }
 
     private var mapJob: kotlinx.coroutines.Job? = null

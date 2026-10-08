@@ -53,6 +53,10 @@ interface ImmichApi {
     /** The people the server recognises, the named ones first, without the ones hidden in Immich. */
     suspend fun people(connection: ImmichConnection): List<ImmichPerson> = error("People are not available here")
 
+    /** The server's "on this day" memories for [day]: one per earlier year, the most recent first. */
+    suspend fun onThisDay(connection: ImmichConnection, day: java.time.LocalDate): List<ServerDayMemory> =
+        error("Memories are not available here")
+
     /** Every photo of this account the server knows the place of. */
     suspend fun mapMarkers(connection: ImmichConnection): List<MapMarker> = error("The map is not available here")
 
@@ -253,3 +257,6 @@ sealed class ImmichApiException(
     )
     class Connection(cause: Throwable) : ImmichApiException(UserMessage.IMMICH_UNREACHABLE, cause = cause)
 }
+
+/** A memory as the server sends it: the year it remembers and its photos, whole. */
+data class ServerDayMemory(val year: Int, val assets: List<eu.studio742.imago.core.model.ImmichAsset>)

@@ -29,6 +29,7 @@ import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.ImmichPerson
 import eu.studio742.imago.core.model.MapContents
+import eu.studio742.imago.core.model.DayMemory
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.ImmichConnection
 import eu.studio742.imago.core.model.AssetType
@@ -162,6 +163,20 @@ class RoomLibraryRepository @Inject constructor(
     override val hasPeople: Boolean get() = true
 
     override val hasMap: Boolean get() = true
+
+    /** The server's own memories; their photos go into the catalogue, where the grid reads them. */
+    override suspend fun onThisDay(today: LocalDate): List<DayMemory> {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        val memories = api.onThisDay(connection, today)
+        val derivedIds = derivedAssets.derivedIds()
+        val visible = memories.map { memory -> memory.year to memory.assets.filterNot { it.isAppExport(derivedIds) } }.filter { it.second.isNotEmpty() }
+        database.withTransaction {
+            database.assetDao().upsertAll(visible.flatMap { (_, assets) -> assets.map { AssetEntity.fromDomain(libraryKey, it) } })
+            database.assetDao().restoreLocalRecipeFlags(libraryKey)
+        }
+        return visible.map { (year, assets) -> DayMemory(year, assets.map { it.id }) }
+    }
 
     override fun mapContents(): Flow<MapContents> = kotlinx.coroutines.flow.flow {
         emit(MapContents(api.mapMarkers(requireConnection())))

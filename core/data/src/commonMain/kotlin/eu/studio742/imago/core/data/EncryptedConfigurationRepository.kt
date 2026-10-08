@@ -9,6 +9,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.emptyFlow
@@ -132,6 +133,14 @@ class EncryptedConfigurationRepository(
         state.value = currentConnection()
         persist()
     }
+    private val onThisDay = MutableStateFlow(preferences.getString(ON_THIS_DAY_KEY) != "false")
+    override val showOnThisDay: StateFlow<Boolean> = onThisDay.asStateFlow()
+
+    override fun setShowOnThisDay(show: Boolean) {
+        requireUser(preferences.write(mapOf(ON_THIS_DAY_KEY to show.toString())), UserMessage.CONFIGURATION_NOT_SAVED)
+        onThisDay.value = show
+    }
+
     override var lastExportLibraryId: String?
         get() = preferences.getString("export_library")
         set(value) { preferences.write(mapOf("export_library" to value)) }
@@ -289,6 +298,7 @@ class EncryptedConfigurationRepository(
     private companion object {
         const val FAILURE_REFRESH_INTERVAL_MS = 30_000L
         const val WELCOME_KEY = "welcome_completed"
+        const val ON_THIS_DAY_KEY = "show_on_this_day"
     }
 }
 
