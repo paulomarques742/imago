@@ -123,6 +123,16 @@ interface LibraryRepository {
     /** The album goes. A server's keeps its photos; a folder's go to the device's trash. */
     suspend fun deleteAlbum(albumId: String): Unit = error("This library cannot delete albums")
 
+    /** Whether this library searches by what is in the photos; a server with it on does. */
+    suspend fun contentSearchAvailable(): Boolean = false
+
+    /**
+     * Photos and videos by what is in them ("beach"), the closest first, within the grid's slice:
+     * the chip, the month, the album. Empty where the library cannot.
+     */
+    fun searchByContent(query: String, filter: LibraryFilter, month: String? = null, albumId: String? = null): Flow<PagingData<ImmichAsset>> =
+        kotlinx.coroutines.flow.flowOf(PagingData.empty())
+
     /** Whether this library has a trash IMAGO can show; the computer's folders do not. */
     val hasTrash: Boolean get() = false
 

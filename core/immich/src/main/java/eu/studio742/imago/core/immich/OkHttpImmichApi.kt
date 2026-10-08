@@ -189,6 +189,51 @@ class OkHttpImmichApi(
         )
     }
 
+    override suspend fun smartSearch(
+        connection: ImmichConnection,
+        page: Int,
+        pageSize: Int,
+        query: String,
+        albumId: String?,
+        favoritesOnly: Boolean,
+        takenAfter: String?,
+        takenBefore: String?,
+        language: String?,
+    ): AssetPage = withContext(Dispatchers.IO) {
+        val payload = SmartSearchDto(
+            query = query,
+            page = page,
+            size = pageSize,
+            albumIds = albumId?.let(::listOf),
+            isFavorite = true.takeIf { favoritesOnly },
+            takenAfter = takenAfter,
+            takenBefore = takenBefore,
+            language = language,
+        )
+        val response = executeJson<SearchResponseDto>(
+            request = Request.Builder()
+                .url(endpoint(connection, ImmichContract.SEARCH_SMART))
+                .post(json.encodeToString(payload).toRequestBody(JSON_MEDIA_TYPE))
+                .build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.SEARCH_SMART,
+        )
+        AssetPage(
+            items = response.assets.items.map(AssetResponseDto::toDomain).filter { it.type == AssetType.IMAGE || it.type == AssetType.VIDEO },
+            nextPage = response.assets.nextPage?.toIntOrNull(),
+        )
+    }
+
+    override suspend fun smartSearchAvailable(connection: ImmichConnection): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            executeJson<ServerFeaturesDto>(
+                request = Request.Builder().url(endpoint(connection, ImmichContract.GET_SERVER_FEATURES)).get().build(),
+                apiKey = connection.apiKey,
+                permission = null,
+            ).smartSearch
+        }.getOrDefault(false)
+    }
+
     override suspend fun trashDays(connection: ImmichConnection): Int? = withContext(Dispatchers.IO) {
         runCatching {
             executeJson<ServerConfigDto>(
@@ -632,6 +677,22 @@ private data class MetadataSearchDto(
 
 @Serializable
 private data class ServerConfigDto(val trashDays: Int? = null)
+
+@Serializable
+private data class ServerFeaturesDto(val smartSearch: Boolean = false)
+
+@Serializable
+private data class SmartSearchDto(
+    val query: String,
+    val page: Int,
+    val size: Int,
+    val albumIds: List<String>? = null,
+    val isFavorite: Boolean? = null,
+    val takenAfter: String? = null,
+    val takenBefore: String? = null,
+    val language: String? = null,
+    val withExif: Boolean? = null,
+)
 
 @Serializable
 private data class UpdateAssetDto(val isFavorite: Boolean)

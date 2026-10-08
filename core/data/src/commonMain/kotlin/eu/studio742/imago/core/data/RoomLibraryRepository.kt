@@ -139,6 +139,19 @@ class RoomLibraryRepository @Inject constructor(
 
     override suspend fun deleteAlbum(albumId: String) = api.deleteAlbum(requireConnection(), albumId)
 
+    override suspend fun contentSearchAvailable(): Boolean = api.smartSearchAvailable(requireConnection())
+
+    override fun searchByContent(query: String, filter: LibraryFilter, month: String?, albumId: String?): Flow<PagingData<ImmichAsset>> {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        return Pager(
+            config = PagingConfig(pageSize = PAGE_SIZE, initialLoadSize = PAGE_SIZE, prefetchDistance = 30, enablePlaceholders = false),
+            pagingSourceFactory = {
+                SmartSearchPagingSource(database, api, derivedAssets, connection, libraryKey, query.trim(), filter, month, albumId)
+            },
+        ).flow
+    }
+
     override val hasTrash: Boolean get() = true
 
     /** Page after page, up to a limit a phone screen can still show at once. */
@@ -491,6 +504,61 @@ private class AssetRemoteMediator(
 
     /** The same key, prefixed by the library: this is how [refreshedThisSession] stores it. */
     private val sessionKey = "$libraryKey|$queryKey"
+}
+
+/**
+ * The server's answer to "what is in the photo", page by page, in its order — the closest first, so
+ * it cannot come from the catalogue, which is sorted by date. The answers still go into the
+ * catalogue, where the detail and the editor look for them.
+ */
+private class SmartSearchPagingSource(
+    private val database: ImmichRoomDatabase,
+    private val api: ImmichApi,
+    private val derivedAssets: DerivedAssetRepository,
+    private val connection: ImmichConnection,
+    private val libraryKey: String,
+    private val query: String,
+    private val filter: LibraryFilter,
+    private val month: String?,
+    private val albumId: String?,
+) : PagingSource<Int, ImmichAsset>() {
+    override suspend fun load(params: LoadParams<Int>): LoadResult<Int, ImmichAsset> {
+        val page = params.key ?: 1
+        return try {
+            val monthStart = month?.let { LocalDate.parse(it).withDayOfMonth(1) }
+            val recentStart = LocalDate.now().minusDays(RECENT_FILTER_DAYS).takeIf { filter == LibraryFilter.RECENT && monthStart == null }
+            val result = api.smartSearch(
+                connection = connection,
+                page = page,
+                pageSize = params.loadSize.coerceAtMost(100),
+                query = query,
+                albumId = albumId,
+                favoritesOnly = filter == LibraryFilter.FAVORITES,
+                takenAfter = (monthStart ?: recentStart)?.let { "${it}T00:00:00.000Z" },
+                takenBefore = monthStart?.plusMonths(1)?.let { "${it}T00:00:00.000Z" },
+                language = java.util.Locale.getDefault().language,
+            )
+            val derivedIds = derivedAssets.derivedIds()
+            val visible = result.items.filterNot { it.isAppExport(derivedIds) }
+            database.withTransaction {
+                database.assetDao().upsertAll(visible.map { AssetEntity.fromDomain(libraryKey, it) })
+                database.assetDao().restoreLocalRecipeFlags(libraryKey)
+            }
+            val recipes = database.recipeDao()
+            LoadResult.Page(
+                data = visible
+                    .map { asset -> asset.copy(hasLocalRecipe = recipes.get(libraryKey, asset.id) != null) }
+                    // "Edited" is not a criterion Immich knows: it is applied to what came back.
+                    .filter { filter != LibraryFilter.EDITED || it.isEdited || it.hasLocalRecipe },
+                prevKey = null,
+                nextKey = result.nextPage,
+            )
+        } catch (error: Exception) {
+            LoadResult.Error(error)
+        }
+    }
+
+    override fun getRefreshKey(state: PagingState<Int, ImmichAsset>): Int? = null
 }
 
 private class AlbumAssetPagingSource(

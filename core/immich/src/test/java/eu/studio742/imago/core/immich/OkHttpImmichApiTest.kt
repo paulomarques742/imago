@@ -320,6 +320,39 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun searchesByContentWithTheGridsFilters() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"albums":{"count":0,"facets":[],"items":[],"nextPage":null,"total":0},"assets":{"count":1,"facets":[],"items":[{"id":"a1","originalFileName":"IMG_1.JPG","fileCreatedAt":"2026-08-01T10:00:00Z","localDateTime":"2026-08-01T11:00:00Z","width":4000,"height":3000,"isFavorite":false,"isEdited":false,"type":"IMAGE"}],"nextPage":"2","total":1}}""",
+            ),
+        )
+
+        val page = api.smartSearch(connection(), page = 1, pageSize = 100, query = "praia", albumId = "al", favoritesOnly = true, language = "pt")
+
+        val request = server.takeRequest()
+        assertEquals("/api/search/smart", request.path)
+        assertEquals(
+            """{"query":"praia","page":1,"size":100,"albumIds":["al"],"isFavorite":true,"language":"pt"}""",
+            request.body.readUtf8(),
+        )
+        assertEquals(listOf("a1"), page.items.map { it.id })
+        assertEquals(2, page.nextPage)
+    }
+
+    @Test
+    fun saysWhetherTheServerSearchesByContent() = runTest {
+        server.enqueue(MockResponse().setBody("""{"smartSearch":true,"trash":true}"""))
+        server.enqueue(MockResponse().setBody("""{"smartSearch":false}"""))
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        assertTrue(api.smartSearchAvailable(connection()))
+        assertFalse(api.smartSearchAvailable(connection()))
+        // A server that does not answer is one without it, not an error on the screen.
+        assertFalse(api.smartSearchAvailable(connection()))
+        assertEquals("/api/server/features", server.takeRequest().path)
+    }
+
+    @Test
     fun listsTheTrashWithPhotosAndVideosAlike() = runTest {
         server.enqueue(MockResponse().setBody("""{"assets":{"items":[],"nextPage":null}}"""))
 

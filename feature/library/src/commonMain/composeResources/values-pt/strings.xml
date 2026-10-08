@@ -357,4 +357,7 @@
         <item quantity="one">Restaurado.</item>
         <item quantity="other">%1$d restaurados.</item>
     </plurals>
+    <string name="library_search_content">Conteúdo</string>
+    <string name="library_search_file_name">Nome do ficheiro</string>
+    <string name="library_search_content_hint">O que está na fotografia</string>
 </resources>

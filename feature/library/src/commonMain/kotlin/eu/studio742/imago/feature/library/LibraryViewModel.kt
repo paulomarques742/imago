@@ -121,6 +121,9 @@ data class MonthUiModel(val value: String, val assetCount: Int)
 
 enum class LibrarySection { TIMELINE, ALBUMS }
 
+/** What the search box looks for in a server's library: what is in the photo, or the file's name. */
+enum class SearchMode { CONTENT, FILE_NAME }
+
 data class LibraryUiState(
     val section: LibrarySection = LibrarySection.TIMELINE,
     val selectedMonth: String? = null,
@@ -131,6 +134,9 @@ data class LibraryUiState(
     val navigationError: UiText? = null,
     val query: String = "",
     val isSearching: Boolean = false,
+    val searchMode: SearchMode = SearchMode.CONTENT,
+    /** The open library searches by content: a server with it on. Until it says, by name. */
+    val contentSearchAvailable: Boolean = false,
     val actionError: UiText? = null,
     /**
      * The date the grid has to jump to as soon as it has content.
@@ -182,6 +188,7 @@ open class LibraryViewModel(
         val album: AlbumUiModel?,
         val query: String,
         val source: eu.studio742.imago.core.model.LibrarySource,
+        val byContent: Boolean,
     )
 
     val assets: Flow<PagingData<AssetUiModel>> = combine(
@@ -189,15 +196,23 @@ open class LibraryViewModel(
         uiState.map { it.selectedMonth },
         uiState.map { it.selectedAlbum },
         uiState.map { it.query.trim() }.distinctUntilChanged().debounce { if (it.isEmpty()) 0 else SEARCH_DEBOUNCE_MS },
-    ) { activeFilter, month, album, query -> AssetQuery(activeFilter.first, month, album, query, activeFilter.second) }
+        uiState.map { it.contentSearchAvailable && it.searchMode == SearchMode.CONTENT }.distinctUntilChanged(),
+    ) { activeFilter, month, album, query, byContent ->
+        AssetQuery(activeFilter.first, month, album, query, activeFilter.second, byContent)
+    }
         .distinctUntilChanged()
-        .flatMapLatest { (activeFilter, month, album, query) ->
-            library.assets(
-                filter = activeFilter,
-                month = month.takeIf { album == null },
-                albumId = album?.id?.takeIf { eu.studio742.imago.core.model.AssetReference.parse(it).libraryId == configuration.selectedLibraryId.value },
-                query = query.takeIf(String::isNotEmpty),
-            )
+        .flatMapLatest { (activeFilter, month, album, query, _, byContent) ->
+            val albumId = album?.id?.takeIf { eu.studio742.imago.core.model.AssetReference.parse(it).libraryId == configuration.selectedLibraryId.value }
+            if (byContent && query.isNotEmpty()) {
+                library.searchByContent(query, activeFilter, month.takeIf { album == null }, albumId)
+            } else {
+                library.assets(
+                    filter = activeFilter,
+                    month = month.takeIf { album == null },
+                    albumId = albumId,
+                    query = query.takeIf(String::isNotEmpty),
+                )
+            }
         }
         .map { pagingData -> pagingData.map { asset -> asset.toAssetUiModel(library, asset.localRecipe()) } }
         .cachedIn(viewModelScope)
@@ -220,6 +235,11 @@ open class LibraryViewModel(
                 previous = id
                 refreshNavigation()
                 syncCatalog()
+                // A server says whether it searches by content; the phone and the folders do not.
+                launch {
+                    val available = runCatching { library.contentSearchAvailable() }.getOrDefault(false)
+                    if (configuration.selectedLibraryId.value == id) uiState.update { it.copy(contentSearchAvailable = available) }
+                }
             }
         }
         viewModelScope.launch {
@@ -316,6 +336,8 @@ open class LibraryViewModel(
     fun updateQuery(value: String) = uiState.update { it.copy(query = value) }
 
     fun openSearch() = uiState.update { it.copy(isSearching = true) }
+
+    fun selectSearchMode(mode: SearchMode) = uiState.update { it.copy(searchMode = mode) }
 
     fun closeSearch() = uiState.update { it.copy(isSearching = false, query = "") }
 

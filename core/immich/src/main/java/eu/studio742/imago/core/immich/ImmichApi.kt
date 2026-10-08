@@ -76,6 +76,25 @@ interface ImmichApi {
     suspend fun deleteAlbum(connection: ImmichConnection, albumId: String): Unit =
         error("Albums cannot be deleted here")
 
+    /**
+     * Photos and videos by what is in them ("beach", "birthday cake"), the closest first. The
+     * filters are the grid's: an album, favourites only, a date range. [language] is the query's.
+     */
+    suspend fun smartSearch(
+        connection: ImmichConnection,
+        page: Int,
+        pageSize: Int,
+        query: String,
+        albumId: String? = null,
+        favoritesOnly: Boolean = false,
+        takenAfter: String? = null,
+        takenBefore: String? = null,
+        language: String? = null,
+    ): AssetPage = error("This server cannot search by content here")
+
+    /** Whether the server has searching by content on; false when it cannot be asked. */
+    suspend fun smartSearchAvailable(connection: ImmichConnection): Boolean = false
+
     /** What is in the trash, photos and videos, the most recently trashed first. */
     suspend fun trashedAssets(connection: ImmichConnection, page: Int, pageSize: Int): AssetPage =
         error("This server has no trash here")

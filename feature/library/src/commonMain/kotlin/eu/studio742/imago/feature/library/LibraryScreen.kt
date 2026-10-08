@@ -457,6 +457,7 @@ private fun LibraryHost(
             onOpenSearch = viewModel::openSearch,
             onCloseSearch = viewModel::closeSearch,
             onQueryChange = viewModel::updateQuery,
+            onSearchModeChange = viewModel::selectSearchMode,
             onJumpToDate = viewModel::jumpToDate,
             onConsumePendingScroll = viewModel::consumePendingScroll,
             onConsumeActionError = viewModel::consumeActionError,
@@ -506,6 +507,7 @@ private fun LibraryScreen(
     onOpenSearch: () -> Unit,
     onCloseSearch: () -> Unit,
     onQueryChange: (String) -> Unit,
+    onSearchModeChange: (SearchMode) -> Unit,
     onJumpToDate: (LocalDate) -> Unit,
     onConsumePendingScroll: () -> Unit,
     onConsumeActionError: () -> Unit,
@@ -595,6 +597,7 @@ private fun LibraryScreen(
                 if (picker != null) {
                     PickerTopBar(
                         picker = picker,
+                        searchesContent = uiState.contentSearchAvailable && uiState.searchMode == SearchMode.CONTENT,
                         album = uiState.selectedAlbum,
                         selected = uiState.selection.size,
                         section = uiState.section,
@@ -615,6 +618,7 @@ private fun LibraryScreen(
                 } else {
                     LibraryTopBar(
                         searchesAlbums = uiState.section == LibrarySection.ALBUMS,
+                        searchesContent = uiState.contentSearchAvailable && uiState.searchMode == SearchMode.CONTENT,
                         isSearching = uiState.isSearching,
                         query = uiState.query,
                         onQueryChange = onQueryChange,
@@ -624,6 +628,21 @@ private fun LibraryScreen(
                         onRefresh = onRefresh,
                         onOpenSettings = onOpenSettings,
                         onOpenTrash = onOpenTrash,
+                    )
+                }
+                // Searching a server: by what is in the photo, or by the file's name. The album list
+                // searches album names, and has neither.
+                val searchesPhotos = uiState.isSearching && uiState.contentSearchAvailable &&
+                    !(uiState.section == LibrarySection.ALBUMS && !inAlbum)
+                if (searchesPhotos && !selecting) {
+                    ImagoChipRow(
+                        options = SearchMode.entries,
+                        selected = uiState.searchMode,
+                        label = {
+                            stringResource(if (it == SearchMode.CONTENT) Res.string.library_search_content else Res.string.library_search_file_name)
+                        },
+                        onSelect = onSearchModeChange,
+                        modifier = Modifier.padding(bottom = ImagoSpacing.Sm),
                     )
                 }
                 // The chips slice the timeline. Inside an album, or in the album list, they have
@@ -789,6 +808,7 @@ private fun LibraryFilter.label() = when (this) {
 private fun LibraryTopBar(
     /** In the album list the search is by album name, and there is no date to jump to. */
     searchesAlbums: Boolean,
+    searchesContent: Boolean,
     isSearching: Boolean,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -815,6 +835,7 @@ private fun LibraryTopBar(
                 onOpenDatePicker = onOpenDatePicker.takeUnless { searchesAlbums },
                 onCloseSearch = onCloseSearch,
                 searchesAlbums = searchesAlbums,
+                searchesContent = searchesContent,
             )
         } else {
             Image(
@@ -922,6 +943,8 @@ private fun RowScope.LibrarySearchField(
     onOpenDatePicker: (() -> Unit)?,
     onCloseSearch: () -> Unit,
     searchesAlbums: Boolean = false,
+    /** A server searching by what is in the photo: the box says so. */
+    searchesContent: Boolean = false,
 ) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
@@ -931,7 +954,13 @@ private fun RowScope.LibrarySearchField(
         singleLine = true,
         placeholder = {
             Text(
-                stringResource(if (searchesAlbums) Res.string.library_album_name else Res.string.library_file_name),
+                stringResource(
+                    when {
+                        searchesAlbums -> Res.string.library_album_name
+                        searchesContent -> Res.string.library_search_content_hint
+                        else -> Res.string.library_file_name
+                    },
+                ),
                 color = ImagoColors.TextTertiary,
             )
         },
@@ -977,6 +1006,7 @@ private fun RowScope.LibrarySearchField(
 @Composable
 private fun PickerTopBar(
     picker: PickerMode,
+    searchesContent: Boolean,
     album: AlbumUiModel?,
     selected: Int,
     section: LibrarySection,
@@ -1015,6 +1045,7 @@ private fun PickerTopBar(
                 onOpenDatePicker = onOpenDatePicker.takeUnless { searchesAlbums },
                 onCloseSearch = onCloseSearch,
                 searchesAlbums = searchesAlbums,
+                searchesContent = searchesContent && !searchesAlbums,
             )
             return@Row
         }

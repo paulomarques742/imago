@@ -85,6 +85,8 @@ val generateImmichContract by tasks.registering {
             "restoreAssets",
             "emptyTrash",
             "getServerConfig",
+            "searchSmart",
+            "getServerFeatures",
             "getMyApiKey",
         )
 
@@ -155,6 +157,9 @@ val generateImmichContract by tasks.registering {
         check(propertiesOf("MetadataSearchDto").containsAll(setOf("withDeleted", "trashedAfter")))
         check(propertiesOf("TrashResponseDto").contains("count"))
         check(propertiesOf("ServerConfigDto").contains("trashDays"))
+        // Searching by what is in the photo, when the server has it on.
+        check(propertiesOf("SmartSearchDto").containsAll(setOf("query", "page", "size", "albumIds", "isFavorite", "takenAfter", "takenBefore", "language")))
+        check(propertiesOf("ServerFeaturesDto").contains("smartSearch"))
         check(
             propertiesOf("AlbumResponseDto").containsAll(
                 setOf("id", "albumName", "albumThumbnailAssetId", "assetCount", "description", "shared"),
@@ -197,6 +202,8 @@ val generateImmichContract by tasks.registering {
             check(validatedProperties("AlbumUserResponseDto").containsAll(setOf("role", "user")))
             check(validatedProperties("MetadataSearchDto").containsAll(setOf("withDeleted", "trashedAfter")))
             check(validatedProperties("ServerConfigDto").contains("trashDays"))
+            check(validatedProperties("SmartSearchDto").containsAll(setOf("query", "page", "size", "albumIds", "isFavorite", "takenAfter", "takenBefore", "language")))
+            check(validatedProperties("ServerFeaturesDto").contains("smartSearch"))
             check(validatedProperties("AssetBulkDeleteDto").containsAll(setOf("ids", "force")))
         }
 
@@ -293,6 +300,8 @@ val generateImmichContract by tasks.registering {
             |    const val RESTORE_ASSETS = "${pathFor("restoreAssets")}"
             |    const val EMPTY_TRASH = "${pathFor("emptyTrash")}"
             |    const val GET_SERVER_CONFIG = "${pathFor("getServerConfig")}"
+            |    const val SEARCH_SMART = "${pathFor("searchSmart")}"
+            |    const val GET_SERVER_FEATURES = "${pathFor("getServerFeatures")}"
             |    const val GET_MY_API_KEY = "${pathFor("getMyApiKey")}"
             |}
             |

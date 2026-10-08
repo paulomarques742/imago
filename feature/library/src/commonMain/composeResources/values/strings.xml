@@ -357,4 +357,7 @@
         <item quantity="one">Restored.</item>
         <item quantity="other">%1$d restored.</item>
     </plurals>
+    <string name="library_search_content">Content</string>
+    <string name="library_search_file_name">File name</string>
+    <string name="library_search_content_hint">What’s in the photo</string>
 </resources>

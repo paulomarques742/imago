@@ -78,6 +78,15 @@ class SourceLibraryRepository @Inject constructor(
         return provider(id).createFolderAlbum(name, localIdsIn(id, assetIds), transfer).encodedFor(id)
     }
 
+    override suspend fun contentSearchAvailable(): Boolean =
+        runCatching { provider(configuration.selectedLibraryId.value).contentSearchAvailable() }.getOrDefault(false)
+
+    override fun searchByContent(query: String, filter: LibraryFilter, month: String?, albumId: String?): Flow<PagingData<ImmichAsset>> {
+        val id = configuration.selectedLibraryId.value
+        return provider(id).searchByContent(query, filter, month, albumId?.let { AssetReference.parse(it).localId })
+            .map { page -> page.map { it.copy(id = AssetReference(id, it.id).encode()) } }
+    }
+
     override val hasTrash: Boolean
         get() = runCatching { provider(configuration.selectedLibraryId.value).hasTrash }.getOrDefault(false)
 
