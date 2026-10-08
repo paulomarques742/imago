@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAlbum
+import eu.studio742.imago.core.model.ImmichPerson
 import eu.studio742.imago.core.model.AlbumAddition
 import eu.studio742.imago.core.model.AlbumPlace
 import eu.studio742.imago.core.model.FolderTransfer
@@ -139,6 +140,19 @@ interface LibraryRepository {
      * the chip, the month, the album. Empty where the library cannot.
      */
     fun searchByContent(query: String, filter: LibraryFilter, month: String? = null, albumId: String? = null): Flow<PagingData<ImmichAsset>> =
+        kotlinx.coroutines.flow.flowOf(PagingData.empty())
+
+    /** Whether this library knows who is in its photos: a server does, this device does not. */
+    val hasPeople: Boolean get() = false
+
+    /** The people in this library's photos, the named ones first. */
+    suspend fun people(): List<ImmichPerson> = emptyList()
+
+    /** The face that stands for [personId]. */
+    fun personThumbnailUrl(personId: String): String = ""
+
+    /** The photos and videos [personId] is in, the newest first. */
+    fun personAssets(personId: String, filter: LibraryFilter): Flow<PagingData<ImmichAsset>> =
         kotlinx.coroutines.flow.flowOf(PagingData.empty())
 
     /** Whether this library has a trash IMAGO can show; the computer's folders do not. */

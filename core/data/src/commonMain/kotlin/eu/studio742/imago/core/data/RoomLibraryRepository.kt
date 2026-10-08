@@ -27,6 +27,7 @@ import eu.studio742.imago.core.immich.requirePermission
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichAlbum
+import eu.studio742.imago.core.model.ImmichPerson
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.ImmichConnection
 import eu.studio742.imago.core.model.AssetType
@@ -156,6 +157,24 @@ class RoomLibraryRepository @Inject constructor(
     }
 
     override val hasTrash: Boolean get() = true
+
+    override val hasPeople: Boolean get() = true
+
+    override suspend fun people(): List<ImmichPerson> = api.people(requireConnection())
+
+    override fun personThumbnailUrl(personId: String): String = api.personThumbnailUrl(requireConnection(), personId)
+
+    /** Straight from the server, like an album: the catalogue does not know who is in each photo. */
+    override fun personAssets(personId: String, filter: LibraryFilter): Flow<PagingData<ImmichAsset>> {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        return Pager(
+            config = PagingConfig(pageSize = PAGE_SIZE, initialLoadSize = PAGE_SIZE, prefetchDistance = 30, enablePlaceholders = false),
+            pagingSourceFactory = {
+                AlbumAssetPagingSource(database, api, derivedAssets, connection, libraryKey, null, filter, null, personId)
+            },
+        ).flow
+    }
 
     /** Page after page, up to a limit a phone screen can still show at once. */
     override suspend fun trash(): TrashContents {
@@ -564,15 +583,17 @@ private class SmartSearchPagingSource(
     override fun getRefreshKey(state: PagingState<Int, ImmichAsset>): Int? = null
 }
 
+/** An album's photos, or a person's, read from the server page by page in its order. */
 private class AlbumAssetPagingSource(
     private val database: ImmichRoomDatabase,
     private val api: ImmichApi,
     private val derivedAssets: DerivedAssetRepository,
     private val connection: ImmichConnection,
     private val libraryKey: String,
-    private val albumId: String,
+    private val albumId: String?,
     private val filter: LibraryFilter,
     private val query: String?,
+    private val personId: String? = null,
 ) : PagingSource<Int, ImmichAsset>() {
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, ImmichAsset> {
         val page = params.key ?: 1
@@ -584,6 +605,7 @@ private class AlbumAssetPagingSource(
                 filter = filter,
                 albumId = albumId,
                 query = query,
+                personId = personId,
             )
             val derivedIds = derivedAssets.derivedIds()
             val visible = result.items.filterNot { it.isAppExport(derivedIds) }

@@ -1,5 +1,6 @@
 package eu.studio742.imago.core.immich
 
+import eu.studio742.imago.core.model.ImmichPerson
 import eu.studio742.imago.core.model.UserMessage
 import eu.studio742.imago.core.model.UserMessageException
 import eu.studio742.imago.core.model.AssetPage
@@ -45,7 +46,14 @@ interface ImmichApi {
         month: String? = null,
         albumId: String? = null,
         query: String? = null,
+        personId: String? = null,
     ): AssetPage
+
+    /** The people the server recognises, the named ones first, without the ones hidden in Immich. */
+    suspend fun people(connection: ImmichConnection): List<ImmichPerson> = error("People are not available here")
+
+    /** The face the server shows for [personId]. */
+    fun personThumbnailUrl(connection: ImmichConnection, personId: String): String = error("People are not available here")
 
     /** Search dedicated to the composer; it does not change the main library, which stays photographic. */
     suspend fun searchMedia(

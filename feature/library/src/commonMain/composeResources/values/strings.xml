@@ -150,6 +150,7 @@
     <string name="library_permission_asset_edit_get">Reads the crop, rotation and mirror Immich already has, so only what changed is sent</string>
     <string name="library_permission_asset_edit_create">Sends the crop, rotation and mirror you set in IMAGO, so Immich shows the photo framed the same way</string>
     <string name="library_permission_asset_edit_delete">Removes them from Immich when you undo them in IMAGO</string>
+    <string name="library_permission_person_read">Shows the people Immich recognizes, and the photos of each one</string>
     <!-- Sharing from other apps to Immich -->
     <string name="library_share_title">Send to Immich</string>
     <string name="library_share_preparing">Preparing %1$d of %2$d</string>
@@ -302,6 +303,12 @@
         <item quantity="other">%1$d copied to “%2$s”.</item>
     </plurals>
     <string name="library_album_name">Album name</string>
+    <string name="library_people">People</string>
+    <string name="library_people_none">Immich hasn’t recognized anyone in this library yet.</string>
+    <string name="library_person_unnamed">Unnamed person</string>
+    <string name="library_person_name">Person’s name</string>
+    <string name="library_no_person_match">No one is called “%1$s”.</string>
+    <string name="library_back_to_people">Back to people</string>
     <string name="library_album_place_label">Create in</string>
     <plurals name="library_album_delete_folder_body_computer">
         <item quantity="one">The photo or video in this album will go to the Recycle Bin. The folder goes too if nothing else is left in it.</item>

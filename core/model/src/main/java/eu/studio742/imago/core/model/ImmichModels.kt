@@ -132,6 +132,9 @@ data class ImmichAlbum(
     val isFolder: Boolean = false,
 )
 
+/** Someone the server recognises in the photos. [name] is empty while nobody named them. */
+data class ImmichPerson(val id: String, val name: String)
+
 /** How photos go into a folder album: moved out of where they were, or copied and left there too. */
 enum class FolderTransfer { MOVE, COPY }
 

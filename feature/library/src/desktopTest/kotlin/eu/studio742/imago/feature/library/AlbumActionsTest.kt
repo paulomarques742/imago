@@ -113,4 +113,19 @@ class AlbumActionsTest {
         assertEquals(emptyList<String>(), albumsMatching(albums, "beach christmas").map { it.name })
         assertEquals(albums, albumsMatching(albums, "  "))
     }
+
+    @Test
+    fun searchingPeopleMatchesTheNameAndLeavesTheUnnamedOutOfAnyQuery() {
+        val people = listOf("Zoë Martin", "Martin Lee", "").mapIndexed { index, name -> PersonUiModel("p$index", name, "", "") }
+
+        assertEquals(listOf("Zoë Martin"), peopleMatching(people, "zoe").map { it.name })
+        assertEquals(listOf("Zoë Martin", "Martin Lee"), peopleMatching(people, "martin").map { it.name })
+        assertEquals(people, peopleMatching(people, ""))
+    }
+
+    @Test
+    fun thePeopleChipIsNotAFilterOfTheTimeline() {
+        assertEquals(TimelineChip.FAVORITES, TimelineChip.of(eu.studio742.imago.core.model.LibraryFilter.FAVORITES))
+        assertNull(TimelineChip.PEOPLE.filter)
+    }
 }

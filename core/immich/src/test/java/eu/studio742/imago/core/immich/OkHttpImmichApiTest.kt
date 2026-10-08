@@ -744,6 +744,42 @@ class OkHttpImmichApiTest {
         assertEquals(listOf("asset.edit.create"), (error as ImmichApiException.MissingPermission).permissions)
     }
 
+    @Test
+    fun listsThePeopleNamedFirstWithoutTheHiddenOnes() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"people":[{"id":"p1","name":"","isHidden":false},{"id":"p2","name":"Ana","isHidden":false},{"id":"p3","name":"Old","isHidden":true}],"hasNextPage":true,"hidden":1,"total":4}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("""{"people":[{"id":"p4","name":" Rui ","isHidden":false}],"hasNextPage":false,"hidden":1,"total":4}"""))
+
+        val people = api.people(connection())
+
+        assertEquals(listOf("p2" to "Ana", "p4" to "Rui", "p1" to ""), people.map { it.id to it.name })
+        assertEquals("/api/people?withHidden=false&page=1&size=500", server.takeRequest().path)
+        assertEquals("/api/people?withHidden=false&page=2&size=500", server.takeRequest().path)
+        assertEquals(server.url("/api/people/p2/thumbnail").toString(), api.personThumbnailUrl(connection(), "p2"))
+    }
+
+    @Test
+    fun aPersonsPhotosComeFromTheSearch() = runTest {
+        server.enqueue(MockResponse().setBody(EMPTY_SEARCH_RESPONSE))
+
+        api.searchAssets(connection(), page = 1, pageSize = 100, filter = LibraryFilter.ALL, personId = "p2")
+
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body, body.contains("\"personIds\":[\"p2\"]"))
+    }
+
+    @Test
+    fun aKeyWithoutPeopleHearsWhichPermission() = runTest {
+        server.enqueue(MockResponse().setResponseCode(403).setBody("""{"message":"Missing required permission: person.read"}"""))
+
+        val error = runCatching { api.people(connection()) }.exceptionOrNull()
+
+        assertEquals(listOf("person.read"), (error as ImmichApiException.MissingPermission).permissions)
+    }
+
     private fun connection() = ImmichConnection(
         serverUrl = server.url("/").toString(),
         apiKey = "secret",

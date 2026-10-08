@@ -94,6 +94,8 @@ fun <T> ImagoChipRow(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: Dp = ImagoSpacing.Lg,
+    /** A chip with an icon shows it in place of the label, which becomes what is read aloud. */
+    icon: (T) -> ImageVector? = { null },
 ) {
     val scrollState = rememberScrollState()
     val itemOffsets = remember { mutableStateMapOf<T, Int>() }
@@ -125,11 +127,13 @@ fun <T> ImagoChipRow(
                     .padding(horizontal = ImagoSpacing.Xl),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = label(option),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = if (isSelected) ImagoColors.BrandBlack else ImagoColors.TextSecondary,
-                )
+                val color = if (isSelected) ImagoColors.BrandBlack else ImagoColors.TextSecondary
+                val vector = icon(option)
+                if (vector != null) {
+                    Icon(vector, contentDescription = label(option), tint = color, modifier = Modifier.size(20.dp))
+                } else {
+                    Text(text = label(option), style = MaterialTheme.typography.titleSmall, color = color)
+                }
             }
         }
     }

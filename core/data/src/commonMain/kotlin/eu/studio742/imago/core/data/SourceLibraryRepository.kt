@@ -110,6 +110,24 @@ class SourceLibraryRepository @Inject constructor(
             .map { page -> page.map { it.copy(id = AssetReference(id, it.id).encode()) } }
     }
 
+    override val hasPeople: Boolean
+        get() = runCatching { provider(configuration.selectedLibraryId.value).hasPeople }.getOrDefault(false)
+
+    override suspend fun people(): List<ImmichPerson> {
+        val id = configuration.selectedLibraryId.value
+        if (id == UNIFIED_LIBRARY_ID) return unified().people()
+        return provider(id).people().map { it.copy(id = AssetReference(id, it.id).encode()) }
+    }
+
+    override fun personThumbnailUrl(personId: String) = location(personId) { personThumbnailUrl(it) }
+
+    override fun personAssets(personId: String, filter: LibraryFilter): Flow<PagingData<ImmichAsset>> {
+        if (unifiedSelected) return unified().personAssets(personId, filter)
+        val person = AssetReference.parse(personId)
+        return provider(person.libraryId).personAssets(person.localId, filter)
+            .map { page -> page.map { it.copy(id = AssetReference(person.libraryId, it.id).encode()) } }
+    }
+
     override val hasTrash: Boolean
         get() = runCatching { provider(configuration.selectedLibraryId.value).hasTrash }.getOrDefault(false)
 

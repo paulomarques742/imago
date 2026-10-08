@@ -150,6 +150,7 @@
     <string name="library_permission_asset_edit_get">Lê o corte, a rotação e o espelho que o Immich já tem, para só enviar o que mudou</string>
     <string name="library_permission_asset_edit_create">Envia o corte, a rotação e o espelho que fizer no IMAGO, para o Immich mostrar a fotografia com o mesmo enquadramento</string>
     <string name="library_permission_asset_edit_delete">Retira-os do Immich quando os desfizer no IMAGO</string>
+    <string name="library_permission_person_read">Mostra as pessoas que o Immich reconhece e as fotografias de cada uma</string>
     <!-- Partilhar de outras apps para o Immich -->
     <string name="library_share_title">Enviar para o Immich</string>
     <string name="library_share_preparing">A preparar %1$d de %2$d</string>
@@ -302,6 +303,12 @@
         <item quantity="other">%1$d copiados para “%2$s”.</item>
     </plurals>
     <string name="library_album_name">Nome do álbum</string>
+    <string name="library_people">Pessoas</string>
+    <string name="library_people_none">O Immich ainda não reconheceu ninguém nesta biblioteca.</string>
+    <string name="library_person_unnamed">Pessoa sem nome</string>
+    <string name="library_person_name">Nome da pessoa</string>
+    <string name="library_no_person_match">Ninguém se chama «%1$s».</string>
+    <string name="library_back_to_people">Voltar às pessoas</string>
     <string name="library_album_place_label">Criar em</string>
     <plurals name="library_album_delete_folder_body_computer">
         <item quantity="one">A fotografia ou o vídeo deste álbum vai para a Reciclagem. A pasta também vai, se nada mais ficar nela.</item>

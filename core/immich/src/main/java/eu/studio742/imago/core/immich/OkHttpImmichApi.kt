@@ -25,6 +25,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import eu.studio742.imago.core.immich.generated.ImmichContract
 import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
+import eu.studio742.imago.core.model.ImmichPerson
 import eu.studio742.imago.core.model.AssetExif
 import eu.studio742.imago.core.model.AssetPage
 import eu.studio742.imago.core.model.AssetType
@@ -113,11 +114,12 @@ class OkHttpImmichApi(
         month: String?,
         albumId: String?,
         query: String?,
+        personId: String?,
     ): AssetPage = search(
         connection, page, pageSize, filter, month, albumId, query,
         // The library shows photos and videos; the request does not filter by type so that
         // Immich's `nextPage` keeps counting the same pages the grid goes through.
-        requestedType = null, allowedTypes = setOf(AssetType.IMAGE, AssetType.VIDEO),
+        requestedType = null, allowedTypes = setOf(AssetType.IMAGE, AssetType.VIDEO), personId = personId,
     )
 
     override suspend fun searchMedia(
@@ -141,6 +143,7 @@ class OkHttpImmichApi(
         query: String?,
         requestedType: String?,
         allowedTypes: Set<AssetType>,
+        personId: String? = null,
     ): AssetPage = withContext(Dispatchers.IO) {
         val monthStart = month?.let(LocalDate::parse)?.withDayOfMonth(1)
         // A chosen month is always more specific than "recent"; if both are active, the month
@@ -156,6 +159,7 @@ class OkHttpImmichApi(
             takenBefore = monthStart?.plusMonths(1)?.let { "${it}T00:00:00.000Z" },
             originalFileName = query?.takeIf(String::isNotBlank),
             type = requestedType,
+            personIds = personId?.let(::listOf),
         )
         val body = json.encodeToString(payload).toRequestBody(JSON_MEDIA_TYPE)
         val response = executeJson<SearchResponseDto>(
@@ -239,6 +243,30 @@ class OkHttpImmichApi(
             ).smartSearch
         }.getOrDefault(false)
     }
+
+    override suspend fun people(connection: ImmichConnection): List<ImmichPerson> = withContext(Dispatchers.IO) {
+        val people = mutableListOf<PersonResponseDto>()
+        var page = 1
+        do {
+            val url = endpoint(connection, ImmichContract.GET_ALL_PEOPLE).newBuilder()
+                .addQueryParameter("withHidden", "false")
+                .addQueryParameter("page", page.toString())
+                .addQueryParameter("size", PEOPLE_PAGE.toString())
+                .build()
+            val response = executeJson<PeopleResponseDto>(
+                request = Request.Builder().url(url).get().build(),
+                apiKey = connection.apiKey,
+                permission = ImmichKeyPermissions.GET_ALL_PEOPLE,
+            )
+            people += response.people
+            page++
+        } while (response.hasNextPage && people.size < PEOPLE_LIMIT)
+        // The server's order within each group: as in its own app, the people with a name come first.
+        people.filterNot { it.isHidden }.sortedBy { it.name.isBlank() }.map { ImmichPerson(it.id, it.name.trim()) }
+    }
+
+    override fun personThumbnailUrl(connection: ImmichConnection, personId: String): String =
+        endpoint(connection, ImmichContract.GET_PERSON_THUMBNAIL.replace("{id}", personId)).toString()
 
     override suspend fun trashDays(connection: ImmichConnection): Int? = withContext(Dispatchers.IO) {
         runCatching {
@@ -675,6 +703,8 @@ class OkHttpImmichApi(
 
     private companion object {
         const val KEY_PERMISSIONS_TIMEOUT_MS = 3_000L
+        const val PEOPLE_PAGE = 500
+        const val PEOPLE_LIMIT = 5_000
         val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         val JPEG_MEDIA_TYPE = "image/jpeg".toMediaType()
     }
@@ -765,7 +795,14 @@ private data class MetadataSearchDto(
     /** With [trashedAfter], what the trash holds; trashed assets are left out otherwise. */
     val withDeleted: Boolean? = null,
     val trashedAfter: String? = null,
+    val personIds: List<String>? = null,
 )
+
+@Serializable
+private data class PeopleResponseDto(val people: List<PersonResponseDto> = emptyList(), val hasNextPage: Boolean = false)
+
+@Serializable
+private data class PersonResponseDto(val id: String, val name: String = "", val isHidden: Boolean = false)
 
 @Serializable
 private data class ServerConfigDto(val trashDays: Int? = null)

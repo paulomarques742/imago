@@ -10,6 +10,7 @@ import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAssetDetail
+import eu.studio742.imago.core.model.ImmichPerson
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.LibraryFilter
 import eu.studio742.imago.core.model.RECENT_FILTER_DAYS
@@ -157,6 +158,17 @@ class UnifiedLibrary(
         return server.searchByContent(query, filter, month, album?.localId)
             .map { page -> page.map { it.copy(id = AssetReference(serverId, it.id).encode(), isOnServer = true) } }
     }
+
+    // Who is in the photos only the server knows.
+    override val hasPeople: Boolean get() = server.hasPeople
+
+    override suspend fun people(): List<ImmichPerson> = server.people().map { it.copy(id = AssetReference(serverId, it.id).encode()) }
+
+    override fun personThumbnailUrl(personId: String) = routed(personId) { personThumbnailUrl(it) }
+
+    override fun personAssets(personId: String, filter: LibraryFilter): Flow<PagingData<ImmichAsset>> =
+        server.personAssets(AssetReference.parse(personId).localId, filter)
+            .map { page -> page.map { it.copy(id = AssetReference(serverId, it.id).encode(), isOnServer = true) } }
 
     // Everything below is reached with a photo's own reference, and goes to its library.
     private fun <T> routed(assetId: String, block: LibraryRepository.(String) -> T): T {

@@ -90,7 +90,12 @@ data class AlbumUiModel(
     val isOwned: Boolean = false,
     /** A folder of the device: photos are moved or copied into it, never taken out. */
     val isFolder: Boolean = false,
+    /** Not an album: a person the server recognises, open with the photos they are in. */
+    val isPerson: Boolean = false,
 )
+
+/** Someone the server recognises; [name] is empty while nobody named them. */
+data class PersonUiModel(val id: String, val name: String, val thumbnailUrl: String, val apiKey: String)
 
 /**
  * A photo of [library] as the screens show it: the grid, the detail, the editor's strip. [recipe] is
@@ -165,6 +170,13 @@ data class LibraryUiState(
      * without the catalogue in between, so nothing else would tell the grid to read it again.
      */
     val gridRevision: Int = 0,
+    /** The open library knows who is in its photos: a server does. */
+    val hasPeople: Boolean = false,
+    /** The people chip is on: the grid gives way to the faces. */
+    val showingPeople: Boolean = false,
+    val people: List<PersonUiModel> = emptyList(),
+    val isLoadingPeople: Boolean = false,
+    val peopleError: UiText? = null,
 )
 
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -207,7 +219,9 @@ open class LibraryViewModel(
         .distinctUntilChanged()
         .flatMapLatest { (activeFilter, month, album, query, _, byContent) ->
             val albumId = album?.id?.takeIf { eu.studio742.imago.core.model.AssetReference.parse(it).libraryId == configuration.selectedLibraryId.value }
-            if (byContent && query.isNotEmpty()) {
+            if (album?.isPerson == true) {
+                library.personAssets(album.id, activeFilter)
+            } else if (byContent && query.isNotEmpty()) {
                 library.searchByContent(query, activeFilter, month.takeIf { album == null }, albumId)
             } else {
                 library.assets(
@@ -237,6 +251,8 @@ open class LibraryViewModel(
                 filter.value = restored?.first ?: LibraryFilter.ALL
                 uiState.value = restored?.second ?: LibraryUiState()
                 previous = id
+                uiState.update { it.copy(hasPeople = library.hasPeople) }
+                if (uiState.value.showingPeople) loadPeople()
                 refreshNavigation()
                 syncCatalog()
                 // A server says whether it searches by content; the phone and the folders do not.
@@ -334,7 +350,46 @@ open class LibraryViewModel(
         filter.value = value
         // A chip is a view of the whole library; leaving the previous month applied underneath would
         // give an empty list with nothing on screen explaining why.
-        uiState.update { it.copy(selectedMonth = null, selectedAlbum = null) }
+        uiState.update { it.copy(selectedMonth = null, selectedAlbum = null, showingPeople = false) }
+    }
+
+    /** The people chip: the faces in place of the grid, read again each time it is chosen. */
+    fun showPeople() {
+        filter.value = LibraryFilter.ALL
+        uiState.update { it.copy(showingPeople = true, selectedMonth = null, selectedAlbum = null) }
+        loadPeople()
+    }
+
+    private var peopleJob: kotlinx.coroutines.Job? = null
+
+    fun loadPeople() {
+        val sourceId = configuration.selectedLibraryId.value
+        peopleJob?.cancel()
+        uiState.update { it.copy(isLoadingPeople = true, peopleError = null) }
+        peopleJob = viewModelScope.launch {
+            val result = runCatching {
+                library.people().map { PersonUiModel(it.id, it.name, library.personThumbnailUrl(it.id), library.apiKey(it.id)) }
+            }
+            if (sourceId != configuration.selectedLibraryId.value) return@launch
+            uiState.update { state ->
+                result.fold(
+                    onSuccess = { state.copy(people = it, isLoadingPeople = false) },
+                    onFailure = { state.copy(peopleError = it.toUiText(Res.string.library_load_failed), isLoadingPeople = false) },
+                )
+            }
+        }
+    }
+
+    /** A person opens like an album: their photos, with the way back to the faces. */
+    fun openPerson(person: PersonUiModel) = uiState.update {
+        it.copy(
+            selectedAlbum = AlbumUiModel(
+                id = person.id, name = person.name, description = "", thumbnailUrl = person.thumbnailUrl, assetCount = 0,
+                startDate = null, endDate = null, shared = false, apiKey = person.apiKey, isPerson = true,
+            ),
+            isSearching = false,
+            query = "",
+        )
     }
 
     fun updateQuery(value: String) = uiState.update { it.copy(query = value) }
@@ -699,7 +754,8 @@ open class LibraryViewModel(
                     // The open album follows the list: photos moved out of it from the selection left
                     // its header counting them. One no longer listed has nothing left in it.
                     selectedAlbum = current.selectedAlbum?.let { open ->
-                        if (refreshed == null) open else refreshed.firstOrNull { it.id == open.id } ?: open.copy(assetCount = 0)
+                        if (refreshed == null || open.isPerson) open
+                        else refreshed.firstOrNull { it.id == open.id } ?: open.copy(assetCount = 0)
                     },
                     months = months.getOrNull()?.map { MonthUiModel(it.month, it.assetCount) } ?: current.months,
                     isLoadingNavigation = false,

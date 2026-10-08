@@ -91,6 +91,8 @@ val generateImmichContract by tasks.registering {
             "getAssetEdits",
             "editAsset",
             "removeAssetEdits",
+            "getAllPeople",
+            "getPersonThumbnail",
         )
 
         /**
@@ -104,6 +106,7 @@ val generateImmichContract by tasks.registering {
             "createAlbum", "addAssetsToAlbum", "removeAssetFromAlbum", "updateAlbumInfo", "deleteAlbum",
             "restoreAssets", "emptyTrash",
             "getAssetEdits", "editAsset", "removeAssetEdits",
+            "getAllPeople", "getPersonThumbnail",
         )
         check(operationIds.containsAll(optionalOperationIds))
         validatedDocuments.forEach { validatedDocument ->
@@ -164,6 +167,10 @@ val generateImmichContract by tasks.registering {
         // Searching by what is in the photo, when the server has it on.
         check(propertiesOf("SmartSearchDto").containsAll(setOf("query", "page", "size", "albumIds", "isFavorite", "takenAfter", "takenBefore", "language")))
         check(propertiesOf("ServerFeaturesDto").contains("smartSearch"))
+        // The people the server recognises, and the photos of each one.
+        check(propertiesOf("PeopleResponseDto").containsAll(setOf("people", "hasNextPage")))
+        check(propertiesOf("PersonResponseDto").containsAll(setOf("id", "name", "isHidden")))
+        check(propertiesOf("MetadataSearchDto").contains("personIds"))
         check(
             propertiesOf("AlbumResponseDto").containsAll(
                 setOf("id", "albumName", "albumThumbnailAssetId", "assetCount", "description", "shared"),
@@ -233,6 +240,9 @@ val generateImmichContract by tasks.registering {
             check(validatedProperties("SmartSearchDto").containsAll(setOf("query", "page", "size", "albumIds", "isFavorite", "takenAfter", "takenBefore", "language")))
             check(validatedProperties("ServerFeaturesDto").contains("smartSearch"))
             check(validatedProperties("AssetBulkDeleteDto").containsAll(setOf("ids", "force")))
+            check(validatedProperties("PeopleResponseDto").containsAll(setOf("people", "hasNextPage")))
+            check(validatedProperties("PersonResponseDto").containsAll(setOf("id", "name", "isHidden")))
+            check(validatedProperties("MetadataSearchDto").contains("personIds"))
         }
 
         fun pathFor(operationId: String) = operationFor(document, operationId).second
@@ -335,6 +345,8 @@ val generateImmichContract by tasks.registering {
             |    const val GET_SERVER_FEATURES = "${pathFor("getServerFeatures")}"
             |    const val GET_MY_API_KEY = "${pathFor("getMyApiKey")}"
             |    const val ASSET_EDITS = "${pathFor("editAsset")}"
+            |    const val GET_ALL_PEOPLE = "${pathFor("getAllPeople")}"
+            |    const val GET_PERSON_THUMBNAIL = "${pathFor("getPersonThumbnail")}"
             |}
             |
             |/** The API key permissions the endpoints the app uses ask for. */

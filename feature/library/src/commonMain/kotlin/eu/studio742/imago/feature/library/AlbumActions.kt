@@ -107,6 +107,12 @@ internal fun albumsMatching(albums: List<AlbumUiModel>, query: String): List<Alb
     return albums.filter { album -> album.name.folded().let { name -> words.all(name::contains) } }
 }
 
+internal fun peopleMatching(people: List<PersonUiModel>, query: String): List<PersonUiModel> {
+    val words = query.folded().split(Regex("""\s+""")).filter(String::isNotEmpty)
+    if (words.isEmpty()) return people
+    return people.filter { person -> person.name.folded().let { name -> words.all(name::contains) } }
+}
+
 private fun String.folded(): String =
     java.text.Normalizer.normalize(this, java.text.Normalizer.Form.NFD).replace(Regex("""\p{M}+"""), "").lowercase()
 

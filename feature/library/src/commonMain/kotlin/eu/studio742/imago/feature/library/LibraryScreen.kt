@@ -45,6 +45,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
@@ -447,6 +448,8 @@ private fun LibraryHost(
             // other way round: the chip and the album are how one looks for what is left to choose,
             // and losing the selection on every change kept it from gathering photos from different places.
             onFilterChange = { viewModel.selectFilter(it); if (picker == null) viewModel.clearSelection() },
+            onShowPeople = { viewModel.showPeople(); if (picker == null) viewModel.clearSelection() },
+            onOpenPerson = { viewModel.openPerson(it); if (picker == null) viewModel.clearSelection() },
             onSectionChange = { viewModel.selectSection(it); if (picker == null) viewModel.clearSelection() },
             onSelectMonth = viewModel::selectMonth,
             onOpenAlbum = { viewModel.openAlbum(it); if (picker == null) viewModel.clearSelection() },
@@ -470,6 +473,7 @@ private fun LibraryHost(
             onRefresh = {
                 assets.refresh()
                 viewModel.refreshNavigation()
+                if (viewModel.uiState.value.showingPeople) viewModel.loadPeople()
                 // Pulling down asks the server what changed, and what changed in the timeline counts
                 // too: without this, a new month only appeared on the next launch.
                 viewModel.syncCatalog()
@@ -497,6 +501,8 @@ private fun LibraryScreen(
     filter: LibraryFilter,
     uiState: LibraryUiState,
     onFilterChange: (LibraryFilter) -> Unit,
+    onShowPeople: () -> Unit,
+    onOpenPerson: (PersonUiModel) -> Unit,
     onSectionChange: (LibrarySection) -> Unit,
     onSelectMonth: (String?) -> Unit,
     onOpenAlbum: (AlbumUiModel) -> Unit,
@@ -624,6 +630,7 @@ private fun LibraryScreen(
                 } else {
                     LibraryTopBar(
                         searchesAlbums = uiState.section == LibrarySection.ALBUMS,
+                        searchesPeople = uiState.showingPeople && uiState.section == LibrarySection.TIMELINE,
                         searchesContent = uiState.contentSearchAvailable && uiState.searchMode == SearchMode.CONTENT,
                         isSearching = uiState.isSearching,
                         query = uiState.query,
@@ -639,7 +646,7 @@ private fun LibraryScreen(
                 // Searching a server: by what is in the photo, or by the file's name. The album list
                 // searches album names, and has neither.
                 val searchesPhotos = uiState.isSearching && uiState.contentSearchAvailable &&
-                    !(uiState.section == LibrarySection.ALBUMS && !inAlbum)
+                    !((uiState.section == LibrarySection.ALBUMS || uiState.showingPeople) && !inAlbum)
                 if (searchesPhotos && !selecting) {
                     ImagoChipRow(
                         options = SearchMode.entries,
@@ -655,11 +662,13 @@ private fun LibraryScreen(
                 // nothing to act on; in the middle of a selection neither, because switching the
                 // slice is what undoes it.
                 if ((!selecting || picker != null) && !inAlbum && uiState.section == LibrarySection.TIMELINE) {
+                    val chips = TimelineChip.entries.filter { it != TimelineChip.PEOPLE || uiState.hasPeople }
                     ImagoChipRow(
-                        options = LibraryFilter.entries,
-                        selected = filter,
+                        options = chips,
+                        selected = if (uiState.showingPeople) TimelineChip.PEOPLE else TimelineChip.of(filter),
                         label = { it.label() },
-                        onSelect = onFilterChange,
+                        icon = { if (it == TimelineChip.PEOPLE) Icons.Outlined.Person else null },
+                        onSelect = { chip -> chip.filter?.let(onFilterChange) ?: onShowPeople() },
                         modifier = Modifier.padding(bottom = ImagoSpacing.Md),
                     )
                 }
@@ -713,6 +722,8 @@ private fun LibraryScreen(
         ) {
             if (uiState.section == LibrarySection.ALBUMS && uiState.selectedAlbum == null) {
                 AlbumBrowser(state = uiState, onOpenAlbum = onOpenAlbum, onRetry = onRefresh, editing = albumEditing)
+            } else if (uiState.showingPeople && uiState.selectedAlbum == null) {
+                PeopleBrowser(state = uiState, onOpenPerson = onOpenPerson, onRetry = onRefresh)
             } else {
                 PhotoBrowser(
                     selectedAssetId = selectedAssetId,
@@ -804,6 +815,18 @@ private fun LibraryFilter.label() = when (this) {
     LibraryFilter.EDITED -> stringResource(Res.string.library_filter_edited)
 }
 
+/** The chips over the timeline: its slices, and then the people in it, where the library knows them. */
+internal enum class TimelineChip(val filter: LibraryFilter?) {
+    ALL(LibraryFilter.ALL), RECENT(LibraryFilter.RECENT), FAVORITES(LibraryFilter.FAVORITES), EDITED(LibraryFilter.EDITED), PEOPLE(null);
+
+    companion object {
+        fun of(filter: LibraryFilter) = entries.first { it.filter == filter }
+    }
+}
+
+@Composable
+private fun TimelineChip.label() = filter?.label() ?: stringResource(Res.string.library_people)
+
 /**
  * The library bar: wordmark, search and menu.
  *
@@ -814,6 +837,8 @@ private fun LibraryFilter.label() = when (this) {
 private fun LibraryTopBar(
     /** In the album list the search is by album name, and there is no date to jump to. */
     searchesAlbums: Boolean,
+    /** Among the faces, by the person's name. */
+    searchesPeople: Boolean,
     searchesContent: Boolean,
     isSearching: Boolean,
     query: String,
@@ -838,9 +863,10 @@ private fun LibraryTopBar(
             LibrarySearchField(
                 query = query,
                 onQueryChange = onQueryChange,
-                onOpenDatePicker = onOpenDatePicker.takeUnless { searchesAlbums },
+                onOpenDatePicker = onOpenDatePicker.takeUnless { searchesAlbums || searchesPeople },
                 onCloseSearch = onCloseSearch,
                 searchesAlbums = searchesAlbums,
+                searchesPeople = searchesPeople,
                 searchesContent = searchesContent,
             )
         } else {
@@ -949,6 +975,7 @@ private fun RowScope.LibrarySearchField(
     onOpenDatePicker: (() -> Unit)?,
     onCloseSearch: () -> Unit,
     searchesAlbums: Boolean = false,
+    searchesPeople: Boolean = false,
     /** A server searching by what is in the photo: the box says so. */
     searchesContent: Boolean = false,
 ) {
@@ -963,6 +990,7 @@ private fun RowScope.LibrarySearchField(
                 stringResource(
                     when {
                         searchesAlbums -> Res.string.library_album_name
+                        searchesPeople -> Res.string.library_person_name
                         searchesContent -> Res.string.library_search_content_hint
                         else -> Res.string.library_file_name
                     },
@@ -1173,19 +1201,19 @@ private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit, editing: Album
         IconButton(onClick = onBack) {
             Icon(
                 Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(Res.string.library_back_to_albums),
+                contentDescription = stringResource(if (album?.isPerson == true) Res.string.library_back_to_people else Res.string.library_back_to_albums),
                 tint = ImagoColors.TextPrimary,
             )
         }
         Column(Modifier.weight(1f).padding(start = ImagoSpacing.Xs)) {
             Text(
-                text = album?.name.orEmpty(),
+                text = album?.name?.takeUnless { album.isPerson && it.isBlank() } ?: stringResource(Res.string.library_person_unnamed),
                 style = MaterialTheme.typography.titleMedium,
                 color = ImagoColors.TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            album?.let {
+            album?.takeUnless { it.isPerson }?.let {
                 Text(
                     text = pluralStringResource(Res.plurals.library_items, it.assetCount.toInt(), it.assetCount),
                     style = MaterialTheme.typography.labelSmall,
@@ -1480,6 +1508,62 @@ private fun AlbumBrowser(
             places = places,
             onConfirm = { name, place -> naming = false; onNewAlbum(name, place) },
             onDismiss = { naming = false },
+        )
+    }
+}
+
+/**
+ * The faces the server recognises, the named ones first, as in its own app. The search box narrows
+ * them by name.
+ */
+@Composable
+private fun PeopleBrowser(state: LibraryUiState, onOpenPerson: (PersonUiModel) -> Unit, onRetry: () -> Unit) {
+    val shown = remember(state.people, state.query) { peopleMatching(state.people, state.query) }
+    when {
+        state.isLoadingPeople && state.people.isEmpty() -> LoadingState()
+        state.peopleError != null && state.people.isEmpty() -> ErrorState(state.peopleError.resolve(), onRetry)
+        state.people.isEmpty() -> Box(Modifier.fillMaxSize().padding(ImagoSpacing.Xxxl), contentAlignment = Alignment.Center) {
+            Text(stringResource(Res.string.library_people_none), color = ImagoColors.TextSecondary)
+        }
+        shown.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(stringResource(Res.string.library_no_person_match, state.query.trim()), color = ImagoColors.TextSecondary)
+        }
+        else -> LazyVerticalGrid(
+            columns = GridCells.Adaptive(96.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = ImagoSpacing.Md),
+            horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
+            verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Lg),
+        ) {
+            gridItems(shown, key = PersonUiModel::id) { person -> PersonTile(person, onClick = { onOpenPerson(person) }) }
+        }
+    }
+}
+
+@Composable
+private fun PersonTile(person: PersonUiModel, onClick: () -> Unit) {
+    val context = LocalPlatformContext.current
+    val name = person.name.ifBlank { stringResource(Res.string.library_person_unnamed) }
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(ImagoRadii.Small))
+            .clickable(role = Role.Button, onClickLabel = name, onClick = onClick)
+            .padding(vertical = ImagoSpacing.Xs),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(context).data(person.thumbnailUrl).libraryAuth(person.apiKey).crossfade(true).build(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(CircleShape).background(ImagoColors.SurfaceElevated),
+        )
+        // A face without a name has no line under it, as in Immich: the tile still says it to a screen reader.
+        Text(
+            person.name,
+            style = MaterialTheme.typography.bodySmall,
+            color = ImagoColors.TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = ImagoSpacing.Xs),
         )
     }
 }

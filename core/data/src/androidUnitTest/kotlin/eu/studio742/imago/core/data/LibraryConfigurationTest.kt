@@ -94,7 +94,7 @@ class LibraryConfigurationTest {
             listOf(
                 "album.read", "asset.upload", "stack.create", "asset.update", "asset.delete",
                 "album.create", "albumAsset.create", "albumAsset.delete", "album.update", "album.delete",
-                "asset.edit.get", "asset.edit.create", "asset.edit.delete",
+                "asset.edit.get", "asset.edit.create", "asset.edit.delete", "person.read",
             ),
             repo.missingOptionalPermissions(ImmichConnection("https://example.test", "read-only")),
         )
