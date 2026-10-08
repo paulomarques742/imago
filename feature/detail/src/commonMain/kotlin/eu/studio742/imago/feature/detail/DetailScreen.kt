@@ -4,13 +4,11 @@ package eu.studio742.imago.feature.detail
 
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.model.AssetReference
-import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.core.model.OPENED_LIBRARY_ID
 import eu.studio742.imago.core.designsystem.LocalActionGate
 import eu.studio742.imago.feature.library.AddToAlbumSheet
 import eu.studio742.imago.feature.library.DeleteWhere
 import eu.studio742.imago.feature.library.DeleteWhereDialog
-import eu.studio742.imago.feature.library.DeviceFolderAlbums
 import eu.studio742.imago.feature.library.rememberMediaManagement
 import androidx.compose.material.icons.outlined.PhotoAlbum
 import androidx.compose.material.icons.outlined.RotateRight
@@ -242,9 +240,6 @@ private fun DetailScreen(
     val gate = LocalActionGate.current
     // As a media management app, Android no longer confirms a delete: the dialog must not promise it.
     val managesMedia = rememberMediaManagement()?.granted == true
-    // The device's albums are its folders, which only the phone changes from here.
-    val canFileIntoAlbum = DeviceFolderAlbums ||
-        runCatching { AssetReference.parse(asset.id).libraryId != DEVICE_LIBRARY_ID }.getOrDefault(false)
     val deviceCopy = deviceCopyFor(asset, if (state.assetId == asset.id) state.recipe else asset.recipe)
     // Zoomed in, the photo gets the whole finger: the drag becomes its own and not the pager's.
     // Without this, pulling a zoomed photo sideways jumped to the next one.
@@ -369,7 +364,7 @@ private fun DetailScreen(
                                     },
                                 )
                             }
-                            if (canFileIntoAlbum && !isOpenedFile) {
+                            if (!isOpenedFile) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(Res.string.detail_add_to_album)) },
                                     leadingIcon = { Icon(Icons.Outlined.PhotoAlbum, contentDescription = null) },

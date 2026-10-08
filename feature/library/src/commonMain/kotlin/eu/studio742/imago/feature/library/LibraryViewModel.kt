@@ -549,11 +549,18 @@ open class LibraryViewModel(
         }
     }
 
-    /** A new album with what was chosen, opened straight away; [transfer] makes it a folder of the device. */
-    fun createAlbum(name: String, assets: List<AssetUiModel>, transfer: FolderTransfer? = null) {
+    /** Where a new album of the open library can go; only this device's folders give a choice. */
+    suspend fun newAlbumPlaces(): List<eu.studio742.imago.core.model.AlbumPlace> =
+        if (isDeviceLibrary) runCatching { library.albumPlaces(emptyList()) }.getOrDefault(emptyList()) else emptyList()
+
+    /**
+     * A new album with what was chosen, opened straight away; [transfer] makes it a folder of the
+     * device, in [place] when there was one to choose.
+     */
+    fun createAlbum(name: String, assets: List<AssetUiModel>, transfer: FolderTransfer? = null, place: String? = null) {
         runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_album_failed, needsSelection = false) {
             val ids = assets.map { it.id }
-            val created = if (transfer != null) library.createFolderAlbum(name, ids, transfer) else library.createAlbum(name, ids)
+            val created = if (transfer != null) library.createFolderAlbum(name, ids, transfer, place) else library.createAlbum(name, ids)
             val album = created.toUiModel()
             uiState.update { it.copy(section = LibrarySection.ALBUMS, selectedAlbum = album, selectedMonth = null) }
             albumChanged(album)
@@ -564,8 +571,9 @@ open class LibraryViewModel(
     fun renameOpenAlbum(name: String) {
         val album = uiState.value.selectedAlbum ?: return
         runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_album_failed, needsSelection = false) {
-            library.renameAlbum(album.id, name)
-            uiState.update { it.copy(selectedAlbum = album.copy(name = name)) }
+            // A folder's id is where it is, and changes with the name.
+            val id = library.renameAlbum(album.id, name)
+            uiState.update { it.copy(selectedAlbum = album.copy(id = id, name = name)) }
             refreshNavigation()
             null
         }

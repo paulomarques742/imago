@@ -18,20 +18,28 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import eu.studio742.imago.core.data.db.AssetEntity
 import eu.studio742.imago.core.data.db.ImmichRoomDatabase
+import eu.studio742.imago.core.model.AlbumAddition
+import eu.studio742.imago.core.model.AlbumPlace
 import eu.studio742.imago.core.model.AssetExif
 import eu.studio742.imago.core.model.AssetType
 import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
+import eu.studio742.imago.core.model.FolderTransfer
+import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import java.io.File
+import java.io.IOException
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.BasicFileAttributes
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatterBuilder
 import javax.imageio.ImageIO
+import kotlin.io.path.exists
 import kotlin.io.path.extension
+import kotlin.io.path.nameWithoutExtension
 import kotlin.io.path.isDirectory
 import kotlin.io.path.name
 
@@ -42,10 +50,15 @@ import kotlin.io.path.name
  * same role as MediaStore's `content://`, and what the image loader opens directly. The folders and
  * the favourites stay in the configuration: the file system has no favourites, and the catalogue is
  * rebuilt from disk on every sync.
+ *
+ * The folders with photos are its albums. The ones inside the chosen folders are the person's to
+ * change from here; the chosen ones take photos, and are changed in Settings.
  */
 class FolderLibraryRepository(
     database: ImmichRoomDatabase,
     private val preferences: SecurePreferences,
+    /** Sends a file, or an empty folder, to the Recycle Bin, where it can be recovered. */
+    private val trash: (File) -> Boolean = { java.awt.Desktop.getDesktop().moveToTrash(it) },
 ) : LocalCatalogLibrary(database) {
     private val json = Json
     private val stringList = ListSerializer(String.serializer())
@@ -53,6 +66,9 @@ class FolderLibraryRepository(
     val folders: StateFlow<List<String>> = folderList.asStateFlow()
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
     override val accessRevision = MutableStateFlow(0)
+    override val rememberedTransfer = MutableStateFlow(
+        preferences.getString(TRANSFER_KEY)?.let { saved -> FolderTransfer.entries.firstOrNull { it.name == saved } },
+    )
 
     override fun accessSummary(): UserText = when (val count = folderList.value.size) {
         0 -> UserText(UserMessage.FOLDERS_NONE)
@@ -158,7 +174,7 @@ class FolderLibraryRepository(
     /** Goes to the Recycle Bin, where it can be recovered — the app never deletes for good. */
     override suspend fun deleteAsset(assetId: String) {
         withContext(Dispatchers.IO) {
-            requireUser(java.awt.Desktop.getDesktop().moveToTrash(fileOf(assetId).toFile()), UserMessage.TRASH_FAILED)
+            requireUser(trash(fileOf(assetId).toFile()), UserMessage.TRASH_FAILED)
         }
         syncCatalog()
     }
@@ -174,11 +190,154 @@ class FolderLibraryRepository(
     override suspend fun deleteAssets(assetIds: List<String>) {
         try {
             withContext(Dispatchers.IO) {
-                assetIds.forEach { requireUser(java.awt.Desktop.getDesktop().moveToTrash(fileOf(it).toFile()), UserMessage.TRASH_FAILED) }
+                assetIds.forEach { requireUser(trash(fileOf(it).toFile()), UserMessage.TRASH_FAILED) }
             }
         } finally {
             syncCatalog()
         }
+    }
+
+    override fun rememberTransfer(transfer: FolderTransfer?) {
+        requireUser(preferences.write(mapOf(TRANSFER_KEY to transfer?.name)), UserMessage.CONFIGURATION_NOT_SAVED)
+        rememberedTransfer.value = transfer
+    }
+
+    override suspend fun albums(): List<ImmichAlbum> = super.albums().map { album ->
+        val folder = Path.of(album.id)
+        val inside = rootOf(folder) != null
+        album.copy(isFolder = true, canEditContent = inside, isOwned = inside && !isChosen(folder))
+    }
+
+    override suspend fun albumPlaces(assetIds: List<String>): List<AlbumPlace> {
+        val roots = roots()
+        if (roots.size < 2) return emptyList()
+        val holding = assetIds.firstOrNull()?.let { runCatching { rootOf(fileOf(it)) }.getOrNull() }
+        return roots.map { AlbumPlace(it.toString(), it.name, it.toString(), suggested = it == holding) }
+    }
+
+    override suspend fun fileIntoAlbum(albumId: String, assetIds: List<String>, transfer: FolderTransfer): AlbumAddition {
+        val folder = Path.of(albumId)
+        requireUser(rootOf(folder) != null && folder.isDirectory(), UserMessage.FOLDER_FILE_UNAVAILABLE)
+        return transferTo(folder, assetIds, transfer)
+    }
+
+    /** A subfolder of [place], or of the chosen folder the photos are in. */
+    override suspend fun createFolderAlbum(name: String, assetIds: List<String>, transfer: FolderTransfer, place: String?): ImmichAlbum {
+        val folderName = requireNotNull(albumFolderName(name)) { "Nothing of \"$name\" makes a folder name" }
+        val roots = roots()
+        val parent = place?.let(Path::of)?.takeIf { it in roots }
+            ?: assetIds.firstNotNullOfOrNull { id -> runCatching { rootOf(fileOf(id)) }.getOrNull() }
+            ?: roots.firstOrNull()
+            ?: throw UserMessageException(UserMessage.FOLDERS_NONE)
+        val target = withContext(Dispatchers.IO) { Files.createDirectories(parent.resolve(folderName)).toRealPath() }
+        val result = transferTo(target, assetIds, transfer)
+        if (result.added + result.alreadyThere == 0) {
+            withContext(Dispatchers.IO) { if (isEmpty(target)) Files.delete(target) }
+            error("No photo reached the new album")
+        }
+        return albums().first { Path.of(it.id) == target }
+    }
+
+    /**
+     * The folder takes the new name, with everything in it. When another folder beside it already
+     * has that name, the photos join that one, as on the phone.
+     */
+    override suspend fun renameAlbum(albumId: String, name: String): String {
+        val folder = ownedFolder(albumId)
+        val folderName = requireNotNull(albumFolderName(name)) { "Nothing of \"$name\" makes a folder name" }
+        val target = folder.resolveSibling(folderName)
+        if (target.name == folder.name) return albumId
+        val other = withContext(Dispatchers.IO) { target.exists() && !Files.isSameFile(target, folder) }
+        if (other) {
+            val joined = withContext(Dispatchers.IO) { target.toRealPath() }
+            val result = transferTo(joined, idsIn(albumId), FolderTransfer.MOVE)
+            check(result.failed == 0) { "${result.failed} files could not be moved to $joined" }
+            withContext(Dispatchers.IO) { if (isEmpty(folder)) Files.delete(folder) }
+            return joined.toString()
+        }
+        val moves = withContext(Dispatchers.IO) {
+            val files = Files.walk(folder).use { stream -> stream.filter { Files.isRegularFile(it) }.toList() }
+            try {
+                // Here a target that exists is this folder: Windows takes a change of case alone as
+                // moving the folder onto itself, which does nothing.
+                if (target.exists()) {
+                    val step = folder.resolveSibling(".imago-rename-${System.nanoTime()}")
+                    Files.move(folder, step)
+                    Files.move(step, target)
+                } else {
+                    Files.move(folder, target)
+                }
+            } catch (error: IOException) {
+                throw UserMessageException(UserMessage.FOLDER_RENAME_FAILED, cause = error)
+            }
+            files.associate { it.toUri().toString() to target.resolve(folder.relativize(it)).toUri().toString() }
+        }
+        followMoves(moves)
+        syncCatalog()
+        return target.toString()
+    }
+
+    /** The photos and videos go to the Recycle Bin; the folder too, when nothing else is left in it. */
+    override suspend fun deleteAlbum(albumId: String) {
+        val folder = ownedFolder(albumId)
+        deleteAssets(idsIn(albumId))
+        withContext(Dispatchers.IO) { if (folder.isDirectory() && isEmpty(folder)) trash(folder.toFile()) }
+    }
+
+    private fun roots(): List<Path> = folderList.value.map(Path::of)
+
+    /** The chosen folder [path] is in; the innermost, when one chosen folder is inside another. */
+    private fun rootOf(path: Path): Path? = roots().filter { path.startsWith(it) }.maxByOrNull { it.nameCount }
+
+    private fun isChosen(folder: Path) = roots().any { it == folder }
+
+    private fun ownedFolder(albumId: String): Path {
+        val folder = Path.of(albumId)
+        requireUser(rootOf(folder) != null && !isChosen(folder) && folder.isDirectory(), UserMessage.FOLDER_FILE_UNAVAILABLE)
+        return folder
+    }
+
+    private suspend fun idsIn(albumId: String): List<String> = database.assetDao().idsInFolder(DEVICE_LIBRARY_ID, albumId)
+
+    private fun isEmpty(folder: Path) = Files.list(folder).use { !it.findAny().isPresent }
+
+    /**
+     * Moves or copies into [target], keeping the name unless one there already has it. One that
+     * fails does not stop the others. Only these photos' rows change in the catalogue.
+     */
+    private suspend fun transferTo(target: Path, assetIds: List<String>, transfer: FolderTransfer): AlbumAddition {
+        val rows = assetIds.mapNotNull { database.assetDao().asset(DEVICE_LIBRARY_ID, it) }
+        val (already, pending) = rows.partition { row -> row.folderId?.let(Path::of) == target }
+        if (pending.isEmpty()) return AlbumAddition(0, already.size, assetIds.size - rows.size)
+        val moves = mutableMapOf<String, String>()
+        val arrived = withContext(Dispatchers.IO) {
+            pending.mapNotNull { row ->
+                runCatching {
+                    val source = fileOf(row.id)
+                    val destination = freeName(target, source.name)
+                    if (transfer == FolderTransfer.MOVE) {
+                        Files.move(source, destination)
+                        moves[row.id] = destination.toUri().toString()
+                    } else {
+                        Files.copy(source, destination, StandardCopyOption.COPY_ATTRIBUTES)
+                    }
+                    destination
+                }.getOrNull()
+            }
+        }
+        followMoves(moves)
+        val favorites = readList(FAVORITES_KEY).toSet()
+        val newRows = withContext(Dispatchers.IO) { arrived.mapNotNull { entity(it, favorites) } }
+        replaceRows(moves.keys + arrived.map { it.toUri().toString() }, newRows)
+        return AlbumAddition(added = arrived.size, alreadyThere = already.size, failed = assetIds.size - already.size - arrived.size)
+    }
+
+    /** A moved file is a new id for the same photo: its recipe and its favourite go with it. */
+    private suspend fun followMoves(moves: Map<String, String>) {
+        if (moves.isEmpty()) return
+        database.moveAssetRecords(DEVICE_LIBRARY_ID, moves)
+        val favorites = readList(FAVORITES_KEY)
+        if (favorites.any(moves::containsKey)) writeList(FAVORITES_KEY, favorites.map { moves[it] ?: it })
     }
 
     override suspend fun downloadOriginal(assetId: String, destination: File) = withContext(Dispatchers.IO) {
@@ -198,6 +357,7 @@ class FolderLibraryRepository(
     companion object {
         private const val FOLDERS_KEY = "device_folders"
         private const val FAVORITES_KEY = "device_favorites"
+        private const val TRANSFER_KEY = "folder_transfer"
         private val ISO_INSTANT = DateTimeFormatterBuilder().appendInstant(3).toFormatter()
         val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "heic", "heif", "tif", "tiff", "bmp")
         val VIDEO_EXTENSIONS = setOf("mp4", "mov", "mkv", "webm", "avi", "m4v")
@@ -209,6 +369,15 @@ class FolderLibraryRepository(
         )
 
         fun fileOf(assetId: String): Path = Path.of(URI(assetId))
+
+        /** [name] in [folder], or "name (2).jpg" and on when it is taken, as Windows does. */
+        internal fun freeName(folder: Path, name: String): Path {
+            val first = folder.resolve(name)
+            if (!first.exists()) return first
+            val base = first.nameWithoutExtension
+            val extension = first.extension.takeIf(String::isNotEmpty)?.let { ".$it" }.orEmpty()
+            return generateSequence(2) { it + 1 }.map { folder.resolve("$base ($it)$extension") }.first { !it.exists() }
+        }
 
         private fun exifDate(file: Path): Instant? = runCatching {
             ImageMetadataReader.readMetadata(file.toFile()).getFirstDirectoryOfType(ExifSubIFDDirectory::class.java)

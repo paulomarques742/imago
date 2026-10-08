@@ -302,6 +302,11 @@
         <item quantity="other">%1$d copiados para “%2$s”.</item>
     </plurals>
     <string name="library_album_name">Nome do álbum</string>
+    <string name="library_album_place_label">Criar em</string>
+    <plurals name="library_album_delete_folder_body_computer">
+        <item quantity="one">A fotografia ou o vídeo deste álbum vai para a Reciclagem. A pasta também vai, se nada mais ficar nela.</item>
+        <item quantity="other">As %1$d fotografias e vídeos deste álbum vão para a Reciclagem. A pasta também vai, se nada mais ficar nela.</item>
+    </plurals>
     <string name="library_no_album_match">Nenhum álbum corresponde a “%1$s”.</string>
     <!-- Gestão de multimédia -->
     <string name="library_media_management_title">Gestão de multimédia</string>

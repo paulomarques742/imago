@@ -142,13 +142,12 @@ internal enum class AlbumSlot { NONE, ADD, REMOVE }
 /**
  * Which album action takes the bar and which goes to "More". Inside a server album this person may
  * change, taking out is what is wanted there, and adding to another album moves to "More". A folder
- * of the device is never taken out of — a photo lives in one — only moved or copied to another;
- * where folders cannot be changed ([deviceFolders] false), the device's photos have no album to go to.
+ * of the device is never taken out of — a photo lives in one — only moved or copied to another.
  */
-internal fun albumSlotFor(selection: List<AssetUiModel>, openAlbum: AlbumUiModel?, deviceFolders: Boolean): AlbumSlot = when {
+internal fun albumSlotFor(selection: List<AssetUiModel>, openAlbum: AlbumUiModel?): AlbumSlot = when {
     selection.isEmpty() -> AlbumSlot.NONE
     selection.any { it.isOnDevice() } && !selection.all { it.isOnDevice() } -> AlbumSlot.NONE
-    selection.any { it.isOnDevice() } -> if (deviceFolders) AlbumSlot.ADD else AlbumSlot.NONE
+    selection.any { it.isOnDevice() } -> AlbumSlot.ADD
     openAlbum?.canEditContent == true && !openAlbum.isFolder -> AlbumSlot.REMOVE
     else -> AlbumSlot.ADD
 }

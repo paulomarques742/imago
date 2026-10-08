@@ -18,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -31,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,6 +53,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import eu.studio742.imago.core.data.LibraryRepository
+import eu.studio742.imago.core.model.AlbumPlace
 import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
@@ -156,9 +160,12 @@ open class AlbumPickerViewModel(
     internal fun fileInto(album: ImmichAlbum, assetIds: List<String>, transfer: FolderTransfer, onFinished: (AlbumOutcome) -> Unit) =
         work(onFinished) { albumAdditionOutcome(library.fileIntoAlbum(album.id, assetIds, transfer), album.name, transfer) }
 
-    internal fun createFolder(name: String, assetIds: List<String>, transfer: FolderTransfer, onFinished: (AlbumOutcome) -> Unit) =
+    /** Where a new folder album for [assetIds] can go; empty when there is no choice to make. */
+    suspend fun places(assetIds: List<String>): List<AlbumPlace> = runCatching { library.albumPlaces(assetIds) }.getOrDefault(emptyList())
+
+    internal fun createFolder(name: String, assetIds: List<String>, transfer: FolderTransfer, place: String?, onFinished: (AlbumOutcome) -> Unit) =
         work(onFinished) {
-            val album = library.createFolderAlbum(name, assetIds, transfer)
+            val album = library.createFolderAlbum(name, assetIds, transfer, place)
             AlbumOutcome(uiPlural(Res.plurals.library_album_created, assetIds.size, album.name, assetIds.size), failed = false)
         }
 
@@ -252,13 +259,15 @@ fun AddToAlbumSheet(
         }
     }
     if (naming) {
+        val places by produceState(emptyList<AlbumPlace>(), onDevice) { if (onDevice) value = viewModel.places(assetIds) }
         AlbumNameDialog(
             title = stringResource(Res.string.library_album_new),
             initial = "",
             confirmLabel = stringResource(Res.string.library_album_create),
-            onConfirm = { name ->
+            places = places,
+            onConfirm = { name, place ->
                 naming = false
-                if (onDevice) chooseTransfer { transfer -> viewModel.createFolder(name, assetIds, transfer, finish) }
+                if (onDevice) chooseTransfer { transfer -> viewModel.createFolder(name, assetIds, transfer, place, finish) }
                 else viewModel.create(name, assetIds, finish)
             },
             onDismiss = { naming = false },
@@ -309,16 +318,21 @@ private fun AlbumThumbnail(source: Pair<String, String>?) {
     )
 }
 
-/** Naming a new album or renaming one: the same field, a different button. */
+/**
+ * Naming a new album or renaming one: the same field, a different button. With [places], a new
+ * folder album also says where it goes, the suggested one already chosen.
+ */
 @Composable
 internal fun AlbumNameDialog(
     title: String,
     initial: String,
     confirmLabel: String,
-    onConfirm: (String) -> Unit,
+    onConfirm: (name: String, place: String?) -> Unit,
     onDismiss: () -> Unit,
+    places: List<AlbumPlace> = emptyList(),
 ) {
     var value by remember { mutableStateOf(initial) }
+    var chosen by remember(places) { mutableStateOf((places.firstOrNull { it.suggested } ?: places.firstOrNull())?.id) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     val name = albumNameOrNull(value)
@@ -326,16 +340,47 @@ internal fun AlbumNameDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            OutlinedTextField(
-                value = value,
-                onValueChange = { value = it },
-                singleLine = true,
-                label = { Text(stringResource(Res.string.library_album_name_label)) },
-                modifier = Modifier.fillMaxWidth().focusRequester(focus),
-            )
+            Column {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    singleLine = true,
+                    label = { Text(stringResource(Res.string.library_album_name_label)) },
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                )
+                if (places.size > 1) {
+                    Text(
+                        stringResource(Res.string.library_album_place_label),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = ImagoColors.TextSecondary,
+                        modifier = Modifier.padding(top = ImagoSpacing.Md, bottom = ImagoSpacing.Xs),
+                    )
+                    places.forEach { place ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(ImagoRadii.Small))
+                                .clickable(role = Role.RadioButton) { chosen = place.id },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = chosen == place.id, onClick = null, modifier = Modifier.padding(ImagoSpacing.Sm))
+                            Column(Modifier.weight(1f)) {
+                                Text(place.name, style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
+                                Text(
+                                    place.path,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ImagoColors.TextTertiary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.MiddleEllipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         },
         confirmButton = {
-            TextButton(onClick = { name?.let(onConfirm) }, enabled = name != null) { Text(confirmLabel) }
+            TextButton(onClick = { name?.let { onConfirm(it, chosen) } }, enabled = name != null) { Text(confirmLabel) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.library_cancel)) } },
     )
@@ -351,17 +396,7 @@ internal fun AlbumDeleteDialog(album: AlbumUiModel, onConfirm: () -> Unit, onDis
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.library_album_delete_question, album.name)) },
         text = {
-            Text(
-                if (album.isFolder) {
-                    val managed = rememberMediaManagement()?.granted == true
-                    pluralStringResource(
-                        if (managed) Res.plurals.library_album_delete_folder_body_managed else Res.plurals.library_album_delete_folder_body,
-                        album.assetCount,
-                        album.assetCount,
-                    )
-                }
-                else stringResource(Res.string.library_album_delete_body),
-            )
+            Text(if (album.isFolder) folderAlbumDeleteBody(album.assetCount) else stringResource(Res.string.library_album_delete_body))
         },
         confirmButton = {
             TextButton(onClick = onConfirm) { Text(stringResource(Res.string.library_album_delete), color = ImagoColors.Danger) }
@@ -427,4 +462,20 @@ private fun FolderTransferDialog(onChoose: (FolderTransfer, always: Boolean) -> 
             TextButton(onClick = { onChoose(FolderTransfer.COPY, always) }) { Text(stringResource(Res.string.library_folder_transfer_copy)) }
         },
     )
+}
+
+/** Where "Always do this" in the move-or-copy question is undone. */
+@Composable
+internal fun FolderTransferSetting(device: DeviceLibrary) {
+    val transfer by device.rememberedTransfer.collectAsStateWithLifecycle()
+    Text(stringResource(Res.string.library_folder_transfer_setting), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
+    Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
+        listOf(
+            null to Res.string.library_folder_transfer_ask,
+            FolderTransfer.MOVE to Res.string.library_folder_transfer_move,
+            FolderTransfer.COPY to Res.string.library_folder_transfer_copy,
+        ).forEach { (option, label) ->
+            FilterChip(selected = transfer == option, onClick = { device.rememberTransfer(option) }, label = { Text(stringResource(label)) })
+        }
+    }
 }

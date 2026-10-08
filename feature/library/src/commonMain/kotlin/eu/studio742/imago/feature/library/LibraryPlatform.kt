@@ -63,9 +63,6 @@ interface MediaManagement {
 @Composable
 expect fun rememberMediaManagement(): MediaManagement?
 
-/** Whether this device's albums — its folders — can be changed from here: on the phone, yes. */
-expect val DeviceFolderAlbums: Boolean
-
 /** The icon of this device's library: the phone, the computer. */
 expect val DeviceLibraryIcon: ImageVector
 
@@ -97,6 +94,10 @@ expect fun rememberSelectionShare(): SelectionShare
 
 expect val SelectionShareLabel: StringResource
 expect val SelectionShareIcon: ImageVector
+
+/** What deleting one of this device's folder albums does with its [count] photos and videos. */
+@Composable
+expect fun folderAlbumDeleteBody(count: Int): String
 
 /** Where this device's photos go when deleted: the phone's trash, the Recycle Bin. */
 expect val SelectionDeleteDeviceBody: StringResource

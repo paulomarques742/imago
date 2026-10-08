@@ -292,7 +292,7 @@ class DeviceLibraryRepository @Inject constructor(
         return transferTo(target, assetIds, transfer)
     }
 
-    override suspend fun createFolderAlbum(name: String, assetIds: List<String>, transfer: FolderTransfer): ImmichAlbum {
+    override suspend fun createFolderAlbum(name: String, assetIds: List<String>, transfer: FolderTransfer, place: String?): ImmichAlbum {
         val target = deviceAlbumFolder(name) ?: throw UserMessageException(UserMessage.FILE_UNAVAILABLE)
         val result = transferTo(target, assetIds, transfer)
         check(result.added + result.alreadyThere > 0) { "No photo reached the new album" }
@@ -300,12 +300,13 @@ class DeviceLibraryRepository @Inject constructor(
         return albums().first { it.id == folderId }
     }
 
-    /** Renaming a folder is moving everything in it to a folder with the new name. */
-    override suspend fun renameAlbum(albumId: String, name: String) {
+    /** Renaming a folder is moving everything in it to a folder with the new name, which MediaStore gives another id. */
+    override suspend fun renameAlbum(albumId: String, name: String): String {
         editableFolder(albumId)
         val target = deviceAlbumFolder(name) ?: throw UserMessageException(UserMessage.FILE_UNAVAILABLE)
         val result = transferTo(target, idsIn(albumId), FolderTransfer.MOVE)
         check(result.failed == 0) { "${result.failed} files could not be moved to $target" }
+        return folderPaths().entries.firstOrNull { it.value.equals(target, ignoreCase = true) }?.key ?: albumId
     }
 
     /** A folder only exists with files in it: deleting the album is sending them to the trash. */

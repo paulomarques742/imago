@@ -135,6 +135,12 @@ data class ImmichAlbum(
 /** How photos go into a folder album: moved out of where they were, or copied and left there too. */
 enum class FolderTransfer { MOVE, COPY }
 
+/**
+ * Where a new folder album can be made, when there is more than one place: one of the folders
+ * chosen on a computer. [suggested] is the one already holding the first of the photos.
+ */
+data class AlbumPlace(val id: String, val name: String, val path: String, val suggested: Boolean = false)
+
 /** What adding photos to an album did with each one. */
 data class AlbumAddition(val added: Int, val alreadyThere: Int, val failed: Int)
 

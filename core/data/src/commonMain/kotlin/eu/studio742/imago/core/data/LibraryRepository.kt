@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.AlbumAddition
+import eu.studio742.imago.core.model.AlbumPlace
 import eu.studio742.imago.core.model.FolderTransfer
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichTimeBucket
@@ -118,7 +119,8 @@ interface LibraryRepository {
     /** Out of the album only; the photos stay in the library. How many came out. */
     suspend fun removeFromAlbum(albumId: String, assetIds: List<String>): Int = error("This library cannot change albums")
 
-    suspend fun renameAlbum(albumId: String, name: String): Unit = error("This library cannot change albums")
+    /** The album's id afterwards: a server's stays, a folder's changes with its name. */
+    suspend fun renameAlbum(albumId: String, name: String): String = error("This library cannot change albums")
 
     /** The album goes. A server's keeps its photos; a folder's go to the device's trash. */
     suspend fun deleteAlbum(albumId: String): Unit = error("This library cannot delete albums")
@@ -155,9 +157,15 @@ interface LibraryRepository {
     suspend fun fileIntoAlbum(albumId: String, assetIds: List<String>, transfer: FolderTransfer): AlbumAddition =
         error("This library has no folder albums")
 
-    /** A new folder album, born with [assetIds] in it: a folder cannot exist empty. */
-    suspend fun createFolderAlbum(name: String, assetIds: List<String>, transfer: FolderTransfer): ImmichAlbum =
+    /**
+     * A new folder album, born with [assetIds] in it: a folder cannot exist empty. [place] is one of
+     * [albumPlaces]; null leaves it with the photos.
+     */
+    suspend fun createFolderAlbum(name: String, assetIds: List<String>, transfer: FolderTransfer, place: String? = null): ImmichAlbum =
         error("This library has no folder albums")
+
+    /** Where a new folder album for [assetIds] may go; fewer than two leave nothing to choose. */
+    suspend fun albumPlaces(assetIds: List<String>): List<AlbumPlace> = emptyList()
 
     /**
      * Fails with the permission the library's key lacks to delete this asset, before the

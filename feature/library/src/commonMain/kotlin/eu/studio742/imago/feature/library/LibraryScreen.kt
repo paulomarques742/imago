@@ -2,6 +2,8 @@
 
 package eu.studio742.imago.feature.library
 
+import androidx.compose.runtime.produceState
+import eu.studio742.imago.core.model.AlbumPlace
 import eu.studio742.imago.core.designsystem.i18n.resolve
 import eu.studio742.imago.core.designsystem.i18n.resolveNow
 import eu.studio742.imago.core.designsystem.i18n.toUiText
@@ -253,7 +255,8 @@ fun LibraryRoute(
             onOpenTrash = onOpenTrash,
             onComposeSelection = { selected -> onComposeSelection(selected, viewModel::clearSelection) },
             albumEditing = AlbumEditing(
-                onNewAlbum = { name -> albumPick = AlbumPick.New(name) },
+                onNewAlbum = { name, place -> albumPick = AlbumPick.New(name, place) },
+                places = viewModel::newAlbumPlaces,
                 onAddPhotos = { album -> albumPick = AlbumPick.Into(album) },
                 onRename = viewModel::renameOpenAlbum,
                 onDelete = viewModel::deleteOpenAlbum,
@@ -272,7 +275,7 @@ fun LibraryRoute(
                     albumPick = null
                     when {
                         pick is AlbumPick.New && viewModel.isDeviceLibrary ->
-                            chooseTransfer { transfer -> viewModel.createAlbum(pick.name, chosen, transfer) }
+                            chooseTransfer { transfer -> viewModel.createAlbum(pick.name, chosen, transfer, pick.place) }
                         pick is AlbumPick.New -> viewModel.createAlbum(pick.name, chosen)
                         pick is AlbumPick.Into && pick.album.isFolder ->
                             chooseTransfer { transfer -> viewModel.addToAlbum(pick.album, chosen, transfer) }
@@ -288,16 +291,18 @@ fun LibraryRoute(
 
 /** What the photos being chosen are for: a new album, named already, or one that exists. */
 private sealed interface AlbumPick {
-    data class New(val name: String) : AlbumPick
+    data class New(val name: String, val place: String?) : AlbumPick
     data class Into(val album: AlbumUiModel) : AlbumPick
 }
 
 /** What the library does to its albums. A picker only chooses, and has none. */
 internal class AlbumEditing(
-    val onNewAlbum: (name: String) -> Unit,
+    val onNewAlbum: (name: String, place: String?) -> Unit,
     val onAddPhotos: (AlbumUiModel) -> Unit,
     val onRename: (name: String) -> Unit,
     val onDelete: () -> Unit,
+    /** Where a new album can go, when there is a choice: the folders chosen on a computer. */
+    val places: suspend () -> List<AlbumPlace> = { emptyList() },
 )
 
 /**
@@ -450,12 +455,8 @@ private fun LibraryHost(
             onOpenRecipes = onOpenRecipes,
             onOpenComposer = onOpenComposer,
             selectionBar = { selection, work -> LibrarySelectionBar(viewModel, selection, work, onComposeSelection) },
-            // The device's albums are its folders, which only the phone changes from here.
             // In the unified library a new album would have to be on one side or the other: it is made in that library.
-            albumEditing = albumEditing?.takeIf {
-                sourceId != eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID &&
-                    (sourceId != eu.studio742.imago.core.model.DEVICE_LIBRARY_ID || DeviceFolderAlbums)
-            },
+            albumEditing = albumEditing?.takeIf { sourceId != eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID },
             onToggleSelection = viewModel::toggleSelection,
             onClearSelection = viewModel::clearSelection,
             onToggleFavorite = viewModel::toggleFavorite,
@@ -711,7 +712,7 @@ private fun LibraryScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             if (uiState.section == LibrarySection.ALBUMS && uiState.selectedAlbum == null) {
-                AlbumBrowser(state = uiState, onOpenAlbum = onOpenAlbum, onRetry = onRefresh, onNewAlbum = albumEditing?.onNewAlbum)
+                AlbumBrowser(state = uiState, onOpenAlbum = onOpenAlbum, onRetry = onRefresh, editing = albumEditing)
             } else {
                 PhotoBrowser(
                     selectedAssetId = selectedAssetId,
@@ -1222,7 +1223,7 @@ private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit, editing: Album
             title = stringResource(Res.string.library_album_rename),
             initial = album.name,
             confirmLabel = stringResource(Res.string.library_album_save),
-            onConfirm = { name -> renaming = false; if (name != album.name) editing.onRename(name) },
+            onConfirm = { name, _ -> renaming = false; if (name != album.name) editing.onRename(name) },
             onDismiss = { renaming = false },
         )
     }
@@ -1440,9 +1441,10 @@ private fun AlbumBrowser(
     state: LibraryUiState,
     onOpenAlbum: (AlbumUiModel) -> Unit,
     onRetry: () -> Unit,
-    /** Null where albums are not created from here: the device's folders, a picker. */
-    onNewAlbum: ((name: String) -> Unit)?,
+    /** Null where albums are not created from here: a picker, the unified library. */
+    editing: AlbumEditing?,
 ) {
+    val onNewAlbum = editing?.onNewAlbum
     var naming by remember { mutableStateOf(false) }
     when {
         state.isLoadingNavigation && state.albums.isEmpty() -> LoadingState()
@@ -1470,11 +1472,13 @@ private fun AlbumBrowser(
         }
     }
     if (naming && onNewAlbum != null) {
+        val places by produceState(emptyList<AlbumPlace>()) { value = editing.places() }
         AlbumNameDialog(
             title = stringResource(Res.string.library_album_new),
             initial = "",
             confirmLabel = stringResource(Res.string.library_album_choose_photos),
-            onConfirm = { name -> naming = false; onNewAlbum(name) },
+            places = places,
+            onConfirm = { name, place -> naming = false; onNewAlbum(name, place) },
             onDismiss = { naming = false },
         )
     }
@@ -1911,7 +1915,7 @@ private fun LibrarySelectionBar(
     SelectionActionsBar(
         selection = selection,
         work = work,
-        albumSlot = albumSlotFor(selection, openAlbum, DeviceFolderAlbums),
+        albumSlot = albumSlotFor(selection, openAlbum),
         canSaveToDevice = viewModel.canSaveSelectionToDevice(selection),
         canSendToImmich = sendToImmich != null && viewModel.canSendToImmich(selection),
         canRotate = viewModel.canRotateSelection(selection),

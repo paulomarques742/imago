@@ -302,6 +302,11 @@
         <item quantity="other">%1$d copied to “%2$s”.</item>
     </plurals>
     <string name="library_album_name">Album name</string>
+    <string name="library_album_place_label">Create in</string>
+    <plurals name="library_album_delete_folder_body_computer">
+        <item quantity="one">The photo or video in this album will go to the Recycle Bin. The folder goes too if nothing else is left in it.</item>
+        <item quantity="other">The %1$d photos and videos in this album will go to the Recycle Bin. The folder goes too if nothing else is left in it.</item>
+    </plurals>
     <string name="library_no_album_match">No album matches “%1$s”.</string>
     <!-- Media management -->
     <string name="library_media_management_title">Media management</string>

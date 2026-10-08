@@ -15,12 +15,17 @@ fun isEditableDeviceFolder(relativePath: String): Boolean {
 
 /**
  * The folder for an album called [name], as MediaStore wants it (`Pictures/Trip/`), or null when
- * nothing usable is left of the name. Separators and the characters file systems refuse become
- * spaces: a "/" in the name would otherwise make a folder inside a folder.
+ * nothing usable is left of the name.
  */
-fun deviceAlbumFolder(name: String): String? {
-    val clean = name.replace(Regex("""[\\/:*?"<>|\u0000-\u001F]"""), " ")
+fun deviceAlbumFolder(name: String): String? = albumFolderName(name)?.let { "Pictures/$it/" }
+
+/**
+ * The name of the folder for an album called [name], or null when nothing usable is left of it.
+ * Separators and the characters file systems refuse become spaces: a "/" in the name would
+ * otherwise make a folder inside a folder.
+ */
+fun albumFolderName(name: String): String? =
+    name.replace(Regex("""[\\/:*?"<>|\u0000-\u001F]"""), " ")
         .replace(Regex("""\s+"""), " ")
         .trim(' ', '.')
-    return clean.takeIf(String::isNotEmpty)?.let { "Pictures/$it/" }
-}
+        .takeIf(String::isNotEmpty)

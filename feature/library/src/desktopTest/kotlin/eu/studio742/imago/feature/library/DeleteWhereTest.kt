@@ -32,7 +32,7 @@ class DeleteWhereTest {
             isFavorite = false, isEdited = false, hasLocalRecipe = false, thumbnailUrl = "", previewUrl = "", apiKey = "",
         )
 
-        assertEquals(AlbumSlot.NONE, albumSlotFor(listOf(asset(phoneOnly), asset(serverOnly)), openAlbum = null, deviceFolders = true))
-        assertEquals(AlbumSlot.ADD, albumSlotFor(listOf(asset(serverOnly)), openAlbum = null, deviceFolders = true))
+        assertEquals(AlbumSlot.NONE, albumSlotFor(listOf(asset(phoneOnly), asset(serverOnly)), openAlbum = null))
+        assertEquals(AlbumSlot.ADD, albumSlotFor(listOf(asset(serverOnly)), openAlbum = null))
     }
 }

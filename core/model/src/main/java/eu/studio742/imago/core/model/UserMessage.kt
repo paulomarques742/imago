@@ -24,6 +24,9 @@ enum class UserMessage {
     /** Moving to the Recycle Bin failed. */
     TRASH_FAILED,
 
+    /** A folder of the computer library could not be renamed; something has it open. */
+    FOLDER_RENAME_FAILED,
+
     /** A new address of an Immich library answers for another server or another account. */
     ADDRESS_OTHER_ACCOUNT,
 

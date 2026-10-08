@@ -4,6 +4,7 @@ import eu.studio742.imago.core.designsystem.i18n.toUiText
 import eu.studio742.imago.core.designsystem.i18n.resolve
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import org.jetbrains.compose.resources.pluralStringResource
 import eu.studio742.imago.feature.library.resources.*
 import android.Manifest
 import android.app.Activity
@@ -122,7 +123,13 @@ actual fun DeviceMediaActionHost(viewModel: LibrarySettingsViewModel) {
     }
 }
 
-actual val DeviceFolderAlbums: Boolean get() = true
+/** Android confirms the move to the trash, unless IMAGO manages media. */
+@Composable
+actual fun folderAlbumDeleteBody(count: Int): String = pluralStringResource(
+    if (rememberMediaManagement()?.granted == true) Res.plurals.library_album_delete_folder_body_managed else Res.plurals.library_album_delete_folder_body,
+    count,
+    count,
+)
 
 /**
  * Read again on every return to the app: it is given in the system's settings, outside it. The
@@ -195,22 +202,7 @@ actual fun ColumnScope.DeviceLibraryAccess(viewModel: LibrarySettingsViewModel, 
             Text(stringResource(if (management.granted) Res.string.library_media_management_change else Res.string.library_media_management_allow))
         }
     }
-    // Where "Always do this" in the move-or-copy question is undone.
-    val transfer by viewModel.device.rememberedTransfer.collectAsState()
-    Text(stringResource(Res.string.library_folder_transfer_setting), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
-    androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(eu.studio742.imago.core.designsystem.ImagoSpacing.Sm)) {
-        listOf(
-            null to Res.string.library_folder_transfer_ask,
-            FolderTransfer.MOVE to Res.string.library_folder_transfer_move,
-            FolderTransfer.COPY to Res.string.library_folder_transfer_copy,
-        ).forEach { (option, label) ->
-            androidx.compose.material3.FilterChip(
-                selected = transfer == option,
-                onClick = { viewModel.device.rememberTransfer(option) },
-                label = { Text(stringResource(label)) },
-            )
-        }
-    }
+    FolderTransferSetting(viewModel.device)
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.material3.TextButton(onClick = {
         context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,

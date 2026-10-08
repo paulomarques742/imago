@@ -59,6 +59,7 @@
     <string name="message_file_unavailable">O ficheiro deixou de estar disponível. Verifique o acesso à biblioteca.</string>
     <string name="message_folder_file_unavailable">O ficheiro deixou de estar disponível. Verifique a pasta da biblioteca.</string>
     <string name="message_trash_failed">Não foi possível mover para a Reciclagem.</string>
+    <string name="message_folder_rename_failed">Não foi possível mudar o nome da pasta. Feche as janelas ou as apps que a tenham aberta e tente de novo.</string>
     <string name="message_address_other_account">Este endereço não aceita a chave desta biblioteca: pertence a outro servidor ou a outra conta.</string>
     <string name="message_account_unconfirmed">Não foi possível confirmar a conta desta biblioteca pelo endereço atual. Tente quando ele estiver disponível.</string>
     <string name="message_library_not_linked">Há fotografias de uma biblioteca que ainda não está ligada à conta.</string>

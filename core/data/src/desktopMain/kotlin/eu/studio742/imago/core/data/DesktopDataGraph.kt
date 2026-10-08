@@ -22,8 +22,12 @@ import java.nio.file.Path
  * instead of the gallery.
  *
  * @param root the app's data folder (`%LOCALAPPDATA%\IMAGO`).
+ * @param trash how the folder library sends files to the Recycle Bin.
  */
-class DesktopDataGraph(root: Path) : AutoCloseable {
+class DesktopDataGraph(
+    root: Path,
+    trash: (java.io.File) -> Boolean = { java.awt.Desktop.getDesktop().moveToTrash(it) },
+) : AutoCloseable {
     init { Files.createDirectories(root) }
 
     val database: ImmichRoomDatabase = Room.databaseBuilder<ImmichRoomDatabase>(name = root.resolve(DATABASE_FILE).toString())
@@ -55,7 +59,7 @@ class DesktopDataGraph(root: Path) : AutoCloseable {
 
     val preferences: SecurePreferences = WindowsSecurePreferences(root.resolve(PREFERENCES_FILE))
     val configuration = EncryptedConfigurationRepository(preferences, api, database, endpointTriggers)
-    val folders = FolderLibraryRepository(database, preferences)
+    val folders = FolderLibraryRepository(database, preferences, trash)
     val library: LibraryRepository = SourceLibraryRepository(configuration, database, api, folders)
     val contentHashes = ContentHashRepository(
         database,

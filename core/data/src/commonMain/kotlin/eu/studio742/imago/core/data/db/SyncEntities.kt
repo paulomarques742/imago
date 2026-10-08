@@ -103,6 +103,9 @@ interface ContentHashDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(hash: ContentHashEntity)
+
+    @Query("UPDATE OR REPLACE content_hashes SET assetId = :to WHERE libraryKey = :libraryKey AND assetId = :from")
+    suspend fun moveAsset(libraryKey: String, from: String, to: String)
 }
 
 /** A received recipe that has not found its photo on this device yet. */
@@ -170,6 +173,9 @@ interface RecipeConflictDao {
 
     @Insert
     suspend fun insert(conflict: RecipeConflictEntity)
+
+    @Query("UPDATE recipe_conflicts SET assetId = :to WHERE libraryKey = :libraryKey AND assetId = :from")
+    suspend fun moveAsset(libraryKey: String, from: String, to: String)
 }
 
 @Dao
@@ -184,4 +190,7 @@ interface CandidateRejectionDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(rejection: CandidateRejectionEntity)
+
+    @Query("UPDATE OR REPLACE candidate_rejections SET assetId = :to WHERE libraryKey = :libraryKey AND assetId = :from")
+    suspend fun moveAsset(libraryKey: String, from: String, to: String)
 }

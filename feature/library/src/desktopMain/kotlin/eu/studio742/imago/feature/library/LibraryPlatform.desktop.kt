@@ -4,6 +4,7 @@ import eu.studio742.imago.core.designsystem.i18n.resolve
 import org.jetbrains.compose.resources.StringResource
 import eu.studio742.imago.core.designsystem.i18n.toUiText
 import org.jetbrains.compose.resources.stringResource
+import org.jetbrains.compose.resources.pluralStringResource
 import eu.studio742.imago.feature.library.resources.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ColumnScope
@@ -86,7 +87,9 @@ actual fun rememberRequestMediaAccess(viewModel: LibrarySettingsViewModel, onRes
 @Composable
 actual fun DeviceMediaActionHost(viewModel: LibrarySettingsViewModel) = Unit
 
-actual val DeviceFolderAlbums: Boolean get() = false
+@Composable
+actual fun folderAlbumDeleteBody(count: Int): String =
+    pluralStringResource(Res.plurals.library_album_delete_folder_body_computer, count, count)
 
 @Composable
 actual fun rememberMediaManagement(): MediaManagement? = null
@@ -120,6 +123,7 @@ actual fun ColumnScope.DeviceLibraryAccess(viewModel: LibrarySettingsViewModel, 
         Icon(Icons.Outlined.CreateNewFolder, null)
         Text(stringResource(Res.string.library_add_folder))
     }
+    FolderTransferSetting(folders)
 }
 
 /** On a computer sharing is keeping copies: the originals are downloaded straight into the folder picked. */

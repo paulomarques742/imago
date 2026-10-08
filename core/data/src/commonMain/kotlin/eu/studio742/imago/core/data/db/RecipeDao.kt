@@ -45,4 +45,8 @@ interface RecipeDao {
     /** Saves the hash computed after the recipe, without counting it as edited again. */
     @Query("UPDATE recipes SET contentSha1 = :sha1 WHERE libraryKey = :libraryKey AND assetId = :assetId")
     suspend fun setContentSha1(libraryKey: String, assetId: String, sha1: String)
+
+    /** The photo is the same file under a new id: a computer's file moved to another folder. */
+    @Query("UPDATE OR REPLACE recipes SET assetId = :to WHERE libraryKey = :libraryKey AND assetId = :from")
+    suspend fun moveAsset(libraryKey: String, from: String, to: String)
 }

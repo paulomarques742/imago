@@ -135,7 +135,10 @@ class RoomLibraryRepository @Inject constructor(
     override suspend fun removeFromAlbum(albumId: String, assetIds: List<String>) =
         api.removeFromAlbum(requireConnection(), albumId, assetIds)
 
-    override suspend fun renameAlbum(albumId: String, name: String) = api.renameAlbum(requireConnection(), albumId, name)
+    override suspend fun renameAlbum(albumId: String, name: String): String {
+        api.renameAlbum(requireConnection(), albumId, name)
+        return albumId
+    }
 
     override suspend fun deleteAlbum(albumId: String) = api.deleteAlbum(requireConnection(), albumId)
 

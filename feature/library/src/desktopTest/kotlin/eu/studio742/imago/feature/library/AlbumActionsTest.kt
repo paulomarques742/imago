@@ -47,24 +47,23 @@ class AlbumActionsTest {
     fun theAlbumPlaceTakesOutInsideAnAlbumThatCanChange() {
         val server = listOf(asset("server"))
 
-        assertEquals(AlbumSlot.ADD, albumSlotFor(server, openAlbum = null, deviceFolders = true))
-        assertEquals(AlbumSlot.REMOVE, albumSlotFor(server, album(canEditContent = true), deviceFolders = true))
+        assertEquals(AlbumSlot.ADD, albumSlotFor(server, openAlbum = null))
+        assertEquals(AlbumSlot.REMOVE, albumSlotFor(server, album(canEditContent = true)))
         // An album shared to look at only: the photos can still go to one of this person's own.
-        assertEquals(AlbumSlot.ADD, albumSlotFor(server, album(canEditContent = false), deviceFolders = true))
+        assertEquals(AlbumSlot.ADD, albumSlotFor(server, album(canEditContent = false)))
     }
 
     @Test
     fun aFolderIsNeverTakenOutOfOnlyMovedOrCopiedFrom() {
         val device = listOf(asset(DEVICE_LIBRARY_ID))
 
-        assertEquals(AlbumSlot.ADD, albumSlotFor(device, album(canEditContent = true, isFolder = true), deviceFolders = true))
-        assertEquals(AlbumSlot.ADD, albumSlotFor(device, openAlbum = null, deviceFolders = true))
+        assertEquals(AlbumSlot.ADD, albumSlotFor(device, album(canEditContent = true, isFolder = true)))
+        assertEquals(AlbumSlot.ADD, albumSlotFor(device, openAlbum = null))
     }
 
     @Test
-    fun whereFoldersCannotChangeTheDevicePhotosHaveNoAlbum() {
-        assertEquals(AlbumSlot.NONE, albumSlotFor(listOf(asset(DEVICE_LIBRARY_ID)), openAlbum = null, deviceFolders = false))
-        assertEquals(AlbumSlot.NONE, albumSlotFor(emptyList(), openAlbum = null, deviceFolders = true))
+    fun nothingChosenHasNoAlbum() {
+        assertEquals(AlbumSlot.NONE, albumSlotFor(emptyList(), openAlbum = null))
     }
 
     @Test

@@ -61,10 +61,14 @@ class SourceLibraryRepository @Inject constructor(
         if (id == UNIFIED_LIBRARY_ID) return unified().albums()
         return provider(id).albums().map { it.encodedFor(id) }
     }
+    /** In the unified library a new album with photos of the server is the server's. */
     override suspend fun createAlbum(name: String, assetIds: List<String>): ImmichAlbum {
-        val id = configuration.selectedLibraryId.value
+        val id = configuration.selectedLibraryId.value.let { if (it == UNIFIED_LIBRARY_ID) unifiedPartner() else it }
         return provider(id).createAlbum(name, localIdsIn(id, assetIds)).encodedFor(id)
     }
+
+    private fun unifiedPartner() =
+        configuration.unifiedPartnerId ?: throw UserMessageException(UserMessage.LIBRARY_DISCONNECTED, listOf(""))
 
     override suspend fun addToAlbum(albumId: String, assetIds: List<String>): AlbumAddition {
         val album = AssetReference.parse(albumId)
@@ -76,8 +80,9 @@ class SourceLibraryRepository @Inject constructor(
         return provider(album.libraryId).removeFromAlbum(album.localId, localIdsIn(album.libraryId, assetIds))
     }
 
-    override suspend fun renameAlbum(albumId: String, name: String) {
-        val album = AssetReference.parse(albumId); provider(album.libraryId).renameAlbum(album.localId, name)
+    override suspend fun renameAlbum(albumId: String, name: String): String {
+        val album = AssetReference.parse(albumId)
+        return AssetReference(album.libraryId, provider(album.libraryId).renameAlbum(album.localId, name)).encode()
     }
 
     override suspend fun deleteAlbum(albumId: String) {
@@ -89,10 +94,11 @@ class SourceLibraryRepository @Inject constructor(
         return provider(album.libraryId).fileIntoAlbum(album.localId, localIdsIn(album.libraryId, assetIds), transfer)
     }
 
-    override suspend fun createFolderAlbum(name: String, assetIds: List<String>, transfer: FolderTransfer): ImmichAlbum {
-        val id = configuration.selectedLibraryId.value
-        return provider(id).createFolderAlbum(name, localIdsIn(id, assetIds), transfer).encodedFor(id)
-    }
+    // Only this device has folder albums, whichever library shows its photos: its own or the unified one.
+    override suspend fun createFolderAlbum(name: String, assetIds: List<String>, transfer: FolderTransfer, place: String?): ImmichAlbum =
+        device.createFolderAlbum(name, localIdsIn(DEVICE_LIBRARY_ID, assetIds), transfer, place).encodedFor(DEVICE_LIBRARY_ID)
+
+    override suspend fun albumPlaces(assetIds: List<String>): List<AlbumPlace> = device.albumPlaces(localIdsIn(DEVICE_LIBRARY_ID, assetIds))
 
     override suspend fun contentSearchAvailable(): Boolean =
         runCatching { provider(configuration.selectedLibraryId.value).contentSearchAvailable() }.getOrDefault(false)
