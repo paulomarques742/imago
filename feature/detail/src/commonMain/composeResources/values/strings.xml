@@ -2,6 +2,8 @@
 <!-- Base language: English. Translations live in values-<language>/ with the same keys. -->
 <resources>
     <string name="detail_back_to_library">Back to library</string>
+    <string name="detail_hide_library">Hide library</string>
+    <string name="detail_show_library">Show library</string>
     <string name="detail_unfavorite">Remove from favorites</string>
     <string name="detail_favorite">Add to favorites</string>
     <string name="detail_more_options">More options</string>

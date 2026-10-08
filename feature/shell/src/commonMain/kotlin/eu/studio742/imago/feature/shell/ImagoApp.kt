@@ -9,6 +9,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.animation.core.Animatable
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import kotlin.math.roundToInt
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
@@ -150,6 +157,11 @@ sealed interface AppDestination {
         val assets: List<AssetUiModel>,
         val index: Int,
         val editing: Boolean,
+        /**
+         * Whether the grid beside the detail was folded away to see the photo on the whole screen.
+         * It lasts while swiping and through the editor; going back to the library unfolds it.
+         */
+        val listPaneHidden: Boolean = false,
     ) : AppDestination
 }
 
@@ -350,8 +362,33 @@ private fun LibraryPane(
 ) {
     val window = LocalImagoWindow.current
     val listPaneWidth = (window.width * LIST_PANE_FRACTION).coerceIn(ListPaneMin, ListPaneMax)
+    val listHidden = photo?.listPaneHidden == true
+    // How much of the pane is showing, 1 to 0. It starts where the destination already is, so that
+    // coming back folded — after a rotation — does not replay the fold.
+    val listShown = remember { Animatable(if (listHidden) 0f else 1f) }
+    LaunchedEffect(listHidden, photo == null) {
+        // Without a photo the grid takes the whole screen and the fraction does not apply; it is reset
+        // without animating, or the next photo would open with the grid sliding in.
+        if (photo == null) listShown.snapTo(1f) else listShown.animateTo(if (listHidden) 0f else 1f)
+    }
+    val listFolded by remember { derivedStateOf { listShown.value == 0f } }
     Row(Modifier.fillMaxSize()) {
-        val listModifier = if (photo != null) Modifier.width(listPaneWidth) else Modifier.weight(1f)
+        val listModifier = if (photo == null) {
+            Modifier.weight(1f)
+        } else {
+            // Folded, the grid stays composed at its full width and is only cut off: taking it out
+            // of the composition would lose where it was scrolled to. It slides out through the
+            // side away from the detail, as if pulled under the screen's edge.
+            Modifier
+                .clipToBounds()
+                .layout { measurable, constraints ->
+                    val full = listPaneWidth.roundToPx()
+                    val shown = (full * listShown.value).roundToInt()
+                    val placeable = measurable.measure(constraints.copy(minWidth = full, maxWidth = full))
+                    layout(shown, placeable.height) { placeable.placeRelative(shown - full, 0) }
+                }
+                .then(if (listFolded) Modifier.clearAndSetSemantics {} else Modifier)
+        }
         // Inside the pane, "the window" becomes the pane. Without this the grid would count its
         // columns by the tablet's width and squeeze six thumbnails into a 480dp pane.
         CompositionLocalProvider(
@@ -386,8 +423,15 @@ private fun LibraryPane(
             )
         }
         if (photo != null) {
-            Box(Modifier.fillMaxHeight().width(1.dp).background(ImagoColors.BorderSubtle))
-            PhotoDetail(photo, onDestination, onComposerRequest, Modifier.weight(1f))
+            if (!listFolded) Box(Modifier.fillMaxHeight().width(1.dp).background(ImagoColors.BorderSubtle))
+            PhotoDetail(
+                current = photo,
+                onDestination = onDestination,
+                onComposerRequest = onComposerRequest,
+                modifier = Modifier.weight(1f),
+                listPaneShown = !listHidden,
+                onToggleListPane = { onDestination(photo.copy(listPaneHidden = !listHidden)) },
+            )
         }
     }
 }
@@ -404,9 +448,13 @@ private fun PhotoDetail(
     onDestination: (AppDestination) -> Unit,
     onComposerRequest: (ComposerRequest) -> Unit,
     modifier: Modifier = Modifier,
+    listPaneShown: Boolean? = null,
+    onToggleListPane: () -> Unit = {},
 ) {
     DetailRoute(
         modifier = modifier,
+        listPaneShown = listPaneShown,
+        onToggleListPane = onToggleListPane,
         assets = current.assets.map(AssetUiModel::toDetailAsset),
         selectedIndex = current.index,
         onSelectIndex = { index ->

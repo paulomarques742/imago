@@ -60,6 +60,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
@@ -168,6 +172,12 @@ fun DetailRoute(
     onAddToComposition: () -> Unit,
     onDeleted: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Whether the list beside the detail is showing, or null when there is none — a narrow screen,
+     * a viewer opened by another app. Only with a list beside it does the detail offer to hide it.
+     */
+    listPaneShown: Boolean? = null,
+    onToggleListPane: () -> Unit = {},
     viewModel: DetailViewModel = detailViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -195,6 +205,8 @@ fun DetailRoute(
         onSetAs = viewModel::setAs,
         onArchive = { archived: Boolean -> viewModel.setArchived(asset.id, archived) { onDeleted(asset.id) } }.takeIf { viewModel.canArchive },
         onConsumeMessage = viewModel::consumeMessage,
+        listPaneShown = listPaneShown,
+        onToggleListPane = onToggleListPane,
     )
 }
 
@@ -226,6 +238,8 @@ private fun DetailScreen(
     /** True archives, false brings back; null where the library has no archive. */
     onArchive: ((archived: Boolean) -> Unit)?,
     onConsumeMessage: () -> Unit,
+    listPaneShown: Boolean?,
+    onToggleListPane: () -> Unit,
 ) {
     val setAs = rememberSetAs()
     val shareFile = rememberShareFile()
@@ -486,6 +500,19 @@ private fun DetailScreen(
                             }
                         },
                     )
+                }
+            }
+
+            // It goes with the rest of the chrome: a tap that hides the buttons to see the photo whole
+            // must not leave this one behind.
+            if (listPaneShown != null) {
+                AnimatedVisibility(
+                    visible = chromeVisible,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.CenterStart),
+                ) {
+                    ListPaneTab(shown = listPaneShown, onClick = onToggleListPane)
                 }
             }
 
@@ -1120,3 +1147,49 @@ private fun formatTakenAt(value: String): String {
         runCatching { format(java.time.LocalDateTime.parse(value)) }.getOrDefault(value)
     }
 }
+
+/**
+ * The handle on the detail's edge, against the divider, that folds the list away and brings it back.
+ *
+ * A half pill and not a round button: it reads as part of the divider, a flap to pull, rather than
+ * one more control floating over the photo. The touch target is larger than what is drawn, so that
+ * something this discreet is still easy to hit.
+ */
+@Composable
+private fun ListPaneTab(shown: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(topEnd = LIST_PANE_TAB_RADIUS, bottomEnd = LIST_PANE_TAB_RADIUS)
+    val label = stringResource(if (shown) Res.string.detail_hide_library else Res.string.detail_show_library)
+    Box(
+        modifier = Modifier
+            .size(width = ImagoSizes.TouchTarget, height = LIST_PANE_TAB_HEIGHT + ImagoSpacing.Lg)
+            .clickable(
+                role = Role.Button,
+                // The grid sliding in or out is the feedback; a ripple on the photo would only add noise.
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = LIST_PANE_TAB_WIDTH, height = LIST_PANE_TAB_HEIGHT)
+                .clip(shape)
+                .background(Color.Black.copy(alpha = 0.42f))
+                .border(1.dp, ImagoColors.BorderSubtle, shape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (shown) Icons.AutoMirrored.Filled.KeyboardArrowLeft else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = ImagoColors.TextSecondary,
+                modifier = Modifier.size(ImagoSizes.IconDefault),
+            )
+        }
+    }
+}
+
+private val LIST_PANE_TAB_WIDTH = 22.dp
+private val LIST_PANE_TAB_HEIGHT = 56.dp
+private val LIST_PANE_TAB_RADIUS = 12.dp

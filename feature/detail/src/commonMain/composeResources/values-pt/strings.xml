@@ -2,6 +2,8 @@
 <!-- Português europeu. -->
 <resources>
     <string name="detail_back_to_library">Voltar à biblioteca</string>
+    <string name="detail_hide_library">Esconder a biblioteca</string>
+    <string name="detail_show_library">Mostrar a biblioteca</string>
     <string name="detail_unfavorite">Remover das favoritas</string>
     <string name="detail_favorite">Marcar como favorita</string>
     <string name="detail_more_options">Mais opções</string>
