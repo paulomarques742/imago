@@ -92,7 +92,7 @@ class LibraryConfigurationTest {
         repo.saveLibrary(null, "Home", "https://example.test", "read-only")
         assertEquals(
             listOf(
-                "album.read", "asset.upload", "stack.create", "asset.update", "asset.delete",
+                "album.read", "asset.upload", "stack.create", "stack.read", "asset.update", "asset.delete",
                 "album.create", "albumAsset.create", "albumAsset.delete", "album.update", "album.delete",
                 "asset.edit.get", "asset.edit.create", "asset.edit.delete", "person.read", "map.read", "memory.read",
             ),

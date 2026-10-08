@@ -12,14 +12,16 @@ val ARCHIVE_SQL = listOf(
 )
 
 /**
- * Version 15: the stack a cover holds. The months are forgotten so that each one is asked for again
- * once, now with its stacks: the sync only goes back to a month whose count changed, and adding the
- * columns changes no count.
+ * Version 15: the stack a cover holds, and the photos under each cover. The months are forgotten so
+ * that each one is asked for again once, now with its stacks: the sync only goes back to a month
+ * whose count changed, and adding the columns changes no count.
  */
 val STACK_SQL = listOf(
     "ALTER TABLE `assets` ADD COLUMN `stackId` TEXT",
     "ALTER TABLE `assets` ADD COLUMN `stackCount` INTEGER",
     "DELETE FROM `catalog_months`",
+    "CREATE TABLE IF NOT EXISTS `stack_members` (`libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `stackId` TEXT NOT NULL, `primaryAssetId` TEXT NOT NULL, PRIMARY KEY(`libraryKey`, `assetId`))",
+    "CREATE INDEX IF NOT EXISTS `index_stack_members_libraryKey_stackId` ON `stack_members` (`libraryKey`, `stackId`)",
 )
 
 /** The index of version 12, as Room names it; the same statement on both apps. */

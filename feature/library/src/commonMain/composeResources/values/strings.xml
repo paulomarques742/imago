@@ -144,6 +144,7 @@
     <string name="library_permission_album_update">Renames your albums</string>
     <string name="library_permission_album_delete">Deletes the albums you ask it to delete, keeping their photos</string>
     <string name="library_permission_asset_upload">Sends exported photos, compositions and what you share with IMAGO to the server</string>
+    <string name="library_permission_stack_read">Shows each stack once, under its cover, with the photos it holds</string>
     <string name="library_permission_stack_create">Stacks each exported edit with its original</string>
     <string name="library_permission_asset_update">Marks and unmarks favorites</string>
     <string name="library_permission_asset_delete">Deletes the photos you ask it to delete</string>

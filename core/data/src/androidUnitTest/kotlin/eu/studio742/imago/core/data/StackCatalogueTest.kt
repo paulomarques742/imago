@@ -3,6 +3,7 @@ package eu.studio742.imago.core.data
 import androidx.room.Room
 import eu.studio742.imago.core.data.db.AssetEntity
 import eu.studio742.imago.core.data.db.ImmichRoomDatabase
+import eu.studio742.imago.core.data.db.StackMemberEntity
 import eu.studio742.imago.core.model.AssetType
 import eu.studio742.imago.core.model.ImmichAsset
 import kotlinx.coroutines.runBlocking
@@ -49,6 +50,52 @@ class StackCatalogueTest {
             // And the album's grid gets the cover with its count, for the badge.
             assertEquals(3, returned.single { it.id == "cover" }.stackCount)
             assertNull(returned.single { it.id == "loose" }.stackCount)
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test fun aSearchLeavesThePhotosUnderACoverOutAndGivesTheCoverItsSize() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), ImmichRoomDatabase::class.java)
+            .allowMainThreadQueries().build()
+        try {
+            // The server's list of stacks: "cover" over "under-1" and "under-2".
+            database.stackMemberDao().insertAll(
+                listOf("cover", "under-1", "under-2").map { StackMemberEntity(library, it, "s1", "cover") },
+            )
+
+            // An album that has all three, and one more, none of them seen by the timeline yet.
+            val returned = database.upsertFromSearch(
+                library,
+                listOf(asset("cover"), asset("under-1"), asset("under-2"), asset("loose")),
+            )
+
+            assertEquals(listOf("cover", "loose"), returned.map { it.id })
+            assertEquals(3, returned.first().stackCount)
+            assertEquals("s1", returned.first().stackId)
+            assertEquals(
+                setOf("cover", "loose"),
+                database.assetDao().byIds(library, listOf("cover", "under-1", "under-2", "loose")).map { it.id }.toSet(),
+            )
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test fun photosAlreadyInTheCatalogueUnderACoverLeaveIt() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), ImmichRoomDatabase::class.java)
+            .allowMainThreadQueries().build()
+        try {
+            // What albums wrote before the app knew about stacks.
+            database.assetDao().upsertAll(listOf("cover", "under", "loose").map { AssetEntity.fromDomain(library, asset(it)) })
+            database.stackMemberDao().insertAll(listOf("cover", "under").map { StackMemberEntity(library, it, "s1", "cover") })
+
+            database.stackMemberDao().removeCoveredFromCatalogue(library)
+
+            assertEquals(
+                setOf("cover", "loose"),
+                database.assetDao().byIds(library, listOf("cover", "under", "loose")).map { it.id }.toSet(),
+            )
         } finally {
             database.close()
         }

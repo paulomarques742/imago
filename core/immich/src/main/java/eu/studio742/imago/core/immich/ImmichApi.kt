@@ -50,6 +50,17 @@ interface ImmichApi {
         personId: String? = null,
     ): AssetPage
 
+    /**
+     * Every stack of this account, with the photos each holds. One request for all of them: the
+     * contract has no paging here, and a library's stacks are few next to its photos.
+     */
+    suspend fun stacks(connection: ImmichConnection): List<eu.studio742.imago.core.model.ImmichStack> =
+        error("Stacks are not available here")
+
+    /** One stack, with the photos it holds now. */
+    suspend fun stack(connection: ImmichConnection, stackId: String): eu.studio742.imago.core.model.ImmichStack =
+        error("Stacks are not available here")
+
     /** The people the server recognises, the named ones first, without the ones hidden in Immich. */
     suspend fun people(connection: ImmichConnection): List<ImmichPerson> = error("People are not available here")
 

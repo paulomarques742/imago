@@ -247,6 +247,24 @@ class OkHttpImmichApi(
         }.getOrDefault(false)
     }
 
+    override suspend fun stacks(connection: ImmichConnection): List<eu.studio742.imago.core.model.ImmichStack> =
+        withContext(Dispatchers.IO) {
+            executeJson<List<StackResponseDto>>(
+                request = Request.Builder().url(endpoint(connection, ImmichContract.SEARCH_STACKS)).get().build(),
+                apiKey = connection.apiKey,
+                permission = ImmichKeyPermissions.SEARCH_STACKS,
+            ).map(StackResponseDto::toDomain)
+        }
+
+    override suspend fun stack(connection: ImmichConnection, stackId: String): eu.studio742.imago.core.model.ImmichStack =
+        withContext(Dispatchers.IO) {
+            executeJson<StackResponseDto>(
+                request = Request.Builder().url(endpoint(connection, ImmichContract.GET_STACK.replace("{id}", stackId))).get().build(),
+                apiKey = connection.apiKey,
+                permission = ImmichKeyPermissions.GET_STACK,
+            ).toDomain()
+        }
+
     override suspend fun people(connection: ImmichConnection): List<ImmichPerson> = withContext(Dispatchers.IO) {
         val people = mutableListOf<PersonResponseDto>()
         var page = 1
@@ -1149,6 +1167,15 @@ private data class SearchAssetResponseDto(
     val items: List<AssetResponseDto>,
     val nextPage: String?,
 )
+
+@Serializable
+private data class StackResponseDto(
+    val id: String,
+    val primaryAssetId: String,
+    val assets: List<AssetResponseDto> = emptyList(),
+) {
+    fun toDomain() = eu.studio742.imago.core.model.ImmichStack(id, primaryAssetId, assets.map(AssetResponseDto::toDomain))
+}
 
 @Serializable
 private data class AssetResponseDto(

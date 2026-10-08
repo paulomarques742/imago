@@ -460,6 +460,26 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun readsEveryStackWithItsPhotosAndOneStackAgain() = runTest {
+        val photo = { id: String ->
+            """{"id":"$id","originalFileName":"$id.jpg","fileCreatedAt":"2026-08-02T10:00:00.000Z",
+               "localDateTime":"2026-08-02T11:00:00.000Z","width":4000,"height":3000,
+               "isFavorite":false,"isEdited":false,"type":"IMAGE"}"""
+        }
+        server.enqueue(MockResponse().setBody("""[{"id":"s1","primaryAssetId":"b","assets":[${photo("a")},${photo("b")}]}]"""))
+        server.enqueue(MockResponse().setBody("""{"id":"s1","primaryAssetId":"b","assets":[${photo("a")},${photo("b")},${photo("c")}]}"""))
+
+        val stacks = api.stacks(connection())
+        assertEquals("/api/stacks", server.takeRequest().path)
+        assertEquals("b", stacks.single().primaryAssetId)
+        assertEquals(listOf("a", "b"), stacks.single().assets.map { it.id })
+
+        val again = api.stack(connection(), "s1")
+        assertEquals("/api/stacks/s1", server.takeRequest().path)
+        assertEquals(listOf("a", "b", "c"), again.assets.map { it.id })
+    }
+
+    @Test
     fun searchCanFilterByMonth() = runTest {
         server.enqueue(MockResponse().setBody(EMPTY_SEARCH_RESPONSE))
 

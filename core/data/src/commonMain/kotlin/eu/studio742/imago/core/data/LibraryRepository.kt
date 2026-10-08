@@ -93,6 +93,12 @@ interface LibraryRepository {
     /** The detail with EXIF, for the photo screen. */
     suspend fun assetDetail(assetId: String): ImmichAssetDetail
 
+    /**
+     * The photos of the stack [assetId] is in, the cover first; empty when it is in none, or the
+     * library has no stacks. Only Immich has them, and reading them asks the key for `stack.read`.
+     */
+    suspend fun stackMembers(assetId: String): List<ImmichAsset> = emptyList()
+
     /** Writes to Immich and to the local catalogue, so the grid reacts without a refetch. */
     suspend fun setFavorite(assetId: String, isFavorite: Boolean)
     suspend fun deleteAsset(assetId: String)

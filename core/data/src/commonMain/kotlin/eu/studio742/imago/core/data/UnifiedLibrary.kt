@@ -242,6 +242,12 @@ class UnifiedLibrary(
     override fun previewUrl(assetId: String) = routed(assetId) { previewUrl(it) }
     override fun videoPlaybackUrl(assetId: String) = routed(assetId) { videoPlaybackUrl(it) }
     override fun apiKey(assetId: String) = routed(assetId) { apiKey(it) }
+    override suspend fun stackMembers(assetId: String): List<ImmichAsset> {
+        val reference = AssetReference.parse(assetId)
+        return libraryOf(reference.libraryId).stackMembers(reference.localId)
+            .map { it.copy(id = AssetReference(reference.libraryId, it.id).encode(), isOnServer = reference.libraryId != DEVICE_LIBRARY_ID) }
+    }
+
     override suspend fun assetDetail(assetId: String): ImmichAssetDetail {
         val reference = AssetReference.parse(assetId)
         return libraryOf(reference.libraryId).assetDetail(reference.localId)

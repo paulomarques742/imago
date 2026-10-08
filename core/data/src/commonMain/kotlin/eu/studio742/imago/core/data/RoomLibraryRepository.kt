@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import eu.studio742.imago.core.data.db.AssetEntity
+import eu.studio742.imago.core.data.db.StackMemberEntity
 import eu.studio742.imago.core.data.db.CatalogMonthEntity
 import eu.studio742.imago.core.data.db.ImmichRoomDatabase
 import eu.studio742.imago.core.data.db.RemoteKeyEntity
@@ -213,11 +214,15 @@ class RoomLibraryRepository @Inject constructor(
         val memories = api.onThisDay(connection, today)
         val derivedIds = derivedAssets.derivedIds()
         val visible = memories.map { memory -> memory.year to memory.assets.filterNot { it.isAppExport(derivedIds) } }.filter { it.second.isNotEmpty() }
-        database.withTransaction {
+        val kept = database.withTransaction {
             database.upsertFromSearch(libraryKey, visible.flatMap { (_, assets) -> assets })
-            database.assetDao().restoreLocalRecipeFlags(libraryKey)
+                .also { database.assetDao().restoreLocalRecipeFlags(libraryKey) }
+                .map { it.id }
+                .toSet()
         }
-        return visible.map { (year, assets) -> DayMemory(year, assets.map { it.id }) }
+        return visible
+            .map { (year, assets) -> DayMemory(year, assets.map { it.id }.filter { it in kept }) }
+            .filter { it.assetIds.isNotEmpty() }
     }
 
     override fun mapContents(): Flow<MapContents> = kotlinx.coroutines.flow.flow {
@@ -289,6 +294,7 @@ class RoomLibraryRepository @Inject constructor(
             val buckets = runCatching { api.getTimeBuckets(connection) }
                 .onFailure { syncLog("W", "no buckets: ${it.message}") }
                 .getOrNull() ?: return
+            refreshStacks(connection, libraryKey)
             val known = database.catalogMonthDao().all(libraryKey).associate { it.month to it.assetCount }
             val pending = buckets.filter { known[it.month] != it.assetCount }
             syncLog("I", "months on the server: ${buckets.size}, to sync: ${pending.size}")
@@ -425,6 +431,46 @@ class RoomLibraryRepository @Inject constructor(
      * knows them, and writing them here makes the catalogue complete itself as one browses, instead
      * of waiting for a heavy sync nobody asked for.
      */
+    /**
+     * The server's list of stacks, written over the one kept here, and the photos under a cover taken
+     * out of the catalogue. Without `stack.read` the list stays as it was — empty on a key that never
+     * had it — and the library goes on without telling the covered photos apart.
+     */
+    private suspend fun refreshStacks(connection: ImmichConnection, libraryKey: String) {
+        val stacks = try {
+            api.stacks(connection)
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            syncLog("W", "no stacks: ${error.message}")
+            return
+        }
+        database.withTransaction {
+            database.stackMemberDao().clear(libraryKey)
+            database.stackMemberDao().insertAll(stacks.flatMap { it.members(libraryKey) })
+            database.stackMemberDao().removeCoveredFromCatalogue(libraryKey)
+        }
+    }
+
+    override suspend fun stackMembers(assetId: String): List<ImmichAsset> {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        val stackId = database.assetDao().byIds(libraryKey, listOf(assetId)).firstOrNull()?.stackId
+            ?: database.stackMemberDao().ofAssets(libraryKey, listOf(assetId)).firstOrNull()?.stackId
+            ?: return emptyList()
+        // Asked for again every time: a stack changes from the web or another device, and this is
+        // the moment it is looked at.
+        val stack = api.stack(connection, stackId)
+        database.withTransaction {
+            database.stackMemberDao().clearStack(libraryKey, stackId)
+            database.stackMemberDao().insertAll(stack.members(libraryKey))
+        }
+        val recipes = database.recipeDao()
+        return stack.assets
+            .sortedByDescending { it.id == stack.primaryAssetId }
+            .map { it.copy(hasLocalRecipe = recipes.get(libraryKey, it.id) != null) }
+    }
+
     override suspend fun assetDetail(assetId: String): ImmichAssetDetail {
         val connection = requireConnection()
         val detail = api.getAssetDetail(connection, assetId)
@@ -504,13 +550,25 @@ class RoomLibraryRepository @Inject constructor(
  */
 internal suspend fun ImmichRoomDatabase.upsertFromSearch(libraryKey: String, assets: List<ImmichAsset>): List<ImmichAsset> {
     if (assets.isEmpty()) return assets
-    val known = assets.map { it.id }.chunked(SQL_VARIABLES_PER_QUERY)
-        .flatMap { ids -> assetDao().byIds(libraryKey, ids) }
-        .associateBy { it.id }
-    val rows = assets.map { AssetEntity.fromDomain(libraryKey, it).keepingStackOf(known[it.id]) }
+    val ids = assets.map { it.id }.chunked(SQL_VARIABLES_PER_QUERY)
+    val known = ids.flatMap { assetDao().byIds(libraryKey, it) }.associateBy { it.id }
+    val membership = ids.flatMap { stackMemberDao().ofAssets(libraryKey, it) }.associateBy { it.assetId }
+    // The photos under a cover stay under it: a search brings them, the grid does not show them.
+    val shown = assets.filter { membership[it.id]?.isCover ?: true }
+    val sizes = membership.values.filter { it.isCover }.map { it.stackId }.distinct().chunked(SQL_VARIABLES_PER_QUERY)
+        .flatMap { stackMemberDao().sizes(libraryKey, it) }
+        .associate { it.stackId to it.assetCount }
+    val rows = shown.map { asset ->
+        val row = AssetEntity.fromDomain(libraryKey, asset).keepingStackOf(known[asset.id])
+        val member = membership[asset.id]
+        if (row.stackId == null && member != null) row.copy(stackId = member.stackId, stackCount = sizes[member.stackId]) else row
+    }
     assetDao().upsertAll(rows)
-    return assets.zip(rows) { asset, row -> asset.copy(stackId = row.stackId, stackCount = row.stackCount) }
+    return shown.zip(rows) { asset, row -> asset.copy(stackId = row.stackId, stackCount = row.stackCount) }
 }
+
+private fun eu.studio742.imago.core.model.ImmichStack.members(libraryKey: String) =
+    assets.map { StackMemberEntity(libraryKey, it.id, id, primaryAssetId) }
 
 /** Under SQLite's limit on the variables of one statement, which older Androids keep at 999. */
 private const val SQL_VARIABLES_PER_QUERY = 500

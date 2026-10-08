@@ -205,6 +205,11 @@ class SourceLibraryRepository @Inject constructor(
     override fun previewUrl(assetId: String) = location(assetId) { previewUrl(it) }
     override fun videoPlaybackUrl(assetId: String) = location(assetId) { videoPlaybackUrl(it) }
     override fun apiKey(assetId: String): String = configuration.source(AssetReference.parse(assetId).libraryId).apiKey.orEmpty()
+    override suspend fun stackMembers(assetId: String): List<ImmichAsset> {
+        val ref = AssetReference.parse(assetId)
+        return provider(ref.libraryId).stackMembers(ref.localId).map { it.copy(id = AssetReference(ref.libraryId, it.id).encode()) }
+    }
+
     override suspend fun assetDetail(assetId: String): ImmichAssetDetail {
         val ref = AssetReference.parse(assetId)
         val detail = provider(ref.libraryId).assetDetail(ref.localId)

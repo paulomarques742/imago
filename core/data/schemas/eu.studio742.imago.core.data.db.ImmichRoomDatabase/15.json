@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 15,
-    "identityHash": "5fdf708e98864252719ff9a8a42ef530",
+    "identityHash": "17e3bc7427aa3108fe32401bfeff3f0e",
     "entities": [
       {
         "tableName": "assets",
@@ -1015,11 +1015,60 @@
             "assetId"
           ]
         }
+      },
+      {
+        "tableName": "stack_members",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `stackId` TEXT NOT NULL, `primaryAssetId` TEXT NOT NULL, PRIMARY KEY(`libraryKey`, `assetId`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "assetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stackId",
+            "columnName": "stackId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "primaryAssetId",
+            "columnName": "primaryAssetId",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "assetId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_stack_members_libraryKey_stackId",
+            "unique": false,
+            "columnNames": [
+              "libraryKey",
+              "stackId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_stack_members_libraryKey_stackId` ON `${TABLE_NAME}` (`libraryKey`, `stackId`)"
+          }
+        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5fdf708e98864252719ff9a8a42ef530')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '17e3bc7427aa3108fe32401bfeff3f0e')"
     ]
   }
 }

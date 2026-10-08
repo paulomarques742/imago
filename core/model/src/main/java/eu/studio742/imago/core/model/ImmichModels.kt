@@ -39,6 +39,9 @@ data class ImmichAsset(
 @Serializable
 enum class AssetType { IMAGE, VIDEO, AUDIO, OTHER }
 
+/** An Immich stack: the photos it holds, and which of them is the cover the timeline shows. */
+data class ImmichStack(val id: String, val primaryAssetId: String, val assets: List<ImmichAsset>)
+
 /**
  * The EXIF fields the detail screen's strip shows.
  *

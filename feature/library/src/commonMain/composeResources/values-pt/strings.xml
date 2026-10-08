@@ -144,6 +144,7 @@
     <string name="library_permission_album_update">Muda o nome dos seus álbuns</string>
     <string name="library_permission_album_delete">Elimina os álbuns que mandar eliminar, mantendo as fotografias</string>
     <string name="library_permission_asset_upload">Envia para o servidor as fotografias e as composições exportadas, e o que partilhar com o IMAGO</string>
+    <string name="library_permission_stack_read">Mostra cada pilha uma vez, pela capa, com as fotografias que tem</string>
     <string name="library_permission_stack_create">Empilha cada edição exportada com o original</string>
     <string name="library_permission_asset_update">Marca e desmarca favoritos</string>
     <string name="library_permission_asset_delete">Apaga as fotografias que mandar apagar</string>
