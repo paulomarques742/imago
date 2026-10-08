@@ -85,6 +85,8 @@ data class DetailUiState(
      */
     val description: String? = null,
     val isFavorite: Boolean = false,
+    /** In the archive: out of the timeline, not deleted. */
+    val isArchived: Boolean = false,
     /**
      * This photo's local recipe, read again every time the screen opens.
      *
@@ -114,6 +116,22 @@ open class DetailViewModel(
 ) : ViewModel() {
     /** Whether photos turn here without the editor. */
     val canRotate: Boolean get() = rotation != null
+
+    /** Whether this library has an archive: a server's, or this device's own. */
+    val canArchive: Boolean get() = library.canArchive
+
+    /** Into the archive or back; either way the photo leaves the list it was opened from. */
+    fun setArchived(assetId: String, archived: Boolean, onDone: () -> Unit) {
+        if (mutableState.value.isBusy) return
+        viewModelScope.launch {
+            runCatching { library.setArchived(listOf(assetId), archived) }
+                .onSuccess {
+                    mutableState.update { if (it.assetId == assetId) it.copy(isArchived = archived) else it }
+                    onDone()
+                }
+                .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(Res.string.detail_archive_failed)) } }
+        }
+    }
     private val mutableState = MutableStateFlow(DetailUiState())
     val state = mutableState.asStateFlow()
 
@@ -154,6 +172,7 @@ open class DetailViewModel(
                             exif = detail.exif,
                             description = detail.exif.description.orEmpty(),
                             isFavorite = detail.asset.isFavorite,
+                            isArchived = detail.asset.isArchived,
                             isLoading = false,
                         )
                     }

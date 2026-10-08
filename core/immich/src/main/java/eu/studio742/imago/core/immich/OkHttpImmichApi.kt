@@ -145,6 +145,7 @@ class OkHttpImmichApi(
         requestedType: String?,
         allowedTypes: Set<AssetType>,
         personId: String? = null,
+        visibility: String? = null,
     ): AssetPage = withContext(Dispatchers.IO) {
         val monthStart = month?.let(LocalDate::parse)?.withDayOfMonth(1)
         // A chosen month is always more specific than "recent"; if both are active, the month
@@ -161,6 +162,7 @@ class OkHttpImmichApi(
             originalFileName = query?.takeIf(String::isNotBlank),
             type = requestedType,
             personIds = personId?.let(::listOf),
+            visibility = visibility,
         )
         val body = json.encodeToString(payload).toRequestBody(JSON_MEDIA_TYPE)
         val response = executeJson<SearchResponseDto>(
@@ -497,6 +499,21 @@ class OkHttpImmichApi(
     ): Unit = withContext(Dispatchers.IO) {
         updateAsset(connection, assetId, UpdateAssetDto(isFavorite))
     }
+
+    override suspend fun setArchived(connection: ImmichConnection, assetIds: List<String>, archived: Boolean): Unit = withContext(Dispatchers.IO) {
+        if (assetIds.isEmpty()) return@withContext
+        val body = json.encodeToString(AssetVisibilityUpdateDto(assetIds, if (archived) "archive" else "timeline")).toRequestBody(JSON_MEDIA_TYPE)
+        execute(
+            request = Request.Builder().url(endpoint(connection, ImmichContract.UPDATE_ASSETS)).put(body).build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.UPDATE_ASSETS,
+        ).close()
+    }
+
+    override suspend fun archivedAssets(connection: ImmichConnection, page: Int, pageSize: Int): AssetPage = search(
+        connection, page, pageSize, LibraryFilter.ALL, null, null, null,
+        requestedType = null, allowedTypes = setOf(AssetType.IMAGE, AssetType.VIDEO), visibility = "archive",
+    )
 
     override suspend fun setFavorites(
         connection: ImmichConnection,
@@ -846,6 +863,7 @@ private data class MetadataSearchDto(
     val withDeleted: Boolean? = null,
     val trashedAfter: String? = null,
     val personIds: List<String>? = null,
+    val visibility: String? = null,
 )
 
 @Serializable
@@ -892,6 +910,9 @@ private data class UpdateAssetDto(val isFavorite: Boolean)
 
 @Serializable
 private data class AssetBulkUpdateDto(val ids: List<String>, val isFavorite: Boolean)
+
+@Serializable
+private data class AssetVisibilityUpdateDto(val ids: List<String>, val visibility: String)
 
 @Serializable
 private data class AssetBulkDeleteDto(val ids: List<String>, val force: Boolean)
@@ -1118,6 +1139,9 @@ private data class AssetResponseDto(
     val type: String,
     val originalMimeType: String? = null,
     val duration: JsonElement? = null,
+    /** "archive" from v2 on; `isArchived` is the older form of the same answer. */
+    val visibility: String? = null,
+    val isArchived: Boolean? = null,
 ) {
     fun toDomain() = ImmichAsset(
         id = id,
@@ -1137,6 +1161,7 @@ private data class AssetResponseDto(
         },
         mimeType = originalMimeType,
         durationMs = duration.toDurationMs(),
+        isArchived = visibility.equals("archive", ignoreCase = true) || isArchived == true,
     )
 }
 

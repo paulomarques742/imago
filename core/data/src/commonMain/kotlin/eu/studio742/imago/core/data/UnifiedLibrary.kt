@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.flow.stateIn
@@ -165,6 +166,31 @@ class UnifiedLibrary(
     }
 
     override val hasMap: Boolean get() = true
+
+    override val canArchive: Boolean get() = true
+
+    /**
+     * Each side archives its own; a photo on both goes on both, or the copy left behind would come
+     * back into the timeline in its place.
+     */
+    override suspend fun setArchived(assetIds: List<String>, archived: Boolean) {
+        val references = assetIds.map(AssetReference::parse)
+        val phone = references.filter { it.libraryId == DEVICE_LIBRARY_ID }.map { it.localId }
+        val cloud = references.filter { it.libraryId == serverId }.map { it.localId }.toMutableSet()
+        phone.forEach { id -> database.assetDao().counterpart(DEVICE_LIBRARY_ID, id, serverId)?.let(cloud::add) }
+        if (phone.isNotEmpty()) device.setArchived(phone, archived)
+        if (cloud.isNotEmpty()) server.setArchived(cloud.toList(), archived)
+    }
+
+    override fun archivedAssets(): Flow<PagingData<ImmichAsset>> = kotlinx.coroutines.flow.flow {
+        runCatching { server.refreshArchive() }
+        emitAll(
+            Pager(PagingConfig(pageSize = 100, enablePlaceholders = false)) { database.assetDao().unifiedArchivedPagingSource(DEVICE_LIBRARY_ID, serverId) }
+                .flow.map { page ->
+                    page.map { row -> row.asset.toDomain().copy(id = AssetReference(row.asset.libraryKey, row.asset.id).encode(), isOnServer = row.alsoOnServer) }
+                },
+        )
+    }
 
     /** Both sides by year; a photo on both is the phone's, as in the timeline. */
     override suspend fun onThisDay(today: LocalDate): List<DayMemory> = coroutineScope {

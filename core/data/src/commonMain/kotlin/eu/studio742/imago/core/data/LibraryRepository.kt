@@ -147,6 +147,18 @@ interface LibraryRepository {
     /** The photos of [today] in earlier years, one memory per year, the most recent year first. */
     suspend fun onThisDay(today: java.time.LocalDate): List<DayMemory> = emptyList()
 
+    /** Whether this library has an archive: a server's, or this device's own. */
+    val canArchive: Boolean get() = false
+
+    /** Out of the timeline into the archive, or back. */
+    suspend fun setArchived(assetIds: List<String>, archived: Boolean): Unit = error("This library has no archive")
+
+    /** The archived photos and videos, the newest first. */
+    fun archivedAssets(): Flow<PagingData<ImmichAsset>> = kotlinx.coroutines.flow.flowOf(PagingData.empty())
+
+    /** Brings the server's archive into the catalogue, where the archive views read it. */
+    suspend fun refreshArchive() = Unit
+
     /** Whether this library can put its photos on a map. */
     val hasMap: Boolean get() = false
 

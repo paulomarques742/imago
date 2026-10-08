@@ -55,6 +55,9 @@
     <string name="detail_add_to_album">Add to album</string>
     <string name="detail_delete_device_body_managed">“%1$s” will go to the device’s trash.</string>
     <string name="detail_rotate">Rotate</string>
+    <string name="detail_archive">Archive</string>
+    <string name="detail_unarchive">Unarchive</string>
+    <string name="detail_archive_failed">Couldn’t change the archive.</string>
     <string name="detail_set_as">Set as…</string>
     <string name="detail_rotate_failed">Couldn’t rotate the photo.</string>
 </resources>

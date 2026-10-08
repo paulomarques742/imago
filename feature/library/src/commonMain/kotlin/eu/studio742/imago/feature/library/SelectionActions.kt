@@ -14,6 +14,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Unarchive
+import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.PhotoAlbum
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
@@ -166,6 +168,9 @@ internal fun SelectionActionsBar(
     canSaveToDevice: Boolean,
     canSendToImmich: Boolean,
     canRotate: Boolean,
+    /** True archives, false brings back from the archive; null where there is no archive. */
+    archive: Boolean?,
+    onArchive: () -> Unit,
     onShare: () -> Unit,
     onFavorite: () -> Unit,
     onCompose: () -> Unit,
@@ -234,6 +239,15 @@ internal fun SelectionActionsBar(
                                 text = { Text(stringResource(Res.string.library_selection_rotate)) },
                                 leadingIcon = { Icon(Icons.Outlined.RotateRight, contentDescription = null) },
                                 onClick = { menu = false; onRotate() },
+                            )
+                        }
+                        if (archive != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(if (archive) Res.string.library_selection_archive else Res.string.library_selection_unarchive)) },
+                                leadingIcon = {
+                                    Icon(if (archive) Icons.Outlined.Archive else Icons.Outlined.Unarchive, contentDescription = null)
+                                },
+                                onClick = { menu = false; onArchive() },
                             )
                         }
                         DropdownMenuItem(

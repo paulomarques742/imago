@@ -307,6 +307,19 @@
     <string name="library_album_name">Nome do álbum</string>
     <string name="library_people">Pessoas</string>
     <string name="library_map">Mapa</string>
+    <string name="library_archive">Arquivo</string>
+    <string name="library_archive_close">Fechar o arquivo</string>
+    <string name="library_selection_archive">Arquivar</string>
+    <string name="library_selection_unarchive">Desarquivar</string>
+    <string name="library_archive_failed">Não foi possível mudar o arquivo.</string>
+    <plurals name="library_archived">
+        <item quantity="one">Arquivada.</item>
+        <item quantity="other">%1$d arquivadas.</item>
+    </plurals>
+    <plurals name="library_unarchived">
+        <item quantity="one">De volta à cronologia.</item>
+        <item quantity="other">%1$d de volta à cronologia.</item>
+    </plurals>
     <plurals name="library_on_this_day_years_ago">
         <item quantity="one">Há %1$d ano</item>
         <item quantity="other">Há %1$d anos</item>

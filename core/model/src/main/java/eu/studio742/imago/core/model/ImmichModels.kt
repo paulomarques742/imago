@@ -26,6 +26,8 @@ data class ImmichAsset(
     val durationMs: Long? = null,
     /** In the unified library: this photo is also on the server (or only there). Nowhere else set. */
     val isOnServer: Boolean = false,
+    /** Out of the timeline without being deleted: Immich's archive, or this app's for the device. */
+    val isArchived: Boolean = false,
 )
 
 @Serializable

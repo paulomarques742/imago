@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import eu.studio742.imago.core.data.db.AssetEntity
@@ -163,6 +164,47 @@ class RoomLibraryRepository @Inject constructor(
     override val hasPeople: Boolean get() = true
 
     override val hasMap: Boolean get() = true
+
+    override val canArchive: Boolean get() = true
+
+    override suspend fun setArchived(assetIds: List<String>, archived: Boolean) {
+        val connection = requireConnection()
+        api.setArchived(connection, assetIds, archived)
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        assetIds.chunked(500).forEach { database.assetDao().setArchived(libraryKey, it, archived) }
+    }
+
+    /**
+     * The server's archive, page by page into the catalogue, marked; the timeline's sync never
+     * brings it, and without this an archived photo would have nowhere to be opened from.
+     */
+    override suspend fun refreshArchive() {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        var page: Int? = 1
+        var read = 0
+        while (page != null && read < ARCHIVE_LIMIT) {
+            val result = api.archivedAssets(connection, page, PAGE_SIZE)
+            database.withTransaction {
+                database.assetDao().upsertAll(result.items.map { AssetEntity.fromDomain(libraryKey, it.copy(isArchived = true)) })
+                database.assetDao().restoreLocalRecipeFlags(libraryKey)
+            }
+            read += result.items.size
+            page = result.nextPage
+        }
+    }
+
+    override fun archivedAssets(): Flow<PagingData<ImmichAsset>> {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        return kotlinx.coroutines.flow.flow {
+            refreshArchive()
+            emitAll(
+                Pager(PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false)) { database.assetDao().archivedPagingSource(libraryKey) }
+                    .flow.map { page -> page.map(AssetEntity::toDomain) },
+            )
+        }
+    }
 
     /** The server's own memories; their photos go into the catalogue, where the grid reads them. */
     override suspend fun onThisDay(today: LocalDate): List<DayMemory> {
@@ -445,6 +487,7 @@ class RoomLibraryRepository @Inject constructor(
         const val PAGE_SIZE = 100
         const val TRASH_PAGE = 500
         const val TRASH_LIMIT = 5_000
+        const val ARCHIVE_LIMIT = 10_000
 
         /** "2024-05" — enough to identify the month, whether the bucket comes with a date or an instant. */
         const val MONTH_PREFIX = 7

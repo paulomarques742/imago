@@ -17,4 +17,11 @@ object UnifiedMigration {
             db.execSQL(ASSET_LOCATIONS_SQL)
         }
     }
+
+    /** The archive: a mark on every row, and the device's own list of what was archived. */
+    val MIGRATION_13_14 = object : Migration(13, 14) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            ARCHIVE_SQL.forEach(db::execSQL)
+        }
+    }
 }

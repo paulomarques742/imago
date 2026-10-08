@@ -808,6 +808,30 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun archivingIsAVisibilityChangedForManyAtOnceAndTheArchiveIsSearchedByIt() = runTest {
+        server.enqueue(MockResponse().setResponseCode(204))
+        server.enqueue(MockResponse().setResponseCode(204))
+        server.enqueue(
+            MockResponse().setBody(
+                """{"albums":{"count":0,"facets":[],"items":[],"nextPage":null,"total":0},"assets":{"count":1,"facets":[],"items":[{"id":"a1","originalFileName":"a.jpg","fileCreatedAt":"2025-10-08T10:00:00Z","localDateTime":"2025-10-08T11:00:00Z","width":1,"height":1,"isFavorite":false,"isEdited":false,"type":"IMAGE","visibility":"archive"}],"nextPage":null,"total":1}}""",
+            ),
+        )
+
+        api.setArchived(connection(), listOf("a1", "a2"), archived = true)
+        api.setArchived(connection(), listOf("a1"), archived = false)
+        val archive = api.archivedAssets(connection(), page = 1, pageSize = 100)
+
+        val archived = server.takeRequest()
+        assertEquals("PUT", archived.method)
+        assertEquals("/api/assets", archived.path)
+        assertEquals("""{"ids":["a1","a2"],"visibility":"archive"}""", archived.body.readUtf8())
+        assertEquals("""{"ids":["a1"],"visibility":"timeline"}""", server.takeRequest().body.readUtf8())
+        val search = server.takeRequest().body.readUtf8()
+        assertTrue(search, search.contains("\"visibility\":\"archive\""))
+        assertTrue(archive.items.single().isArchived)
+    }
+
+    @Test
     fun readsWhereThePhotosWereTaken() = runTest {
         server.enqueue(
             MockResponse().setBody(

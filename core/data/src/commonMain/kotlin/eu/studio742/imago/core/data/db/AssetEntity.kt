@@ -1,5 +1,6 @@
 package eu.studio742.imago.core.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import eu.studio742.imago.core.model.AssetType
@@ -42,6 +43,8 @@ data class AssetEntity(
     val folderName: String? = null,
     /** The file size, when the source gives it: today only MediaStore. */
     val sizeBytes: Long? = null,
+    /** Out of the timeline: Immich's archive, or for the device the app's own list (`archived_assets`). */
+    @ColumnInfo(defaultValue = "0") val isArchived: Boolean = false,
 ) {
     fun toDomain() = ImmichAsset(
         id = id,
@@ -57,6 +60,7 @@ data class AssetEntity(
         type = runCatching { AssetType.valueOf(type) }.getOrDefault(AssetType.OTHER),
         mimeType = mimeType,
         durationMs = durationMs,
+        isArchived = isArchived,
     )
 
     /**
@@ -101,6 +105,7 @@ data class AssetEntity(
             type = asset.type.name,
             mimeType = asset.mimeType,
             durationMs = asset.durationMs,
+            isArchived = asset.isArchived,
         )
     }
 }

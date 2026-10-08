@@ -307,6 +307,19 @@
     <string name="library_album_name">Album name</string>
     <string name="library_people">People</string>
     <string name="library_map">Map</string>
+    <string name="library_archive">Archive</string>
+    <string name="library_archive_close">Close the archive</string>
+    <string name="library_selection_archive">Archive</string>
+    <string name="library_selection_unarchive">Unarchive</string>
+    <string name="library_archive_failed">Couldn’t change the archive.</string>
+    <plurals name="library_archived">
+        <item quantity="one">Archived.</item>
+        <item quantity="other">%1$d archived.</item>
+    </plurals>
+    <plurals name="library_unarchived">
+        <item quantity="one">Back in the timeline.</item>
+        <item quantity="other">%1$d back in the timeline.</item>
+    </plurals>
     <plurals name="library_on_this_day_years_ago">
         <item quantity="one">%1$d year ago</item>
         <item quantity="other">%1$d years ago</item>

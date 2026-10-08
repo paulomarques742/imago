@@ -116,6 +116,20 @@ class SourceLibraryRepository @Inject constructor(
         return provider(id).onThisDay(today).map { memory -> memory.copy(assetIds = memory.assetIds.map { AssetReference(id, it).encode() }) }
     }
 
+    override val canArchive: Boolean
+        get() = runCatching { provider(configuration.selectedLibraryId.value).canArchive }.getOrDefault(false)
+
+    override suspend fun setArchived(assetIds: List<String>, archived: Boolean) {
+        if (unifiedSelected) return unified().setArchived(assetIds, archived)
+        byLibrary(assetIds) { ids -> setArchived(ids, archived) }
+    }
+
+    override fun archivedAssets(): Flow<PagingData<ImmichAsset>> {
+        val id = configuration.selectedLibraryId.value
+        if (id == UNIFIED_LIBRARY_ID) return unified().archivedAssets()
+        return provider(id).archivedAssets().map { page -> page.map { it.copy(id = AssetReference(id, it.id).encode()) } }
+    }
+
     override val hasMap: Boolean
         get() = runCatching { provider(configuration.selectedLibraryId.value).hasMap }.getOrDefault(false)
 

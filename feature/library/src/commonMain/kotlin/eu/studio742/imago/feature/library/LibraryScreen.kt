@@ -48,6 +48,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
@@ -497,6 +498,7 @@ private fun LibraryHost(
             onOpenSettings = onOpenSettings,
             onOpenTrash = onOpenTrash?.takeIf { hasTrash },
             onOpenMap = viewModel::showMap,
+            onOpenArchive = { viewModel.openArchive(); viewModel.clearSelection() },
         )
     }
 }
@@ -546,6 +548,7 @@ private fun LibraryScreen(
     /** Null where the library has no trash to show. */
     onOpenTrash: (() -> Unit)? = null,
     onOpenMap: (() -> Unit)? = null,
+    onOpenArchive: (() -> Unit)? = null,
 ) {
     // The order is that of priorities, and it is the opposite of what it looks like: the dispatcher
     // calls what was registered last first. In a picker, leaving it is the last resort — before that
@@ -661,6 +664,7 @@ private fun LibraryScreen(
                         onOpenSettings = onOpenSettings,
                         onOpenTrash = onOpenTrash,
                         onOpenMap = onOpenMap?.takeIf { uiState.hasMap },
+                        onOpenArchive = onOpenArchive?.takeIf { uiState.canArchive },
                     )
                 }
                 // Searching a server: by what is in the photo, or by the file's name. The album list
@@ -877,6 +881,8 @@ private fun LibraryTopBar(
     onOpenTrash: (() -> Unit)? = null,
     /** Null where the library cannot put its photos on a map. */
     onOpenMap: (() -> Unit)? = null,
+    /** Null where the library has no archive. */
+    onOpenArchive: (() -> Unit)? = null,
 ) {
     var moreExpanded by remember { mutableStateOf(false) }
     Row(
@@ -947,6 +953,13 @@ private fun LibraryTopBar(
                             text = { Text(stringResource(Res.string.library_trash)) },
                             leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
                             onClick = { moreExpanded = false; onOpenTrash() },
+                        )
+                    }
+                    if (onOpenArchive != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(Res.string.library_archive)) },
+                            leadingIcon = { Icon(Icons.Outlined.Archive, contentDescription = null) },
+                            onClick = { moreExpanded = false; onOpenArchive() },
                         )
                     }
                     DropdownMenuItem(
@@ -1236,6 +1249,7 @@ private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit, editing: Album
                 Icons.AutoMirrored.Outlined.ArrowBack,
                 contentDescription = stringResource(
                     when {
+                        album?.isArchive == true -> Res.string.library_archive_close
                         album?.isPerson == true -> Res.string.library_back_to_people
                         album?.placeAssetIds != null -> Res.string.library_back_to_map
                         else -> Res.string.library_back_to_albums
@@ -1246,14 +1260,20 @@ private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit, editing: Album
         }
         Column(Modifier.weight(1f).padding(start = ImagoSpacing.Xs)) {
             Text(
-                text = album?.name?.takeUnless { it.isBlank() && (album.isPerson || album.placeAssetIds != null) }
-                    ?: stringResource(if (album?.placeAssetIds != null) Res.string.library_map_place else Res.string.library_person_unnamed),
+                text = album?.name?.takeUnless { it.isBlank() && (album.isPerson || album.placeAssetIds != null || album.isArchive) }
+                    ?: stringResource(
+                        when {
+                            album?.isArchive == true -> Res.string.library_archive
+                            album?.placeAssetIds != null -> Res.string.library_map_place
+                            else -> Res.string.library_person_unnamed
+                        },
+                    ),
                 style = MaterialTheme.typography.titleMedium,
                 color = ImagoColors.TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            album?.takeUnless { it.isPerson }?.let {
+            album?.takeUnless { it.isPerson || it.isArchive }?.let {
                 Text(
                     text = pluralStringResource(Res.plurals.library_items, it.assetCount.toInt(), it.assetCount),
                     style = MaterialTheme.typography.labelSmall,
@@ -2061,6 +2081,12 @@ private fun LibrarySelectionBar(
         canSendToImmich = sendToImmich != null && viewModel.canSendToImmich(selection),
         canRotate = viewModel.canRotateSelection(selection),
         onRotate = viewModel::rotateSelection,
+        archive = when {
+            !viewModel.uiState.collectAsStateWithLifecycle().value.canArchive -> null
+            openAlbum?.isArchive == true -> false
+            else -> true
+        },
+        onArchive = viewModel::archiveSelection,
         onShare = { viewModel.shareSelection(share) },
         onFavorite = viewModel::favoriteSelection,
         onCompose = { onComposeSelection(selection) },

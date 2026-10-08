@@ -67,6 +67,8 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Tune
@@ -191,6 +193,7 @@ fun DetailRoute(
         onAlbumResult = viewModel::show,
         onRotate = viewModel::rotate.takeIf { viewModel.canRotate },
         onSetAs = viewModel::setAs,
+        onArchive = { archived: Boolean -> viewModel.setArchived(asset.id, archived) { onDeleted(asset.id) } }.takeIf { viewModel.canArchive },
         onConsumeMessage = viewModel::consumeMessage,
     )
 }
@@ -220,6 +223,8 @@ private fun DetailScreen(
     /** Null where photos do not turn without the editor. */
     onRotate: ((DetailAsset) -> Unit)?,
     onSetAs: (DetailAsset, (java.io.File, String) -> Unit) -> Unit,
+    /** True archives, false brings back; null where the library has no archive. */
+    onArchive: ((archived: Boolean) -> Unit)?,
     onConsumeMessage: () -> Unit,
 ) {
     val setAs = rememberSetAs()
@@ -361,6 +366,22 @@ private fun DetailScreen(
                                     onClick = {
                                         showMenu = false
                                         gate.run { onSetAs(asset, setAs) }
+                                    },
+                                )
+                            }
+                            if (onArchive != null && !isOpenedFile) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(if (state.isArchived) Res.string.detail_unarchive else Res.string.detail_archive)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            if (state.isArchived) androidx.compose.material.icons.Icons.Outlined.Unarchive
+                                            else androidx.compose.material.icons.Icons.Outlined.Archive,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        gate.run { onArchive(!state.isArchived) }
                                     },
                                 )
                             }

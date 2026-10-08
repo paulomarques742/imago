@@ -141,6 +141,14 @@ interface ImmichApi {
 
     suspend fun setFavorite(connection: ImmichConnection, assetId: String, isFavorite: Boolean)
 
+    /** Into the archive or back to the timeline, all in one request. */
+    suspend fun setArchived(connection: ImmichConnection, assetIds: List<String>, archived: Boolean): Unit =
+        error("The archive is not available here")
+
+    /** The archived photos and videos, page by page, the newest first. */
+    suspend fun archivedAssets(connection: ImmichConnection, page: Int, pageSize: Int): AssetPage =
+        error("The archive is not available here")
+
     /** Several in a single request — a selection of two hundred is not two hundred requests. */
     suspend fun setFavorites(connection: ImmichConnection, assetIds: List<String>, isFavorite: Boolean) {
         assetIds.forEach { setFavorite(connection, it, isFavorite) }

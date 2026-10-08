@@ -73,6 +73,8 @@ data class AssetUiModel(
     val recipe: EditRecipe? = null,
     /** In the unified library: also on the server, or only there. The tile shows a small cloud. */
     val isOnServer: Boolean = false,
+    /** In the archive: out of the timeline, not deleted. */
+    val isArchived: Boolean = false,
 )
 
 data class AlbumUiModel(
@@ -95,6 +97,8 @@ data class AlbumUiModel(
     val isPerson: Boolean = false,
     /** Not an album either: a place on the map, with the photos taken there. */
     val placeAssetIds: List<String>? = null,
+    /** The archive of the open library, opened from the menu like the trash. */
+    val isArchive: Boolean = false,
 )
 
 /** Someone the server recognises; [name] is empty while nobody named them. */
@@ -125,6 +129,7 @@ fun ImmichAsset.toAssetUiModel(library: LibraryRepository, recipe: EditRecipe?):
         videoUrl = if (isVideo) library.videoPlaybackUrl(id) else null,
         recipe = recipe,
         isOnServer = isOnServer,
+        isArchived = isArchived,
     )
 }
 
@@ -143,8 +148,8 @@ enum class SearchMode { CONTENT, FILE_NAME }
 internal fun memoryDate(today: LocalDate, year: Int): LocalDate = today.withYear(year)
 
 internal fun gridAlbumId(album: AlbumUiModel, selectedLibraryId: String): String? {
-    // A person and a place on the map open like albums but are read by their own photos.
-    if (album.isPerson || album.placeAssetIds != null) return null
+    // A person, a place on the map and the archive open like albums but are read by their own photos.
+    if (album.isPerson || album.placeAssetIds != null || album.isArchive) return null
     val libraryId = runCatching { eu.studio742.imago.core.model.AssetReference.parse(album.id).libraryId }.getOrNull() ?: return null
     return album.id.takeIf { selectedLibraryId == eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID || libraryId == selectedLibraryId }
 }
@@ -204,6 +209,8 @@ data class LibraryUiState(
     val mapCamera: MapCamera? = null,
     /** "On this day": a memory per earlier year, over the timeline, when Settings say so. */
     val memories: List<MemoryUiModel> = emptyList(),
+    /** The open library has an archive: a server's, or this device's own. */
+    val canArchive: Boolean = false,
 )
 
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -250,6 +257,8 @@ open class LibraryViewModel(
                 library.personAssets(album.id, activeFilter)
             } else if (album?.placeAssetIds != null) {
                 library.assetsWithIds(album.placeAssetIds)
+            } else if (album?.isArchive == true) {
+                library.archivedAssets()
             } else if (byContent && query.isNotEmpty()) {
                 library.searchByContent(query, activeFilter, month.takeIf { album == null }, albumId)
             } else {
@@ -280,7 +289,7 @@ open class LibraryViewModel(
                 filter.value = restored?.first ?: LibraryFilter.ALL
                 uiState.value = restored?.second ?: LibraryUiState()
                 previous = id
-                uiState.update { it.copy(hasPeople = library.hasPeople, hasMap = library.hasMap) }
+                uiState.update { it.copy(hasPeople = library.hasPeople, hasMap = library.hasMap, canArchive = library.canArchive) }
                 loadMemories()
                 if (uiState.value.showingMap) loadMap()
                 if (uiState.value.showingPeople) loadPeople()
@@ -659,6 +668,32 @@ open class LibraryViewModel(
         }
     }
 
+    /** The archive opens like an album, over the timeline. */
+    fun openArchive() = uiState.update {
+        it.copy(
+            selectedAlbum = AlbumUiModel(
+                id = "archive", name = "", description = "", thumbnailUrl = null, assetCount = 0,
+                startDate = null, endDate = null, shared = false, apiKey = "", isArchive = true,
+            ),
+            showingPeople = false,
+            isSearching = false,
+            query = "",
+        )
+    }
+
+    /** In the archive the chosen photos come back; anywhere else they go into it. */
+    fun archiveSelection() {
+        val selection = chosen
+        val archiving = uiState.value.selectedAlbum?.isArchive != true
+        runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_archive_failed) {
+            library.setArchived(selection.map { it.id }, archiving)
+            // The archive is read straight from its source: it has to be told.
+            uiState.update { it.copy(gridRevision = it.gridRevision + 1) }
+            refreshNavigation()
+            uiPlural(if (archiving) Res.plurals.library_archived else Res.plurals.library_unarchived, selection.size, selection.size)
+        }
+    }
+
     /** The photos of this device in the selection, by their id in its library, for the upload to Immich. */
     fun deviceAssetsIn(selection: List<AssetUiModel>): List<String> =
         selection.filter { it.isOnDevice() }.map { AssetReference.parse(it.id).localId }
@@ -863,7 +898,7 @@ open class LibraryViewModel(
                     // The open album follows the list: photos moved out of it from the selection left
                     // its header counting them. One no longer listed has nothing left in it.
                     selectedAlbum = current.selectedAlbum?.let { open ->
-                        if (refreshed == null || open.isPerson || open.placeAssetIds != null) open
+                        if (refreshed == null || open.isPerson || open.placeAssetIds != null || open.isArchive) open
                         else refreshed.firstOrNull { it.id == open.id } ?: open.copy(assetCount = 0)
                     },
                     months = months.getOrNull()?.map { MonthUiModel(it.month, it.assetCount) } ?: current.months,

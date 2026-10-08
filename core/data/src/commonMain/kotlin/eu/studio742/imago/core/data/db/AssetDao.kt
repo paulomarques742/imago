@@ -40,6 +40,7 @@ interface AssetDao {
         SELECT a.*, (a.libraryKey = :server OR EXISTS (SELECT 1 FROM assets s WHERE s.libraryKey = :server AND s.originalFileName = a.originalFileName AND ABS(julianday(s.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)) AS alsoOnServer
         FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
+          AND a.isArchived = 0
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
@@ -62,6 +63,7 @@ interface AssetDao {
         """
         SELECT COUNT(*) FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
+          AND a.isArchived = 0
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
@@ -86,6 +88,7 @@ interface AssetDao {
         """
         SELECT COUNT(*) FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
+          AND a.isArchived = 0
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
@@ -111,6 +114,7 @@ interface AssetDao {
                COUNT(*) AS assetCount
         FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
+          AND a.isArchived = 0
         GROUP BY substr(CASE WHEN a.localDateTime = '' THEN a.fileCreatedAt ELSE a.localDateTime END, 1, 7)
         ORDER BY month DESC
         """,
@@ -124,11 +128,37 @@ interface AssetDao {
     @Query(
         """
         SELECT * FROM assets
-        WHERE libraryKey = :libraryKey AND substr(localDateTime, 6, 5) = :monthDay AND substr(localDateTime, 1, 4) < :year
+        WHERE libraryKey = :libraryKey AND isArchived = 0 AND substr(localDateTime, 6, 5) = :monthDay AND substr(localDateTime, 1, 4) < :year
         ORDER BY localDateTime DESC, id DESC
         """,
     )
     suspend fun onThisDay(libraryKey: String, monthDay: String, year: String): List<AssetEntity>
+
+    @Query("UPDATE assets SET isArchived = :archived WHERE libraryKey = :libraryKey AND id IN (:ids)")
+    suspend fun setArchived(libraryKey: String, ids: List<String>, archived: Boolean)
+
+    /** The device's rows get their mark back from the app's own archive after every rewrite. */
+    @Query(
+        """
+        UPDATE assets SET isArchived = 1
+        WHERE libraryKey = :libraryKey AND id IN (SELECT assetId FROM archived_assets WHERE libraryKey = :libraryKey)
+        """,
+    )
+    suspend fun restoreArchivedFlags(libraryKey: String)
+
+    @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey AND isArchived = 1 ORDER BY fileCreatedAt DESC, id DESC")
+    fun archivedPagingSource(libraryKey: String): PagingSource<Int, AssetEntity>
+
+    /** Both sides' archives; a photo archived on both is the phone's, as in the timeline. */
+    @Query(
+        """
+        SELECT a.*, (a.libraryKey = :server) AS alsoOnServer FROM assets a
+        WHERE a.isArchived = 1
+          AND (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.isArchived = 1 AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
+        ORDER BY a.fileCreatedAt DESC, a.id DESC
+        """,
+    )
+    fun unifiedArchivedPagingSource(device: String, server: String): PagingSource<Int, UnifiedAssetRow>
 
     @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey AND id IN (:ids)")
     suspend fun byIds(libraryKey: String, ids: List<String>): List<AssetEntity>
@@ -197,6 +227,7 @@ interface AssetDao {
           AND (:monthStart IS NULL OR fileCreatedAt >= :monthStart)
           AND (:monthEnd IS NULL OR fileCreatedAt < :monthEnd)
           AND (:albumId IS NULL OR folderId = :albumId)
+          AND (:albumId IS NOT NULL OR isArchived = 0)
           AND (:query IS NULL OR originalFileName LIKE '%' || :query || '%')
         ORDER BY fileCreatedAt DESC, id DESC
         """,
@@ -229,6 +260,7 @@ interface AssetDao {
         """
         SELECT COUNT(*) FROM assets
         WHERE libraryKey = :libraryKey
+          AND isArchived = 0
           AND (:favoritesOnly = 0 OR isFavorite = 1)
           AND (:editedOnly = 0 OR isEdited = 1 OR hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR fileCreatedAt >= :monthStart)
@@ -259,6 +291,7 @@ interface AssetDao {
         """
         SELECT COUNT(*) FROM assets
         WHERE libraryKey = :libraryKey
+          AND isArchived = 0
           AND (:favoritesOnly = 0 OR isFavorite = 1)
           AND (:editedOnly = 0 OR isEdited = 1 OR hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR fileCreatedAt >= :monthStart)
@@ -382,7 +415,7 @@ interface AssetDao {
         SELECT substr(CASE WHEN localDateTime = '' THEN fileCreatedAt ELSE localDateTime END, 1, 7) || '-01' AS month,
                COUNT(*) AS assetCount
         FROM assets
-        WHERE libraryKey = :libraryKey
+        WHERE libraryKey = :libraryKey AND isArchived = 0
         GROUP BY substr(CASE WHEN localDateTime = '' THEN fileCreatedAt ELSE localDateTime END, 1, 7)
         ORDER BY month DESC
         """,

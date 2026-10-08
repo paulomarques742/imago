@@ -178,6 +178,11 @@ val generateImmichContract by tasks.registering {
         // "On this day": the memories the server makes, one per earlier year.
         check(propertiesOf("MemoryResponseDto").containsAll(setOf("assets", "data", "type", "showAt", "hideAt")))
         check(propertiesOf("OnThisDayDto").contains("year"))
+        // The archive: a visibility, changed for many at once and searched by.
+        check(propertiesOf("AssetBulkUpdateDto").contains("visibility"))
+        check(propertiesOf("MetadataSearchDto").contains("visibility"))
+        check(propertiesOf("AssetResponseDto").contains("visibility"))
+        check((schemas.getValue("AssetVisibility")["enum"] as List<*>).containsAll(listOf("archive", "timeline")))
         check("on_this_day" in (schemas.getValue("MemoryType")["enum"] as List<*>))
         check(
             propertiesOf("AlbumResponseDto").containsAll(
@@ -254,6 +259,9 @@ val generateImmichContract by tasks.registering {
             check(validatedProperties("MapMarkerResponseDto").containsAll(setOf("id", "lat", "lon", "city")))
             check(validatedProperties("MemoryResponseDto").containsAll(setOf("assets", "data", "type", "showAt", "hideAt")))
             check(validatedProperties("OnThisDayDto").contains("year"))
+            check(validatedProperties("AssetBulkUpdateDto").contains("visibility"))
+            check(validatedProperties("MetadataSearchDto").contains("visibility"))
+            check(validatedProperties("AssetResponseDto").contains("visibility"))
         }
 
         fun pathFor(operationId: String) = operationFor(document, operationId).second

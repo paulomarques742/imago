@@ -32,6 +32,7 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
         database.assetDao().deleteLibrary(DEVICE_LIBRARY_ID)
         database.assetDao().upsertAll(rows)
         database.assetDao().restoreLocalRecipeFlags(DEVICE_LIBRARY_ID)
+        database.assetDao().restoreArchivedFlags(DEVICE_LIBRARY_ID)
     }
 
     override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?): Flow<PagingData<ImmichAsset>> {
@@ -61,7 +62,21 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
         ids.filterNot(found::contains).forEach { database.assetDao().delete(DEVICE_LIBRARY_ID, it) }
         database.assetDao().upsertAll(rows)
         database.assetDao().restoreLocalRecipeFlags(DEVICE_LIBRARY_ID)
+        database.assetDao().restoreArchivedFlags(DEVICE_LIBRARY_ID)
     }
+
+    override val canArchive: Boolean get() = true
+
+    /** The app's own archive: neither Android nor the folders have one, so the other apps still show these. */
+    override suspend fun setArchived(assetIds: List<String>, archived: Boolean) = database.withTransaction {
+        if (archived) database.archivedAssetDao().archive(assetIds.map { ArchivedAssetEntity(DEVICE_LIBRARY_ID, it) })
+        else assetIds.chunked(500).forEach { database.archivedAssetDao().unarchive(DEVICE_LIBRARY_ID, it) }
+        assetIds.chunked(500).forEach { database.assetDao().setArchived(DEVICE_LIBRARY_ID, it, archived) }
+    }
+
+    override fun archivedAssets(): Flow<PagingData<ImmichAsset>> =
+        Pager(PagingConfig(pageSize = 100, enablePlaceholders = false)) { database.assetDao().archivedPagingSource(DEVICE_LIBRARY_ID) }
+            .flow.map { page -> page.map(AssetEntity::toDomain) }
     override suspend fun timeBuckets() = database.assetDao().timeBuckets(DEVICE_LIBRARY_ID).map { ImmichTimeBucket(it.month, it.assetCount) }
     override suspend fun loadMonth(month: String) = syncCatalog()
     override suspend fun indexOfAsset(
