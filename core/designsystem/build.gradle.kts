@@ -34,6 +34,9 @@ kotlin {
         getByName("desktopTest").dependencies {
             implementation(libs.junit4)
             implementation(compose.desktop.currentOs)
+            // The sliders' gestures, played with a finger and a mouse.
+            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+            implementation(compose.uiTest)
         }
         getByName("desktopMain").dependencies {
             // The Windows file and folder dialogs (IFileOpenDialog), through Native File Dialog.

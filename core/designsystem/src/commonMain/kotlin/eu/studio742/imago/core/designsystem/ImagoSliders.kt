@@ -3,9 +3,12 @@ package eu.studio742.imago.core.designsystem
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,19 +24,30 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
@@ -60,7 +74,8 @@ enum class ImagoScaleTint { NEUTRAL, TEMPERATURE }
  * piece of it.
  *
  * The drag mechanics, the touch target and accessibility are still Material's; only the drawing is
- * ours.
+ * ours. Material's mechanics — a touch takes the value to the finger — are right for seeking through
+ * a video; the editor's adjustments use [ImagoParameterSlider], which only moves on a sideways drag.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,53 +100,11 @@ fun ImagoSlider(
         interactionSource = remember { MutableInteractionSource() },
         modifier = modifier,
         thumb = {
-            Box(
-                modifier = Modifier.size(ThumbRadius * 2),
-                contentAlignment = Alignment.Center,
-            ) {
-                Canvas(Modifier.size(ThumbRadius * 2)) {
-                    val stroke = 2.dp.toPx()
-                    // The inside darkens just enough for the white ring not to get lost over a light
-                    // area of the photo; it still lets what is underneath show through.
-                    drawCircle(
-                        color = Color.Black.copy(alpha = 0.28f),
-                        radius = size.minDimension / 2 - stroke / 2,
-                    )
-                    drawCircle(
-                        color = if (enabled) ImagoColors.BrandWhite else ImagoColors.TextDisabled,
-                        radius = size.minDimension / 2 - stroke / 2,
-                        style = Stroke(width = stroke),
-                    )
-                }
-            }
+            Canvas(Modifier.size(ThumbRadius * 2)) { drawImagoThumb(center, enabled) }
         },
         track = {
             Canvas(Modifier.fillMaxWidth().height(ThumbRadius * 2)) {
-                // The thumb moves between these two limits, not between 0 and the full width;
-                // without this inset the fill would run away from it at the ends.
-                val start = ThumbRadius.toPx()
-                val end = size.width - ThumbRadius.toPx()
-                val usable = (end - start).coerceAtLeast(0f)
-                val y = size.height / 2
-                val thickness = TrackHeight.toPx()
-                drawLine(
-                    color = ImagoColors.BorderVisible,
-                    start = Offset(start, y),
-                    end = Offset(end, y),
-                    strokeWidth = thickness,
-                    cap = StrokeCap.Round,
-                )
-                val from = start + usable * neutralFraction
-                val to = start + usable * valueFraction
-                if (abs(to - from) > 0.5f) {
-                    drawLine(
-                        color = if (enabled) ImagoColors.BrandWhite else ImagoColors.TextDisabled,
-                        start = Offset(minOf(from, to), y),
-                        end = Offset(maxOf(from, to), y),
-                        strokeWidth = thickness,
-                        cap = StrokeCap.Round,
-                    )
-                }
+                drawImagoTrack(valueFraction, neutralFraction, enabled)
             }
         },
         colors = SliderDefaults.colors(
@@ -268,6 +241,52 @@ private fun lerpColor(from: Color, to: Color, amount: Float): Color {
 }
 
 /**
+ * The track and the ring, drawn the same in both sliders.
+ *
+ * The ring moves between two limits inset by its radius, not between 0 and the full width; without
+ * the inset the fill would run away from it at the ends.
+ */
+private fun DrawScope.drawImagoTrack(valueFraction: Float, neutralFraction: Float, enabled: Boolean) {
+    val start = ThumbRadius.toPx()
+    val end = size.width - ThumbRadius.toPx()
+    val usable = (end - start).coerceAtLeast(0f)
+    val y = size.height / 2
+    val thickness = TrackHeight.toPx()
+    drawLine(
+        color = ImagoColors.BorderVisible,
+        start = Offset(start, y),
+        end = Offset(end, y),
+        strokeWidth = thickness,
+        cap = StrokeCap.Round,
+    )
+    val from = start + usable * neutralFraction
+    val to = start + usable * valueFraction
+    if (abs(to - from) > 0.5f) {
+        drawLine(
+            color = if (enabled) ImagoColors.BrandWhite else ImagoColors.TextDisabled,
+            start = Offset(minOf(from, to), y),
+            end = Offset(maxOf(from, to), y),
+            strokeWidth = thickness,
+            cap = StrokeCap.Round,
+        )
+    }
+}
+
+private fun DrawScope.drawImagoThumb(center: Offset, enabled: Boolean) {
+    val stroke = 2.dp.toPx()
+    val radius = ThumbRadius.toPx() - stroke / 2
+    // The inside darkens just enough for the white ring not to get lost over a light area of the
+    // photo; it still lets what is underneath show through.
+    drawCircle(color = Color.Black.copy(alpha = 0.28f), radius = radius, center = center)
+    drawCircle(
+        color = if (enabled) ImagoColors.BrandWhite else ImagoColors.TextDisabled,
+        radius = radius,
+        center = center,
+        style = Stroke(width = stroke),
+    )
+}
+
+/**
  * An adjustment row: the name, the value, and the slider below.
  *
  * This component gives the editor the behaviour the design system asks for — while a value is being
@@ -276,8 +295,13 @@ private fun lerpColor(from: Color, to: Color, amount: Float): Color {
  * inside the photo editor, because the composer does exactly the same with its adjustments: it is
  * the same gesture, and it has to be the same drawing.
  *
- * A double tap resets the neutral value, and there is a vibration when passing the neutral and the
- * extremes.
+ * The rows live in a list that scrolls, and the finger that scrolls it lands on them. So with a
+ * finger the value only moves on a drag that is clearly sideways, and moves by how far the finger
+ * travels, never jumping to where it landed: a touch, or a drag up or down, leaves the value alone.
+ * A mouse has the wheel to scroll, and there a click on the track still takes the value to it.
+ *
+ * A double tap anywhere on the row — the name, the value or the track — resets the neutral value,
+ * and there is a vibration when passing the neutral and the extremes.
  */
 @Composable
 fun ImagoParameterSlider(
@@ -353,12 +377,13 @@ fun ImagoParameterSlider(
                 },
             )
         }
-        ImagoSlider(
+        ParameterTrack(
             value = value,
-            enabled = enabled,
             neutral = neutral,
             range = range,
-            onValueChange = { newValue ->
+            enabled = enabled,
+            onValueChange = { requested ->
+                val newValue = requested.coerceIn(range.start, range.endInclusive)
                 val snap = when {
                     abs(newValue - neutral) <= snapTolerance -> 0
                     abs(newValue - range.start) <= snapTolerance -> -1
@@ -377,5 +402,106 @@ fun ImagoParameterSlider(
                 onValueChangeFinished()
             },
         )
+    }
+}
+
+/**
+ * The adjustment row's track, with its own gestures instead of Material's.
+ *
+ * Material's slider takes the value to the finger on the touch itself, before anything can tell a
+ * scroll from an adjustment — scrolling the list of adjustments kept setting whichever one the
+ * finger landed on.
+ */
+@Composable
+private fun ParameterTrack(
+    value: Float,
+    neutral: Float,
+    range: ClosedFloatingPointRange<Float>,
+    enabled: Boolean,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
+) {
+    val span = (range.endInclusive - range.start).takeIf { it > 0f } ?: 1f
+    val valueFraction = ((value - range.start) / span).coerceIn(0f, 1f)
+    val neutralFraction = ((neutral - range.start) / span).coerceIn(0f, 1f)
+    // The gesture block outlives recompositions; what it reads has to be the latest.
+    val currentValue by rememberUpdatedState(value)
+    val currentRange by rememberUpdatedState(range)
+    val currentChange by rememberUpdatedState(onValueChange)
+    val currentFinish by rememberUpdatedState(onValueChangeFinished)
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            // The height Material's slider had: the line is thin, the finger is not.
+            .height(ImagoSizes.TouchTarget)
+            .semantics {
+                progressBarRangeInfo = ProgressBarRangeInfo(value, range)
+                if (!enabled) disabled()
+                setProgress { target ->
+                    if (!enabled) return@setProgress false
+                    currentChange(target)
+                    currentFinish()
+                    true
+                }
+            }
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val inset = ThumbRadius.toPx()
+                    val usable = (size.width - inset * 2).coerceAtLeast(1f)
+                    fun valueAt(x: Float): Float {
+                        val fraction = ((x - inset) / usable).coerceIn(0f, 1f)
+                        return currentRange.start + fraction * (currentRange.endInclusive - currentRange.start)
+                    }
+                    if (down.type == PointerType.Mouse) {
+                        currentChange(valueAt(down.position.x))
+                        drag(down.id) { change ->
+                            currentChange(valueAt(change.position.x))
+                            change.consume()
+                        }
+                        currentFinish()
+                        return@awaitEachGesture
+                    }
+                    val start = awaitSidewaysSlop(down, viewConfiguration.touchSlop) ?: return@awaitEachGesture
+                    start.consume()
+                    var dragged = currentValue
+                    val perPixel = (currentRange.endInclusive - currentRange.start) / usable
+                    // Counted from where the slop was crossed, so the value does not leap by it.
+                    horizontalDrag(start.id) { change ->
+                        dragged = (dragged + change.positionChange().x * perPixel)
+                            .coerceIn(currentRange.start, currentRange.endInclusive)
+                        currentChange(dragged)
+                        change.consume()
+                    }
+                    // A cancelled drag still moved the value; it is recorded like any other.
+                    currentFinish()
+                }
+            },
+    ) {
+        drawImagoTrack(valueFraction, neutralFraction, enabled)
+        val x = ThumbRadius.toPx() + (size.width - ThumbRadius.toPx() * 2).coerceAtLeast(0f) * valueFraction
+        drawImagoThumb(Offset(x, size.height / 2), enabled)
+    }
+}
+
+/**
+ * Waits for the finger to say what it wants: the change where it crossed the slop going sideways, or
+ * null if it went up or down first, or lifted, or someone else — the list scrolling — took it.
+ */
+private suspend fun AwaitPointerEventScope.awaitSidewaysSlop(
+    down: PointerInputChange,
+    slop: Float,
+): PointerInputChange? {
+    var travelled = Offset.Zero
+    while (true) {
+        val event = awaitPointerEvent()
+        val change = event.changes.firstOrNull { it.id == down.id } ?: return null
+        if (!change.pressed || change.isConsumed) return null
+        travelled += change.positionChange()
+        when {
+            abs(travelled.y) > slop && abs(travelled.y) >= abs(travelled.x) -> return null
+            abs(travelled.x) > slop && abs(travelled.x) > abs(travelled.y) -> return change
+        }
     }
 }
