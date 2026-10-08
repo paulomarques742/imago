@@ -32,10 +32,17 @@ kotlin {
             implementation(libs.coil3.compose)
             implementation(libs.kotlinx.coroutines.core)
         }
+        getByName("desktopMain").dependencies {
+            // The map's vector tiles, drawn here: the style is JSON, the tiles come over HTTP.
+            implementation(libs.okhttp)
+            implementation(libs.kotlinx.serialization.json)
+        }
         getByName("desktopTest").dependencies {
             implementation(libs.junit4)
             // Tests only: the key's permission list is checked against the generated contract.
             implementation(project(":core:immich"))
+            // Skia for this machine: the map snapshots draw with it.
+            implementation(compose.desktop.currentOs)
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
@@ -44,6 +51,7 @@ kotlin {
             // Uploading what other apps share runs outside the app (SharedUploadWorker).
             implementation(libs.androidx.work.runtime.ktx)
             implementation(libs.kotlinx.coroutines.android)
+            implementation(libs.maplibre.android)
         }
     }
 }

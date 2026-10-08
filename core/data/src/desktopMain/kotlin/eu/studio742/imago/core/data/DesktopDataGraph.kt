@@ -25,7 +25,7 @@ import java.nio.file.Path
  * @param trash how the folder library sends files to the Recycle Bin.
  */
 class DesktopDataGraph(
-    root: Path,
+    val root: Path,
     trash: (java.io.File) -> Boolean = { java.awt.Desktop.getDesktop().moveToTrash(it) },
 ) : AutoCloseable {
     init { Files.createDirectories(root) }

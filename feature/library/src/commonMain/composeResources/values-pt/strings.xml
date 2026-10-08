@@ -305,6 +305,20 @@
     </plurals>
     <string name="library_album_name">Nome do álbum</string>
     <string name="library_people">Pessoas</string>
+    <string name="library_map">Mapa</string>
+    <string name="library_map_close">Fechar o mapa</string>
+    <string name="library_map_failed">Não foi possível carregar o mapa.</string>
+    <string name="library_map_zoom_in">Aproximar</string>
+    <string name="library_map_zoom_out">Afastar</string>
+    <string name="library_back_to_map">Voltar ao mapa</string>
+    <string name="library_map_place">Fotografias daqui</string>
+    <string name="library_map_empty">Nenhuma destas fotografias diz onde foi tirada.</string>
+    <string name="library_map_location_hidden">O Android esconde onde as fotografias foram tiradas até o IMAGO ter autorização para o ver.</string>
+    <string name="library_map_location_allow">Autorizar</string>
+    <plurals name="library_map_reading">
+        <item quantity="one">A ler onde as fotografias foram tiradas: %1$d de %2$d.</item>
+        <item quantity="other">A ler onde as fotografias foram tiradas: %1$d de %2$d.</item>
+    </plurals>
     <string name="library_people_none">O Immich ainda não reconheceu ninguém nesta biblioteca.</string>
     <string name="library_person_unnamed">Pessoa sem nome</string>
     <string name="library_person_name">Nome da pessoa</string>

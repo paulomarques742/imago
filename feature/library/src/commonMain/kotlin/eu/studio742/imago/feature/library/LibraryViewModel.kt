@@ -92,6 +92,8 @@ data class AlbumUiModel(
     val isFolder: Boolean = false,
     /** Not an album: a person the server recognises, open with the photos they are in. */
     val isPerson: Boolean = false,
+    /** Not an album either: a place on the map, with the photos taken there. */
+    val placeAssetIds: List<String>? = null,
 )
 
 /** Someone the server recognises; [name] is empty while nobody named them. */
@@ -186,6 +188,14 @@ data class LibraryUiState(
     val people: List<PersonUiModel> = emptyList(),
     val isLoadingPeople: Boolean = false,
     val peopleError: UiText? = null,
+    /** The open library can put its photos on a map. */
+    val hasMap: Boolean = false,
+    /** The map is open, over the library; a place opened from it shows as an album above it. */
+    val showingMap: Boolean = false,
+    val map: eu.studio742.imago.core.model.MapContents? = null,
+    val mapError: UiText? = null,
+    /** Where the map was left; null fits every photo. */
+    val mapCamera: MapCamera? = null,
 )
 
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -230,6 +240,8 @@ open class LibraryViewModel(
             val albumId = album?.let { gridAlbumId(it, configuration.selectedLibraryId.value) }
             if (album?.isPerson == true) {
                 library.personAssets(album.id, activeFilter)
+            } else if (album?.placeAssetIds != null) {
+                library.assetsWithIds(album.placeAssetIds)
             } else if (byContent && query.isNotEmpty()) {
                 library.searchByContent(query, activeFilter, month.takeIf { album == null }, albumId)
             } else {
@@ -260,7 +272,8 @@ open class LibraryViewModel(
                 filter.value = restored?.first ?: LibraryFilter.ALL
                 uiState.value = restored?.second ?: LibraryUiState()
                 previous = id
-                uiState.update { it.copy(hasPeople = library.hasPeople) }
+                uiState.update { it.copy(hasPeople = library.hasPeople, hasMap = library.hasMap) }
+                if (uiState.value.showingMap) loadMap()
                 if (uiState.value.showingPeople) loadPeople()
                 refreshNavigation()
                 syncCatalog()
@@ -387,6 +400,49 @@ open class LibraryViewModel(
                 )
             }
         }
+    }
+
+    private var mapJob: kotlinx.coroutines.Job? = null
+
+    /** The map of the open library, from where it was left. */
+    fun showMap() {
+        uiState.update { it.copy(showingMap = true, isSearching = false, query = "") }
+        loadMap()
+    }
+
+    /** Again from the start: after the location permission, or after a failure. */
+    fun loadMap() {
+        val sourceId = configuration.selectedLibraryId.value
+        mapJob?.cancel()
+        uiState.update { it.copy(mapError = null) }
+        mapJob = viewModelScope.launch {
+            try {
+                library.mapContents().collect { contents ->
+                    if (sourceId == configuration.selectedLibraryId.value) uiState.update { it.copy(map = contents) }
+                }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (sourceId == configuration.selectedLibraryId.value) uiState.update { it.copy(mapError = error.toUiText(Res.string.library_load_failed)) }
+            }
+        }
+    }
+
+    fun closeMap() {
+        mapJob?.cancel()
+        uiState.update { it.copy(showingMap = false) }
+    }
+
+    fun mapMoved(camera: MapCamera) = uiState.update { it.copy(mapCamera = camera) }
+
+    /** A place opens like an album, over the map, which is still there when it closes. */
+    fun openPlace(place: MarkerCluster) = uiState.update {
+        it.copy(
+            selectedAlbum = AlbumUiModel(
+                id = "place", name = place.city.orEmpty(), description = "", thumbnailUrl = null, assetCount = place.assetIds.size,
+                startDate = null, endDate = null, shared = false, apiKey = "", placeAssetIds = place.assetIds,
+            ),
+        )
     }
 
     /** A person opens like an album: their photos, with the way back to the faces. */
@@ -763,7 +819,7 @@ open class LibraryViewModel(
                     // The open album follows the list: photos moved out of it from the selection left
                     // its header counting them. One no longer listed has nothing left in it.
                     selectedAlbum = current.selectedAlbum?.let { open ->
-                        if (refreshed == null || open.isPerson) open
+                        if (refreshed == null || open.isPerson || open.placeAssetIds != null) open
                         else refreshed.firstOrNull { it.id == open.id } ?: open.copy(assetCount = 0)
                     },
                     months = months.getOrNull()?.map { MonthUiModel(it.month, it.assetCount) } ?: current.months,

@@ -46,6 +46,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
@@ -241,6 +242,7 @@ fun LibraryRoute(
     var albumPick by remember { mutableStateOf<AlbumPick?>(null) }
     val remembered by viewModel.rememberedTransfer.collectAsStateWithLifecycle()
     val chooseTransfer = rememberFolderTransfer(remembered, viewModel::rememberTransfer)
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     Box(modifier) {
         LibraryHost(
             viewModel = viewModel,
@@ -263,6 +265,17 @@ fun LibraryRoute(
                 onDelete = viewModel::deleteOpenAlbum,
             ),
         )
+        // A place opened from the map shows as an album; closing it comes back to the map.
+        if (state.showingMap && state.selectedAlbum == null) {
+            PhotoMapScreen(
+                state = state,
+                onBack = viewModel::closeMap,
+                onOpenPlace = { viewModel.openPlace(it); viewModel.clearSelection() },
+                onCameraChange = viewModel::mapMoved,
+                onRetry = viewModel::loadMap,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         // Laid over the library and not in its place: the grid underneath keeps where it was.
         albumPick?.let { pick ->
             LibraryPickerRoute(
@@ -480,6 +493,7 @@ private fun LibraryHost(
             },
             onOpenSettings = onOpenSettings,
             onOpenTrash = onOpenTrash?.takeIf { hasTrash },
+            onOpenMap = viewModel::showMap,
         )
     }
 }
@@ -527,6 +541,7 @@ private fun LibraryScreen(
     onOpenSettings: () -> Unit,
     /** Null where the library has no trash to show. */
     onOpenTrash: (() -> Unit)? = null,
+    onOpenMap: (() -> Unit)? = null,
 ) {
     // The order is that of priorities, and it is the opposite of what it looks like: the dispatcher
     // calls what was registered last first. In a picker, leaving it is the last resort — before that
@@ -641,6 +656,7 @@ private fun LibraryScreen(
                         onRefresh = onRefresh,
                         onOpenSettings = onOpenSettings,
                         onOpenTrash = onOpenTrash,
+                        onOpenMap = onOpenMap?.takeIf { uiState.hasMap },
                     )
                 }
                 // Searching a server: by what is in the photo, or by the file's name. The album list
@@ -850,6 +866,8 @@ private fun LibraryTopBar(
     onOpenSettings: () -> Unit,
     /** Null where the library has no trash to show. */
     onOpenTrash: (() -> Unit)? = null,
+    /** Null where the library cannot put its photos on a map. */
+    onOpenMap: (() -> Unit)? = null,
 ) {
     var moreExpanded by remember { mutableStateOf(false) }
     Row(
@@ -893,6 +911,12 @@ private fun LibraryTopBar(
                     contentDescription = stringResource(Res.string.library_jump_to_date),
                     tint = ImagoColors.TextPrimary,
                 )
+            }
+            // Beside the calendar: the other way of reaching a photo, by where instead of when.
+            onOpenMap?.let {
+                IconButton(onClick = it) {
+                    Icon(Icons.Outlined.Map, contentDescription = stringResource(Res.string.library_map), tint = ImagoColors.TextPrimary)
+                }
             }
             LibrarySourceButton()
             Box {
@@ -1201,13 +1225,20 @@ private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit, editing: Album
         IconButton(onClick = onBack) {
             Icon(
                 Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(if (album?.isPerson == true) Res.string.library_back_to_people else Res.string.library_back_to_albums),
+                contentDescription = stringResource(
+                    when {
+                        album?.isPerson == true -> Res.string.library_back_to_people
+                        album?.placeAssetIds != null -> Res.string.library_back_to_map
+                        else -> Res.string.library_back_to_albums
+                    },
+                ),
                 tint = ImagoColors.TextPrimary,
             )
         }
         Column(Modifier.weight(1f).padding(start = ImagoSpacing.Xs)) {
             Text(
-                text = album?.name?.takeUnless { album.isPerson && it.isBlank() } ?: stringResource(Res.string.library_person_unnamed),
+                text = album?.name?.takeUnless { it.isBlank() && (album.isPerson || album.placeAssetIds != null) }
+                    ?: stringResource(if (album?.placeAssetIds != null) Res.string.library_map_place else Res.string.library_person_unnamed),
                 style = MaterialTheme.typography.titleMedium,
                 color = ImagoColors.TextPrimary,
                 maxLines = 1,

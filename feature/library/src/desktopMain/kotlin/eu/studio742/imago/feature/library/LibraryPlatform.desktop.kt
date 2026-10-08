@@ -146,3 +146,6 @@ actual val SelectionDeleteDeviceBody: StringResource get() = Res.string.library_
 /** The computer has no background upload like the phone's share sheet yet, so the entry does not show. */
 @Composable
 actual fun rememberSendToImmich(): ((List<String>, String) -> Unit)? = null
+
+@Composable
+actual fun rememberLocationAccess(onGranted: () -> Unit): (() -> Unit)? = null
