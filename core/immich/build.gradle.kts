@@ -88,6 +88,9 @@ val generateImmichContract by tasks.registering {
             "searchSmart",
             "getServerFeatures",
             "getMyApiKey",
+            "getAssetEdits",
+            "editAsset",
+            "removeAssetEdits",
         )
 
         /**
@@ -100,6 +103,7 @@ val generateImmichContract by tasks.registering {
             "getAllAlbums", "uploadAsset", "createStack", "updateAsset", "updateAssets", "deleteAssets",
             "createAlbum", "addAssetsToAlbum", "removeAssetFromAlbum", "updateAlbumInfo", "deleteAlbum",
             "restoreAssets", "emptyTrash",
+            "getAssetEdits", "editAsset", "removeAssetEdits",
         )
         check(operationIds.containsAll(optionalOperationIds))
         validatedDocuments.forEach { validatedDocument ->
@@ -166,6 +170,30 @@ val generateImmichContract by tasks.registering {
             ),
         )
         check(propertiesOf("TimeBucketsResponseDto").containsAll(setOf("timeBucket", "count")))
+        // The geometry mirrored to Immich's own edits. The crop is in pixels of the image already
+        // turned by its EXIF orientation, and the server only accepts it when it fits in
+        // exifImageWidth x exifImageHeight swapped by that orientation: those three fields are how
+        // the client knows the size the server checks against.
+        fun checkEditContract(spec: Map<String, Any?>) {
+            @Suppress("UNCHECKED_CAST")
+            val specSchemas = componentsOf(spec)["schemas"] as Map<String, Map<String, Any?>>
+            fun properties(schema: String) = (specSchemas.getValue(schema).getValue("properties") as Map<String, Any?>).keys
+            check(properties("AssetEditsCreateDto").contains("edits"))
+            check(properties("AssetEditsResponseDto").contains("edits"))
+            check(properties("AssetEditActionItemDto").containsAll(setOf("action", "parameters")))
+            check(properties("CropParameters").containsAll(setOf("x", "y", "width", "height")))
+            check(properties("RotateParameters").contains("angle"))
+            check(properties("MirrorParameters").contains("axis"))
+            check(specSchemas.getValue("AssetEditAction")["enum"] == listOf("crop", "rotate", "mirror")) {
+                "Immich edit actions changed"
+            }
+            check(specSchemas.getValue("MirrorAxis")["enum"] == listOf("horizontal", "vertical")) {
+                "Immich mirror axes changed"
+            }
+            check(properties("ExifResponseDto").containsAll(setOf("exifImageWidth", "exifImageHeight", "orientation")))
+        }
+        checkEditContract(document)
+        validatedDocuments.forEach(::checkEditContract)
         validatedDocuments.forEach { validatedDocument ->
             @Suppress("UNCHECKED_CAST")
             val validatedSchemas = componentsOf(validatedDocument)["schemas"] as Map<String, Map<String, Any?>>
@@ -208,6 +236,9 @@ val generateImmichContract by tasks.registering {
         }
 
         fun pathFor(operationId: String) = operationFor(document, operationId).second
+        check(setOf("getAssetEdits", "editAsset", "removeAssetEdits").map(::pathFor).distinct().size == 1) {
+            "Immich edit operations no longer share a path"
+        }
 
         /**
          * The API key permission each operation asks for, or null if it is public.
@@ -303,6 +334,7 @@ val generateImmichContract by tasks.registering {
             |    const val SEARCH_SMART = "${pathFor("searchSmart")}"
             |    const val GET_SERVER_FEATURES = "${pathFor("getServerFeatures")}"
             |    const val GET_MY_API_KEY = "${pathFor("getMyApiKey")}"
+            |    const val ASSET_EDITS = "${pathFor("editAsset")}"
             |}
             |
             |/** The API key permissions the endpoints the app uses ask for. */

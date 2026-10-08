@@ -33,6 +33,35 @@ class FrameGeometryTest {
         }
     }
 
+    /** The same, with the perspective in the matrix: every tilt, stretch and offset, with every turn and mirror. */
+    private val perspectiveGeometries: List<FrameGeometry> = buildList {
+        for (turns in 0..3) {
+            for (mirrorH in listOf(false, true)) {
+                for (perspective in listOf(
+                    PerspectiveParameters(vertical = -60f),
+                    PerspectiveParameters(horizontal = 45f, aspect = -30f),
+                    PerspectiveParameters(vertical = 30f, horizontal = -20f, offsetX = 40f, scale = 20f),
+                    PerspectiveParameters(vertical = -50f, scale = -40f, constrainCrop = false),
+                )) {
+                    add(
+                        FrameGeometry(
+                            sourceWidth = 4000,
+                            sourceHeight = 3000,
+                            cropX = 0.1f,
+                            cropY = 0.2f,
+                            cropWidth = 0.6f,
+                            cropHeight = 0.5f,
+                            straighten = -7f,
+                            quarterTurns = turns,
+                            mirrorH = mirrorH,
+                            perspective = perspective,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
     /**
      * The two directions have to cancel out. It is the only way for the interface overlay and the mask
      * field not to diverge silently — the symptom would be a mask drawn in one place and applied in
@@ -42,7 +71,7 @@ class FrameGeometryTest {
     fun theTwoDirectionsCancelOut() {
         val there = FloatArray(2)
         val back = FloatArray(2)
-        for (geometry in geometries) {
+        for (geometry in geometries + perspectiveGeometries) {
             for (u in listOf(0f, 0.25f, 0.5f, 0.75f, 1f)) {
                 for (v in listOf(0f, 0.25f, 0.5f, 0.75f, 1f)) {
                     geometry.imageFromFramed(u, v, there)

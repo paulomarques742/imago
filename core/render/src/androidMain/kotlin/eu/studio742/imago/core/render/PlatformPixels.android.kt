@@ -8,6 +8,8 @@ import coil3.request.ImageRequest
 import coil3.request.allowHardware
 
 actual val coil3.Bitmap.pixelWidth: Int get() = width
+
+actual fun coil3.Bitmap.asComposeImage(): ImageBitmap = asImageBitmap()
 actual val coil3.Bitmap.pixelHeight: Int get() = height
 
 actual fun coil3.Bitmap.toPixelBuffer(): PixelBuffer {

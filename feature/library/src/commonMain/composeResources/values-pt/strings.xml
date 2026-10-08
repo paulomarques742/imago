@@ -147,6 +147,9 @@
     <string name="library_permission_stack_create">Empilha cada edição exportada com o original</string>
     <string name="library_permission_asset_update">Marca e desmarca favoritos</string>
     <string name="library_permission_asset_delete">Apaga as fotografias que mandar apagar</string>
+    <string name="library_permission_asset_edit_get">Lê o corte, a rotação e o espelho que o Immich já tem, para só enviar o que mudou</string>
+    <string name="library_permission_asset_edit_create">Envia o corte, a rotação e o espelho que fizer no IMAGO, para o Immich mostrar a fotografia com o mesmo enquadramento</string>
+    <string name="library_permission_asset_edit_delete">Retira-os do Immich quando os desfizer no IMAGO</string>
     <!-- Partilhar de outras apps para o Immich -->
     <string name="library_share_title">Enviar para o Immich</string>
     <string name="library_share_preparing">A preparar %1$d de %2$d</string>

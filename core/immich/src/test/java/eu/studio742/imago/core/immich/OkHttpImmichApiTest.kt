@@ -12,7 +12,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import eu.studio742.imago.core.model.AssetType
+import eu.studio742.imago.core.model.ImageSize
 import eu.studio742.imago.core.model.ImmichConnection
+import eu.studio742.imago.core.model.ImmichEdit
 import eu.studio742.imago.core.model.LibraryFilter
 import eu.studio742.imago.core.model.RECENT_FILTER_DAYS
 import java.io.File
@@ -661,6 +663,85 @@ class OkHttpImmichApiTest {
         val error = runCatching { api.deleteAsset(connection(), "a1") }.exceptionOrNull()
 
         assertEquals(500, (error as ImmichApiException.Server).status)
+    }
+
+    /** The size Immich checks a crop against is the stored one, swapped by the orientation. */
+    @Test
+    fun readsTheSizeTheServerChecksCropsAgainst() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"id":"a1","originalFileName":"retrato.jpg","fileCreatedAt":"2024-05-16T18:42:00Z","type":"IMAGE","exifInfo":{"exifImageWidth":4032,"exifImageHeight":3024,"orientation":"6"}}""",
+            ),
+        )
+        server.enqueue(
+            MockResponse().setBody(
+                """{"id":"a2","originalFileName":"paisagem.jpg","fileCreatedAt":"2024-05-16T18:42:00Z","type":"IMAGE","exifInfo":{"exifImageWidth":4032.0,"exifImageHeight":3024.0,"orientation":"1"}}""",
+            ),
+        )
+
+        assertEquals(ImageSize(3024, 4032), api.getAssetDetail(connection(), "a1").exif.serverImageSize())
+        assertEquals(ImageSize(4032, 3024), api.getAssetDetail(connection(), "a2").exif.serverImageSize())
+    }
+
+    @Test
+    fun readsTheServerEditsInOrder() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"assetId":"a1","edits":[{"id":"e1","action":"crop","parameters":{"x":10,"y":20,"width":300,"height":200}},{"id":"e2","action":"rotate","parameters":{"angle":90}},{"id":"e3","action":"mirror","parameters":{"axis":"vertical"}}]}""",
+            ),
+        )
+
+        val edits = api.getAssetEdits(connection(), "a1")
+
+        assertEquals("/api/assets/a1/edits", server.takeRequest().path)
+        assertEquals(
+            listOf(
+                ImmichEdit.Crop(10, 20, 300, 200),
+                ImmichEdit.Rotate(90),
+                ImmichEdit.Mirror(ImmichEdit.MirrorAxis.VERTICAL),
+            ),
+            edits,
+        )
+    }
+
+    @Test
+    fun writesEditsWithTheParametersOfEachAction() = runTest {
+        server.enqueue(MockResponse().setBody("""{"assetId":"a1","edits":[]}"""))
+
+        api.replaceAssetEdits(
+            connection(),
+            "a1",
+            listOf(ImmichEdit.Crop(0, 5, 100, 50), ImmichEdit.Rotate(270), ImmichEdit.Mirror(ImmichEdit.MirrorAxis.HORIZONTAL)),
+        )
+
+        val request = server.takeRequest()
+        assertEquals("PUT", request.method)
+        assertEquals("/api/assets/a1/edits", request.path)
+        assertEquals(
+            """{"edits":[{"action":"crop","parameters":{"x":0,"y":5,"width":100,"height":50}},{"action":"rotate","parameters":{"angle":270}},{"action":"mirror","parameters":{"axis":"horizontal"}}]}""",
+            request.body.readUtf8(),
+        )
+    }
+
+    /** The server refuses an empty list: no edits is said by removing them. */
+    @Test
+    fun removesEditsInsteadOfSendingAnEmptyList() = runTest {
+        server.enqueue(MockResponse().setResponseCode(204))
+
+        api.replaceAssetEdits(connection(), "a1", emptyList())
+
+        val request = server.takeRequest()
+        assertEquals("DELETE", request.method)
+        assertEquals("/api/assets/a1/edits", request.path)
+    }
+
+    @Test
+    fun aKeyWithoutTheEditPermissionHearsWhichOne() = runTest {
+        server.enqueue(MockResponse().setResponseCode(403).setBody("""{"message":"Missing required permission: asset.edit.create"}"""))
+
+        val error = runCatching { api.replaceAssetEdits(connection(), "a1", listOf(ImmichEdit.Rotate(90))) }.exceptionOrNull()
+
+        assertEquals(listOf("asset.edit.create"), (error as ImmichApiException.MissingPermission).permissions)
     }
 
     private fun connection() = ImmichConnection(

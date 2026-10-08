@@ -36,6 +36,23 @@ fun renderRecipePreview(source: Bitmap, recipe: EditRecipe): Bitmap {
 }
 
 /**
+ * Straighten and perspective on a bitmap already turned and flipped: [frameTransformInPixels], the
+ * matrix the shader samples with, in this bitmap's pixels. Null when there is
+ * nothing to do. What the photo does not cover stays transparent here; `BitmapPhotoProcessor` paints
+ * it white after processing, when the crop is unconstrained.
+ */
+fun transformedFrame(working: Bitmap, straighten: Float, perspective: PerspectiveParameters): Bitmap? {
+    if (straighten == 0f && perspective.isNeutral) return null
+    // Android's `Matrix` is row-major with the perspective in the last row: the same nine values.
+    val matrix = Matrix().apply {
+        setValues(frameTransformInPixels(working.width, working.height, straighten, perspective).values())
+    }
+    val transformed = Bitmap.createBitmap(working.width, working.height, Bitmap.Config.ARGB_8888)
+    Canvas(transformed).drawBitmap(working, matrix, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+    return transformed
+}
+
+/**
  * Rotation, flip, straighten and crop, in that order — the same as the export and the same as
  * `PhotoShaders.COMPOSITE`'s `geometryCoordinate`, which is what defines it.
  *
@@ -85,19 +102,8 @@ private fun applyRecipeGeometry(source: Bitmap, geometry: Geometry): Bitmap {
             ),
         )
     }
-    val straighten = geometry.straighten.coerceIn(-45f, 45f)
-    if (straighten != 0f) {
-        val straightened = Bitmap.createBitmap(working.width, working.height, Bitmap.Config.ARGB_8888)
-        val scale = straightenCoverScale(working.width.toFloat() / working.height, straighten)
-        Canvas(straightened).apply {
-            translate(working.width / 2f, working.height / 2f)
-            scale(scale, scale)
-            rotate(straighten)
-            translate(-working.width / 2f, -working.height / 2f)
-            drawBitmap(working, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
-        }
-        replaceWith(straightened)
-    }
+    transformedFrame(working, geometry.straighten.coerceIn(-45f, 45f), geometry.perspective.toRenderPerspective())
+        ?.let(::replaceWith)
     val crop = geometry.cropRect
     val left = (normalizedCropOrigin(crop.x) * working.width).roundToInt().coerceAtMost(working.width - 1)
     val top = (normalizedCropOrigin(crop.y) * working.height).roundToInt().coerceAtMost(working.height - 1)

@@ -504,8 +504,11 @@ internal object PhotoShaders {
         uniform float uAirlightLod;
         uniform vec2 uCropOrigin;
         uniform vec2 uCropSize;
-        uniform float uStraightenRadians;
-        uniform float uStraightenScale;
+        // Straighten and perspective in one matrix: `FrameGeometry.imageFromView`, computed once on the
+        // CPU and uploaded as it is. The shader does not read the sliders, so it cannot read them
+        // differently from the export.
+        uniform mat3 uImageFromView;
+        uniform int uShowOutside;
         uniform float uImageAspect;
         uniform int uRotation;
         uniform int uMirrorH;
@@ -531,14 +534,11 @@ internal object PhotoShaders {
         // `FrameGeometry` transcribes it to Kotlin. As flip and quarter turn do not commute, the
         // order here is not a preference — it is the contract, and `FrameGeometryTest` guards it.
         vec2 geometryCoordinate(vec2 coordinate) {
-            vec2 pixel = vec2((coordinate.x - 0.5) * uImageAspect, coordinate.y - 0.5);
-            float cosine = cos(uStraightenRadians);
-            float sine = sin(uStraightenRadians);
-            vec2 unrotated = vec2(
-                cosine * pixel.x + sine * pixel.y,
-                -sine * pixel.x + cosine * pixel.y
-            ) / uStraightenScale;
-            vec2 transformed = vec2(unrotated.x / uImageAspect + 0.5, unrotated.y + 0.5);
+            vec3 view = vec3((coordinate.x - 0.5) * uImageAspect, coordinate.y - 0.5, 1.0);
+            vec3 image = uImageFromView * view;
+            // Beyond the virtual camera's horizon: no point of the photo lands here.
+            if (image.z <= 0.0) return vec2(-1.0);
+            vec2 transformed = vec2(image.x / image.z / uImageAspect + 0.5, image.y / image.z + 0.5);
             if (uMirrorH == 1) transformed.x = 1.0 - transformed.x;
             if (uMirrorV == 1) transformed.y = 1.0 - transformed.y;
             if (uRotation == 1) return vec2(transformed.y, 1.0 - transformed.x);
@@ -791,6 +791,12 @@ internal object PhotoShaders {
             vec2 screen = vec2(vTexCoord.x, 1.0 - vTexCoord.y);
             vec2 cropped = uCropOrigin + screen * uCropSize;
             vec2 source = geometryCoordinate(cropped);
+            // What the perspective leaves uncovered is white, and stays white: it leaves before any
+            // adjustment could turn it grey. Only with the crop unconstrained can it be reached.
+            if (uShowOutside == 1 && (any(lessThan(source, vec2(0.0))) || any(greaterThan(source, vec2(1.0))))) {
+                fragColor = vec4(1.0);
+                return;
+            }
             vec4 staged = texture(uStage, source);
             vec3 color = staged.rgb;
             // The field is read at `source` and never at `screen`. Masks are in image coordinates, and

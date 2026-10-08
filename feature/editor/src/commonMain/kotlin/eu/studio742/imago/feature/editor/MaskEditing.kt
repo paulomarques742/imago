@@ -33,6 +33,8 @@ fun Adjustment.isLocal(): Boolean = when (this) {
     Adjustment.VIGNETTE_AMOUNT, Adjustment.VIGNETTE_MIDPOINT, Adjustment.VIGNETTE_ROUNDNESS,
     Adjustment.VIGNETTE_FEATHER, Adjustment.GRAIN_AMOUNT, Adjustment.GRAIN_SIZE,
     Adjustment.GRAIN_ROUGHNESS, Adjustment.GRADE_BLENDING, Adjustment.GRADE_BALANCE,
+    Adjustment.PERSPECTIVE_VERTICAL, Adjustment.PERSPECTIVE_HORIZONTAL, Adjustment.PERSPECTIVE_ASPECT,
+    Adjustment.PERSPECTIVE_SCALE, Adjustment.PERSPECTIVE_OFFSET_X, Adjustment.PERSPECTIVE_OFFSET_Y,
     -> false
 }
 

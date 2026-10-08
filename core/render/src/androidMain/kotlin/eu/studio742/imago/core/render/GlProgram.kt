@@ -29,6 +29,9 @@ internal class GlProgram(vertexSource: String, fragmentSource: String) {
 
     fun vec3(name: String, x: Float, y: Float, z: Float) = GLES30.glUniform3f(location(name), x, y, z)
 
+    /** Row-major, as [Homography.values] gives it: GL transposes it into its column order. */
+    fun mat3(name: String, rowMajor: FloatArray) = GLES30.glUniformMatrix3fv(location(name), 1, true, rowMajor, 0)
+
     fun floats(name: String, count: Int, values: FloatArray) =
         GLES30.glUniform1fv(location("$name[0]"), count, values, 0)
 

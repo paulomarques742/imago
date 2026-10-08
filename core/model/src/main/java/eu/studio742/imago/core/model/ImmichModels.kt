@@ -45,7 +45,42 @@ data class AssetExif(
     val model: String? = null,
     val lensModel: String? = null,
     val description: String? = null,
-)
+    /** As stored in the file, before the orientation turns it. */
+    val imageWidth: Int? = null,
+    val imageHeight: Int? = null,
+    /** Immich's text: `1`..`8`, or `90` and `-90` from some sources. */
+    val orientation: String? = null,
+) {
+    /**
+     * The size Immich checks a crop against: the stored one, swapped when the orientation turns the
+     * photo a quarter. The list of orientations that swap is the server's own (`isFlipped`), so that
+     * a crop computed here is never refused as out of bounds there.
+     */
+    fun serverImageSize(): ImageSize? {
+        val width = imageWidth?.takeIf { it > 0 } ?: return null
+        val height = imageHeight?.takeIf { it > 0 } ?: return null
+        val swaps = orientation?.toIntOrNull() in setOf(5, 6, 7, 8, -90, 90)
+        return if (swaps) ImageSize(height, width) else ImageSize(width, height)
+    }
+}
+
+data class ImageSize(val width: Int, val height: Int)
+
+/**
+ * One of Immich's own edits, which the server applies when it makes thumbnails and previews.
+ *
+ * The crop is in pixels of the image already turned by its EXIF orientation and always comes first;
+ * the rotation, clockwise and a multiple of 90°, and the mirrors follow in the order of the list.
+ */
+sealed interface ImmichEdit {
+    data class Crop(val x: Int, val y: Int, val width: Int, val height: Int) : ImmichEdit
+    data class Rotate(val angle: Int) : ImmichEdit
+
+    /** [MirrorAxis.VERTICAL] swaps left and right; [MirrorAxis.HORIZONTAL] swaps top and bottom. */
+    data class Mirror(val axis: MirrorAxis) : ImmichEdit
+
+    enum class MirrorAxis { HORIZONTAL, VERTICAL }
+}
 
 /**
  * The photo with the detail only `getAssetInfo` brings.

@@ -11,6 +11,7 @@ import eu.studio742.imago.core.model.ColorWheel
 import eu.studio742.imago.core.model.CropRect
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.Geometry
+import eu.studio742.imago.core.model.Perspective
 import eu.studio742.imago.core.model.Tone
 
 private fun recipe(
@@ -30,6 +31,36 @@ private fun recipe(
 )
 
 class RecipeRenderingTest {
+    /** A recipe from before version 10 cannot carry a perspective; if one arrives, it stays inert. */
+    @Test
+    fun perspectiveOnlyCountsFromProcessTen() {
+        val geometry = Geometry(perspective = Perspective(vertical = -30f, constrainCrop = false))
+
+        assertEquals(PerspectiveParameters(), recipe(processVersion = 9, geometry = geometry).toRenderParameters().perspective)
+        assertEquals(Perspective(), recipe(processVersion = 9, geometry = geometry).activeGeometry().perspective)
+        assertEquals(-30f, recipe(processVersion = 10, geometry = geometry).toRenderParameters().perspective.vertical)
+        assertTrue(recipe(processVersion = 10, geometry = geometry).changesTheImage())
+    }
+
+    /** An Upright mode that is off finds nothing, whatever angles a recipe carries. */
+    @Test
+    fun anUprightThatIsOffFindsNothing() {
+        val leftover = Perspective(upright = eu.studio742.imago.core.model.UPRIGHT_OFF, uprightPitch = 12f, uprightYaw = -3f)
+        val guided = leftover.copy(upright = eu.studio742.imago.core.model.UPRIGHT_GUIDED)
+
+        assertEquals(PerspectiveParameters(), recipe(geometry = Geometry(perspective = leftover)).toRenderParameters().perspective)
+        assertEquals(12f, recipe(geometry = Geometry(perspective = guided)).toRenderParameters().perspective.uprightPitch)
+    }
+
+    /** The perspective is geometry: a photo with only that does not go through the colour pipeline. */
+    @Test
+    fun perspectiveAloneIsNotAColourEdit() {
+        val parameters = recipe(geometry = Geometry(perspective = Perspective(horizontal = 20f))).toRenderParameters()
+
+        assertTrue(parameters.isColorNeutral)
+        assertFalse(parameters.isNeutral)
+    }
+
     /**
      * Step 12's gate. The field existed in the schema from the start and no earlier recipe could have it
      * off neutral — but it is the gate that makes that promise verifiable.

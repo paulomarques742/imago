@@ -9,6 +9,7 @@ import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.AlbumAddition
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAssetDetail
+import eu.studio742.imago.core.model.ImmichEdit
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.ServerVersion
 import eu.studio742.imago.core.model.AssetType
@@ -141,6 +142,14 @@ interface ImmichApi {
     fun videoPlaybackUrl(connection: ImmichConnection, assetId: String): String
 
     suspend fun downloadOriginal(connection: ImmichConnection, assetId: String, destination: File)
+
+    /** The server's own edits of the photo — crop, rotation, mirror — in the order it applies them. */
+    suspend fun getAssetEdits(connection: ImmichConnection, assetId: String): List<ImmichEdit> =
+        error("Immich edits unavailable")
+
+    /** Replaces all of the photo's edits; an empty list removes them. */
+    suspend fun replaceAssetEdits(connection: ImmichConnection, assetId: String, edits: List<ImmichEdit>): Unit =
+        error("Immich edits unavailable")
 
     suspend fun exportEditedAsset(
         connection: ImmichConnection,

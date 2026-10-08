@@ -1,8 +1,5 @@
 package eu.studio742.imago.core.render
 
-import kotlin.math.cos
-import kotlin.math.sin
-
 /**
  * The bridge between the original image's space and the visible frame's space.
  *
@@ -15,6 +12,9 @@ import kotlin.math.sin
  * [imageFromFramed] is the literal transcription of [PhotoShaders.COMPOSITE]'s `geometryCoordinate`,
  * with the crop step on top. [framedFromImage] is its inverse, and `FrameGeometryTest` checks that
  * they cancel out — it is the only way for the two not to diverge silently.
+ *
+ * Straighten and perspective are one matrix, [frameTransform], and the shader and the Android CPU
+ * path receive that same matrix: there is no second reading of the sliders anywhere.
  */
 data class FrameGeometry(
     val sourceWidth: Int,
@@ -27,6 +27,7 @@ data class FrameGeometry(
     val quarterTurns: Int = 0,
     val mirrorH: Boolean = false,
     val mirrorV: Boolean = false,
+    val perspective: PerspectiveParameters = PerspectiveParameters(),
 ) {
     /**
      * The aspect ratio **after** the quarter turns.
@@ -35,7 +36,7 @@ data class FrameGeometry(
      * uses so as not to tilt, and using the sensor's aspect ratio on a photo rotated 90° gave a
      * different angle from what the preview shows.
      */
-    private val orientedAspect: Float = run {
+    internal val orientedAspect: Float = run {
         val swaps = quarterTurns % 2 == 1
         val width = if (swaps) sourceHeight else sourceWidth
         val height = if (swaps) sourceWidth else sourceHeight
@@ -50,12 +51,25 @@ data class FrameGeometry(
      */
     val imageAspect: Float = sourceWidth.toFloat() / sourceHeight.coerceAtLeast(1)
 
-    private val straightenRadians: Float = Math.toRadians(straighten.toDouble()).toFloat()
-    private val straightenScale: Float = straightenCoverScale(orientedAspect, straighten)
+    /** From the oriented photo to the frame, centred and in photo heights. */
+    val viewFromImage: Homography = frameTransform(orientedAspect, straighten, perspective)
+
+    /** The inverse, which is what sampling needs: for each point of the frame, where in the photo. */
+    val imageFromView: Homography = viewFromImage.inverse()
+
+    /**
+     * Whether the frame may show what lies beyond the photo — white, by decision. Without it every
+     * consumer clamps to the edge, as it always did, and a point a hair outside from rounding never
+     * turns white.
+     */
+    val showsOutside: Boolean get() = !perspective.constrainCrop
 
     /**
      * From the visible frame to the original image, both normalised with the origin at the top-left
      * corner. Writes into [out] so as not to allocate per texel.
+     *
+     * A point the photo does not cover comes out of `[0, 1]` — or as NaN, when it is beyond the virtual
+     * camera's horizon. Only [showsOutside] makes that reachable; [isOutside] tells it apart.
      */
     fun imageFromFramed(u: Float, v: Float, out: FloatArray) {
         val croppedX = cropX + u * cropWidth
@@ -63,12 +77,13 @@ data class FrameGeometry(
 
         val pixelX = (croppedX - 0.5f) * orientedAspect
         val pixelY = croppedY - 0.5f
-        val cosine = cos(straightenRadians)
-        val sine = sin(straightenRadians)
-        val unrotatedX = (cosine * pixelX + sine * pixelY) / straightenScale
-        val unrotatedY = (-sine * pixelX + cosine * pixelY) / straightenScale
-        var x = unrotatedX / orientedAspect + 0.5f
-        var y = unrotatedY + 0.5f
+        if (!imageFromView.map(pixelX, pixelY, out)) {
+            out[0] = Float.NaN
+            out[1] = Float.NaN
+            return
+        }
+        var x = out[0] / orientedAspect + 0.5f
+        var y = out[1] + 0.5f
 
         if (mirrorH) x = 1f - x
         if (mirrorV) y = 1f - y
@@ -95,17 +110,70 @@ data class FrameGeometry(
         if (mirrorH) x = 1f - x
         if (mirrorV) y = 1f - y
 
-        val unrotatedX = (x - 0.5f) * orientedAspect
-        val unrotatedY = y - 0.5f
-        val cosine = cos(straightenRadians)
-        val sine = sin(straightenRadians)
-        val pixelX = (cosine * unrotatedX - sine * unrotatedY) * straightenScale
-        val pixelY = (sine * unrotatedX + cosine * unrotatedY) * straightenScale
-        val croppedX = pixelX / orientedAspect + 0.5f
-        val croppedY = pixelY + 0.5f
+        if (!viewFromImage.map((x - 0.5f) * orientedAspect, y - 0.5f, out)) {
+            out[0] = Float.NaN
+            out[1] = Float.NaN
+            return
+        }
+        val croppedX = out[0] / orientedAspect + 0.5f
+        val croppedY = out[1] + 0.5f
 
         out[0] = if (cropWidth != 0f) (croppedX - cropX) / cropWidth else 0f
         out[1] = if (cropHeight != 0f) (croppedY - cropY) / cropHeight else 0f
+    }
+
+    /**
+     * From the original image to the oriented photo, centred and in photo heights: the space
+     * [viewFromImage] starts from, and where the Upright solver measures its guides.
+     */
+    fun orientedFromImage(u: Float, v: Float, out: FloatArray) {
+        var x: Float
+        var y: Float
+        when (quarterTurns) {
+            1 -> { x = 1f - v; y = u }
+            2 -> { x = 1f - u; y = 1f - v }
+            3 -> { x = v; y = 1f - u }
+            else -> { x = u; y = v }
+        }
+        if (mirrorH) x = 1f - x
+        if (mirrorV) y = 1f - y
+        out[0] = (x - 0.5f) * orientedAspect
+        out[1] = y - 0.5f
+    }
+
+    /**
+     * [framedFromImage] as a single matrix, from the original image's pixels to the frame's
+     * normalised coordinates: what a canvas needs to draw the photo as the stage frames it.
+     */
+    fun framedFromImagePixels(): Homography {
+        val toNormalised = Homography.scale(1.0 / sourceWidth.coerceAtLeast(1), 1.0 / sourceHeight.coerceAtLeast(1))
+        val turned = when (quarterTurns) {
+            1 -> Homography.of(0.0, -1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+            2 -> Homography.of(-1.0, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, 0.0, 1.0)
+            3 -> Homography.of(0.0, 1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 1.0)
+            else -> Homography.scale(1.0, 1.0)
+        }
+        val mirrored = Homography.of(
+            if (mirrorH) -1.0 else 1.0, 0.0, if (mirrorH) 1.0 else 0.0,
+            0.0, if (mirrorV) -1.0 else 1.0, if (mirrorV) 1.0 else 0.0,
+            0.0, 0.0, 1.0,
+        )
+        val aspect = orientedAspect.toDouble()
+        val centred = Homography.of(aspect, 0.0, -aspect / 2, 0.0, 1.0, -0.5, 0.0, 0.0, 1.0)
+        val uncentred = Homography.of(1 / aspect, 0.0, 0.5, 0.0, 1.0, 0.5, 0.0, 0.0, 1.0)
+        val cropped = Homography.of(
+            1.0 / cropWidth, 0.0, -cropX.toDouble() / cropWidth,
+            0.0, 1.0 / cropHeight, -cropY.toDouble() / cropHeight,
+            0.0, 0.0, 1.0,
+        )
+        return cropped * uncentred * viewFromImage * centred * mirrored * turned * toNormalised
+    }
+
+    /** Whether a point [imageFromFramed] wrote lies beyond the photo. */
+    fun isOutside(point: FloatArray): Boolean {
+        val x = point[0]
+        val y = point[1]
+        return x.isNaN() || y.isNaN() || x < 0f || x > 1f || y < 0f || y > 1f
     }
 
 }
@@ -128,4 +196,5 @@ fun RenderParameters.frameGeometry(sourceWidth: Int, sourceHeight: Int) = FrameG
     quarterTurns = normalizedQuarterTurns(),
     mirrorH = mirrorH,
     mirrorV = mirrorV,
+    perspective = perspective,
 )

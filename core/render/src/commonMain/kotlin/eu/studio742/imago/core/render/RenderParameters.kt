@@ -40,6 +40,7 @@ data class RenderParameters(
     val rotation: Int = 0,
     val mirrorH: Boolean = false,
     val mirrorV: Boolean = false,
+    val perspective: PerspectiveParameters = PerspectiveParameters(),
     /**
      * The active masks, already resolved from the recipe.
      *
@@ -68,6 +69,7 @@ data class RenderParameters(
             rotation = 0,
             mirrorH = false,
             mirrorV = false,
+            perspective = PerspectiveParameters(),
         ) == RenderParameters()
 
     /**

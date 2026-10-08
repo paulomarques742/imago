@@ -7,6 +7,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -28,6 +33,7 @@ import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.AlbumAddition
 import eu.studio742.imago.core.model.ImmichConnection
+import eu.studio742.imago.core.model.ImmichEdit
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.LibraryFilter
 import eu.studio742.imago.core.model.RECENT_FILTER_DAYS
@@ -453,6 +459,40 @@ class OkHttpImmichApi(
         ).close()
     }
 
+    override suspend fun getAssetEdits(connection: ImmichConnection, assetId: String): List<ImmichEdit> =
+        withContext(Dispatchers.IO) {
+            executeJson<AssetEditsResponseDto>(
+                request = Request.Builder().url(endpoint(connection, assetEditsPath(assetId))).get().build(),
+                apiKey = connection.apiKey,
+                permission = ImmichKeyPermissions.GET_ASSET_EDITS,
+            ).edits.map { it.toDomain() }
+        }
+
+    override suspend fun replaceAssetEdits(
+        connection: ImmichConnection,
+        assetId: String,
+        edits: List<ImmichEdit>,
+    ): Unit = withContext(Dispatchers.IO) {
+        // The server wants at least one edit: none is said with DELETE, not with an empty list.
+        if (edits.isEmpty()) {
+            execute(
+                request = Request.Builder().url(endpoint(connection, assetEditsPath(assetId))).delete().build(),
+                apiKey = connection.apiKey,
+                permission = ImmichKeyPermissions.REMOVE_ASSET_EDITS,
+            ).close()
+            return@withContext
+        }
+        val body = json.encodeToString(AssetEditsCreateDto(edits.map(AssetEditActionItemDto::of)))
+            .toRequestBody(JSON_MEDIA_TYPE)
+        execute(
+            request = Request.Builder().url(endpoint(connection, assetEditsPath(assetId))).put(body).build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.EDIT_ASSET,
+        ).close()
+    }
+
+    private fun assetEditsPath(assetId: String) = ImmichContract.ASSET_EDITS.replace("{id}", assetId)
+
     private fun updateAsset(connection: ImmichConnection, assetId: String, payload: UpdateAssetDto) {
         val path = ImmichContract.UPDATE_ASSET.replace("{id}", assetId)
         val body = json.encodeToString(payload).toRequestBody(JSON_MEDIA_TYPE)
@@ -647,6 +687,58 @@ private data class AssetMediaResponseDto(val id: String, val status: String)
 private data class StackCreateDto(val assetIds: List<String>)
 
 @Serializable
+private data class AssetEditsCreateDto(val edits: List<AssetEditActionItemDto>)
+
+@Serializable
+private data class AssetEditsResponseDto(val edits: List<AssetEditActionItemDto> = emptyList())
+
+/**
+ * One edit as it travels. The parameters are a different object for each action, which is why they
+ * are read and written by hand from the action instead of through three DTOs and a polymorphic
+ * serializer.
+ */
+@Serializable
+private data class AssetEditActionItemDto(val action: String, val parameters: JsonObject) {
+    fun toDomain(): ImmichEdit {
+        fun number(name: String): Int = parameters[name]?.jsonPrimitive?.doubleOrNull?.roundToLong()?.toInt()
+            ?: throw ImmichApiException.Server(200, "invalid response: edit $action without $name")
+        return when (action) {
+            "crop" -> ImmichEdit.Crop(number("x"), number("y"), number("width"), number("height"))
+            "rotate" -> ImmichEdit.Rotate(number("angle"))
+            "mirror" -> ImmichEdit.Mirror(
+                when (parameters["axis"]?.jsonPrimitive?.contentOrNull) {
+                    "horizontal" -> ImmichEdit.MirrorAxis.HORIZONTAL
+                    "vertical" -> ImmichEdit.MirrorAxis.VERTICAL
+                    else -> throw ImmichApiException.Server(200, "invalid response: mirror without a known axis")
+                },
+            )
+            else -> throw ImmichApiException.Server(200, "invalid response: unknown edit $action")
+        }
+    }
+
+    companion object {
+        fun of(edit: ImmichEdit) = when (edit) {
+            is ImmichEdit.Crop -> AssetEditActionItemDto(
+                "crop",
+                buildJsonObject {
+                    put("x", edit.x)
+                    put("y", edit.y)
+                    put("width", edit.width)
+                    put("height", edit.height)
+                },
+            )
+            is ImmichEdit.Rotate -> AssetEditActionItemDto("rotate", buildJsonObject { put("angle", edit.angle) })
+            is ImmichEdit.Mirror -> AssetEditActionItemDto(
+                "mirror",
+                buildJsonObject {
+                    put("axis", if (edit.axis == ImmichEdit.MirrorAxis.HORIZONTAL) "horizontal" else "vertical")
+                },
+            )
+        }
+    }
+}
+
+@Serializable
 private data class ApiKeyDto(val permissions: List<String>)
 
 @Serializable
@@ -713,6 +805,10 @@ private data class ExifResponseDto(
     val model: String? = null,
     val lensModel: String? = null,
     val description: String? = null,
+    // A number in v2 and an integer in v3: read as a number, so both arrive.
+    val exifImageWidth: Double? = null,
+    val exifImageHeight: Double? = null,
+    val orientation: String? = null,
 ) {
     fun toDomain() = AssetExif(
         fNumber = fNumber,
@@ -723,6 +819,9 @@ private data class ExifResponseDto(
         model = model?.takeIf(String::isNotBlank),
         lensModel = lensModel?.takeIf(String::isNotBlank),
         description = description?.takeIf(String::isNotBlank),
+        imageWidth = exifImageWidth?.toInt(),
+        imageHeight = exifImageHeight?.toInt(),
+        orientation = orientation?.takeIf(String::isNotBlank),
     )
 }
 

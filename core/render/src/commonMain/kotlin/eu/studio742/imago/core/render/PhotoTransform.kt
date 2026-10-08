@@ -103,10 +103,10 @@ internal fun photoScaledSize(
  * Existing in two forms — and not in two implementations — is what lets the crop frame sit exactly
  * on the photo: whoever draws the frame and whoever draws the photo read from here.
  *
- * **Straightening does not enter this calculation.** The shader divides the coordinates by
- * `uStraightenScale`, that is, it enlarges the sampling until the corners stop being empty; the drawn
- * rectangle is the same with and without fine rotation. It is counter-intuitive and someone will
- * come along wanting to fix it.
+ * **Straightening and perspective do not enter this calculation.** They live in the shader's
+ * `uImageFromView`, which resamples the photo inside the same rectangle — enlarging it until the
+ * corners stop being empty, when the crop is constrained; the drawn rectangle is the same with and
+ * without them. It is counter-intuitive and someone will come along wanting to fix it.
  */
 data class PhotoBounds(
     val left: Float,

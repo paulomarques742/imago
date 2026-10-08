@@ -16,6 +16,8 @@ import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
  * neighbourhood and so can only run after the whole image has been toned.
  */
 object BitmapPhotoProcessor {
+    /** Opaque white, as `PhotoShaders.COMPOSITE` writes it. */
+    private const val OUTSIDE_COLOR = -0x1
 
     /**
      * @param geometry the bridge between this bitmap and the original image, needed because the
@@ -34,7 +36,40 @@ object BitmapPhotoProcessor {
         geometry: FrameGeometry? = null,
         renderScale: Float = 1f,
     ): T {
-        if (parameters.isColorNeutral) return bitmap
+        if (!parameters.isColorNeutral) process(bitmap, parameters, geometry, renderScale)
+        geometry?.takeIf { it.showsOutside }?.let { paintOutside(bitmap, it) }
+        return bitmap
+    }
+
+    /**
+     * What the perspective leaves uncovered, white — after the processing, so that exposure or a
+     * vignette never turn it grey. The shader does the same by returning white before any of it.
+     */
+    private fun paintOutside(bitmap: PixelSurface, geometry: FrameGeometry) {
+        val width = bitmap.width
+        val row = IntArray(width)
+        val point = FloatArray(2)
+        for (y in 0 until bitmap.height) {
+            var touched = false
+            for (x in 0 until width) {
+                geometry.imageFromFramed((x + .5f) / width, (y + .5f) / bitmap.height, point)
+                if (!geometry.isOutside(point)) continue
+                if (!touched) {
+                    bitmap.getPixels(row, 0, width, 0, y, width, 1)
+                    touched = true
+                }
+                row[x] = OUTSIDE_COLOR
+            }
+            if (touched) bitmap.setPixels(row, 0, width, 0, y, width, 1)
+        }
+    }
+
+    private fun <T : PixelSurface> process(
+        bitmap: T,
+        parameters: RenderParameters,
+        geometry: FrameGeometry?,
+        renderScale: Float,
+    ) {
         val field = if (parameters.needsMaskField) {
             LocalMaskField.build(
                 framedWidth = bitmap.width,
@@ -54,7 +89,6 @@ object BitmapPhotoProcessor {
             }
             applyFinishPass(bitmap, parameters, pyramid, field, renderScale)
         }
-        return bitmap
     }
 
     /**

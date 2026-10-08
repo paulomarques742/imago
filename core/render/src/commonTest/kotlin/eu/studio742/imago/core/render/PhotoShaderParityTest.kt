@@ -325,11 +325,19 @@ class PhotoShaderParityTest {
         assertTrue(mirror in 0 until rotation)
     }
 
+    /**
+     * Straighten and perspective reach the shader as `FrameGeometry.imageFromView` and nothing else:
+     * the sampling multiplies by it and divides by the depth, and a point the photo does not cover
+     * leaves white before any adjustment.
+     */
     @Test
-    fun fineRotationUsesTheInverseTransformAndCoverScale() {
-        assertContains("cos(uStraightenRadians)", "the cosine of the fine rotation")
-        assertContains("-sine * pixel.x + cosine * pixel.y", "the inverse rotation of the sampling")
-        assertContains(") / uStraightenScale", "the zoom that avoids empty corners")
+    fun theFineGeometryIsTheSharedMatrix() {
+        assertContains("uniform mat3 uImageFromView;", "the matrix FrameGeometry computes")
+        assertContains("vec3 image = uImageFromView * view;", "the sampling through that matrix")
+        assertContains("image.x / image.z / uImageAspect + 0.5", "the projective division")
+        assertContains("if (image.z <= 0.0) return vec2(-1.0);", "the horizon of the virtual camera")
+        assertContains("fragColor = vec4(1.0);", "white for what the photo does not cover")
+        assertTrue(composite.indexOf("fragColor = vec4(1.0);") < composite.indexOf("vec4 staged = texture(uStage, source);"))
     }
 
     /**

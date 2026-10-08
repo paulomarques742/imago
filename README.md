@@ -37,8 +37,10 @@ as the screen shows it. Your photos never pass through anyone else’s server.
 - Connect with the server address and an API key (Immich 2.6.0 or later). The key only needs
   `user.read`, `asset.read`, `asset.view` and `asset.download`: with those IMAGO edits and exports to
   the device without being able to change anything on the server. `album.read`, `asset.upload`,
-  `stack.create`, `asset.update` and `asset.delete` are optional, and each turns on only what it
-  does.
+  `stack.create`, `asset.update`, `asset.delete` and the `asset.edit` ones are optional, and each
+  turns on only what it does.
+- Crop, rotation and mirror are written to Immich's own edits, so the server shows the photo framed
+  as in IMAGO without exporting it.
 - One library can have several addresses, at home and away; the app uses whichever answers.
 - Exports go back to the server at full resolution, stacked on the original.
 - No server? IMAGO edits your phone’s gallery the same way.

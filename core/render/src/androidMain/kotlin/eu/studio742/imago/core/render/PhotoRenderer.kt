@@ -475,8 +475,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         val orientedWidth = if (swapsDimensions) imageHeight else imageWidth
         val orientedHeight = if (swapsDimensions) imageWidth else imageHeight
         val imageAspect = orientedWidth.toFloat() / orientedHeight.coerceAtLeast(1)
-        program.float("uStraightenRadians", Math.toRadians(active.straighten.toDouble()).toFloat())
-        program.float("uStraightenScale", straightenCoverScale(imageAspect, active.straighten))
+        program.mat3("uImageFromView", frameTransform(imageAspect, active.straighten, active.perspective).inverse().values())
+        program.boolean("uShowOutside", !active.perspective.constrainCrop)
         program.float("uImageAspect", imageAspect)
         // Grain is measured in image pixels, and what is drawn here is the cropped frame: this is the
         // extent the shader's `screen` covers, and the denominator that gives it its scale.

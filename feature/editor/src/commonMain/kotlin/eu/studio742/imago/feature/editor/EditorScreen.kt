@@ -3,6 +3,7 @@
 package eu.studio742.imago.feature.editor
 
 import eu.studio742.imago.core.designsystem.i18n.uiText
+import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.designsystem.i18n.resolve
 import eu.studio742.imago.core.designsystem.i18n.resolveNow
 import org.jetbrains.compose.resources.stringResource
@@ -44,6 +45,7 @@ import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
@@ -87,6 +89,7 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Timeline
+import androidx.compose.material.icons.outlined.Transform
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -108,6 +111,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -169,6 +174,7 @@ import eu.studio742.imago.core.render.MIN_PHOTO_ZOOM
 import eu.studio742.imago.core.render.PhotoTransform
 import eu.studio742.imago.core.render.frameGeometry
 import eu.studio742.imago.core.render.photoBounds
+import eu.studio742.imago.core.render.PhotoBounds
 import eu.studio742.imago.core.render.drag
 import eu.studio742.imago.core.render.pinch
 import eu.studio742.imago.core.render.settle
@@ -192,6 +198,17 @@ import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.CropRect
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.Geometry
+import eu.studio742.imago.core.model.Perspective
+import eu.studio742.imago.core.model.MAX_UPRIGHT_GUIDES
+import eu.studio742.imago.core.model.MIN_UPRIGHT_GUIDES
+import eu.studio742.imago.core.model.UPRIGHT_GUIDED
+import eu.studio742.imago.core.model.UPRIGHT_AUTO
+import eu.studio742.imago.core.model.UPRIGHT_FULL
+import eu.studio742.imago.core.model.UPRIGHT_LEVEL
+import eu.studio742.imago.core.model.UPRIGHT_VERTICAL
+import eu.studio742.imago.core.model.UPRIGHT_OFF
+import eu.studio742.imago.core.model.UprightGuide
+import eu.studio742.imago.core.render.asComposeImage
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -356,6 +373,18 @@ fun EditorRoute(
                 onRotate = viewModel::rotateMask,
             )
         },
+        perspectiveActions = remember(viewModel) {
+            PerspectiveActions(
+                onConstrainCrop = viewModel::setConstrainCrop,
+                onReset = viewModel::resetPerspective,
+                onUprightMode = viewModel::setUprightMode,
+                onGuideGestureStart = viewModel::beginGuideGesture,
+                onGuidesChange = viewModel::updateGuides,
+                onGuideGestureEnd = viewModel::finishGuideGesture,
+                onRemoveLastGuide = viewModel::removeLastGuide,
+                onClearGuides = viewModel::clearGuides,
+            )
+        },
         colorGradeActions = remember(viewModel) {
             ColorGradeActions(
                 onSelectWheel = viewModel::selectColorGradeWheel,
@@ -497,6 +526,7 @@ private fun EditorScreen(
     onExportPermissionDenied: () -> Unit,
     maskActions: MaskActions,
     colorGradeActions: ColorGradeActions,
+    perspectiveActions: PerspectiveActions,
     recipeActions: RecipeEditActions?,
 ) {
     val recipeMode = recipeActions != null
@@ -596,6 +626,14 @@ private fun EditorScreen(
     val currentGeometry by rememberUpdatedState(state.recipe?.geometry)
     val maskHitRadius = with(chromeDensity) { MASK_HANDLE_HIT_RADIUS.toPx() }
     // The bridge between what the mask stores — image coordinates — and what is on screen.
+    // The guided Upright is on while its sheet is open: elsewhere a finger on the photo is the photo's.
+    val guidingNow by rememberUpdatedState(
+        state.sheet == EditorSheet.PERSPECTIVE && state.recipe?.geometry?.perspective?.upright == UPRIGHT_GUIDED,
+    )
+    val currentGuides by rememberUpdatedState(state.recipe?.geometry?.perspective?.guides.orEmpty())
+    var guideFinger by remember(assetId) { mutableStateOf<Offset?>(null) }
+    val guideHitRadius = with(chromeDensity) { GUIDE_HANDLE_HIT_RADIUS.toPx() }
+    val loupePhoto = remember(state.bitmap) { state.bitmap?.asComposeImage() }
     val maskFrameGeometry by rememberUpdatedState(
         state.bitmap?.let { state.renderParameters.frameGeometry(it.pixelWidth, it.pixelHeight) },
     )
@@ -867,6 +905,37 @@ private fun EditorScreen(
                                 },
                                 modifier = Modifier.fillMaxSize(),
                             )
+                            val guidesGeometry = maskFrameGeometry
+                            if (guidingNow && !cropMode && guidesGeometry != null && stageSize != IntSize.Zero) {
+                                UprightGuidesOverlay(
+                                    guides = state.recipe?.geometry?.perspective?.guides.orEmpty(),
+                                    bounds = photoBounds(
+                                        surfaceWidth = stageSize.width,
+                                        surfaceHeight = stageSize.height,
+                                        imageWidth = imageSize.first,
+                                        imageHeight = imageSize.second,
+                                        transform = transform,
+                                        quarterTurns = quarterTurns,
+                                    ),
+                                    geometry = guidesGeometry,
+                                    photo = loupePhoto,
+                                    finger = guideFinger,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            if (editingKey in PERSPECTIVE_ADJUSTMENTS && !cropMode && stageSize != IntSize.Zero) {
+                                PerspectiveGrid(
+                                    bounds = photoBounds(
+                                        surfaceWidth = stageSize.width,
+                                        surfaceHeight = stageSize.height,
+                                        imageWidth = imageSize.first,
+                                        imageHeight = imageSize.second,
+                                        transform = transform,
+                                        quarterTurns = quarterTurns,
+                                    ),
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                             val maskToDraw = selectedMaskNow?.takeIf { maskingNow && !cropMode }
                             val maskGeometry = maskFrameGeometry
                             if (maskToDraw != null && maskGeometry != null && stageSize != IntSize.Zero) {
@@ -1006,6 +1075,31 @@ private fun EditorScreen(
                                                 }
                                             }
 
+                                            // The guided Upright's guides, the masks' way: in image
+                                            // coordinates, an end under the finger is dragged, and
+                                            // elsewhere — with room for another — the finger draws a
+                                            // new guide from where it landed.
+                                            var guideGrip: GuideGrip? = null
+                                            var workingGuides = currentGuides
+                                            var guiding = false
+                                            if (guidingNow && !cropping && maskGeometry != null) {
+                                                val projection = MaskProjection(bounds(current), maskGeometry)
+                                                guideGrip = hitGuideEnd(workingGuides, projection, down.position, guideHitRadius)
+                                                if (guideGrip == null && workingGuides.size < MAX_UPRIGHT_GUIDES) {
+                                                    val start = projection.toImage(down.position)
+                                                    if (start.x in 0f..1f && start.y in 0f..1f) {
+                                                        workingGuides = workingGuides + UprightGuide(start.x, start.y, start.x, start.y)
+                                                        guideGrip = GuideGrip(workingGuides.lastIndex, 2)
+                                                    }
+                                                }
+                                                if (guideGrip != null) {
+                                                    guiding = true
+                                                    perspectiveActions.onGuideGestureStart()
+                                                    perspectiveActions.onGuidesChange(workingGuides)
+                                                    guideFinger = down.position
+                                                }
+                                            }
+
                                             // `fullImageSize` and not `state.bitmap` for the same
                                             // reason: when the block started the bitmap could still
                                             // be null, and the aspect ratio got stuck at 1:1.
@@ -1037,6 +1131,8 @@ private fun EditorScreen(
                                                     // The same abandonment for the mask: without it a
                                                     // radius would be left half pulled by the pinch.
                                                     maskHandle = null
+                                                    guideGrip = null
+                                                    guideFinger = null
                                                     pinching = true
                                                     val centroid = event.calculateCentroid(useCurrent = true)
                                                     if (centroid != Offset.Unspecified) {
@@ -1128,6 +1224,20 @@ private fun EditorScreen(
                                                     }
                                                     moved = true
                                                     change.consume()
+                                                } else if (guideGrip != null && !pinching && maskGeometry != null) {
+                                                    val change = pressed.firstOrNull() ?: continue
+                                                    val grip = guideGrip
+                                                    val point = MaskProjection(bounds(current), maskGeometry).toImage(change.position)
+                                                    workingGuides = workingGuides.mapIndexed { index, guide ->
+                                                        if (index != grip.index) {
+                                                            guide
+                                                        } else {
+                                                            guide.withEnd(grip.end, point.x.coerceIn(0f, 1f), point.y.coerceIn(0f, 1f))
+                                                        }
+                                                    }
+                                                    perspectiveActions.onGuidesChange(workingGuides)
+                                                    guideFinger = change.position
+                                                    change.consume()
                                                 } else if (handle != null && !pinching) {
                                                     val change = pressed.firstOrNull() ?: continue
                                                     val delta = change.position - change.previousPosition
@@ -1186,6 +1296,10 @@ private fun EditorScreen(
 
                                             if (cropping && geometry != null) onCropGestureFinished()
                                             if (maskHandle != null) onAdjustmentFinished()
+                                            if (guiding) {
+                                                guideFinger = null
+                                                perspectiveActions.onGuideGestureEnd()
+                                            }
                                             if (moved) {
                                                 val settled = current.settle(
                                                     surfaceWidth = size.width,
@@ -1439,6 +1553,7 @@ private fun EditorScreen(
                         onResetGeometry = onResetGeometry,
                         maskActions = maskActions,
                         colorGradeActions = colorGradeActions,
+                        perspectiveActions = perspectiveActions,
                     )
                     // The curve floats over the photo; there the bar would get in the way — and as it
                     // is the bar that now brings the system bar's inset, without it a spacer stands in
@@ -1448,7 +1563,7 @@ private fun EditorScreen(
                     } else {
                         EditorToolBar(
                             selected = when (state.sheet) {
-                                EditorSheet.CROP -> EditorTool.CROP
+                                EditorSheet.CROP, EditorSheet.PERSPECTIVE -> EditorTool.CROP
                                 EditorSheet.HISTORY -> EditorTool.HISTORY
                                 else -> EditorTool.ADJUSTMENTS
                             },
@@ -1950,6 +2065,7 @@ private fun AdjustmentPanel(
     onResetGeometry: () -> Unit,
     maskActions: MaskActions,
     colorGradeActions: ColorGradeActions,
+    perspectiveActions: PerspectiveActions,
 ) {
     // Dragging a value fades the panel to let the photo show underneath. In a rail there is nothing
     // underneath — the photo is beside it, always in view — and fading it would make the column the
@@ -2086,6 +2202,17 @@ private fun AdjustmentPanel(
                 EditorSheet.CROP -> CropAspectSheet(
                     state = state,
                     onSelectCropAspect = onSelectCropAspect,
+                    onOpenPerspective = { onSelectSheet(EditorSheet.PERSPECTIVE) },
+                )
+                EditorSheet.PERSPECTIVE -> PerspectivePanel(
+                    state = state,
+                    editingKey = editingKey,
+                    onEditing = onEditing,
+                    onAdjustment = onAdjustment,
+                    onAdjustmentFinished = onAdjustmentFinished,
+                    onResetAdjustment = onResetAdjustment,
+                    actions = perspectiveActions,
+                    onClose = { onSelectSheet(EditorSheet.CROP) },
                 )
                 EditorSheet.HISTORY -> HistoryPanel(
                     entries = state.history,
@@ -2307,6 +2434,7 @@ private fun SliderPanel(
 @Composable
 private fun EditorSheet.subToolLabel(): String = when (this) {
     EditorSheet.CURVE -> stringResource(Res.string.editor_chip_curve)
+    EditorSheet.PERSPECTIVE -> stringResource(Res.string.editor_chip_perspective)
     EditorSheet.HSL -> "HSL"
     EditorSheet.COLOR_GRADING -> stringResource(Res.string.editor_chip_grading)
     else -> ""
@@ -2315,6 +2443,7 @@ private fun EditorSheet.subToolLabel(): String = when (this) {
 private fun EditorSheet.subToolIcon(): ImageVector = when (this) {
     EditorSheet.HSL -> Icons.Filled.Circle
     EditorSheet.COLOR_GRADING -> Icons.Outlined.ColorLens
+    EditorSheet.PERSPECTIVE -> Icons.Outlined.Transform
     else -> Icons.Outlined.Timeline
 }
 
@@ -2739,14 +2868,18 @@ private fun hitCropHandle(frame: CropFrame, position: Offset, radius: Float): Cr
 private fun CropAspectSheet(
     state: EditorUiState,
     onSelectCropAspect: (String?) -> Unit,
+    onOpenPerspective: () -> Unit,
 ) {
     val geometry = state.recipe?.geometry ?: Geometry()
     val aspectDescription = stringResource(Res.string.editor_crop_aspect_description)
+    // The perspective sits where the curve sits beside Light: fixed at the end, not lost after the
+    // last aspect ratio of a row that scrolls.
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
     Row(
         modifier = Modifier
-            .fillMaxWidth()
+            .weight(1f)
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = ImagoSpacing.Lg, vertical = ImagoSpacing.Md)
+            .padding(start = ImagoSpacing.Lg, end = ImagoSpacing.Sm, top = ImagoSpacing.Md, bottom = ImagoSpacing.Md)
             .semantics { contentDescription = aspectDescription },
         horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
     ) {
@@ -2768,7 +2901,223 @@ private fun CropAspectSheet(
             )
         }
     }
+    SubToolChip(
+        label = EditorSheet.PERSPECTIVE.subToolLabel(),
+        icon = EditorSheet.PERSPECTIVE.subToolIcon(),
+        onClick = onOpenPerspective,
+    )
+    }
 }
+
+/** What the perspective sheet asks of the screen besides the sliders, which go the way of all others. */
+data class PerspectiveActions(
+    val onConstrainCrop: (Boolean) -> Unit,
+    val onReset: () -> Unit,
+    val onUprightMode: (String) -> Unit,
+    val onGuideGestureStart: () -> Unit,
+    val onGuidesChange: (List<UprightGuide>) -> Unit,
+    val onGuideGestureEnd: () -> Unit,
+    val onRemoveLastGuide: () -> Unit,
+    val onClearGuides: () -> Unit,
+)
+
+/**
+ * The perspective, opened from the crop the way the curve opens from Light: the same `SliderPanel`,
+ * under a header that goes back to the crop.
+ *
+ * The stage shows the result and not the crop's whole photo: the sliders are judged by the frame
+ * they produce, and the grid drawn while one is dragged is what tells parallel lines from nearly
+ * parallel ones.
+ */
+@Composable
+private fun PerspectivePanel(
+    state: EditorUiState,
+    editingKey: Any?,
+    onEditing: (Any?) -> Unit,
+    onAdjustment: (Adjustment, Float) -> Unit,
+    onAdjustmentFinished: () -> Unit,
+    onResetAdjustment: (Adjustment) -> Unit,
+    actions: PerspectiveActions,
+    onClose: () -> Unit,
+) {
+    val chromeAlpha by animateFloatAsState(
+        targetValue = if (editingKey == null) 1f else 0f,
+        animationSpec = tween(durationMillis = 160),
+        label = "perspectiveChrome",
+    )
+    val perspective = state.recipe?.geometry?.perspective ?: Perspective()
+    Column(Modifier.fillMaxSize()) {
+        SubToolHeader(
+            title = EditorSheet.PERSPECTIVE.subToolLabel(),
+            onClose = onClose,
+            onReset = actions.onReset.takeIf { perspective != Perspective() },
+            modifier = Modifier.alpha(chromeAlpha).padding(horizontal = ImagoSpacing.Lg),
+        )
+        UprightRow(
+            perspective = perspective,
+            detecting = state.isDetectingUpright,
+            notice = state.uprightNotice,
+            actions = actions,
+            modifier = Modifier.alpha(chromeAlpha).padding(horizontal = ImagoSpacing.Lg),
+        )
+        ConstrainCropRow(
+            checked = perspective.constrainCrop,
+            onCheckedChange = actions.onConstrainCrop,
+            modifier = Modifier.alpha(chromeAlpha).padding(horizontal = ImagoSpacing.Lg),
+        )
+        SliderPanel(
+            state = state,
+            groups = listOf(
+                AdjustmentGroup(
+                    title = null,
+                    entries = listOf(
+                        Adjustment.PERSPECTIVE_VERTICAL to stringResource(Res.string.editor_perspective_vertical),
+                        Adjustment.PERSPECTIVE_HORIZONTAL to stringResource(Res.string.editor_perspective_horizontal),
+                        Adjustment.PERSPECTIVE_ASPECT to stringResource(Res.string.editor_perspective_aspect),
+                        Adjustment.PERSPECTIVE_SCALE to stringResource(Res.string.editor_perspective_scale),
+                        Adjustment.PERSPECTIVE_OFFSET_X to stringResource(Res.string.editor_perspective_offset_x),
+                        Adjustment.PERSPECTIVE_OFFSET_Y to stringResource(Res.string.editor_perspective_offset_y),
+                    ),
+                ),
+            ),
+            editingKey = editingKey,
+            onEditing = onEditing,
+            onAdjustment = onAdjustment,
+            onAdjustmentFinished = onAdjustmentFinished,
+            onResetAdjustment = onResetAdjustment,
+        )
+    }
+}
+
+/**
+ * Lightroom's Upright modes that the app can do so far — off and guided — and, in guided, what the
+ * finger does on the photo and how many guides there are. The automatic modes join this row when
+ * they exist, not before.
+ */
+@Composable
+private fun UprightRow(
+    perspective: Perspective,
+    detecting: Boolean,
+    notice: UiText?,
+    actions: PerspectiveActions,
+    modifier: Modifier = Modifier,
+) {
+    val guided = perspective.upright == UPRIGHT_GUIDED
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(Res.string.editor_upright),
+                style = MaterialTheme.typography.bodyMedium,
+                color = ImagoColors.TextPrimary,
+                modifier = Modifier.weight(1f),
+            )
+            if (detecting) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = ImagoColors.Gold)
+            }
+        }
+        // Six modes do not fit a phone's width: the row scrolls, as the crop's aspect ratios do.
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+        ) {
+            listOf(UPRIGHT_OFF, UPRIGHT_AUTO, UPRIGHT_LEVEL, UPRIGHT_VERTICAL, UPRIGHT_FULL, UPRIGHT_GUIDED).forEach { mode ->
+                CropAspectButton(
+                    label = stringResource(uprightModeName(mode)),
+                    selected = perspective.upright == mode,
+                    onClick = { actions.onUprightMode(mode) },
+                )
+            }
+        }
+        notice?.let {
+            Text(
+                text = it.resolve(),
+                style = MaterialTheme.typography.bodySmall,
+                color = ImagoColors.TextTertiary,
+            )
+        }
+        if (guided) {
+            Text(
+                text = stringResource(Res.string.editor_upright_guided_hint, MIN_UPRIGHT_GUIDES, MAX_UPRIGHT_GUIDES),
+                style = MaterialTheme.typography.bodySmall,
+                color = ImagoColors.TextTertiary,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(Res.string.editor_upright_guides_count, perspective.guides.size, MAX_UPRIGHT_GUIDES),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = ImagoColors.TextSecondary,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = actions.onRemoveLastGuide, enabled = perspective.guides.isNotEmpty()) {
+                    Text(stringResource(Res.string.editor_upright_remove_last))
+                }
+                TextButton(onClick = actions.onClearGuides, enabled = perspective.guides.isNotEmpty()) {
+                    Text(stringResource(Res.string.editor_upright_clear))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConstrainCropRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(ImagoRadii.Small))
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .sizeIn(minHeight = ImagoSizes.TouchTarget)
+            .padding(vertical = ImagoSpacing.Xs),
+        horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(Res.string.editor_constrain_crop),
+                style = MaterialTheme.typography.bodyMedium,
+                color = ImagoColors.TextPrimary,
+            )
+            Text(
+                text = stringResource(Res.string.editor_constrain_crop_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = ImagoColors.TextTertiary,
+            )
+        }
+        // The row is the control: the switch only shows its state, so the touch is not counted twice.
+        Switch(
+            checked = checked,
+            onCheckedChange = null,
+            colors = SwitchDefaults.colors(checkedTrackColor = ImagoColors.Gold),
+        )
+    }
+}
+
+/**
+ * The grid drawn over the photo while a perspective slider is dragged. Lines that should be vertical
+ * or level are judged against it; without it "almost parallel" looks parallel.
+ */
+@Composable
+private fun PerspectiveGrid(bounds: PhotoBounds, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val stroke = 1.dp.toPx()
+        val color = Color.White.copy(alpha = 0.35f)
+        for (division in 1 until PERSPECTIVE_GRID_DIVISIONS) {
+            val x = bounds.left + bounds.width * division / PERSPECTIVE_GRID_DIVISIONS
+            val y = bounds.top + bounds.height * division / PERSPECTIVE_GRID_DIVISIONS
+            drawLine(color, Offset(x, bounds.top), Offset(x, bounds.bottom), stroke)
+            drawLine(color, Offset(bounds.left, y), Offset(bounds.right, y), stroke)
+        }
+    }
+}
+
+private const val PERSPECTIVE_GRID_DIVISIONS = 8
+
+/** How far from a guide's end a finger still takes it: the size of a fingertip, as the crop's handles. */
+private val GUIDE_HANDLE_HIT_RADIUS = 28.dp
 
 /**
  * Rotate, flip and reset, in a capsule over the photo.

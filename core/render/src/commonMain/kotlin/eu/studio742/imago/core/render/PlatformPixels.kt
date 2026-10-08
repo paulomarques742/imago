@@ -17,6 +17,9 @@ expect fun coil3.Bitmap.toPixelBuffer(): PixelBuffer
 
 expect fun PixelBuffer.toImageBitmap(): ImageBitmap
 
+/** The same pixels, for Compose to draw — not a copy. */
+expect fun coil3.Bitmap.asComposeImage(): ImageBitmap
+
 /** An encoded image (JPEG, PNG, WebP) as pixels, or null if it cannot be read. */
 expect fun decodePixels(bytes: ByteArray): PixelBuffer?
 

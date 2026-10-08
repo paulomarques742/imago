@@ -147,6 +147,9 @@
     <string name="library_permission_stack_create">Stacks each exported edit with its original</string>
     <string name="library_permission_asset_update">Marks and unmarks favorites</string>
     <string name="library_permission_asset_delete">Deletes the photos you ask it to delete</string>
+    <string name="library_permission_asset_edit_get">Reads the crop, rotation and mirror Immich already has, so only what changed is sent</string>
+    <string name="library_permission_asset_edit_create">Sends the crop, rotation and mirror you set in IMAGO, so Immich shows the photo framed the same way</string>
+    <string name="library_permission_asset_edit_delete">Removes them from Immich when you undo them in IMAGO</string>
     <!-- Sharing from other apps to Immich -->
     <string name="library_share_title">Send to Immich</string>
     <string name="library_share_preparing">Preparing %1$d of %2$d</string>

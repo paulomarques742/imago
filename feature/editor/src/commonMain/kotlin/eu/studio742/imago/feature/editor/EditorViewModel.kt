@@ -24,6 +24,7 @@ import eu.studio742.imago.core.render.softwareBitmap
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -45,6 +46,26 @@ import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
 import eu.studio742.imago.core.model.MaskShape
 import eu.studio742.imago.core.model.CropRect
 import eu.studio742.imago.core.model.Geometry
+import eu.studio742.imago.core.model.Perspective
+import eu.studio742.imago.core.model.MAX_UPRIGHT_GUIDES
+import eu.studio742.imago.core.model.AUTOMATIC_UPRIGHT_MODES
+import eu.studio742.imago.core.model.UPRIGHT_AUTO
+import eu.studio742.imago.core.model.UPRIGHT_FULL
+import eu.studio742.imago.core.model.UPRIGHT_LEVEL
+import eu.studio742.imago.core.model.UPRIGHT_VERTICAL
+import eu.studio742.imago.core.render.LineSegment
+import eu.studio742.imago.core.render.RecipePixels
+import eu.studio742.imago.core.render.detectLineSegments
+import eu.studio742.imago.core.render.solveAutoUpright
+import eu.studio742.imago.core.render.toPixelBuffer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import eu.studio742.imago.core.model.UPRIGHT_GUIDED
+import eu.studio742.imago.core.model.UPRIGHT_OFF
+import eu.studio742.imago.core.model.UprightGuide
+import eu.studio742.imago.core.render.frameGeometry
+import eu.studio742.imago.core.render.solveGuidedUpright
+import kotlin.math.hypot
 import eu.studio742.imago.core.model.ColorGrading
 import eu.studio742.imago.core.model.ColorWheel
 import eu.studio742.imago.core.model.HslBand
@@ -156,7 +177,7 @@ enum class EditorPanel { LIGHT, COLOR, DETAIL, EFFECTS, MASKS }
  * [ADJUSTMENTS] is the normal state — the categories and their sliders. The others are modes with
  * their own interface, which replace the panel's content without changing screen.
  */
-enum class EditorSheet { ADJUSTMENTS, CURVE, HSL, COLOR_GRADING, CROP, HISTORY, MASKS, MASK_ADJUSTMENTS }
+enum class EditorSheet { ADJUSTMENTS, CURVE, HSL, COLOR_GRADING, CROP, PERSPECTIVE, HISTORY, MASKS, MASK_ADJUSTMENTS }
 
 /**
  * The buttons of the tools drawer.
@@ -261,7 +282,23 @@ enum class Adjustment(val neutral: Float, val range: ClosedFloatingPointRange<Fl
     GRAIN_ROUGHNESS(50f, 0f..100f),
     GRADE_BLENDING(50f, 0f..100f),
     GRADE_BALANCE(0f, -100f..100f),
+    PERSPECTIVE_VERTICAL(0f, -100f..100f),
+    PERSPECTIVE_HORIZONTAL(0f, -100f..100f),
+    PERSPECTIVE_ASPECT(0f, -100f..100f),
+    PERSPECTIVE_SCALE(0f, -50f..100f),
+    PERSPECTIVE_OFFSET_X(0f, -100f..100f),
+    PERSPECTIVE_OFFSET_Y(0f, -100f..100f),
 }
+
+/** The sliders of the perspective sheet, in Lightroom's order. */
+val PERSPECTIVE_ADJUSTMENTS = listOf(
+    Adjustment.PERSPECTIVE_VERTICAL,
+    Adjustment.PERSPECTIVE_HORIZONTAL,
+    Adjustment.PERSPECTIVE_ASPECT,
+    Adjustment.PERSPECTIVE_SCALE,
+    Adjustment.PERSPECTIVE_OFFSET_X,
+    Adjustment.PERSPECTIVE_OFFSET_Y,
+)
 
 /**
  * The adjustment that has to be off neutral for this one to do anything.
@@ -308,6 +345,12 @@ val Adjustment.labelRes: StringResource
     Adjustment.GRAIN_ROUGHNESS -> Res.string.editor_adj_grain_roughness
     Adjustment.GRADE_BLENDING -> Res.string.editor_adj_grading_blending
     Adjustment.GRADE_BALANCE -> Res.string.editor_adj_grading_balance
+    Adjustment.PERSPECTIVE_VERTICAL -> Res.string.editor_adj_perspective_vertical
+    Adjustment.PERSPECTIVE_HORIZONTAL -> Res.string.editor_adj_perspective_horizontal
+    Adjustment.PERSPECTIVE_ASPECT -> Res.string.editor_adj_perspective_aspect
+    Adjustment.PERSPECTIVE_SCALE -> Res.string.editor_adj_perspective_scale
+    Adjustment.PERSPECTIVE_OFFSET_X -> Res.string.editor_adj_perspective_offset_x
+    Adjustment.PERSPECTIVE_OFFSET_Y -> Res.string.editor_adj_perspective_offset_y
     }
 
 @Composable
@@ -323,6 +366,7 @@ private fun Adjustment.historyIcon(): HistoryIcon = when (this) {
     Adjustment.TEMPERATURE, Adjustment.TINT, Adjustment.VIBRANCE, Adjustment.SATURATION -> HistoryIcon.COLOR
     Adjustment.TEXTURE, Adjustment.CLARITY, Adjustment.DEHAZE -> HistoryIcon.DETAIL
     Adjustment.GRADE_BLENDING, Adjustment.GRADE_BALANCE -> HistoryIcon.GRADE
+    in PERSPECTIVE_ADJUSTMENTS -> HistoryIcon.CROP
     else -> HistoryIcon.EFFECTS
 }
 
@@ -407,6 +451,10 @@ data class EditorUiState(
     /** "Show mask" pins the red; otherwise it only lights up during the gesture. */
     val maskOverlayPinned: Boolean = false,
     val maskNotice: UiText? = null,
+    /** An automatic Upright mode is looking for the photo's lines. */
+    val isDetectingUpright: Boolean = false,
+    /** Said when an automatic mode found no lines to work on; cleared by the next mode. */
+    val uprightNotice: UiText? = null,
     val history: List<HistoryEntry> = emptyList(),
     val historyIndex: Int = 0,
     val isLoading: Boolean = false,
@@ -499,6 +547,20 @@ open class EditorViewModel(
     private var loadJob: Job? = null
     private var conflictsJob: Job? = null
     private var saveJob: Job? = null
+    private val geometryMirror = ImmichGeometryMirror(immichApi, configuration)
+    private var uprightJob: Job? = null
+
+    /**
+     * The lines found in the open photo, kept for as long as it stays open: every automatic mode
+     * solves from the same lines, and so do a quarter turn and a mirror. They are in the original
+     * image's coordinates, which neither changes.
+     */
+    private var detectedLines: Pair<Bitmap, List<LineSegment>>? = null
+    private var mirrorJob: Job? = null
+    /** The recipe whose geometry is waiting to go to Immich, so leaving the photo does not lose it. */
+    private var pendingMirror: EditRecipe? = null
+    /** The last geometry handed to the mirror, so a change of exposure does not ask the server again. */
+    private var mirroredGeometry: Pair<Geometry, Int>? = null
     private var shouldPersist = false
     private var needsNewerApp = false
     private var activeTarget: PhotoEditTarget? = null
@@ -541,6 +603,8 @@ open class EditorViewModel(
         loadJob?.cancel()
         conflictsJob?.cancel()
         saveJob?.cancel()
+        flushGeometryMirror()
+        mirroredGeometry = null
         editStart = null
         pendingChange = null
         shouldPersist = false
@@ -622,6 +686,13 @@ open class EditorViewModel(
                     )
                 }
                 if (target is PhotoEditTarget.Asset) {
+                    // Opening is when another device's recipe reaches this library's server: the
+                    // device that has the key is the one that writes (sync spec, §5.6).
+                    if (existed && !needsNewerApp) {
+                        scheduleGeometryMirror(recipe, delayMillis = 0)
+                    } else {
+                        mirroredGeometry = recipe.geometry to recipe.processVersion
+                    }
                     conflictsJob = viewModelScope.launch {
                         recipes.conflicts(asset.id).collect { versions -> mutableState.update { it.copy(conflicts = versions) } }
                     }
@@ -794,7 +865,15 @@ open class EditorViewModel(
         val maskId = snapshot.selectedMaskId
             ?.takeIf { adjustment.isLocal() && snapshot.sheet == EditorSheet.MASK_ADJUSTMENTS }
             ?.takeIf { current.mask(it) != null }
-        val clamped = value.coerceIn(adjustment.range.start, adjustment.range.endInclusive)
+        val clamped = value.coerceIn(adjustment.range.start, adjustment.range.endInclusive).let { bounded ->
+            // With the crop constrained the frame cannot shrink below the cover: the slider stops at
+            // zero instead of moving with no effect.
+            if (adjustment == Adjustment.PERSPECTIVE_SCALE && current.geometry.perspective.constrainCrop) {
+                bounded.coerceAtLeast(0f)
+            } else {
+                bounded
+            }
+        }
         val existing = if (maskId != null) {
             current.localAdjustmentValue(maskId, adjustment)
         } else {
@@ -805,14 +884,16 @@ open class EditorViewModel(
             editStart = current
             pendingChange = PendingChange.OfAdjustment(adjustment, maskId)
         }
+        // The dormant geometry is cleared first and the change applied after: the other way round, a
+        // perspective slider was the one change this step threw away.
+        val active = current.copy(geometry = current.geometry.activeAtProcess(current.processVersion))
         val edited = if (maskId != null) {
-            current.withLocalAdjustment(maskId, adjustment, clamped)
+            active.withLocalAdjustment(maskId, adjustment, clamped)
         } else {
-            current.withAdjustment(adjustment, clamped)
+            active.withAdjustment(adjustment, clamped)
         }
         val updated = edited.copy(
             processVersion = CURRENT_PROCESS_VERSION,
-            geometry = current.geometry.activeAtProcess(current.processVersion),
             updatedAt = Instant.now().toString(),
         )
         mutableState.update { it.copy(recipe = updated, isSaving = true) }
@@ -1189,6 +1270,206 @@ open class EditorViewModel(
         )
     }
 
+    /** Lightroom's *Constrain Crop*: on, the frame never shows beyond the photo; off, that shows white. */
+    fun setConstrainCrop(enabled: Boolean) {
+        val current = state.value.recipe ?: return
+        val geometry = current.geometry.activeAtProcess(current.processVersion)
+        updateGeometry(
+            updated = current.copy(
+                geometry = geometry.copy(
+                    perspective = geometry.perspective.copy(
+                        constrainCrop = enabled,
+                        scale = if (enabled) geometry.perspective.scale.coerceAtLeast(0f) else geometry.perspective.scale,
+                    ),
+                ),
+            ),
+            detail = uiText(if (enabled) Res.string.editor_history_constrain_on else Res.string.editor_history_constrain_off),
+        )
+    }
+
+    /**
+     * Lightroom's Upright modes that exist so far: off, and guided. Off forgets what the mode found and
+     * its guides; guided keeps the guides there are and solves again.
+     */
+    fun setUprightMode(mode: String) {
+        if (mode in AUTOMATIC_UPRIGHT_MODES) return applyAutomaticUpright(mode)
+        uprightJob?.cancel()
+        mutableState.update { it.copy(isDetectingUpright = false, uprightNotice = null) }
+        val current = state.value.recipe ?: return
+        val geometry = current.geometry.activeAtProcess(current.processVersion)
+        val updated = if (mode == UPRIGHT_GUIDED) {
+            current.copy(geometry = geometry.copy(perspective = geometry.perspective.copy(upright = UPRIGHT_GUIDED)))
+                .withSolvedGuides(geometry.perspective.guides)
+        } else {
+            current.copy(
+                geometry = geometry.copy(
+                    perspective = geometry.perspective.copy(
+                        upright = UPRIGHT_OFF,
+                        uprightRoll = 0f,
+                        uprightPitch = 0f,
+                        uprightYaw = 0f,
+                        guides = emptyList(),
+                    ),
+                ),
+            )
+        }
+        updateGeometry(
+            updated = updated,
+            detail = uiText(if (mode == UPRIGHT_GUIDED) Res.string.editor_history_upright_guided else Res.string.editor_history_upright_off),
+        )
+    }
+
+    /**
+     * An automatic mode: the photo's lines are found once — off the main thread, on a reduced copy —
+     * and the mode's angles solved from them and stored. A photo without the lines the mode needs
+     * keeps the mode chosen with nothing corrected, and the panel says why.
+     */
+    private fun applyAutomaticUpright(mode: String) {
+        val bitmap = state.value.bitmap ?: return
+        uprightJob?.cancel()
+        mutableState.update { it.copy(isDetectingUpright = true, uprightNotice = null) }
+        uprightJob = viewModelScope.launch {
+            val lines = linesOf(bitmap)
+            val current = state.value.recipe ?: return@launch
+            val geometry = current.geometry.activeAtProcess(current.processVersion)
+            val chosen = current.copy(
+                geometry = geometry.copy(perspective = geometry.perspective.copy(upright = mode, guides = emptyList())),
+            )
+            val (solved, found) = chosen.withAutomaticUpright(lines)
+            mutableState.update {
+                it.copy(
+                    isDetectingUpright = false,
+                    uprightNotice = if (found) null else uiText(Res.string.editor_upright_no_lines),
+                )
+            }
+            updateGeometry(updated = solved, detail = uiText(uprightModeName(mode)))
+        }
+    }
+
+    private suspend fun linesOf(bitmap: Bitmap): List<LineSegment> {
+        detectedLines?.takeIf { it.first === bitmap }?.let { return it.second }
+        val lines = withContext(Dispatchers.Default) {
+            val started = System.nanoTime()
+            val reduced = RecipePixels.reduce(bitmap.toPixelBuffer(), UPRIGHT_DETECTION_SIDE)
+            detectLineSegments(reduced).also { found ->
+                System.err.println(
+                    "[ImmichRoom/upright] ${found.size} lines in ${reduced.width}x${reduced.height} " +
+                        "in ${(System.nanoTime() - started) / 1_000_000} ms",
+                )
+            }
+        }
+        detectedLines = bitmap to lines
+        return lines
+    }
+
+    /** The automatic mode's angles from these lines, and whether the lines were enough for it. */
+    private fun EditRecipe.withAutomaticUpright(lines: List<LineSegment>): Pair<EditRecipe, Boolean> {
+        val bitmap = state.value.bitmap ?: return this to false
+        val geometry = this.geometry.activeAtProcess(processVersion)
+        val draft = copy(processVersion = CURRENT_PROCESS_VERSION, geometry = geometry)
+        val angles = solveAutoUpright(
+            draft.toRenderParameters().frameGeometry(bitmap.pixelWidth, bitmap.pixelHeight),
+            lines,
+            geometry.perspective.upright,
+        )
+        val perspective = geometry.perspective.copy(
+            uprightRoll = angles?.roll ?: 0f,
+            uprightPitch = angles?.pitch ?: 0f,
+            uprightYaw = angles?.yaw ?: 0f,
+        )
+        return draft.copy(geometry = geometry.copy(perspective = perspective)) to (angles != null)
+    }
+
+    fun beginGuideGesture() {
+        if (editStart != null) return
+        editStart = state.value.recipe
+        pendingChange = PendingChange.Fixed(
+            label = uiText(Res.string.editor_history_upright),
+            detail = uiText(Res.string.editor_history_guide),
+            valueText = null,
+            icon = HistoryIcon.CROP,
+        )
+    }
+
+    /**
+     * The guides while a finger moves one. Nothing is solved yet: solving moves the photo, and a
+     * photo moving under the finger would take the guide away from the line it is following.
+     */
+    fun updateGuides(guides: List<UprightGuide>) {
+        val current = state.value.recipe ?: return
+        if (current.geometry.perspective.guides == guides) return
+        beginGuideGesture()
+        val geometry = current.geometry.activeAtProcess(current.processVersion)
+        val updated = current.copy(
+            processVersion = CURRENT_PROCESS_VERSION,
+            geometry = geometry.copy(perspective = geometry.perspective.copy(guides = guides.take(MAX_UPRIGHT_GUIDES))),
+            updatedAt = Instant.now().toString(),
+            derivedAssetId = null,
+        )
+        mutableState.update { it.copy(recipe = updated, isSaving = true) }
+        scheduleSave(updated)
+    }
+
+    /** The finger lifted: a guide too short to have a direction is dropped, and the rest are solved. */
+    fun finishGuideGesture() {
+        val current = state.value.recipe ?: return
+        val bitmap = state.value.bitmap
+        val guides = current.geometry.perspective.guides.filter { guide ->
+            bitmap == null || hypot(
+                (guide.x2 - guide.x1) * bitmap.pixelWidth,
+                (guide.y2 - guide.y1) * bitmap.pixelHeight,
+            ) >= MIN_GUIDE_PIXELS
+        }
+        val solved = current.withSolvedGuides(guides).copy(updatedAt = Instant.now().toString())
+        if (editStart?.geometry == solved.geometry) {
+            editStart = null
+            pendingChange = null
+            mutableState.update { it.copy(recipe = solved) }
+            return
+        }
+        mutableState.update { it.copy(recipe = solved, isSaving = true) }
+        scheduleSave(solved)
+        finishAdjustment()
+    }
+
+    fun removeLastGuide() {
+        val current = state.value.recipe ?: return
+        val guides = current.geometry.perspective.guides
+        if (guides.isEmpty()) return
+        updateGeometry(updated = current.withSolvedGuides(guides.dropLast(1)), detail = uiText(Res.string.editor_history_guide_removed))
+    }
+
+    fun clearGuides() {
+        val current = state.value.recipe ?: return
+        if (current.geometry.perspective.guides.isEmpty()) return
+        updateGeometry(updated = current.withSolvedGuides(emptyList()), detail = uiText(Res.string.editor_history_guides_cleared))
+    }
+
+    /**
+     * The guided mode's angles for these guides, against the rest of this recipe's geometry. Without
+     * the photo's dimensions there is nothing to solve against, and the recipe stays as it was.
+     */
+    private fun EditRecipe.withSolvedGuides(guides: List<UprightGuide>): EditRecipe {
+        val bitmap = state.value.bitmap ?: return this
+        val geometry = this.geometry.activeAtProcess(processVersion)
+        val perspective = geometry.perspective.copy(guides = guides)
+        val draft = copy(processVersion = CURRENT_PROCESS_VERSION, geometry = geometry.copy(perspective = perspective))
+        val angles = solveGuidedUpright(draft.toRenderParameters().frameGeometry(bitmap.pixelWidth, bitmap.pixelHeight), guides)
+        return draft.copy(
+            geometry = draft.geometry.copy(
+                perspective = perspective.copy(uprightRoll = angles.roll, uprightPitch = angles.pitch, uprightYaw = angles.yaw),
+            ),
+        )
+    }
+
+    fun resetPerspective() {
+        val current = state.value.recipe ?: return
+        updateGeometry(
+            updated = current.copy(geometry = current.geometry.copy(perspective = Perspective())),
+            detail = uiText(Res.string.editor_history_perspective_reset),
+        )
+    }
+
     fun resetGeometry() {
         val current = state.value.recipe ?: return
         updateGeometry(
@@ -1317,6 +1598,7 @@ open class EditorViewModel(
 
     fun saveNow() {
         if (!persistsToPhoto || needsNewerApp) return
+        flushGeometryMirror()
         if (!shouldPersist) return
         saveJob?.cancel()
         state.value.recipe?.let { recipe ->
@@ -1610,6 +1892,32 @@ open class EditorViewModel(
     private fun updateGeometry(updated: EditRecipe, detail: UiText, valueText: UiText? = null) {
         val current = state.value.recipe ?: return
         if (updated.geometry == current.geometry) return
+        // The guided angles are measured in the turned and mirrored photo: after a quarter turn the
+        // tilt that straightened a vertical would bend a level. The guides do not move, so solving
+        // again gives back what the person had.
+        val reoriented = updated.geometry.rotation != current.geometry.rotation ||
+            updated.geometry.mirrorH != current.geometry.mirrorH ||
+            updated.geometry.mirrorV != current.geometry.mirrorV
+        val upright = updated.geometry.perspective.upright
+        val lines = detectedLines?.takeIf { it.first === state.value.bitmap }?.second
+        val resolved = when {
+            !reoriented -> updated
+            upright == UPRIGHT_GUIDED -> updated.withSolvedGuides(updated.geometry.perspective.guides)
+            upright in AUTOMATIC_UPRIGHT_MODES && lines != null -> updated.withAutomaticUpright(lines).first
+            upright in AUTOMATIC_UPRIGHT_MODES -> {
+                // The lines of a photo opened again are not kept: find them, and solve after.
+                commitGeometry(updated, detail, valueText)
+                applyAutomaticUpright(upright)
+                return
+            }
+            else -> updated
+        }
+        commitGeometry(resolved, detail, valueText)
+    }
+
+    private fun commitGeometry(updated: EditRecipe, detail: UiText, valueText: UiText?) {
+        val current = state.value.recipe ?: return
+        if (updated.geometry == current.geometry) return
         editStart = null
         pendingChange = null
         val committed = updated.copy(
@@ -1665,6 +1973,7 @@ open class EditorViewModel(
             return
         }
         shouldPersist = true
+        scheduleGeometryMirror(recipe, GEOMETRY_MIRROR_DELAY_MS)
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
             delay(1_000)
@@ -1672,6 +1981,31 @@ open class EditorViewModel(
                 .onSuccess { mutableState.update { it.copy(isSaving = false) } }
                 .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(), isSaving = false) } }
         }
+    }
+
+    /**
+     * Sends the geometry to Immich once it has stopped changing. Only a change of geometry counts:
+     * the server holds nothing else of the recipe.
+     */
+    private fun scheduleGeometryMirror(recipe: EditRecipe, delayMillis: Long) {
+        val geometry = recipe.geometry to recipe.processVersion
+        if (geometry == mirroredGeometry) return
+        mirroredGeometry = geometry
+        pendingMirror = recipe
+        mirrorJob?.cancel()
+        mirrorJob = viewModelScope.launch {
+            delay(delayMillis)
+            pendingMirror = null
+            geometryMirror.mirror(recipe)
+        }
+    }
+
+    /** Sends a waiting geometry now. It outlives the screen: leaving is the most common moment for it. */
+    private fun flushGeometryMirror() {
+        val recipe = pendingMirror ?: return
+        pendingMirror = null
+        mirrorJob?.cancel()
+        mirrorJob = viewModelScope.launch(NonCancellable) { geometryMirror.mirror(recipe) }
     }
 
     private suspend fun loadBitmap(asset: EditorAsset): Bitmap {
@@ -1693,6 +2027,25 @@ open class EditorViewModel(
  * must not change the recipe, or it would count as an edit.
  */
 internal const val RECIPE_EDIT_ASSET_ID = "recipe"
+
+/** The long side the lines are looked for at: every edge a building has, in a fraction of a second. */
+private const val UPRIGHT_DETECTION_SIDE = 1000
+
+/** Each Upright mode's name, on its button and in the history. */
+internal fun uprightModeName(mode: String): StringResource = when (mode) {
+    UPRIGHT_AUTO -> Res.string.editor_upright_auto
+    UPRIGHT_LEVEL -> Res.string.editor_upright_level
+    UPRIGHT_VERTICAL -> Res.string.editor_upright_vertical
+    UPRIGHT_FULL -> Res.string.editor_upright_full
+    UPRIGHT_GUIDED -> Res.string.editor_upright_guided
+    else -> Res.string.editor_upright_off
+}
+
+/** Shorter than this, in the photo's pixels, a guide is a tap and has no direction. */
+private const val MIN_GUIDE_PIXELS = 24f
+
+/** How long the geometry has to rest before it goes to Immich: a crop being dragged is not a crop yet. */
+private const val GEOMETRY_MIRROR_DELAY_MS = 2_000L
 
 private fun RecipeSource.editState(opened: EditRecipe) = when (this) {
     is RecipeSource.Saved -> RecipeEditState(saved = saved, suggestedName = null, suggestedCollection = null, baseline = opened)
@@ -1730,6 +2083,7 @@ private fun Geometry.activeAtProcess(processVersion: Int): Geometry = copy(
     cropRect = if (processVersion >= 6) cropRect else CropRect(),
     aspectLock = if (processVersion >= 6) aspectLock else null,
     straighten = if (processVersion >= 7) straighten else 0f,
+    perspective = if (processVersion >= 10) perspective else Perspective(),
 )
 
 fun EditRecipe.editableCurvePoints(): List<eu.studio742.imago.core.model.CurvePoint> {
@@ -1864,7 +2218,16 @@ internal fun EditRecipe.withAdjustment(adjustment: Adjustment, value: Float): Ed
     Adjustment.GRAIN_ROUGHNESS -> copy(effects = effects.copy(grainRoughness = value))
     Adjustment.GRADE_BLENDING -> copy(colorGrading = colorGrading.copy(blending = value))
     Adjustment.GRADE_BALANCE -> copy(colorGrading = colorGrading.copy(balance = value))
+    Adjustment.PERSPECTIVE_VERTICAL -> withPerspective { copy(vertical = value) }
+    Adjustment.PERSPECTIVE_HORIZONTAL -> withPerspective { copy(horizontal = value) }
+    Adjustment.PERSPECTIVE_ASPECT -> withPerspective { copy(aspect = value) }
+    Adjustment.PERSPECTIVE_SCALE -> withPerspective { copy(scale = value) }
+    Adjustment.PERSPECTIVE_OFFSET_X -> withPerspective { copy(offsetX = value) }
+    Adjustment.PERSPECTIVE_OFFSET_Y -> withPerspective { copy(offsetY = value) }
 }
+
+private fun EditRecipe.withPerspective(change: Perspective.() -> Perspective) =
+    copy(geometry = geometry.copy(perspective = geometry.perspective.change()))
 
 fun EditRecipe.adjustmentValue(adjustment: Adjustment): Float = when (adjustment) {
     Adjustment.EXPOSURE -> tone.exposure
@@ -1889,4 +2252,10 @@ fun EditRecipe.adjustmentValue(adjustment: Adjustment): Float = when (adjustment
     Adjustment.GRAIN_ROUGHNESS -> effects.grainRoughness
     Adjustment.GRADE_BLENDING -> colorGrading.blending
     Adjustment.GRADE_BALANCE -> colorGrading.balance
+    Adjustment.PERSPECTIVE_VERTICAL -> geometry.perspective.vertical
+    Adjustment.PERSPECTIVE_HORIZONTAL -> geometry.perspective.horizontal
+    Adjustment.PERSPECTIVE_ASPECT -> geometry.perspective.aspect
+    Adjustment.PERSPECTIVE_SCALE -> geometry.perspective.scale
+    Adjustment.PERSPECTIVE_OFFSET_X -> geometry.perspective.offsetX
+    Adjustment.PERSPECTIVE_OFFSET_Y -> geometry.perspective.offsetY
 }

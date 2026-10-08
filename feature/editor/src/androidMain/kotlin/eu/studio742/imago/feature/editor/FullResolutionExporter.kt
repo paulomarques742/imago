@@ -7,9 +7,7 @@ import eu.studio742.imago.feature.editor.resources.*
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Matrix
-import android.graphics.Paint
 import android.media.ExifInterface
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +21,8 @@ import eu.studio742.imago.core.render.renderInPlace
 import eu.studio742.imago.core.render.activeGeometry
 import eu.studio742.imago.core.render.toRenderParameters
 import eu.studio742.imago.core.render.frameGeometry
-import eu.studio742.imago.core.render.straightenCoverScale
+import eu.studio742.imago.core.render.toRenderPerspective
+import eu.studio742.imago.core.render.transformedFrame
 import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
@@ -153,25 +152,11 @@ class FullResolutionExporter @Inject constructor(
             if (mirrored !== working) working.recycle()
             working = mirrored
         }
-        val straighten = geometry.straighten.coerceIn(-45f, 45f)
-        if (straighten != 0f) {
-            val straightened = Bitmap.createBitmap(working.width, working.height, Bitmap.Config.ARGB_8888)
-            val scale = straightenCoverScale(working.width.toFloat() / working.height, straighten)
-            AndroidCanvas(straightened).apply {
-                translate(working.width / 2f, working.height / 2f)
-                scale(scale, scale)
-                rotate(straighten)
-                translate(-working.width / 2f, -working.height / 2f)
-                drawBitmap(
-                    working,
-                    0f,
-                    0f,
-                    Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG),
-                )
+        transformedFrame(working, geometry.straighten.coerceIn(-45f, 45f), geometry.perspective.toRenderPerspective())
+            ?.let { transformed ->
+                working.recycle()
+                working = transformed
             }
-            working.recycle()
-            working = straightened
-        }
         val crop = geometry.cropRect
         val left = (crop.x.coerceIn(0f, 0.9999f) * working.width).roundToInt()
             .coerceAtMost(working.width - 1)

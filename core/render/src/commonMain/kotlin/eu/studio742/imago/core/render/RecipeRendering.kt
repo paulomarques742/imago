@@ -7,6 +7,7 @@ import eu.studio742.imago.core.model.LocalMask
 import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
 import eu.studio742.imago.core.model.MaskComponent
 import eu.studio742.imago.core.model.MaskShape
+import eu.studio742.imago.core.model.UPRIGHT_OFF
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.roundToInt
@@ -58,7 +59,22 @@ fun EditRecipe.toRenderParameters() = RenderParameters(
     rotation = if (processVersion >= 4) geometry.rotation else 0,
     mirrorH = processVersion >= 4 && geometry.mirrorH,
     mirrorV = processVersion >= 4 && geometry.mirrorV,
+    perspective = if (processVersion >= 10) geometry.perspective.toRenderPerspective() else PerspectiveParameters(),
     masks = if (processVersion >= 8) masks.toRenderSpecs() else emptyList(),
+)
+
+fun eu.studio742.imago.core.model.Perspective.toRenderPerspective() = PerspectiveParameters(
+    vertical = vertical.coerceIn(-100f, 100f),
+    horizontal = horizontal.coerceIn(-100f, 100f),
+    aspect = aspect.coerceIn(-100f, 100f),
+    scale = scale.coerceIn(-50f, 100f),
+    offsetX = offsetX.coerceIn(-100f, 100f),
+    offsetY = offsetY.coerceIn(-100f, 100f),
+    constrainCrop = constrainCrop,
+    // A mode that is off finds nothing, whatever angles were left behind.
+    uprightRoll = if (upright == UPRIGHT_OFF) 0f else uprightRoll.coerceIn(-45f, 45f),
+    uprightPitch = if (upright == UPRIGHT_OFF) 0f else uprightPitch.coerceIn(-45f, 45f),
+    uprightYaw = if (upright == UPRIGHT_OFF) 0f else uprightYaw.coerceIn(-45f, 45f),
 )
 
 /** The four wheels of step 12, with the hue already converted to chroma. See [ColorGradeRange]. */
@@ -135,7 +151,8 @@ private fun MaskComponent.toRenderComponent(): MaskRenderComponent? = when (shap
 
 /** The part of the geometry this recipe's process version already knew. */
 fun EditRecipe.activeGeometry(): Geometry = when {
-    processVersion >= 7 -> geometry
+    processVersion >= 10 -> geometry
+    processVersion >= 7 -> geometry.copy(perspective = eu.studio742.imago.core.model.Perspective())
     processVersion >= 6 -> geometry.copy(straighten = 0f)
     processVersion >= 4 -> geometry.copy(cropRect = CropRect(), straighten = 0f, aspectLock = null)
     else -> Geometry()

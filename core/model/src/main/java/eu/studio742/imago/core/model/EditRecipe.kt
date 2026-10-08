@@ -5,6 +5,10 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 10 activates `geometry.perspective`. The straighten becomes the roll of the same virtual camera
+ * that the perspective tilts, and with the perspective neutral the matrix is exactly the rotation
+ * there was before — but the gate stays, as in 6, 7 and 9, so that this is checked and not assumed.
+ *
  * 9 activates `colorGrading`, step 12 of the pipeline, and adds its fourth wheel — `global`, which
  * tints the whole photo regardless of tone. The first three and the two blending controls were in
  * the schema from the start, dormant: no earlier recipe could have them off neutral, and so the gate
@@ -19,7 +23,7 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 9
+const val CURRENT_PROCESS_VERSION = 10
 
 @Serializable
 data class EditRecipe(
@@ -150,4 +154,62 @@ data class Geometry(
     val mirrorH: Boolean = false,
     val mirrorV: Boolean = false,
     val aspectLock: String? = null,
+    val perspective: Perspective = Perspective(),
 )
+
+/**
+ * The manual perspective: the photo as a plane seen by a virtual camera that tilts and turns.
+ *
+ * [vertical] and [horizontal] go from -100 to 100; negative widens the top and the left, which is
+ * what straightens a building shot from below. [aspect] stretches across (positive) or down
+ * (negative), [scale] goes from -50 to 100, and the offsets from -100 to 100 move the photo in the
+ * frame. With [constrainCrop] the frame never shows anything beyond the photo; without it, what the
+ * correction leaves uncovered shows white and [scale] may go below zero.
+ *
+ * [upright] is Lightroom's Upright mode. What a mode found is kept in [uprightRoll], [uprightPitch]
+ * and [uprightYaw], in degrees, and the render only ever reads those: it never detects anything
+ * again, so the same recipe renders the same on every device, and a better detector one day does not
+ * change a photo already edited. The sliders add on top of them, as in Lightroom.
+ */
+@Serializable
+data class Perspective(
+    val vertical: Float = 0f,
+    val horizontal: Float = 0f,
+    val aspect: Float = 0f,
+    val scale: Float = 0f,
+    val offsetX: Float = 0f,
+    val offsetY: Float = 0f,
+    val constrainCrop: Boolean = true,
+    val upright: String = UPRIGHT_OFF,
+    val uprightRoll: Float = 0f,
+    val uprightPitch: Float = 0f,
+    val uprightYaw: Float = 0f,
+    /** The guided mode's lines, in the original image's normalised coordinates, as masks are. */
+    val guides: List<UprightGuide> = emptyList(),
+) {
+    /** Whether the camera tilts or the photo stretches: what Immich's own edits cannot express. */
+    val isProjective: Boolean
+        get() = vertical != 0f || horizontal != 0f || aspect != 0f ||
+            uprightRoll != 0f || uprightPitch != 0f || uprightYaw != 0f
+}
+
+/**
+ * A line the person drew along something that should be vertical or level. Which of the two is read
+ * from its angle in the photo: nearer upright is a vertical.
+ */
+@Serializable
+data class UprightGuide(val x1: Float, val y1: Float, val x2: Float, val y2: Float)
+
+const val UPRIGHT_OFF = "off"
+const val UPRIGHT_AUTO = "auto"
+const val UPRIGHT_LEVEL = "level"
+const val UPRIGHT_VERTICAL = "vertical"
+const val UPRIGHT_FULL = "full"
+const val UPRIGHT_GUIDED = "guided"
+
+/** The automatic modes, in Lightroom's order: they detect the lines themselves. */
+val AUTOMATIC_UPRIGHT_MODES = listOf(UPRIGHT_AUTO, UPRIGHT_LEVEL, UPRIGHT_VERTICAL, UPRIGHT_FULL)
+
+/** Lightroom's limits: the guided mode corrects from two guides and takes up to four. */
+const val MIN_UPRIGHT_GUIDES = 2
+const val MAX_UPRIGHT_GUIDES = 4
