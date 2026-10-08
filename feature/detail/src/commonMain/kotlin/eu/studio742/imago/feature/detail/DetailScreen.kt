@@ -175,6 +175,10 @@ fun DetailRoute(
     modifier: Modifier = Modifier,
     /** A file of this list took another name; on a computer, another id too. */
     onRenamed: (RenamedAsset) -> Unit = {},
+    /** The library's map at this place; null where nothing can show it. */
+    onShowOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
+    /** The photos of someone in this one. */
+    onShowPerson: ((DetailPerson) -> Unit)? = null,
     /**
      * Whether the list beside the detail is showing, or null when there is none — a narrow screen,
      * a viewer opened by another app. Only with a list beside it does the detail offer to hide it.
@@ -206,6 +210,8 @@ fun DetailRoute(
         onAlbumResult = viewModel::show,
         onRotate = viewModel::rotate.takeIf { viewModel.canRotate },
         onSetAs = viewModel::setAs,
+        onShowOnMap = onShowOnMap,
+        onShowPerson = onShowPerson,
         onRename = { name: String, onResult: (UiText?) -> Unit -> viewModel.rename(asset, name, onResult, onRenamed) }
             .takeIf { state.canRename && state.assetId == asset.id },
         onArchive = { archived: Boolean -> viewModel.setArchived(asset.id, archived) { onDeleted(asset.id) } }.takeIf { viewModel.canArchive },
@@ -244,6 +250,8 @@ private fun DetailScreen(
     onArchive: ((archived: Boolean) -> Unit)?,
     /** Null where the file keeps its name: a server's original. */
     onRename: ((name: String, onResult: (UiText?) -> Unit) -> Unit)?,
+    onShowOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
+    onShowPerson: ((DetailPerson) -> Unit)?,
     onConsumeMessage: () -> Unit,
     listPaneShown: Boolean?,
     onToggleListPane: () -> Unit,
@@ -449,6 +457,9 @@ private fun DetailScreen(
                     asset = asset,
                     state = state,
                     onRename = { renameError = null; renaming = true }.takeIf { onRename != null && !isOpenedFile },
+                    // A file another app opened belongs to no library: there is no map or person to go to.
+                    onShowOnMap = onShowOnMap?.takeIf { !isOpenedFile },
+                    onShowPerson = onShowPerson?.takeIf { !isOpenedFile },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()

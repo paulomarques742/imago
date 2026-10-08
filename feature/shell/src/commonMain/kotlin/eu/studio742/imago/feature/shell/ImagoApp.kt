@@ -41,6 +41,8 @@ import eu.studio742.imago.feature.detail.DetailRoute
 import eu.studio742.imago.feature.editor.EditorAsset
 import eu.studio742.imago.feature.editor.EditorRoute
 import eu.studio742.imago.feature.editor.RecipeLibraryRoute
+import eu.studio742.imago.feature.library.PersonUiModel
+import eu.studio742.imago.feature.library.LibraryRequest
 import eu.studio742.imago.feature.library.AssetUiModel
 import eu.studio742.imago.feature.library.DeviceMediaActionHost
 import eu.studio742.imago.feature.library.LibraryNavDestination
@@ -146,6 +148,8 @@ sealed interface AppDestination {
         val focusAssetId: String? = null,
         /** The view requested by whoever navigated here, or null to leave the library where it was. */
         val section: LibrarySection? = null,
+        /** The map or a person's photos, asked for from a photo's information. */
+        val request: LibraryRequest? = null,
     ) : AppDestination
     data object Settings : AppDestination
     data class Account(val signUp: Boolean = false) : AppDestination
@@ -234,6 +238,12 @@ private fun ImagoAppContent(viewModel: ShellViewModel, onLeaveViewer: (() -> Uni
                 onSectionConsumed = {
                     (destination as? AppDestination.Library)?.let {
                         destination = it.copy(section = null)
+                    }
+                },
+                request = (current as? AppDestination.Library)?.request,
+                onRequestConsumed = {
+                    (destination as? AppDestination.Library)?.let {
+                        destination = it.copy(request = null)
                     }
                 },
                 onDestination = { destination = it },
@@ -357,6 +367,8 @@ private fun LibraryPane(
     onFocusConsumed: () -> Unit,
     section: LibrarySection?,
     onSectionConsumed: () -> Unit,
+    request: LibraryRequest?,
+    onRequestConsumed: () -> Unit,
     onDestination: (AppDestination) -> Unit,
     onComposerRequest: (ComposerRequest) -> Unit,
 ) {
@@ -401,6 +413,8 @@ private fun LibraryPane(
                 onFocusConsumed = onFocusConsumed,
                 section = section,
                 onSectionConsumed = onSectionConsumed,
+                request = request,
+                onRequestConsumed = onRequestConsumed,
                 onOpenAsset = { selected, loadedAssets ->
                     val assets = loadedAssets.distinctBy(AssetUiModel::id).ifEmpty { listOf(selected) }
                     onDestination(
@@ -469,6 +483,13 @@ private fun PhotoDetail(
             current.assets.getOrNull(current.index)?.let {
                 onComposerRequest(ComposerRequest(listOf(it.toComposerMedia())))
             }
+        },
+        // From the information: the map at the photo's place, the photos of someone in it.
+        onShowOnMap = { latitude, longitude ->
+            onDestination(AppDestination.Library(request = LibraryRequest.ShowMap(latitude, longitude)))
+        },
+        onShowPerson = { person ->
+            onDestination(AppDestination.Library(request = LibraryRequest.ShowPerson(PersonUiModel(person.id, person.name, person.thumbnailUrl, person.apiKey))))
         },
         // The list keeps the new name; on a computer the id and the address of the file changed too.
         onRenamed = { renamed ->

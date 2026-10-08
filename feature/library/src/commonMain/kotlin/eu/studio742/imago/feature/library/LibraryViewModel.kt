@@ -487,6 +487,26 @@ open class LibraryViewModel(
 
     fun mapMoved(camera: MapCamera) = uiState.update { it.copy(mapCamera = camera) }
 
+    /** What the detail asked for: the map at a photo's place, or the photos of someone in it. */
+    fun handle(request: LibraryRequest) {
+        when (request) {
+            is LibraryRequest.ShowMap -> {
+                uiState.update {
+                    it.copy(
+                        section = LibrarySection.TIMELINE,
+                        selectedAlbum = null,
+                        mapCamera = MapCamera(request.latitude, request.longitude, PLACE_ZOOM),
+                    )
+                }
+                showMap()
+            }
+            is LibraryRequest.ShowPerson -> {
+                uiState.update { it.copy(section = LibrarySection.TIMELINE, showingMap = false) }
+                openPerson(request.person)
+            }
+        }
+    }
+
     /** A place opens like an album, over the map, which is still there when it closes. */
     fun openPlace(place: MarkerCluster) = uiState.update {
         it.copy(
@@ -930,3 +950,6 @@ open class LibraryViewModel(
         isFolder = isFolder,
     )
 }
+
+/** How close the map comes to a single photo's place. */
+private const val PLACE_ZOOM = 15.0

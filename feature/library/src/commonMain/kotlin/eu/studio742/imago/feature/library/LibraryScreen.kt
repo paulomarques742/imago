@@ -233,12 +233,22 @@ fun LibraryRoute(
      */
     section: LibrarySection? = null,
     onSectionConsumed: () -> Unit = {},
+    /** The map or a person's photos, asked for from the detail; one-off, like [section]. */
+    request: LibraryRequest? = null,
+    onRequestConsumed: () -> Unit = {},
     viewModel: LibraryViewModel = libraryViewModel(),
 ) {
     LaunchedEffect(section) {
         section?.let {
             viewModel.selectSection(it)
             onSectionConsumed()
+        }
+    }
+    LaunchedEffect(request) {
+        request?.let {
+            viewModel.clearSelection()
+            viewModel.handle(it)
+            onRequestConsumed()
         }
     }
     var albumPick by remember { mutableStateOf<AlbumPick?>(null) }

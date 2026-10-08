@@ -140,6 +140,15 @@ expect fun PhotoMap(
     modifier: Modifier = Modifier,
 )
 
+/** What another screen asks the library to show when it gets there: one request, consumed on arrival. */
+sealed interface LibraryRequest {
+    /** The map, at this place, close in. */
+    data class ShowMap(val latitude: Double, val longitude: Double) : LibraryRequest
+
+    /** This person's photos. */
+    data class ShowPerson(val person: PersonUiModel) : LibraryRequest
+}
+
 /** A small map that only shows where [latitude], [longitude] is, for the detail's information. */
 @Composable
 expect fun PlaceMap(latitude: Double, longitude: Double, modifier: Modifier = Modifier)

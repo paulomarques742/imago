@@ -1,6 +1,9 @@
 package eu.studio742.imago.feature.detail
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -72,6 +75,10 @@ internal fun DetailInfoPanel(
     /** Null where the file cannot be renamed: a server's original keeps its name. */
     onRename: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    /** The library's map, centred here. */
+    onShowOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
+    /** The photos of someone in this one. */
+    onShowPerson: ((DetailPerson) -> Unit)? = null,
 ) {
     val locale = LocalAppLocale.current
     val exif = state.exif
@@ -127,9 +134,24 @@ internal fun DetailInfoPanel(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(ImagoRadii.Medium))
-                    .background(ImagoColors.SurfaceElevated),
+                    .background(ImagoColors.SurfaceElevated)
+                    .then(
+                        onShowOnMap?.let { show ->
+                            Modifier.clickable(role = Role.Button, onClickLabel = stringResource(Res.string.detail_show_on_map)) { show(latitude, longitude) }
+                        } ?: Modifier,
+                    ),
             ) {
-                PlaceMap(latitude, longitude, Modifier.fillMaxWidth().height(160.dp))
+                Box {
+                    PlaceMap(latitude, longitude, Modifier.fillMaxWidth().height(160.dp))
+                    // The map is a view of its own on Android and would keep the tap: this layer takes it.
+                    if (onShowOnMap != null) {
+                        Box(
+                            Modifier
+                                .matchParentSize()
+                                .clickable(role = Role.Button, onClickLabel = stringResource(Res.string.detail_show_on_map)) { onShowOnMap(latitude, longitude) },
+                        )
+                    }
+                }
                 val address = rememberAddress(latitude, longitude)
                     ?: listOfNotNull(exif.city, exif.state, exif.country).distinct().joinToString(", ").ifBlank { null }
                     ?: "%.5f, %.5f".format(locale, latitude, longitude)
@@ -147,7 +169,7 @@ internal fun DetailInfoPanel(
                 Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
             ) {
-                state.people.forEach { person -> Face(person) }
+                state.people.forEach { person -> Face(person, onClick = onShowPerson?.let { show -> { show(person) } }) }
             }
         }
     }
@@ -163,9 +185,15 @@ private fun Facts(facts: List<String>) {
 }
 
 @Composable
-private fun Face(person: DetailPerson) {
+private fun Face(person: DetailPerson, onClick: (() -> Unit)?) {
     val context = LocalPlatformContext.current
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(72.dp)) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(72.dp)
+            .clip(RoundedCornerShape(ImagoRadii.Small))
+            .then(onClick?.let { Modifier.clickable(role = Role.Button, onClickLabel = person.name.ifBlank { null }, onClick = it) } ?: Modifier),
+    ) {
         AsyncImage(
             model = ImageRequest.Builder(context).data(person.thumbnailUrl).libraryAuth(person.apiKey).crossfade(true).build(),
             contentDescription = null,

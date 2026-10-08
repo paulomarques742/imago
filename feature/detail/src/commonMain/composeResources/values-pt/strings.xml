@@ -59,6 +59,7 @@
     <string name="detail_rotate">Rodar</string>
     <string name="detail_archive">Arquivar</string>
     <string name="detail_rename">Mudar o nome</string>
+    <string name="detail_show_on_map">Ver no mapa</string>
     <string name="detail_rename_label">Nome</string>
     <string name="detail_rename_save">Mudar</string>
     <string name="detail_rename_failed">Não foi possível mudar o nome do ficheiro.</string>

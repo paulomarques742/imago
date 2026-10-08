@@ -59,6 +59,7 @@
     <string name="detail_rotate">Rotate</string>
     <string name="detail_archive">Archive</string>
     <string name="detail_rename">Rename</string>
+    <string name="detail_show_on_map">Show on the map</string>
     <string name="detail_rename_label">Name</string>
     <string name="detail_rename_save">Rename</string>
     <string name="detail_rename_failed">Couldn’t rename the file.</string>
