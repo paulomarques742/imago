@@ -54,4 +54,7 @@
     <string name="detail_save_edited">Editada</string>
     <string name="detail_add_to_album">Juntar a álbum</string>
     <string name="detail_delete_device_body_managed">“%1$s” vai para o lixo do dispositivo.</string>
+    <string name="detail_rotate">Rodar</string>
+    <string name="detail_set_as">Definir como…</string>
+    <string name="detail_rotate_failed">Não foi possível rodar a fotografia.</string>
 </resources>

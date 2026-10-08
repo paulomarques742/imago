@@ -16,6 +16,10 @@ expect fun detailViewModel(): DetailViewModel
 @Composable
 expect fun rememberShareFile(): (file: File, mimeType: String) -> Unit
 
+/** Hands a photo to another app to set it as something — a wallpaper, a contact's picture; null where nothing does. */
+@Composable
+expect fun rememberSetAs(): ((file: File, mimeType: String) -> Unit)?
+
 /** The menu entry that saves a copy: "Save to gallery" on the phone, "Save copy…" on the computer. */
 expect val SaveToDeviceLabel: StringResource
 

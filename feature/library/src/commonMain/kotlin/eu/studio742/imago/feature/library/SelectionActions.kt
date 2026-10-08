@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.PhotoAlbum
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
+import androidx.compose.material.icons.outlined.RotateRight
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.MoreHoriz
@@ -164,6 +165,7 @@ internal fun SelectionActionsBar(
     albumSlot: AlbumSlot,
     canSaveToDevice: Boolean,
     canSendToImmich: Boolean,
+    canRotate: Boolean,
     onShare: () -> Unit,
     onFavorite: () -> Unit,
     onCompose: () -> Unit,
@@ -172,6 +174,7 @@ internal fun SelectionActionsBar(
     onRequestDelete: () -> Unit,
     onSaveToDevice: () -> Unit,
     onSendToImmich: () -> Unit,
+    onRotate: () -> Unit,
 ) {
     ImagoNavBarSurface {
         Row(
@@ -224,6 +227,13 @@ internal fun SelectionActionsBar(
                                 text = { Text(stringResource(Res.string.library_selection_add_to_album)) },
                                 leadingIcon = { Icon(Icons.Outlined.PhotoAlbum, contentDescription = null) },
                                 onClick = { menu = false; onAddToAlbum() },
+                            )
+                        }
+                        if (canRotate) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.library_selection_rotate)) },
+                                leadingIcon = { Icon(Icons.Outlined.RotateRight, contentDescription = null) },
+                                onClick = { menu = false; onRotate() },
                             )
                         }
                         DropdownMenuItem(
@@ -316,4 +326,14 @@ internal fun SelectionSaveWhichDialog(onChoose: (edited: Boolean) -> Unit, onDis
             TextButton(onClick = { onChoose(false) }) { Text(stringResource(Res.string.library_selection_save_original)) }
         },
     )
+}
+
+/**
+ * Turning a photo a quarter clockwise without opening the editor: its recipe turns, crop and all,
+ * and a server's copy follows. The editor, which knows geometry, does it; the library and the detail
+ * only ask. Null where nothing turns photos.
+ */
+interface PhotoRotation {
+    /** The photo's recipe after turning it. */
+    suspend fun rotateClockwise(assetId: String, checksum: String): eu.studio742.imago.core.model.EditRecipe
 }

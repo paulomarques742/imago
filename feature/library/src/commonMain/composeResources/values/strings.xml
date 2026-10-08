@@ -363,4 +363,6 @@
     <string name="library_search_content">Content</string>
     <string name="library_search_file_name">File name</string>
     <string name="library_search_content_hint">What’s in the photo</string>
+    <string name="library_selection_rotate">Rotate</string>
+    <string name="library_selection_rotate_failed">Couldn’t rotate every photo.</string>
 </resources>

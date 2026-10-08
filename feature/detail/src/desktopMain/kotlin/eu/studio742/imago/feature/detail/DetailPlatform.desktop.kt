@@ -40,11 +40,21 @@ import java.nio.file.StandardCopyOption
 actual fun detailViewModel(): DetailViewModel {
     val graph = LocalDesktopDataGraph.current
     return viewModel {
-        DetailViewModel(graph.library, graph.recipes, DesktopEditorExporter(graph.library), Files.createTempDirectory("imago-share").toFile())
+        DetailViewModel(
+            graph.library,
+            graph.recipes,
+            DesktopEditorExporter(graph.library),
+            Files.createTempDirectory("imago-share").toFile(),
+            eu.studio742.imago.feature.editor.RecipePhotoRotation(graph.recipes, graph.api, graph.configuration),
+        )
     }
 }
 
 actual val SaveToDeviceLabel: StringResource get() = Res.string.detail_save_copy
+
+/** A computer sets wallpapers from its own settings: nothing to hand a photo to here. */
+@Composable
+actual fun rememberSetAs(): ((File, String) -> Unit)? = null
 
 /** On desktop, sharing is saving a copy of the original where the user chooses. */
 @Composable

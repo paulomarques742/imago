@@ -40,12 +40,32 @@ class HiltDetailViewModel @Inject constructor(
     library: LibraryRepository,
     recipes: RecipeRepository,
     exporter: EditorExporter,
-) : DetailViewModel(library, recipes, exporter, File(context.cacheDir, "share"))
+    rotation: eu.studio742.imago.feature.library.PhotoRotation,
+) : DetailViewModel(library, recipes, exporter, File(context.cacheDir, "share"), rotation)
 
 @Composable
 actual fun detailViewModel(): DetailViewModel = hiltViewModel<HiltDetailViewModel>()
 
 actual val SaveToDeviceLabel: StringResource get() = Res.string.detail_save_to_gallery
+
+/** Android's "Set as" (`ATTACH_DATA`): the wallpaper, a contact, whatever the phone offers. */
+@Composable
+actual fun rememberSetAs(): ((File, String) -> Unit)? {
+    val context = LocalContext.current
+    return remember(context) {
+        { file, mimeType ->
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.share", file)
+            context.startActivity(Intent.createChooser(
+                Intent(Intent.ACTION_ATTACH_DATA).apply {
+                    setDataAndType(uri, mimeType)
+                    putExtra("mimeType", mimeType)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                },
+                null,
+            ))
+        }
+    }
+}
 
 /** The Android share menu, with the file served by this module's FileProvider. */
 @Composable

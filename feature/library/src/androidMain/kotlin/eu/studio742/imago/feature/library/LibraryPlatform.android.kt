@@ -43,7 +43,8 @@ class HiltLibraryViewModel @Inject constructor(
     configuration: ConfigurationRepository,
     device: DeviceLibrary,
     deviceCopies: DeviceCopies,
-) : LibraryViewModel(library, recipes, configuration, device, deviceCopies)
+    rotation: PhotoRotation,
+) : LibraryViewModel(library, recipes, configuration, device, deviceCopies, rotation)
 
 @HiltViewModel
 class HiltLibrarySettingsViewModel @Inject constructor(

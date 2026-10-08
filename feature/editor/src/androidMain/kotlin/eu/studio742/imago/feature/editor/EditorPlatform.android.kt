@@ -25,6 +25,7 @@ import eu.studio742.imago.core.data.DerivedAssetRepository
 import eu.studio742.imago.core.data.LibraryRepository
 import eu.studio742.imago.feature.library.AssetUiModel
 import eu.studio742.imago.feature.library.DeviceCopies
+import eu.studio742.imago.feature.library.PhotoRotation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import eu.studio742.imago.core.data.RecipeRepository
@@ -75,9 +76,16 @@ class ExporterDeviceCopies @Inject constructor(
     }
 }
 
+class HiltPhotoRotation @Inject constructor(
+    recipes: RecipeRepository,
+    immichApi: ImmichApi,
+    configuration: ConfigurationRepository,
+) : PhotoRotation by RecipePhotoRotation(recipes, immichApi, configuration)
+
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class EditorBindings {
+    @Binds abstract fun photoRotation(implementation: HiltPhotoRotation): PhotoRotation
     @Binds abstract fun exporter(implementation: AndroidEditorExporter): EditorExporter
     @Binds abstract fun deviceCopies(implementation: ExporterDeviceCopies): DeviceCopies
 }

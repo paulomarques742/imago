@@ -1132,17 +1132,11 @@ open class EditorViewModel(
 
     fun rotateClockwise() {
         val current = state.value.recipe ?: return
-        val rotation = (current.geometry.rotation + 90) % 360
+        val updated = current.rotatedClockwise()
         updateGeometry(
-            updated = current.copy(
-                geometry = current.geometry.copy(
-                    rotation = rotation,
-                    cropRect = current.geometry.cropRect.rotatedClockwise(),
-                    aspectLock = reciprocalCropAspectId(current.geometry.aspectLock),
-                ),
-            ),
+            updated = updated,
             detail = uiText(Res.string.editor_history_rotated),
-            valueText = "$rotation°".asUiText(),
+            valueText = "${updated.geometry.rotation}°".asUiText(),
         )
     }
 

@@ -1,6 +1,7 @@
 package eu.studio742.imago.feature.editor
 
 import eu.studio742.imago.core.data.ConfigurationRepository
+import eu.studio742.imago.core.data.RecipeRepository
 import eu.studio742.imago.core.immich.ImmichApi
 import eu.studio742.imago.core.immich.ImmichApiException
 import eu.studio742.imago.core.immich.ImmichExportResult
@@ -109,6 +110,29 @@ class ImmichGeometryMirrorTest {
         mirror.mirror(recipe(Geometry(rotation = 90)))
 
         assertTrue(logged.single().startsWith("could not mirror"))
+    }
+
+    /** The detail's and the selection's rotation: the editor's quarter turn, saved and sent to the server. */
+    @Test
+    fun turningAPhotoOutsideTheEditorSavesTheRecipeAndTurnsTheServersCopy() = runBlocking {
+        val saved = mutableMapOf<String, EditRecipe>()
+        val recipes = object : RecipeRepository {
+            override suspend fun get(assetId: String) = saved[assetId]
+            override suspend fun save(recipe: EditRecipe) { saved[recipe.assetId] = recipe }
+        }
+        val rotation = RecipePhotoRotation(recipes, api, FakeLibraries)
+        val id = AssetReference(LIBRARY_ID, "photo").encode()
+
+        val once = rotation.rotateClockwise(id, "sum")
+
+        assertEquals(90, once.geometry.rotation)
+        assertEquals(once, saved[id])
+        assertTrue(api.edits.any { it is ImmichEdit.Rotate })
+
+        repeat(3) { rotation.rotateClockwise(id, "sum") }
+        // Four quarter turns are none: the recipe is back where it started, and the server's copy too.
+        assertEquals(0, saved.getValue(id).geometry.rotation)
+        assertTrue(api.edits.none { it is ImmichEdit.Rotate })
     }
 
     private class FakeEditsApi : ImmichApi {

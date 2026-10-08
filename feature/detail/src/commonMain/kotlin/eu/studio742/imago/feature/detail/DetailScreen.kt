@@ -11,6 +11,8 @@ import eu.studio742.imago.feature.library.AddToAlbumSheet
 import eu.studio742.imago.feature.library.DeviceFolderAlbums
 import eu.studio742.imago.feature.library.rememberMediaManagement
 import androidx.compose.material.icons.outlined.PhotoAlbum
+import androidx.compose.material.icons.outlined.RotateRight
+import androidx.compose.material.icons.outlined.Wallpaper
 import eu.studio742.imago.core.designsystem.i18n.LocalAppLocale
 import eu.studio742.imago.core.designsystem.i18n.resolve
 import eu.studio742.imago.core.designsystem.i18n.resolveNow
@@ -187,6 +189,8 @@ fun DetailRoute(
         onSaveOriginal = viewModel::saveOriginalToDevice,
         onSaveEdited = viewModel::saveEditedToDevice,
         onAlbumResult = viewModel::show,
+        onRotate = viewModel::rotate.takeIf { viewModel.canRotate },
+        onSetAs = viewModel::setAs,
         onConsumeMessage = viewModel::consumeMessage,
     )
 }
@@ -210,8 +214,12 @@ private fun DetailScreen(
     onSaveOriginal: (DetailAsset) -> Unit,
     onSaveEdited: (DetailAsset) -> Unit,
     onAlbumResult: (UiText, failed: Boolean) -> Unit,
+    /** Null where photos do not turn without the editor. */
+    onRotate: ((DetailAsset) -> Unit)?,
+    onSetAs: (DetailAsset, (java.io.File, String) -> Unit) -> Unit,
     onConsumeMessage: () -> Unit,
 ) {
+    val setAs = rememberSetAs()
     val shareFile = rememberShareFile()
     val asset = assets.getOrNull(selectedIndex) ?: return
     val pagerState = rememberPagerState(initialPage = selectedIndex) { assets.size }
@@ -337,6 +345,24 @@ private fun DetailScreen(
                                     showInfo = true
                                 },
                             )
+                            if (onRotate != null && !asset.isVideo) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(Res.string.detail_rotate)) },
+                                    leadingIcon = { Icon(Icons.Outlined.RotateRight, contentDescription = null) },
+                                    // The menu stays open: turning twice, or three times, is common.
+                                    onClick = { gate.run { onRotate(asset) } },
+                                )
+                            }
+                            if (setAs != null && !asset.isVideo) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(Res.string.detail_set_as)) },
+                                    leadingIcon = { Icon(Icons.Outlined.Wallpaper, contentDescription = null) },
+                                    onClick = {
+                                        showMenu = false
+                                        gate.run { onSetAs(asset, setAs) }
+                                    },
+                                )
+                            }
                             if (canFileIntoAlbum && !isOpenedFile) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(Res.string.detail_add_to_album)) },

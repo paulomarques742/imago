@@ -171,6 +171,7 @@ open class LibraryViewModel(
     private val configuration: ConfigurationRepository,
     private val device: eu.studio742.imago.core.data.DeviceLibrary,
     private val deviceCopies: DeviceCopies? = null,
+    private val rotation: PhotoRotation? = null,
 ) : ViewModel() {
     val selectedSource = configuration.selectedLibraryId
     val filter = MutableStateFlow(LibraryFilter.ALL)
@@ -454,6 +455,34 @@ open class LibraryViewModel(
             check(saved > 0) { "No copy could be saved" }
             if (failed == 0) uiPlural(Res.plurals.library_selection_saved, saved, saved)
             else uiPlural(Res.plurals.library_selection_saved_some, failed, saved, failed)
+        }
+    }
+
+    /** Whether the selection has photos to turn here; videos never turn. */
+    fun canRotateSelection(selection: List<AssetUiModel>): Boolean = rotation != null && selection.any { !it.isVideo }
+
+    /**
+     * A quarter turn clockwise for every photo chosen. The selection stays: turning twice is common,
+     * and choosing them all again for it would not be.
+     */
+    fun rotateSelection() {
+        val turn = rotation ?: return
+        val photos = chosen.filterNot { it.isVideo }
+        if (photos.isEmpty() || uiState.value.selectionWork != null) return
+        uiState.update { it.copy(selectionWork = uiText(Res.string.library_selection_working)) }
+        viewModelScope.launch {
+            var failure: Throwable? = null
+            photos.forEach { asset ->
+                runCatching { turn.rotateClockwise(asset.id, asset.checksum) }.onFailure { failure = it }
+            }
+            uiState.update {
+                it.copy(
+                    selectionWork = null,
+                    // An album is read from the server, not the catalogue: it has to be told.
+                    gridRevision = it.gridRevision + 1,
+                    actionError = failure?.toUiText(Res.string.library_selection_rotate_failed),
+                )
+            }
         }
     }
 

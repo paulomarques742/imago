@@ -1898,6 +1898,8 @@ private fun LibrarySelectionBar(
         albumSlot = albumSlotFor(selection, openAlbum, DeviceFolderAlbums),
         canSaveToDevice = viewModel.canSaveSelectionToDevice(selection),
         canSendToImmich = sendToImmich != null && viewModel.canSendToImmich(selection),
+        canRotate = viewModel.canRotateSelection(selection),
+        onRotate = viewModel::rotateSelection,
         onShare = { viewModel.shareSelection(share) },
         onFavorite = viewModel::favoriteSelection,
         onCompose = { onComposeSelection(selection) },

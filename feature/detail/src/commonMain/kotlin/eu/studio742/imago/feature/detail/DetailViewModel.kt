@@ -110,7 +110,10 @@ open class DetailViewModel(
     private val recipes: RecipeRepository,
     private val exporter: EditorExporter,
     private val shareDirectory: File,
+    private val rotation: eu.studio742.imago.feature.library.PhotoRotation? = null,
 ) : ViewModel() {
+    /** Whether photos turn here without the editor. */
+    val canRotate: Boolean get() = rotation != null
     private val mutableState = MutableStateFlow(DetailUiState())
     val state = mutableState.asStateFlow()
 
@@ -302,6 +305,51 @@ open class DetailViewModel(
                     mutableState.update {
                         it.copy(isBusy = false, busyLabel = null, error = error.toUiText(Res.string.detail_save_failed))
                     }
+                }
+        }
+    }
+
+    /** A quarter turn clockwise; the preview, the grid and a server's thumbnails follow the recipe. */
+    fun rotate(asset: DetailAsset) {
+        val turn = rotation ?: return
+        if (mutableState.value.isBusy) return
+        viewModelScope.launch {
+            runCatching { turn.rotateClockwise(asset.id, asset.checksum) }
+                .onSuccess { rotated ->
+                    mutableState.update { current ->
+                        if (current.assetId != asset.id) current else current.copy(recipe = rotated.takeIf(EditRecipe::changesTheImage))
+                    }
+                }
+                .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(Res.string.detail_rotate_failed)) } }
+        }
+    }
+
+    /**
+     * The photo as it is seen — with its edits, rendered at full resolution, when it has them — for
+     * another app to use as a wallpaper or a contact's picture.
+     */
+    fun setAs(asset: DetailAsset, onReady: (file: File, mimeType: String) -> Unit) {
+        if (mutableState.value.isBusy) return
+        val current = mutableState.value
+        val recipe = if (current.assetId == asset.id) current.recipe else asset.recipe
+        mutableState.update { it.copy(isBusy = true, busyLabel = uiText(if (recipe != null) Res.string.detail_preparing_edit else Res.string.detail_preparing_share)) }
+        viewModelScope.launch {
+            runCatching {
+                val directory = shareDirectory.apply { deleteRecursively(); mkdirs() }
+                if (recipe != null) {
+                    val target = EditorAsset(asset.id, asset.checksum, asset.fileName, asset.previewUrl, asset.apiKey, asset.fileCreatedAt)
+                    val jpeg = exporter.renderJpeg(target, recipe) { phase -> mutableState.update { it.copy(busyLabel = phase) } }
+                    File(directory, asset.fileName.substringBeforeLast('.') + ".jpg").also { jpeg.copyTo(it, overwrite = true); jpeg.delete() } to "image/jpeg"
+                } else {
+                    File(directory, asset.fileName.ifBlank { "IMAGO.jpg" }).also { library.downloadOriginal(asset.id, it) } to "image/*"
+                }
+            }
+                .onSuccess { (file, type) ->
+                    mutableState.update { it.copy(isBusy = false, busyLabel = null) }
+                    onReady(file, type)
+                }
+                .onFailure { error ->
+                    mutableState.update { it.copy(isBusy = false, busyLabel = null, error = error.toUiText(Res.string.detail_share_failed)) }
                 }
         }
     }
