@@ -257,7 +257,7 @@ class SupabaseSyncBackend(
     private suspend fun <T> call(block: suspend SupabaseClient.() -> T): T {
         val client = client ?: throw AccountException(Reason.NOT_AVAILABLE, "Accounts are not available in this version of the app.")
         return try {
-            client.block()
+            client.withFreshSession(block)
         } catch (error: CancellationException) {
             throw error
         } catch (error: AccountException) {
@@ -267,7 +267,34 @@ class SupabaseSyncBackend(
         }
     }
 
+    /**
+     * Runs [block] with an access token that has not expired.
+     *
+     * The token lasts an hour and the library refreshes it on its own, but not while the app is in the
+     * background; coming back, the first sync ran in parallel with that refresh and went with the
+     * expired token, and the server's 401 showed as a sync error until the next run. So it is
+     * refreshed here first when it is about to expire, and once more if the server still says 401 —
+     * it can expire between the check and the request.
+     */
+    private suspend fun <T> SupabaseClient.withFreshSession(block: suspend SupabaseClient.() -> T): T {
+        auth.awaitInitialization()
+        val session = auth.currentSessionOrNull()
+        if (session != null && session.expiresAt.toEpochMilliseconds() - System.currentTimeMillis() < TOKEN_MARGIN_MS) {
+            auth.refreshCurrentSession()
+        }
+        return try {
+            block()
+        } catch (error: RestException) {
+            if (error.statusCode != 401 || auth.currentSessionOrNull() == null) throw error
+            auth.refreshCurrentSession()
+            block()
+        }
+    }
+
     companion object {
+        /** Refreshed when it has less than this left: enough for a whole run of requests. */
+        private const val TOKEN_MARGIN_MS = 60_000L
+
         private const val LINK_SCHEME = "imago"
         private const val LINK_HOST = "auth"
         private const val RECOVERY_PATH = "/recovery"

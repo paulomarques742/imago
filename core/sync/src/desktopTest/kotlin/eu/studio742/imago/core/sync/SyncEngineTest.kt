@@ -37,9 +37,10 @@ class SyncEngineTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var deviceId: String? = DEVICE_A
     private val hashes = ContentHashRepository(database, { null }, { error("no Immich") })
+    private var clock = 1_000_000_000L
     private val engine = SyncEngine(
         database, server, hashes, { deviceId }, { "Computer" }, TestSyncTexts, scope,
-        now = { "2026-09-16T12:00:00Z" }, debounceMillis = 20,
+        now = { "2026-09-16T12:00:00Z" }, debounceMillis = 20, clock = { clock },
     )
 
     @After
@@ -92,6 +93,23 @@ class SyncEngineTest {
         assertFalse(received.isFavorite)
         assertEquals("2026-09-16T09:00:00Z", received.usedAt)
         assertFalse(received.sync.dirty)
+    }
+
+    @Test
+    fun `coming back to the app runs nothing after a recent good run, unless something waits`() = runBlocking {
+        server.signIn()
+        assertTrue("never ran", engine.isStale())
+        assertTrue(engine.syncNow())
+        assertFalse(engine.isStale())
+
+        clock += 14 * 60_000L
+        assertFalse("fourteen minutes later", engine.isStale())
+        database.savedRecipeDao().upsert(preset("p5", "Edited here", dirty("2026-09-16T11:00:00Z")))
+        assertTrue("what waits to go up always goes", engine.isStale())
+
+        assertTrue(engine.syncNow())
+        clock += 16 * 60_000L
+        assertTrue("old enough to look again", engine.isStale())
     }
 
     @Test

@@ -26,8 +26,9 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 /**
- * What belongs to Android in the sync triggers: coming back to the foreground and, without a
- * network, a WorkManager job that runs when it returns — even with the app closed.
+ * What belongs to Android in the sync triggers: coming back to the foreground — when the last run
+ * is not recent — and, without a network, a WorkManager job that runs when it returns, even with the
+ * app closed.
  */
 object AndroidSync {
     private const val WORK = "imago-sync"
@@ -35,7 +36,7 @@ object AndroidSync {
     fun start(context: Context, engine: SyncEngine) {
         engine.start()
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
-            override fun onStart(owner: LifecycleOwner) = engine.syncSoon()
+            override fun onStart(owner: LifecycleOwner) = engine.syncIfStale()
         })
         val appContext = context.applicationContext
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {

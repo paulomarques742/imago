@@ -22,13 +22,15 @@ class SupabaseSyncBackendTest {
     private val server = MockWebServer()
     private val requests = CopyOnWriteArrayList<RecordedRequest>()
     private val routes = mutableMapOf<String, MockResponse>()
+    /** Routes whose answer depends on the request. */
+    private val handlers = mutableMapOf<String, (RecordedRequest) -> MockResponse>()
 
     @Before fun setUp() {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 requests += request
                 val path = request.path.orEmpty().substringBefore('?')
-                return routes[path] ?: MockResponse().setResponseCode(404).setBody("{}")
+                return handlers[path]?.invoke(request) ?: routes[path] ?: MockResponse().setResponseCode(404).setBody("{}")
             }
         }
         server.start()
@@ -103,6 +105,50 @@ class SupabaseSyncBackendTest {
         // The session stays saved and comes back with the app.
         val reopened = backend(prefs)
         assertEquals("user-a", withTimeout(2_000) { reopened.session.first { it != null } }!!.userId)
+    }
+
+    private fun tokenResponds(token: String, expiresIn: Int, refresh: String) {
+        routes["/auth/v1/token"] = json(
+            """{"access_token":"$token","token_type":"bearer","expires_in":$expiresIn,"refresh_token":"$refresh",
+               "user":{"id":"user-a","aud":"authenticated","email":"ana@example.test"}}""",
+        )
+    }
+
+    private val emptyPage = """{"rows":[],"cursor":0}"""
+
+    /** Coming back to the app after an hour: the token about to expire is refreshed before the call. */
+    @Test fun aTokenAboutToExpireIsRefreshedBeforeTheCall() = runBlocking {
+        tokenResponds("jwt-old", expiresIn = 30, refresh = "refresh-1")
+        val backend = backend()
+        backend.signIn("ana@example.test", "password")
+        tokenResponds("jwt-new", expiresIn = 3600, refresh = "refresh-2")
+        routes["/rest/v1/rpc/sync_pull"] = json(emptyPage)
+
+        backend.pull(SyncEntity.RECIPE, 0, 10)
+
+        assertEquals("Bearer jwt-new", requests.last { it.path == "/rest/v1/rpc/sync_pull" }.getHeader("Authorization"))
+    }
+
+    /** The token can still expire between the check and the request: a 401 refreshes it and tries once more. */
+    @Test fun aCallRefusedForAnExpiredTokenIsRetriedWithANewOne() = runBlocking {
+        tokenResponds("jwt-old", expiresIn = 3600, refresh = "refresh-1")
+        val backend = backend()
+        backend.signIn("ana@example.test", "password")
+        tokenResponds("jwt-new", expiresIn = 3600, refresh = "refresh-2")
+        handlers["/rest/v1/rpc/sync_pull"] = { request ->
+            if (request.getHeader("Authorization") == "Bearer jwt-old") {
+                MockResponse().setResponseCode(401).setHeader("Content-Type", "application/json")
+                    .setBody("""{"code":"PGRST303","message":"JWT expired","details":null,"hint":null}""")
+            } else {
+                json(emptyPage)
+            }
+        }
+
+        val page = backend.pull(SyncEntity.RECIPE, 0, 10)
+
+        assertEquals(0L, page.cursor)
+        val pulls = requests.filter { it.path == "/rest/v1/rpc/sync_pull" }.map { it.getHeader("Authorization") }
+        assertEquals(listOf("Bearer jwt-old", "Bearer jwt-new"), pulls)
     }
 
     @Test fun pullReadsTheCursorAndTheRows() = runBlocking {

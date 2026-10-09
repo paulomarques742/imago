@@ -71,6 +71,8 @@ class SyncEngine(
     private val scope: CoroutineScope,
     private val now: () -> String = { Instant.now().toString() },
     private val debounceMillis: Long = DEBOUNCE_MS,
+    /** Milliseconds, for how long ago the last run went well. */
+    private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
     private val media = MediaResolver(database, hashes)
     private val translator = ReferenceTranslator(database, media)
@@ -139,7 +141,9 @@ class SyncEngine(
                 while (deviceId() == null) delay(DEVICE_WAIT_MS)
                 running.withLock { localData.markUnsentForUpload() }
                 requestMissingHashes()
-                passes.trySend(Unit)
+                // Opening the app is not a reason on its own: what changed elsewhere since a run a few
+                // minutes ago would have come live, and what changed here is pending and goes anyway.
+                if (isStale()) passes.trySend(Unit)
                 while (true) {
                     delay(SAFETY_NET_MS)
                     passes.trySend(Unit)
@@ -201,9 +205,25 @@ class SyncEngine(
         requests.tryEmit(Unit)
     }
 
-    /** Asks for a run now, without the pause: the app came back to the foreground or the network returned. */
+    /** Asks for a run now, without the pause: the network returned. */
     fun syncSoon() {
         passes.trySend(Unit)
+    }
+
+    /**
+     * Asks for a run now unless one went well less than [RECENT_MS] ago and nothing is waiting to go
+     * up: the app came back to the foreground. Opening and closing it again and again is not news;
+     * while it is open, another device's changes arrive live, and "Sync now" always runs.
+     */
+    fun syncIfStale() {
+        scope.launch { if (isStale()) passes.trySend(Unit) }
+    }
+
+    /** Whether there is something to send, or the last good run is old enough to look again. */
+    internal suspend fun isStale(): Boolean {
+        if (pendingCount() > 0) return true
+        val last = database.syncCursorDao().get(LAST_RUN_KEY) ?: return true
+        return clock() - last >= RECENT_MS
     }
 
     /**
@@ -222,6 +242,7 @@ class SyncEngine(
                 received = pull(entity) || received
             }
             if (received) resolveWaiting(readFiles = true)
+            database.syncCursorDao().set(SyncCursorEntity(LAST_RUN_KEY, clock()))
             // The error was cleared at the start: if one is left, it was a refusal or a block in this run.
             mutableStatus.update { it.copy(running = false, pending = pendingCount(), lastSyncedAt = now()) }
             true
@@ -382,6 +403,13 @@ class SyncEngine(
         const val PULL_LIMIT = 500
         const val DEBOUNCE_MS = 5_000L
         const val SAFETY_NET_MS = 12L * 60 * 60 * 1000
+        /** A run younger than this makes coming back to the app run nothing. */
+        const val RECENT_MS = 15L * 60 * 1000
+        /**
+         * When the last run went well, kept with the cursors: it belongs to the account the same way,
+         * and leaves with them. Not an entity's name, so no pull ever reads it as one.
+         */
+        const val LAST_RUN_KEY = "@last-run"
         const val DEVICE_WAIT_MS = 1_000L
         const val RETRY_FIRST_MS = 30_000L
         const val RETRY_MAX_MS = 15L * 60 * 1000
