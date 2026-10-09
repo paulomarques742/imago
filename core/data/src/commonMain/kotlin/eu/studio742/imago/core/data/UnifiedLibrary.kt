@@ -288,15 +288,21 @@ class UnifiedLibrary(
     /** A photo of the unified library on each side: its id on the phone and on the server, when it is there. */
     private data class Sides(val phone: String?, val server: String?)
 
+    /**
+     * A photo on each side. The catalogue answers when it knows both names; a server's timeline rows
+     * have none until a photo is opened, and then each side is asked for its copy by name and moment.
+     */
     private suspend fun sidesOf(assetId: String): Sides {
         val reference = AssetReference.parse(assetId)
         val stacked = database.unifiedStackDao().of(serverId, reference.libraryId, reference.localId)
         val phone = stacked?.deviceAssetId
             ?: reference.localId.takeIf { reference.libraryId == DEVICE_LIBRARY_ID }
             ?: database.assetDao().counterpart(serverId, reference.localId, DEVICE_LIBRARY_ID)
+            ?: server.nameAndMoment(reference.localId)?.let { (name, taken) -> device.copyOf(name, taken) }
         val onServer = stacked?.serverAssetId
             ?: reference.localId.takeIf { reference.libraryId == serverId }
             ?: database.assetDao().counterpart(DEVICE_LIBRARY_ID, reference.localId, serverId)
+            ?: device.nameAndMoment(reference.localId)?.let { (name, taken) -> runCatching { server.copyOf(name, taken) }.getOrNull() }
         return Sides(phone, onServer)
     }
 

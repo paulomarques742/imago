@@ -493,6 +493,30 @@ class RoomLibraryRepository @Inject constructor(
             ?.originalAssetId
     }
 
+    /** The catalogue's name when it has one; the timeline brings none, and then the server is asked. */
+    override suspend fun nameAndMoment(assetId: String): Pair<String, String>? {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        database.assetDao().byIds(libraryKey, listOf(assetId)).firstOrNull()
+            ?.takeIf { it.originalFileName.isNotBlank() }
+            ?.let { return it.originalFileName to it.fileCreatedAt }
+        return runCatching { api.getAssetDetail(connection, assetId).asset }.getOrNull()
+            ?.takeIf { it.originalFileName.isNotBlank() }
+            ?.let { it.originalFileName to it.fileCreatedAt }
+    }
+
+    /** From the catalogue when the photo's name is known there; otherwise the server is searched by name. */
+    override suspend fun copyOf(fileName: String, takenAt: String): String? {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        database.assetDao().byNames(libraryKey, listOf(fileName)).firstOrNull { sameMoment(it.fileCreatedAt, takenAt) }
+            ?.let { return it.id }
+        return runCatching { api.searchAssets(connection, 1, COPY_SEARCH_SIZE, LibraryFilter.ALL, query = fileName) }.getOrNull()
+            ?.items
+            ?.firstOrNull { it.originalFileName.equals(fileName, ignoreCase = true) && sameMoment(it.fileCreatedAt, takenAt) }
+            ?.id
+    }
+
     override val canStack: Boolean get() = true
 
     override suspend fun stackTogether(assetIds: List<String>) {
@@ -657,6 +681,9 @@ class RoomLibraryRepository @Inject constructor(
 
         /** "2024-05" — enough to identify the month, whether the bucket comes with a date or an instant. */
         const val MONTH_PREFIX = 7
+
+        /** Enough results for one name: a photo and the few others that share it. */
+        const val COPY_SEARCH_SIZE = 20
 
         /** What to filter in logcat to watch the timeline sync happen. */
         const val SYNC_TAG = "ImagoCatalogSync"

@@ -208,7 +208,21 @@ class SourceLibraryRepository @Inject constructor(
     override val canStack: Boolean
         get() = if (unifiedSelected) unified().canStack else runCatching { provider(configuration.selectedLibraryId.value).canStack }.getOrDefault(false)
 
+    /**
+     * The phone with the server paired to it, for photos of the two. A stack is like an edit: made in
+     * any of the libraries, it shows everywhere the photo shows — so it is always made through the
+     * pair, on the phone with the photos there and on the server with the photos there. Without a
+     * paired server, or for another server's photos, it stays in the library it was made in.
+     */
+    private fun pairFor(assetIds: List<String>): UnifiedLibrary? {
+        val partner = configuration.unifiedPartnerId ?: return null
+        val libraries = assetIds.map { AssetReference.parse(it).libraryId }.toSet()
+        if (!libraries.all { it == DEVICE_LIBRARY_ID || it == partner }) return null
+        return runCatching { unified() }.getOrNull()
+    }
+
     override suspend fun stackTogether(assetIds: List<String>) {
+        pairFor(assetIds)?.let { return it.stackTogether(assetIds) }
         val refs = assetIds.map(AssetReference::parse)
         val libraryId = refs.first().libraryId
         require(refs.all { it.libraryId == libraryId }) { "A stack is of one library" }
@@ -216,16 +230,19 @@ class SourceLibraryRepository @Inject constructor(
     }
 
     override suspend fun makeStackCover(assetId: String) {
+        pairFor(listOf(assetId))?.let { return it.makeStackCover(assetId) }
         val ref = AssetReference.parse(assetId)
         provider(ref.libraryId).makeStackCover(ref.localId)
     }
 
     override suspend fun removeFromStack(assetId: String) {
+        pairFor(listOf(assetId))?.let { return it.removeFromStack(assetId) }
         val ref = AssetReference.parse(assetId)
         provider(ref.libraryId).removeFromStack(ref.localId)
     }
 
     override suspend fun unstack(assetId: String) {
+        pairFor(listOf(assetId))?.let { return it.unstack(assetId) }
         val ref = AssetReference.parse(assetId)
         provider(ref.libraryId).unstack(ref.localId)
     }

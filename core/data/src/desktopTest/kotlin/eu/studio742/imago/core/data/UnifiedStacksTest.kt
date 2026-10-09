@@ -57,8 +57,10 @@ class UnifiedStacksTest {
     }
 
     /** A server whose stacks are what the test puts in the table; it only records what it is asked. */
-    private class Server : LibraryRepository {
+    private class Server(private val copies: Map<String, String> = emptyMap()) : LibraryRepository {
         val stacked = mutableListOf<List<String>>()
+        /** What the server says it has under each name — the search a real one would run. */
+        override suspend fun copyOf(fileName: String, takenAt: String): String? = copies[fileName]
         override val canStack = true
         override suspend fun stackTogether(assetIds: List<String>) { stacked += assetIds }
         override suspend fun syncCatalog() = Unit
@@ -137,6 +139,20 @@ class UnifiedStacksTest {
         val grid = unifiedGrid()
         assertEquals(listOf("p2"), grid.map { it.id })
         assertEquals(3, grid.single().stackCount)
+    }
+
+    @Test fun theServersCopiesAreAskedForWhenTheCatalogueHasNoNames() = runBlocking {
+        // The timeline brings no names: the server's rows are there, nameless.
+        val phone = Phone(listOf(row(DEVICE_LIBRARY_ID, "p1", "one.jpg", one), row(DEVICE_LIBRARY_ID, "p2", "two.jpg", two)))
+        database.assetDao().upsertAll(listOf(row(SERVER, "s1", "", one), row(SERVER, "s2", "", two)))
+        val server = Server(copies = mapOf("one.jpg" to "s1", "two.jpg" to "s2"))
+        val library = UnifiedLibrary(database, phone, server, SERVER)
+        library.syncCatalog()
+
+        library.stackTogether(listOf("p1", "p2").map { eu.studio742.imago.core.model.AssetReference(DEVICE_LIBRARY_ID, it).encode() })
+
+        assertEquals(listOf(listOf("s1", "s2")), server.stacked)
+        assertEquals(setOf("p1", "p2"), database.stackMemberDao().all(DEVICE_LIBRARY_ID).map { it.assetId }.toSet())
     }
 
     @Test fun photosTogetherOnNeitherSideAreNotStacked() = runBlocking {

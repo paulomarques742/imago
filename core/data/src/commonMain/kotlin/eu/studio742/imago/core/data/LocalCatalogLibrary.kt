@@ -83,6 +83,12 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
         }
     }
 
+    override suspend fun nameAndMoment(assetId: String): Pair<String, String>? =
+        database.assetDao().byIds(DEVICE_LIBRARY_ID, listOf(assetId)).firstOrNull()?.let { it.originalFileName to it.fileCreatedAt }
+
+    override suspend fun copyOf(fileName: String, takenAt: String): String? =
+        database.assetDao().byNames(DEVICE_LIBRARY_ID, listOf(fileName)).firstOrNull { sameMoment(it.fileCreatedAt, takenAt) }?.id
+
     override val canStack: Boolean get() = true
 
     override suspend fun stackTogether(assetIds: List<String>) {

@@ -105,6 +105,15 @@ interface LibraryRepository {
      */
     suspend fun stackChanged(assetId: String) = Unit
 
+    /** The name and capture moment of [assetId], by which its copy in another library is found. */
+    suspend fun nameAndMoment(assetId: String): Pair<String, String>? = null
+
+    /**
+     * This library's copy of a photo named [fileName] taken at [takenAt]: the same name, less than a
+     * day apart — the unified library's rule. Null when it has none.
+     */
+    suspend fun copyOf(fileName: String, takenAt: String): String? = null
+
     /** Whether this library's photos can be stacked: Immich's can, the phone's and the folders' cannot. */
     val canStack: Boolean get() = false
 
