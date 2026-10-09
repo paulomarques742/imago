@@ -187,7 +187,15 @@ class SourceLibraryRepository @Inject constructor(
     )
 
     override suspend fun timeBuckets() = provider(configuration.selectedLibraryId.value).timeBuckets()
-    override suspend fun syncCatalog() = provider(configuration.selectedLibraryId.value).syncCatalog()
+    override suspend fun syncCatalog() {
+        val selected = configuration.selectedLibraryId.value
+        provider(selected).syncCatalog()
+        // The paired server's stacks reach the phone whichever library is open; the unified one does
+        // it in its own sync. Out of reach, nothing changes, and the next sync tries again.
+        val partner = configuration.unifiedPartnerId ?: return
+        if (selected != DEVICE_LIBRARY_ID && selected != partner) return
+        runCatching { unified().syncStacks(refreshServer = selected != partner) }
+    }
     override suspend fun loadMonth(month: String) = provider(configuration.selectedLibraryId.value).loadMonth(month)
     override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?): Int? {
         if (unifiedSelected) return unified().indexOfAsset(assetId, filter, month, query)

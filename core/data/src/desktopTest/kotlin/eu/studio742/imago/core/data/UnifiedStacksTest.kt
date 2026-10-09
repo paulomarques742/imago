@@ -189,6 +189,84 @@ class UnifiedStacksTest {
         assertEquals(2, grid.single().stackCount)
     }
 
+    private fun server(id: String, stack: String, cover: String, name: String, at: String) =
+        StackMemberEntity(SERVER, id, stack, cover, name, at)
+
+    private fun phoneMember(id: String, stack: String, cover: String) = StackMemberEntity(DEVICE_LIBRARY_ID, id, stack, cover)
+
+    private val copies = mapOf("s1" to "p1", "s2" to "p2", "s3" to "p3")
+
+    @Test fun aStackMadeOnTheWebReachesThePhone() {
+        val web = listOf(server("s2", "w", "s2", "two.jpg", two), server("s1", "w", "s2", "one.jpg", one))
+
+        val mirrored = mirroredLocally(DEVICE_LIBRARY_ID, local = emptyList(), seen = emptyList(), current = web, phoneCopyOf = copies)
+
+        assertEquals(setOf("p1", "p2"), mirrored.map { it.assetId }.toSet())
+        assertEquals(setOf("p2"), mirrored.map { it.primaryAssetId }.toSet())
+    }
+
+    @Test fun aStackUndoneOnTheWebIsUndoneOnThePhone() {
+        val web = listOf(server("s1", "w", "s1", "one.jpg", one), server("s2", "w", "s1", "two.jpg", two))
+        // The phone's stack also holds a photo only it has.
+        val local = listOf(phoneMember("p1", "l", "p1"), phoneMember("p2", "l", "p1"), phoneMember("p9", "l", "p1"))
+
+        val mirrored = mirroredLocally(DEVICE_LIBRARY_ID, local, seen = web, current = emptyList(), phoneCopyOf = copies)
+
+        assertEquals(emptyList<StackMemberEntity>(), mirrored)
+    }
+
+    @Test fun aPhotoTakenOutOnTheWebLeavesThePhonesStack() {
+        val before = listOf("s1", "s2", "s3").map { server(it, "w", "s1", "$it.jpg", one) }
+        val after = before.filterNot { it.assetId == "s3" }
+        val local = listOf("p1", "p2", "p3").map { phoneMember(it, "immich:w", "p1") }
+
+        val mirrored = mirroredLocally(DEVICE_LIBRARY_ID, local, seen = before, current = after, phoneCopyOf = copies)
+
+        assertEquals(setOf("p1", "p2"), mirrored.map { it.assetId }.toSet())
+    }
+
+    @Test fun aCoverChangedOnTheWebChangesOnThePhone() {
+        val before = listOf("s1", "s2").map { server(it, "w", "s1", "$it.jpg", one) }
+        val after = listOf("s1", "s2").map { server(it, "w", "s2", "$it.jpg", one) }
+        val local = listOf("p1", "p2").map { phoneMember(it, "immich:w", "p1") }
+
+        val mirrored = mirroredLocally(DEVICE_LIBRARY_ID, local, seen = before, current = after, phoneCopyOf = copies)
+
+        assertEquals(setOf("p2"), mirrored.map { it.primaryAssetId }.toSet())
+    }
+
+    @Test fun withNothingChangedOnTheWebThePhonesOwnStacksStay() {
+        val web = listOf("s1", "s2").map { server(it, "w", "s1", "$it.jpg", one) }
+        val local = listOf(phoneMember("p8", "mine", "p8"), phoneMember("p9", "mine", "p8"))
+
+        val mirrored = mirroredLocally(DEVICE_LIBRARY_ID, local, seen = web, current = web, phoneCopyOf = copies)
+
+        assertEquals(local.toSet(), mirrored.toSet())
+    }
+
+    @Test fun theWebsStacksComeAndGoInThePhonesLibrary() = runBlocking {
+        val phone = Phone(listOf(row(DEVICE_LIBRARY_ID, "p1", "one.jpg", one), row(DEVICE_LIBRARY_ID, "p2", "two.jpg", two)))
+        val library = UnifiedLibrary(database, phone, Server(), SERVER)
+        // Made on the web; the server's list of stacks has it.
+        database.stackMemberDao().insertAll(listOf(server("s1", "w", "s1", "one.jpg", one), server("s2", "w", "s1", "two.jpg", two)))
+
+        library.syncCatalog()
+
+        val phoneGrid = database.assetDao().pagingSource(DEVICE_LIBRARY_ID, false, false, null, null, null)
+        val page = phoneGrid.load(PagingSource.LoadParams.Refresh(null, 50, false)) as PagingSource.LoadResult.Page
+        assertEquals(listOf("p1"), page.data.map { it.id })
+        assertEquals(2, page.data.single().stackCount)
+
+        // Undone on the web.
+        database.stackMemberDao().clear(SERVER)
+        library.syncCatalog()
+
+        val again = database.assetDao().pagingSource(DEVICE_LIBRARY_ID, false, false, null, null, null)
+            .load(PagingSource.LoadParams.Refresh(null, 50, false)) as PagingSource.LoadResult.Page
+        assertEquals(setOf("p1", "p2"), again.data.map { it.id }.toSet())
+        assertNull(again.data.firstOrNull { it.stackCount != null })
+    }
+
     @Test fun stacksThatShareAPhotoAreOne() {
         val remote = listOf(
             StackMemberEntity(SERVER, "s1", "r", "s1", "one.jpg", one),

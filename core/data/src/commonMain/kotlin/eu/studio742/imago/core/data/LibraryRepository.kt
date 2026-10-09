@@ -105,6 +105,9 @@ interface LibraryRepository {
      */
     suspend fun stackChanged(assetId: String) = Unit
 
+    /** Reads this library's stacks again from where they are kept — Immich's from the server. */
+    suspend fun syncStacks() = Unit
+
     /** The name and capture moment of [assetId], by which its copy in another library is found. */
     suspend fun nameAndMoment(assetId: String): Pair<String, String>? = null
 

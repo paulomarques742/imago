@@ -89,6 +89,9 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
     override suspend fun copyOf(fileName: String, takenAt: String): String? =
         database.assetDao().byNames(DEVICE_LIBRARY_ID, listOf(fileName)).firstOrNull { sameMoment(it.fileCreatedAt, takenAt) }?.id
 
+    /** Puts the catalogue in line with the stacks after someone else wrote them — the server's, mirrored. */
+    suspend fun stacksWritten() = settleStacks(gone = emptySet())
+
     override val canStack: Boolean get() = true
 
     override suspend fun stackTogether(assetIds: List<String>) {

@@ -116,7 +116,61 @@ class UnifiedLibrary(
             launch { runCatching { device.syncCatalog() } }
             server.syncCatalog()
         }
+        mirrorServerStacks()
         rebuildStacks()
+    }
+
+    /**
+     * The server's stacks brought to the phone, from any library: like an edit, a stack shows
+     * everywhere the photo does. [refreshServer] reads them from the server first; the server's own
+     * sync already did when its library is the open one.
+     */
+    suspend fun syncStacks(refreshServer: Boolean) {
+        if (refreshServer) runCatching { server.syncStacks() }
+        mirrorServerStacks()
+        rebuildStacks()
+    }
+
+    /**
+     * After a change made here, on both sides at once: what the server has now is what the phone was
+     * already given, and becomes the last seen — the next sync does not take it for a change of the web.
+     */
+    private suspend fun afterChange() {
+        mirrorServerStacks()
+        rebuildStacks()
+    }
+
+    /** The server's stacks as this library last brought them to the phone, under a key of their own. */
+    private val seenKey get() = "seen:$serverId"
+
+    /**
+     * Brings to the phone what changed in the server's stacks since the last time — see
+     * [mirroredLocally]. The first time, every stack the server has is new.
+     */
+    private suspend fun mirrorServerStacks() {
+        val dao = database.stackMemberDao()
+        val current = dao.all(serverId)
+        val seen = dao.all(seenKey).map { it.copy(libraryKey = serverId) }
+        if (current.toSet() == seen.toSet()) return
+        val members = mirroredLocally(DEVICE_LIBRARY_ID, dao.all(DEVICE_LIBRARY_ID), seen, current, phoneCopiesOf(current + seen))
+        database.withTransaction {
+            dao.clear(DEVICE_LIBRARY_ID)
+            dao.insertAll(members)
+            dao.clear(seenKey)
+            dao.insertAll(current.map { it.copy(libraryKey = seenKey) })
+        }
+        (device as? LocalCatalogLibrary)?.stacksWritten()
+    }
+
+    /** Each server photo's copy on the phone, found as the timeline finds it: same name, less than a day apart. */
+    private suspend fun phoneCopiesOf(remote: List<eu.studio742.imago.core.data.db.StackMemberEntity>): Map<String, String> {
+        val names = remote.mapNotNull { it.originalFileName }.distinct()
+        val onPhone = names.chunked(500).flatMap { database.assetDao().byNames(DEVICE_LIBRARY_ID, it) }.groupBy { it.originalFileName }
+        return remote.mapNotNull { member ->
+            val name = member.originalFileName ?: return@mapNotNull null
+            val taken = member.fileCreatedAt ?: return@mapNotNull null
+            onPhone[name]?.firstOrNull { sameMoment(it.fileCreatedAt, taken) }?.let { member.assetId to it.id }
+        }.toMap()
     }
 
     /**
@@ -126,14 +180,7 @@ class UnifiedLibrary(
     private suspend fun rebuildStacks() {
         val local = database.stackMemberDao().all(DEVICE_LIBRARY_ID)
         val remote = database.stackMemberDao().all(serverId)
-        val names = remote.mapNotNull { it.originalFileName }.distinct()
-        val onPhone = names.chunked(500).flatMap { database.assetDao().byNames(DEVICE_LIBRARY_ID, it) }.groupBy { it.originalFileName }
-        val phoneCopyOf = remote.mapNotNull { member ->
-            val name = member.originalFileName ?: return@mapNotNull null
-            val taken = member.fileCreatedAt ?: return@mapNotNull null
-            onPhone[name]?.firstOrNull { sameMoment(it.fileCreatedAt, taken) }?.let { member.assetId to it.id }
-        }.toMap()
-        val rows = unifiedStacks(serverId, local, remote, phoneCopyOf)
+        val rows = unifiedStacks(serverId, local, remote, phoneCopiesOf(remote))
         database.withTransaction {
             database.unifiedStackDao().clear(serverId)
             database.unifiedStackDao().insertAll(rows)
@@ -317,7 +364,7 @@ class UnifiedLibrary(
         requireUser(onServer.size >= 2 || onPhone.size >= 2, UserMessage.STACK_APART)
         if (onServer.size >= 2) server.stackTogether(onServer)
         if (onPhone.size >= 2) device.stackTogether(onPhone)
-        rebuildStacks()
+        afterChange()
     }
 
     override suspend fun makeStackCover(assetId: String) = onBothSides(assetId) { makeStackCover(it) }
@@ -335,13 +382,13 @@ class UnifiedLibrary(
         check(onPhone != null || onServer != null) { "The photo is in no stack" }
         onPhone?.let { device.change(it) }
         onServer?.let { server.change(it) }
-        rebuildStacks()
+        afterChange()
     }
 
     override suspend fun stackChanged(assetId: String) {
         val reference = AssetReference.parse(assetId)
         libraryOf(reference.libraryId).stackChanged(reference.localId)
-        rebuildStacks()
+        afterChange()
     }
 
     override suspend fun exportOriginal(assetId: String): String? {

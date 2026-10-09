@@ -493,6 +493,12 @@ class RoomLibraryRepository @Inject constructor(
             ?.originalAssetId
     }
 
+    override suspend fun syncStacks() {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        catalogSyncLock.withLock { refreshStacks(connection, libraryKey) }
+    }
+
     /** The catalogue's name when it has one; the timeline brings none, and then the server is asked. */
     override suspend fun nameAndMoment(assetId: String): Pair<String, String>? {
         val connection = requireConnection()

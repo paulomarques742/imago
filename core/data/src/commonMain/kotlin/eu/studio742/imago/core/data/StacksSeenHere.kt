@@ -243,3 +243,45 @@ internal fun unifiedStacks(
         }
     }
 }
+
+/**
+ * The phone's stacks after the server's changed from [seen] — how they were the last time — to
+ * [current]. What the app changes goes to both sides at once, so whatever differs here was changed on
+ * the server since, on the web or another app: it is the newest change, and the phone follows it.
+ *
+ * A stack undone on the server undoes the phone's stack that holds its photos; photos taken out there
+ * leave it here; a stack made or changed there stacks the photos the phone has the same way, its
+ * cover first. [phoneCopyOf] gives each server photo's copy on the phone; a photo with none is left
+ * alone, and a stack with fewer than two photos on the phone is none here.
+ */
+internal fun mirroredLocally(
+    libraryKey: String,
+    local: List<StackMemberEntity>,
+    seen: List<StackMemberEntity>,
+    current: List<StackMemberEntity>,
+    phoneCopyOf: Map<String, String>,
+): List<StackMemberEntity> {
+    val before = seen.groupBy { it.stackId }
+    val now = current.groupBy { it.stackId }
+    fun copies(members: List<StackMemberEntity>) =
+        members.sortedByDescending { it.isCover }.mapNotNull { phoneCopyOf[it.assetId] }.distinct()
+    fun shape(members: List<StackMemberEntity>) = members.map { it.assetId to it.primaryAssetId }.toSet()
+    var members = local
+    before.filterKeys { it !in now }.values.forEach { undone ->
+        val photos = copies(undone).toSet()
+        val stacks = members.filter { it.assetId in photos }.map { it.stackId }.toSet()
+        members = members.filterNot { it.stackId in stacks }
+    }
+    now.forEach { (stackId, after) ->
+        val prior = before[stackId] ?: return@forEach
+        val out = (prior.map { it.assetId } - after.map { it.assetId }.toSet()).mapNotNull { phoneCopyOf[it] }.toSet()
+        members = members.filterNot { it.assetId in out }
+    }
+    now.forEach { (stackId, after) ->
+        val prior = before[stackId]
+        if (prior != null && shape(prior) == shape(after)) return@forEach
+        val photos = copies(after)
+        if (photos.size >= 2) members = stackedTogether(libraryKey, photos, members, "immich:$stackId")
+    }
+    return settleLocalStacks(members, gone = emptySet())
+}
