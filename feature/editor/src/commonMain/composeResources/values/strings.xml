@@ -90,6 +90,12 @@
     <string name="editor_curve_channel_red">Red</string>
     <string name="editor_curve_channel_green">Green</string>
     <string name="editor_curve_channel_blue">Blue</string>
+    <string name="editor_white_balance">White Balance</string>
+    <string name="editor_white_balance_picker">White Balance Selector</string>
+    <string name="editor_white_balance_pick">Pick the white balance on the photo</string>
+    <string name="editor_white_balance_pick_hint">Move the loupe to something that should be grey</string>
+    <string name="editor_white_balance_unreadable">Too dark or too bright to read</string>
+    <string name="editor_history_white_balance_picked">Selector</string>
     <string name="editor_crop_frame">Adjustable crop frame</string>
     <string name="editor_aspect_free_state">Free aspect ratio</string>
     <string name="editor_crop_move_left">Move crop left</string>

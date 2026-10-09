@@ -11,6 +11,7 @@ import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.Tone
+import eu.studio742.imago.core.render.NeutralWhiteBalance
 import eu.studio742.imago.core.render.toRenderParameters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -220,6 +221,49 @@ class RecipeEditorTest {
 
         assertEquals(0.5f, viewModel.state.value.recipe!!.tone.exposure)
         assertFalse(viewModel.state.value.hasUnsavedRecipeChanges)
+    }
+
+    @Test
+    fun `the white balance selector is one history step, and cancel puts back what there was`() {
+        openRecipe(RecipeSource.Saved(original))
+        val before = viewModel.state.value.recipe!!.whiteBalance
+
+        viewModel.startWhiteBalancePick()
+        viewModel.pickWhiteBalance(NeutralWhiteBalance(temperature = -30f, tint = 12f))
+        assertEquals(-30f, viewModel.state.value.recipe!!.whiteBalance.temp)
+        viewModel.pickWhiteBalance(null)
+        assertTrue(viewModel.state.value.whiteBalanceUnreadable)
+        assertEquals("an unreadable area changes nothing", -30f, viewModel.state.value.recipe!!.whiteBalance.temp)
+        viewModel.cancelWhiteBalancePick()
+
+        assertFalse(viewModel.state.value.isPickingWhiteBalance)
+        assertEquals(before, viewModel.state.value.recipe!!.whiteBalance)
+        assertFalse(viewModel.state.value.canUndo)
+
+        viewModel.startWhiteBalancePick()
+        viewModel.pickWhiteBalance(NeutralWhiteBalance(temperature = 20f, tint = -5f))
+        viewModel.pickWhiteBalance(NeutralWhiteBalance(temperature = 25f, tint = -8f))
+        viewModel.acceptWhiteBalancePick()
+
+        val kept = viewModel.state.value.recipe!!
+        assertEquals(25f, kept.whiteBalance.temp)
+        assertEquals(-8f, kept.whiteBalance.tint)
+        assertTrue(viewModel.state.value.canUndo)
+        viewModel.undo()
+        assertEquals("the two picks were one step", before, viewModel.state.value.recipe!!.whiteBalance)
+    }
+
+    @Test
+    fun `leaving the panel while picking keeps what was picked`() {
+        openRecipe(RecipeSource.Saved(original))
+        viewModel.startWhiteBalancePick()
+        viewModel.pickWhiteBalance(NeutralWhiteBalance(temperature = 15f, tint = 0f))
+
+        viewModel.selectPanel(EditorPanel.LIGHT)
+
+        assertFalse(viewModel.state.value.isPickingWhiteBalance)
+        assertEquals(15f, viewModel.state.value.recipe!!.whiteBalance.temp)
+        assertTrue(viewModel.state.value.canUndo)
     }
 
     @Test

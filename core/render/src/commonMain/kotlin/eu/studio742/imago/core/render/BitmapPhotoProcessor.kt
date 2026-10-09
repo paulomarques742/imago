@@ -455,7 +455,7 @@ object BitmapPhotoProcessor {
         return mix(curves[left * 3 + channel], curves[right * 3 + channel], position - left)
     }
 
-    private fun srgbToLinear(value: Float): Float =
+    internal fun srgbToLinear(value: Float): Float =
         if (value < 0.04045f) value / 12.92f else ((value + 0.055f) / 1.055f).pow(2.4f)
 
     private fun linearToSrgb(value: Float): Float {

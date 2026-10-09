@@ -2,6 +2,10 @@
 
 package eu.studio742.imago.feature.editor
 
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Colorize
+import androidx.compose.ui.text.style.TextAlign
 import eu.studio742.imago.core.designsystem.i18n.uiText
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.designsystem.i18n.resolve
@@ -380,6 +384,14 @@ fun EditorRoute(
                 onRotate = viewModel::rotateMask,
             )
         },
+        whiteBalanceActions = remember(viewModel) {
+            WhiteBalancePickActions(
+                onStart = viewModel::startWhiteBalancePick,
+                onPick = viewModel::pickWhiteBalance,
+                onAccept = viewModel::acceptWhiteBalancePick,
+                onCancel = viewModel::cancelWhiteBalancePick,
+            )
+        },
         perspectiveActions = remember(viewModel) {
             PerspectiveActions(
                 onConstrainCrop = viewModel::setConstrainCrop,
@@ -537,6 +549,7 @@ private fun EditorScreen(
     maskActions: MaskActions,
     colorGradeActions: ColorGradeActions,
     perspectiveActions: PerspectiveActions,
+    whiteBalanceActions: WhiteBalancePickActions,
     recipeActions: RecipeEditActions?,
 ) {
     val recipeMode = recipeActions != null
@@ -788,6 +801,8 @@ private fun EditorScreen(
     BackHandler(enabled = !rail && drawer != DrawerDetent.CLOSED && !chromeHidden) {
         drawer = DrawerDetent.CLOSED
     }
+    // Declared after, so it runs first: back leaves the selector, as its cancel does, before anything else.
+    BackHandler(enabled = state.isPickingWhiteBalance) { whiteBalanceActions.onCancel() }
     // The source of the recipe previews is the same bitmap as the preview, reduced once. Switching
     // photos throws away the previous ones, which no longer describe anything.
     LaunchedEffect(assetId, state.bitmap) {
@@ -1425,6 +1440,26 @@ private fun EditorScreen(
                                         )
                                     },
                             )
+                            val pickerGeometry = maskFrameGeometry
+                            if (state.isPickingWhiteBalance && !cropMode && pickerGeometry != null &&
+                                loupePhoto != null && stageSize != IntSize.Zero
+                            ) {
+                                WhiteBalancePickerOverlay(
+                                    bounds = photoBounds(
+                                        surfaceWidth = stageSize.width,
+                                        surfaceHeight = stageSize.height,
+                                        imageWidth = imageSize.first,
+                                        imageHeight = imageSize.second,
+                                        transform = transform,
+                                        quarterTurns = quarterTurns,
+                                    ),
+                                    geometry = pickerGeometry,
+                                    photo = loupePhoto,
+                                    onPick = whiteBalanceActions.onPick,
+                                    onAccept = whiteBalanceActions.onAccept,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                         }
                     }
                     if (isActiveAsset && state.isLoading) {
@@ -1595,6 +1630,7 @@ private fun EditorScreen(
                         maskActions = maskActions,
                         colorGradeActions = colorGradeActions,
                         perspectiveActions = perspectiveActions,
+                        whiteBalanceActions = whiteBalanceActions,
                     )
                     val openTool = when (state.sheet) {
                         EditorSheet.CROP, EditorSheet.PERSPECTIVE -> EditorTool.CROP
@@ -2087,6 +2123,7 @@ private fun AdjustmentPanel(
     maskActions: MaskActions,
     colorGradeActions: ColorGradeActions,
     perspectiveActions: PerspectiveActions,
+    whiteBalanceActions: WhiteBalancePickActions,
 ) {
     // Dragging a value fades the panel to let the photo show underneath. In a rail there is nothing
     // underneath — the photo is beside it, always in view — and fading it would make the column the
@@ -2166,6 +2203,7 @@ private fun AdjustmentPanel(
                         onAdjustment = onAdjustment,
                         onAdjustmentFinished = onAdjustmentFinished,
                         onResetAdjustment = onResetAdjustment,
+                        whiteBalanceActions = whiteBalanceActions,
                     )
                 }
                 EditorSheet.CURVE -> CurvePanel(
@@ -2264,7 +2302,12 @@ private fun AdjustmentPanel(
 }
 
 /** A group of sliders, with a header when the panel has more than one family of adjustments. */
-private data class AdjustmentGroup(val title: String?, val entries: List<Pair<Adjustment, String>>)
+private data class AdjustmentGroup(
+    val title: String?,
+    val entries: List<Pair<Adjustment, String>>,
+    /** The header carries the White Balance Selector, as Lightroom's does. */
+    val whiteBalancePicker: Boolean = false,
+)
 
 @Composable
 private fun EditorPanel.adjustmentGroups(): List<AdjustmentGroup> = when (this) {
@@ -2283,13 +2326,13 @@ private fun EditorPanel.adjustmentGroups(): List<AdjustmentGroup> = when (this) 
     )
     EditorPanel.COLOR -> listOf(
         AdjustmentGroup(
+            title = stringResource(Res.string.editor_white_balance),
+            entries = listOf(Adjustment.TEMPERATURE, Adjustment.TINT).withLabels(),
+            whiteBalancePicker = true,
+        ),
+        AdjustmentGroup(
             title = null,
-            entries = listOf(
-                Adjustment.TEMPERATURE,
-                Adjustment.TINT,
-                Adjustment.VIBRANCE,
-                Adjustment.SATURATION,
-            ).withLabels(),
+            entries = listOf(Adjustment.VIBRANCE, Adjustment.SATURATION).withLabels(),
         ),
     )
     EditorPanel.DETAIL -> listOf(
@@ -2364,6 +2407,28 @@ private fun EditorPanel.adjustmentGroups(): List<AdjustmentGroup> = when (this) 
 @Composable
 private fun List<Adjustment>.withLabels(): List<Pair<Adjustment, String>> = map { it to it.label() }
 
+/** The White Balance group's header while the selector is on: the way back, what to do, and keep. */
+@Composable
+private fun WhiteBalancePickBar(unreadable: Boolean, onCancel: () -> Unit, onAccept: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onCancel) {
+            Icon(Icons.Outlined.Close, contentDescription = stringResource(Res.string.editor_cancel), tint = ImagoColors.TextPrimary)
+        }
+        Text(
+            text = stringResource(
+                if (unreadable) Res.string.editor_white_balance_unreadable else Res.string.editor_white_balance_pick_hint,
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (unreadable) ImagoColors.Gold else ImagoColors.TextSecondary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onAccept) {
+            Icon(Icons.Outlined.Check, contentDescription = stringResource(Res.string.editor_apply), tint = ImagoColors.Gold)
+        }
+    }
+}
+
 @Composable
 private fun SliderPanel(
     state: EditorUiState,
@@ -2373,6 +2438,7 @@ private fun SliderPanel(
     onAdjustment: (Adjustment, Float) -> Unit,
     onAdjustmentFinished: () -> Unit,
     onResetAdjustment: (Adjustment) -> Unit,
+    whiteBalanceActions: WhiteBalancePickActions? = null,
 ) {
     Column(
         modifier = Modifier
@@ -2388,18 +2454,44 @@ private fun SliderPanel(
                     animationSpec = tween(durationMillis = 160),
                     label = "groupHeader",
                 )
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = ImagoColors.Gold,
-                    modifier = Modifier
-                        .alpha(headerAlpha)
-                        .padding(top = ImagoSpacing.Sm, bottom = ImagoSpacing.Xs),
-                )
+                val picker = whiteBalanceActions?.takeIf { group.whiteBalancePicker }
+                if (picker != null && state.isPickingWhiteBalance) {
+                    WhiteBalancePickBar(
+                        unreadable = state.whiteBalanceUnreadable,
+                        onCancel = picker.onCancel,
+                        onAccept = picker.onAccept,
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().alpha(headerAlpha),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = ImagoColors.Gold,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(top = ImagoSpacing.Sm, bottom = ImagoSpacing.Xs),
+                        )
+                        if (picker != null) {
+                            IconButton(onClick = picker.onStart) {
+                                Icon(
+                                    Icons.Outlined.Colorize,
+                                    contentDescription = stringResource(Res.string.editor_white_balance_pick),
+                                    tint = ImagoColors.TextSecondary,
+                                )
+                            }
+                        }
+                    }
+                }
             }
             group.entries.forEach { (adjustment, label) ->
                 val parent = adjustment.parent()
-                val enabled = parent == null || state.valueOf(parent) != parent.neutral
+                // While the selector is on, its sliders show what it picks and are not for the finger:
+                // the two would be writing the same values in the same history entry.
+                val enabled = !state.isPickingWhiteBalance &&
+                    (parent == null || state.valueOf(parent) != parent.neutral)
                 ImagoParameterSlider(
                     label = label,
                     value = state.valueOf(adjustment),
@@ -3021,6 +3113,14 @@ private fun CropAspectSheet(
     )
     }
 }
+
+/** The White Balance Selector: turn it on, hand it what the loupe read, keep it or go back. */
+data class WhiteBalancePickActions(
+    val onStart: () -> Unit,
+    val onPick: (eu.studio742.imago.core.render.NeutralWhiteBalance?) -> Unit,
+    val onAccept: () -> Unit,
+    val onCancel: () -> Unit,
+)
 
 /** What the perspective sheet asks of the screen besides the sliders, which go the way of all others. */
 data class PerspectiveActions(

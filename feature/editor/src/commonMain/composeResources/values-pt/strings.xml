@@ -90,6 +90,12 @@
     <string name="editor_curve_channel_red">Vermelho</string>
     <string name="editor_curve_channel_green">Verde</string>
     <string name="editor_curve_channel_blue">Azul</string>
+    <string name="editor_white_balance">Equilíbrio de brancos</string>
+    <string name="editor_white_balance_picker">Seletor do equilíbrio de brancos</string>
+    <string name="editor_white_balance_pick">Escolher o equilíbrio de brancos na foto</string>
+    <string name="editor_white_balance_pick_hint">Leve a lupa a algo que devia ser cinzento</string>
+    <string name="editor_white_balance_unreadable">Demasiado escuro ou claro para ler</string>
+    <string name="editor_history_white_balance_picked">Seletor</string>
     <string name="editor_crop_frame">Moldura de corte ajustável</string>
     <string name="editor_aspect_free_state">Proporção livre</string>
     <string name="editor_crop_move_left">Mover corte para a esquerda</string>

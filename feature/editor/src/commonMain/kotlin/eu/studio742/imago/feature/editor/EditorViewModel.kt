@@ -38,6 +38,7 @@ import eu.studio742.imago.core.data.RecipeRepository
 import eu.studio742.imago.core.data.SavedRecipeRepository
 import eu.studio742.imago.core.model.BUILT_IN_RECIPES
 import eu.studio742.imago.core.model.BuiltInRecipeMark
+import eu.studio742.imago.core.render.NeutralWhiteBalance
 import eu.studio742.imago.core.model.BuiltInRecipe
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.CURRENT_PROCESS_VERSION
@@ -438,6 +439,10 @@ data class EditorUiState(
     val sheet: EditorSheet = EditorSheet.ADJUSTMENTS,
     val selectedHslBand: HslColorBand = HslColorBand.RED,
     val curveChannel: CurveChannel = CurveChannel.RGB,
+    /** The White Balance Selector is on: a finger on the photo reads a colour instead of moving it. */
+    val isPickingWhiteBalance: Boolean = false,
+    /** The last area read was too dark or burnt out to say anything about the light. */
+    val whiteBalanceUnreadable: Boolean = false,
     val selectedColorGradeWheel: ColorGradeWheel = ColorGradeWheel.SHADOWS,
     val selectedMaskId: String? = null,
     /** "Show mask" pins the red; otherwise it only lights up during the gesture. */
@@ -830,7 +835,7 @@ open class EditorViewModel(
      * are no adjustments to show before there is a region to apply them to. Leaving the category drops
      * the selection, or a global slider would move a mask that is no longer in view.
      */
-    fun selectPanel(panel: EditorPanel) = mutableState.update {
+    fun selectPanel(panel: EditorPanel) = endWhiteBalancePickThen {
         if (panel == EditorPanel.MASKS) {
             it.copy(panel = panel, sheet = EditorSheet.MASKS, selectedMaskId = null, maskOverlayPinned = false)
         } else {
@@ -843,7 +848,73 @@ open class EditorViewModel(
         }
     }
 
-    fun selectSheet(sheet: EditorSheet) = mutableState.update { it.copy(sheet = sheet) }
+    fun selectSheet(sheet: EditorSheet) = endWhiteBalancePickThen { it.copy(sheet = sheet) }
+
+    /** Leaving the panel while picking keeps what was picked, as moving on from a slider does. */
+    private fun endWhiteBalancePickThen(change: (EditorUiState) -> EditorUiState) {
+        if (state.value.isPickingWhiteBalance) acceptWhiteBalancePick()
+        mutableState.update(change)
+    }
+
+    /**
+     * Turns on the White Balance Selector. Everything picked until it closes is one history entry,
+     * and cancelling goes back to the white balance there was.
+     */
+    fun startWhiteBalancePick() {
+        val current = state.value.recipe ?: return
+        if (state.value.isPickingWhiteBalance) return
+        finishAdjustment()
+        editStart = current
+        pendingChange = PendingChange.Fixed(
+            label = uiText(Res.string.editor_white_balance),
+            detail = uiText(Res.string.editor_history_white_balance_picked),
+            valueText = null,
+            icon = HistoryIcon.COLOR,
+        )
+        mutableState.update { it.copy(isPickingWhiteBalance = true, whiteBalanceUnreadable = false) }
+    }
+
+    /** What the loupe read: the white balance that makes it grey, or null where it could not tell. */
+    fun pickWhiteBalance(pick: NeutralWhiteBalance?) {
+        if (!state.value.isPickingWhiteBalance) return
+        val current = state.value.recipe ?: return
+        if (pick == null) {
+            mutableState.update { it.copy(whiteBalanceUnreadable = true) }
+            return
+        }
+        val balance = current.whiteBalance.copy(temp = pick.temperature, tint = pick.tint)
+        if (balance == current.whiteBalance) {
+            mutableState.update { it.copy(whiteBalanceUnreadable = false) }
+            return
+        }
+        val updated = current.copy(
+            processVersion = CURRENT_PROCESS_VERSION,
+            geometry = current.geometry.activeAtProcess(current.processVersion),
+            whiteBalance = balance,
+            updatedAt = Instant.now().toString(),
+        )
+        mutableState.update { it.copy(recipe = updated, isSaving = true, whiteBalanceUnreadable = false) }
+        scheduleSave(updated)
+    }
+
+    fun acceptWhiteBalancePick() {
+        if (!state.value.isPickingWhiteBalance) return
+        mutableState.update { it.copy(isPickingWhiteBalance = false, whiteBalanceUnreadable = false) }
+        finishAdjustment()
+    }
+
+    fun cancelWhiteBalancePick() {
+        if (!state.value.isPickingWhiteBalance) return
+        val start = editStart
+        editStart = null
+        pendingChange = null
+        val current = state.value.recipe
+        mutableState.update { it.copy(isPickingWhiteBalance = false, whiteBalanceUnreadable = false) }
+        if (start != null && current != null && start != current) {
+            mutableState.update { it.copy(recipe = start, isSaving = true) }
+            scheduleSave(start)
+        }
+    }
 
     fun selectHslBand(band: HslColorBand) = mutableState.update { it.copy(selectedHslBand = band) }
 
