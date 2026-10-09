@@ -9,5 +9,6 @@ object SyncTables {
         "composition_templates" to "updatedAt",
         "brand_kits" to "updatedAt",
         "composition_projects" to "updatedAt",
+        "built_in_recipe_marks" to "updatedAt",
     )
 }

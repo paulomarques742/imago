@@ -37,6 +37,7 @@ import eu.studio742.imago.core.data.DerivedAssetRepository
 import eu.studio742.imago.core.data.RecipeRepository
 import eu.studio742.imago.core.data.SavedRecipeRepository
 import eu.studio742.imago.core.model.BUILT_IN_RECIPES
+import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.BuiltInRecipe
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.CURRENT_PROCESS_VERSION
@@ -446,6 +447,7 @@ data class EditorUiState(
     val exportMessage: UiText? = null,
     val exportError: UiText? = null,
     val savedRecipes: List<SavedRecipe> = emptyList(),
+    val builtInMarks: List<BuiltInRecipeMark> = emptyList(),
     val canPasteRecipe: Boolean = false,
     val isRecipeLibraryLoading: Boolean = false,
     val recipeNotice: UiText? = null,
@@ -594,6 +596,7 @@ open class EditorViewModel(
             asset = asset,
             isLoading = true,
             savedRecipes = retained.savedRecipes,
+            builtInMarks = retained.builtInMarks,
             canPasteRecipe = copiedRecipe != null,
             isRecipeLibraryLoading = retained.isRecipeLibraryLoading,
             recipeNotice = retained.recipeNotice,
@@ -709,7 +712,9 @@ open class EditorViewModel(
         loadJob?.cancel()
         activeTarget = null
         recipeSessionKey = null
-        mutableState.update { EditorUiState(savedRecipes = it.savedRecipes, canPasteRecipe = it.canPasteRecipe) }
+        mutableState.update {
+            EditorUiState(savedRecipes = it.savedRecipes, builtInMarks = it.builtInMarks, canPasteRecipe = it.canPasteRecipe)
+        }
     }
 
     /**
@@ -1474,10 +1479,23 @@ open class EditorViewModel(
         }
     }
 
-    /** Applies one of the app's presets. They do not live in Room and have nothing to record. */
+    /** Applies one of the app's presets. The preset is code; only its last use is recorded. */
     fun applyBuiltInRecipe(id: String) {
         val builtIn = BUILT_IN_RECIPES.firstOrNull { it.id == id } ?: return
         applyReusableRecipe(builtIn.recipe, uiText(Res.string.editor_filter_applied, builtIn.nameText()), label = builtIn.nameText())
+        val mark = state.value.builtInMarks.firstOrNull { it.id == id } ?: BuiltInRecipeMark(id)
+        viewModelScope.launch {
+            runCatching { savedRecipes.saveBuiltInMark(mark.copy(usedAt = Instant.now().toString())) }
+            refreshSavedRecipes()
+        }
+    }
+
+    fun toggleBuiltInRecipeFavorite(id: String) {
+        val mark = state.value.builtInMarks.firstOrNull { it.id == id } ?: BuiltInRecipeMark(id)
+        viewModelScope.launch {
+            runCatching { savedRecipes.saveBuiltInMark(mark.copy(isFavorite = !mark.isFavorite)) }
+            refreshSavedRecipes()
+        }
     }
 
     fun toggleSavedRecipeFavorite(id: String) {
@@ -1921,9 +1939,9 @@ open class EditorViewModel(
     private fun refreshSavedRecipes() {
         mutableState.update { it.copy(isRecipeLibraryLoading = true) }
         viewModelScope.launch {
-            runCatching { savedRecipes.list() }
-                .onSuccess { items ->
-                    mutableState.update { it.copy(savedRecipes = items, isRecipeLibraryLoading = false) }
+            runCatching { savedRecipes.list() to savedRecipes.builtInMarks() }
+                .onSuccess { (items, marks) ->
+                    mutableState.update { it.copy(savedRecipes = items, builtInMarks = marks, isRecipeLibraryLoading = false) }
                 }
                 .onFailure { error ->
                     mutableState.update {

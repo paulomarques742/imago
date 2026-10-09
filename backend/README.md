@@ -115,7 +115,8 @@ Every syncable entity has the same shape — `key`, `payload`, `revision`, `seq`
 | `sync_record_conflict(entity, key, revision, payload, edited_at, device)` | Stores the version that lost a conflict. |
 | `sync_pull(entity, cursor, limit)` | What changed since the cursor, in `seq` order. `RECIPE_CONFLICT` returns the lost versions of recipes. |
 
-`entity` is `RECIPE`, `DERIVED_ASSET`, `SAVED_RECIPE`, `TEMPLATE`, `PROJECT` or `BRAND_KIT`.
+`entity` is `RECIPE`, `DERIVED_ASSET`, `SAVED_RECIPE`, `TEMPLATE`, `PROJECT`, `BRAND_KIT` or
+`BUILT_IN_RECIPE_MARK` (the heart and last use on the app's presets).
 `devices` and `libraries` are read directly from their tables (row-level security shows only the
 account's own), and removing a device is a `delete` on `devices`. Realtime only publishes
 `sync_signals`, one small row per entity that wakes the other devices.

@@ -16,6 +16,7 @@ import eu.studio742.imago.core.data.MediaResolver
 import eu.studio742.imago.core.data.ReferenceTranslator
 import eu.studio742.imago.core.data.RemoteRecipeStore
 import eu.studio742.imago.core.data.db.BrandKitEntity
+import eu.studio742.imago.core.data.db.BuiltInRecipeMarkEntity
 import eu.studio742.imago.core.data.db.CompositionProjectEntity
 import eu.studio742.imago.core.data.db.CompositionTemplateEntity
 import eu.studio742.imago.core.data.db.DerivedAssetEntity
@@ -200,6 +201,52 @@ internal class SavedRecipeSync(
     private fun withoutReferences(value: JsonObject) = JsonObject(value.mapValues { (key, child) ->
         if (key.endsWith("ssetId") || key == "originalChecksum") JsonPrimitive("") else child
     })
+}
+
+/** The heart and last use on the app's presets: `(user_id, preset id)`. Nothing in them points at a photo. */
+internal class BuiltInRecipeMarkSync(private val database: ImmichRoomDatabase) : SyncedEntity {
+    override val entity = SyncEntity.BUILT_IN_RECIPE_MARK
+    private val dao get() = database.builtInRecipeMarkDao()
+
+    override suspend fun pending(limit: Int) = dao.pending(limit).map { entity ->
+        SyncRow(
+            key = entity.id,
+            baseRevision = entity.sync.remoteRevision,
+            payload = buildJsonObject {
+                put("id", JsonPrimitive(entity.id))
+                put("isFavorite", JsonPrimitive(entity.isFavorite))
+                entity.usedAt?.let { put("usedAt", JsonPrimitive(it)) }
+                put("updatedAt", JsonPrimitive(entity.updatedAt))
+            },
+            editedAt = entity.sync.editedAt,
+            deleted = entity.sync.deletedAt != null,
+            dirty = entity.sync.dirty,
+        )
+    }
+    override suspend fun pendingCount() = dao.pendingCount()
+    override fun observePendingCount() = dao.observePendingCount()
+    override suspend fun local(key: String) = dao.getAny(key)?.let { LocalState(it.sync.dirty, it.sync.remoteRevision) }
+
+    override suspend fun markPushed(key: String, revision: Long?, sentEditedAt: String) {
+        val row = dao.getAny(key) ?: return
+        if (row.sync.editedAt != sentEditedAt) return
+        if (row.sync.deletedAt != null) dao.delete(key)
+        else dao.upsert(row.copy(sync = row.sync.copy(remoteRevision = revision, dirty = false)))
+    }
+
+    override suspend fun apply(change: IncomingChange, resolvingConflict: Boolean) {
+        if (change.deletedAt != null) return dao.delete(change.key)
+        val payload = change.payload
+        dao.upsert(
+            BuiltInRecipeMarkEntity(
+                id = change.key,
+                isFavorite = payload.boolean("isFavorite"),
+                usedAt = payload.string("usedAt"),
+                updatedAt = payload.string("updatedAt").orEmpty(),
+                sync = change.syncState(),
+            ),
+        )
+    }
 }
 
 /** Composition templates: `(user_id, id)`. */

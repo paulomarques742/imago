@@ -8,6 +8,7 @@ import eu.studio742.imago.core.data.RecipeRepository
 import eu.studio742.imago.core.data.SavedRecipeRepository
 import eu.studio742.imago.core.immich.ImmichApi
 import eu.studio742.imago.core.model.EditRecipe
+import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.UPRIGHT_GUIDED
 import eu.studio742.imago.core.model.UPRIGHT_OFF
@@ -65,6 +66,8 @@ class GuidedUprightEditingTest {
                 override suspend fun list() = listOf(saved)
                 override suspend fun save(recipe: SavedRecipe) = Unit
                 override suspend fun delete(id: String) = Unit
+                override suspend fun builtInMarks() = emptyList<BuiltInRecipeMark>()
+                override suspend fun saveBuiltInMark(mark: BuiltInRecipeMark) = Unit
             },
             derivedAssets = unused<DerivedAssetRepository>(),
             configuration = unused<ConfigurationRepository>(),

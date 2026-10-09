@@ -67,6 +67,8 @@
     <string name="editor_name">Nome</string>
     <string name="editor_collection">Coleção</string>
     <string name="editor_collection_hint">Ex.: Retratos, Viagens ou Preto e branco</string>
+    <string name="editor_new_collection">Nova coleção</string>
+    <string name="editor_new_collection_name">Nome da coleção</string>
     <string name="editor_group_vignette">Vinheta</string>
     <string name="editor_amount">Intensidade</string>
     <string name="editor_midpoint">Ponto médio</string>
@@ -211,9 +213,9 @@
     <string name="editor_organize">Organizar</string>
     <string name="editor_create_recipe">Criar receita</string>
     <string name="editor_create_recipe_hint">Guarde os seus ajustes como uma receita personalizada.</string>
-    <string name="editor_tab_recipes">Receitas</string>
-    <string name="editor_tab_filters">Filtros</string>
-    <string name="editor_tab_favorites">Favoritos</string>
+    <string name="editor_tab_mine">Minhas</string>
+    <string name="editor_tab_imago">IMAGO</string>
+    <string name="editor_tab_favorites">Favoritas</string>
     <string name="editor_tab_recent">Recentes</string>
     <string name="editor_empty_saved">Ainda não guardou nenhuma receita.</string>
     <string name="editor_empty_filters">Não há filtros disponíveis.</string>

@@ -63,6 +63,7 @@ import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.ImagoTabRow
 import eu.studio742.imago.core.model.BUILT_IN_RECIPES
+import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.label
@@ -80,18 +81,17 @@ data class RecipeCard(
 )
 
 /**
- * The mockup's tabs.
- *
- * "Filters" are the presets that come with the app; "Recipes" the ones the user saved. It is the
- * distinction the two names already suggest, and the only one the data supports.
+ * Where a recipe comes from — the person's own, or the app's — and then the two views that mix both:
+ * a heart and a last use mean the same on either.
  */
-enum class RecipeTab { SAVED, BUILT_IN, FAVORITES, RECENT }
+enum class RecipeTab { MINE, IMAGO, FAVORITES, RECENT }
 
 /** The "all" chip is not a group: it is the absence of a filter. A collection never has an empty name. */
 private const val ALL_GROUPS = ""
 
 @Composable
-fun builtInCards(): List<RecipeCard> = BUILT_IN_RECIPES.map {
+fun builtInCards(marks: List<BuiltInRecipeMark>): List<RecipeCard> = BUILT_IN_RECIPES.map {
+    val mark = marks.firstOrNull { mark -> mark.id == it.id }
     RecipeCard(
         id = it.id,
         name = it.nameText().resolve(),
@@ -99,8 +99,8 @@ fun builtInCards(): List<RecipeCard> = BUILT_IN_RECIPES.map {
         group = stringResource(it.category.labelRes()),
         recipe = it.recipe,
         isBuiltIn = true,
-        isFavorite = false,
-        usedAt = null,
+        isFavorite = mark?.isFavorite == true,
+        usedAt = mark?.usedAt,
     )
 }
 
@@ -143,15 +143,15 @@ fun RecipeLibraryScreen(
     bottomBar: @Composable () -> Unit = {},
 ) {
     // Saveable, so that coming back from editing a recipe finds the same tab and the same filter.
-    var tab by rememberSaveable { mutableStateOf(if (saved.isEmpty()) RecipeTab.BUILT_IN else RecipeTab.SAVED) }
+    var tab by rememberSaveable { mutableStateOf(if (saved.isEmpty()) RecipeTab.IMAGO else RecipeTab.MINE) }
     var group by rememberSaveable(tab) { mutableStateOf(ALL_GROUPS) }
 
     val visible = when (tab) {
-        RecipeTab.SAVED -> saved
-        RecipeTab.BUILT_IN -> builtIn
-        RecipeTab.FAVORITES -> saved.filter { it.isFavorite }
+        RecipeTab.MINE -> saved
+        RecipeTab.IMAGO -> builtIn
+        RecipeTab.FAVORITES -> (saved + builtIn).filter { it.isFavorite }
         // Without `usedAt` the recipe was never applied and has no place in "Recent".
-        RecipeTab.RECENT -> saved.filter { it.usedAt != null }.sortedByDescending { it.usedAt }
+        RecipeTab.RECENT -> (saved + builtIn).filter { it.usedAt != null }.sortedByDescending { it.usedAt }
     }
     val groups = listOf(ALL_GROUPS) + visible.map(RecipeCard::group).distinct().sorted()
     val filtered = if (group == ALL_GROUPS) visible else visible.filter { it.group == group }
@@ -270,27 +270,24 @@ private fun RecipeTile(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            // The heart only exists on the user's recipes: the app's are not theirs to mark.
-            if (!card.isBuiltIn) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .size(ImagoSizes.TouchTarget)
-                        .clip(CircleShape)
-                        .clickable(role = Role.Checkbox, onClick = onToggleFavorite),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = if (card.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = if (card.isFavorite) {
-                            stringResource(Res.string.editor_recipe_unfavorite, card.name)
-                        } else {
-                            stringResource(Res.string.editor_recipe_favorite, card.name)
-                        },
-                        tint = ImagoColors.BrandWhite,
-                        modifier = Modifier.size(ImagoSizes.IconDefault),
-                    )
-                }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(ImagoSizes.TouchTarget)
+                    .clip(CircleShape)
+                    .clickable(role = Role.Checkbox, onClick = onToggleFavorite),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (card.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                    contentDescription = if (card.isFavorite) {
+                        stringResource(Res.string.editor_recipe_unfavorite, card.name)
+                    } else {
+                        stringResource(Res.string.editor_recipe_favorite, card.name)
+                    },
+                    tint = ImagoColors.BrandWhite,
+                    modifier = Modifier.size(ImagoSizes.IconDefault),
+                )
             }
             // The gradient holds the name over the preview, which may be light or dark.
             Box(
@@ -412,16 +409,16 @@ private fun CreateRecipeRow(label: String, hint: String, onClick: () -> Unit) {
 
 @Composable
 private fun RecipeTab.label() = when (this) {
-    RecipeTab.SAVED -> stringResource(Res.string.editor_tab_recipes)
-    RecipeTab.BUILT_IN -> stringResource(Res.string.editor_tab_filters)
+    RecipeTab.MINE -> stringResource(Res.string.editor_tab_mine)
+    RecipeTab.IMAGO -> stringResource(Res.string.editor_tab_imago)
     RecipeTab.FAVORITES -> stringResource(Res.string.editor_tab_favorites)
     RecipeTab.RECENT -> stringResource(Res.string.editor_tab_recent)
 }
 
 @Composable
 private fun RecipeTab.emptyMessage() = when (this) {
-    RecipeTab.SAVED -> stringResource(Res.string.editor_empty_saved)
-    RecipeTab.BUILT_IN -> stringResource(Res.string.editor_empty_filters)
+    RecipeTab.MINE -> stringResource(Res.string.editor_empty_saved)
+    RecipeTab.IMAGO -> stringResource(Res.string.editor_empty_filters)
     RecipeTab.FAVORITES -> stringResource(Res.string.editor_empty_favorites)
     RecipeTab.RECENT -> stringResource(Res.string.editor_empty_recent)
 }

@@ -75,7 +75,7 @@ class SyncStateTest {
         old.version = 10
         old.close()
         val upgraded = Room.databaseBuilder(context, ImmichRoomDatabase::class.java, name)
-            .addMigrations(SyncMigration.MIGRATION_10_11, UnifiedMigration.MIGRATION_11_12, UnifiedMigration.MIGRATION_12_13, UnifiedMigration.MIGRATION_13_14, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_14_15, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_15_16).allowMainThreadQueries().build()
+            .addMigrations(SyncMigration.MIGRATION_10_11, UnifiedMigration.MIGRATION_11_12, UnifiedMigration.MIGRATION_12_13, UnifiedMigration.MIGRATION_13_14, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_14_15, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_15_16, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_16_17).allowMainThreadQueries().build()
         try {
             val sql = upgraded.openHelper.writableDatabase // Room validates the whole schema here.
             val recipe = upgraded.recipeDao().get("lib", "photo")!!
@@ -201,6 +201,23 @@ class SyncStateTest {
         presets.save(SavedRecipe("uploaded", "B", "C", recipe, "x", "x"))
         assertEquals(listOf("uploaded"), presets.list().map { it.id })
         assertNull(database.savedRecipeDao().getAny(GLOBAL_LIBRARY_ID, "uploaded")!!.sync.deletedAt)
+    }
+
+    @Test fun aMarkOnAnAppPresetWaitsToBeSentButTheSameMarkAgainIsNotAnEdit() = runBlocking {
+        val presets = RoomSavedRecipeRepository(database, configuration)
+        presets.saveBuiltInMark(BuiltInRecipeMark("built-in-pastel", isFavorite = true))
+        val first = database.builtInRecipeMarkDao().getAny("built-in-pastel")!!
+        assertTrue(first.sync.dirty)
+        database.builtInRecipeMarkDao().upsert(first.copy(sync = first.sync.copy(remoteRevision = 1, dirty = false)))
+
+        presets.saveBuiltInMark(BuiltInRecipeMark("built-in-pastel", isFavorite = true))
+        assertFalse(database.builtInRecipeMarkDao().getAny("built-in-pastel")!!.sync.dirty)
+
+        presets.saveBuiltInMark(BuiltInRecipeMark("built-in-pastel", isFavorite = true, usedAt = "2026-10-09T10:00:00Z"))
+        val used = database.builtInRecipeMarkDao().getAny("built-in-pastel")!!
+        assertTrue(used.sync.dirty)
+        assertEquals(1L, used.sync.remoteRevision)
+        assertEquals(listOf(BuiltInRecipeMark("built-in-pastel", true, "2026-10-09T10:00:00Z")), presets.builtInMarks())
     }
 
     @Test fun deletedProjectLeavesTheHubAndItsDeviceMediaIsHashed() = runBlocking {

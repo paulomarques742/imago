@@ -352,6 +352,7 @@ fun EditorRoute(
         onApplySavedRecipe = viewModel::applySavedRecipe,
         onApplyBuiltInRecipe = viewModel::applyBuiltInRecipe,
         onToggleRecipeFavorite = viewModel::toggleSavedRecipeFavorite,
+        onToggleBuiltInRecipeFavorite = viewModel::toggleBuiltInRecipeFavorite,
         onUpdateSavedRecipe = viewModel::updateSavedRecipe,
         onDeleteSavedRecipe = viewModel::deleteSavedRecipe,
         onConsumeRecipeNotice = viewModel::consumeRecipeNotice,
@@ -443,6 +444,7 @@ fun EditorRoute(
             title = stringResource(Res.string.editor_save_recipe),
             initialName = edit?.suggestedName?.resolve().orEmpty(),
             initialCollection = edit?.suggestedCollection?.resolve() ?: stringResource(Res.string.editor_default_collection),
+            collections = state.savedRecipes.collections(),
             confirmLabel = stringResource(Res.string.editor_tool_save),
             onDismiss = {
                 namingRecipe = false
@@ -522,6 +524,7 @@ private fun EditorScreen(
     onApplySavedRecipe: (String) -> Unit,
     onApplyBuiltInRecipe: (String) -> Unit,
     onToggleRecipeFavorite: (String) -> Unit,
+    onToggleBuiltInRecipeFavorite: (String) -> Unit,
     onUpdateSavedRecipe: (String, String, String) -> Unit,
     onDeleteSavedRecipe: (String) -> Unit,
     onConsumeRecipeNotice: () -> Unit,
@@ -1883,6 +1886,7 @@ private fun EditorScreen(
             title = stringResource(Res.string.editor_save_recipe),
             initialName = "",
             initialCollection = stringResource(Res.string.editor_default_collection),
+            collections = state.savedRecipes.collections(),
             confirmLabel = stringResource(Res.string.editor_tool_save),
             onDismiss = { showSaveRecipeDialog = false },
             onConfirm = { name, collection ->
@@ -1896,6 +1900,7 @@ private fun EditorScreen(
             title = stringResource(Res.string.editor_organize_recipe),
             initialName = saved.name,
             initialCollection = saved.collection,
+            collections = state.savedRecipes.collections(),
             confirmLabel = stringResource(Res.string.editor_save_changes),
             onDismiss = {
                 editingSavedRecipe = null
@@ -1913,7 +1918,7 @@ private fun EditorScreen(
         // choosing by name and choosing by result.
         RecipeLibraryScreen(
             saved = state.savedRecipes.toCards(),
-            builtIn = builtInCards(),
+            builtIn = builtInCards(state.builtInMarks),
             isLoading = state.isRecipeLibraryLoading,
             assetId = state.asset?.id,
             onBack = { showRecipeLibrary = false },
@@ -1921,7 +1926,9 @@ private fun EditorScreen(
                 if (card.isBuiltIn) onApplyBuiltInRecipe(card.id) else onApplySavedRecipe(card.id)
                 showRecipeLibrary = false
             },
-            onToggleFavorite = { onToggleRecipeFavorite(it.id) },
+            onToggleFavorite = { card ->
+                if (card.isBuiltIn) onToggleBuiltInRecipeFavorite(card.id) else onToggleRecipeFavorite(card.id)
+            },
             onRename = { card ->
                 showRecipeLibrary = false
                 editingSavedRecipe = state.savedRecipes.firstOrNull { it.id == card.id }
@@ -2033,50 +2040,6 @@ private fun RecipeEditTitle(state: EditorUiState) {
             )
         }
     }
-}
-
-@Composable
-internal fun RecipeDetailsDialog(
-    title: String,
-    initialName: String,
-    initialCollection: String,
-    confirmLabel: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit,
-) {
-    var name by remember(initialName) { mutableStateOf(initialName) }
-    var collection by remember(initialCollection) { mutableStateOf(initialCollection) }
-    val defaultCollection = stringResource(Res.string.editor_default_collection)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(Res.string.editor_name)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = collection,
-                    onValueChange = { collection = it },
-                    label = { Text(stringResource(Res.string.editor_collection)) },
-                    supportingText = { Text(stringResource(Res.string.editor_collection_hint)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(name.trim(), collection.trim().ifBlank { defaultCollection }) },
-                enabled = name.isNotBlank(),
-            ) { Text(confirmLabel) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.editor_cancel)) } },
-    )
 }
 
 @Composable

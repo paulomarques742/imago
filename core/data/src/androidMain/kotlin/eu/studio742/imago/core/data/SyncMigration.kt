@@ -4,7 +4,18 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 object SyncMigration {
-    internal val SYNCED_TABLES get() = SyncTables.SYNCED
+    /**
+     * The tables that synced when version 11 arrived. Frozen: a table added later already has the
+     * columns from the start, and altering it here would fail on a database coming from version 10.
+     */
+    internal val SYNCED_TABLES = listOf(
+        "recipes" to "updatedAt",
+        "derived_assets" to "createdAt",
+        "saved_recipes" to "updatedAt",
+        "composition_templates" to "updatedAt",
+        "brand_kits" to "updatedAt",
+        "composition_projects" to "updatedAt",
+    )
 
     /**
      * The sync state, without anything that depends on the network or an account.

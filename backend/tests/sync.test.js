@@ -179,6 +179,24 @@ test('the brand kit is a single record per account', async () => {
   assert.deepEqual(results.map((r) => r.status), ['applied', 'rejected'])
 })
 
+test('the marks on the app presets sync like any record, and each account only sees its own', async () => {
+  const [first] = await push(alice, 'BUILT_IN_RECIPE_MARK', [change(alice, 'built-in-pastel', { isFavorite: true })])
+  assert.deepEqual([first.status, first.revision], ['applied', 1])
+  const [stale] = await push(alice, 'BUILT_IN_RECIPE_MARK', [change(alice, 'built-in-pastel', { isFavorite: false })])
+  assert.equal(stale.status, 'conflict')
+  const [used] = await push(alice, 'BUILT_IN_RECIPE_MARK', [
+    change(alice, 'built-in-pastel', { isFavorite: true, usedAt: '2026-10-09T10:00:00Z' }, { baseRevision: 1 }),
+  ])
+  assert.deepEqual([used.status, used.revision], ['applied', 2])
+
+  const page = await pull(alice, 'BUILT_IN_RECIPE_MARK', 0)
+  assert.deepEqual(page.rows.map((r) => [r.key, r.payload.usedAt]), [['built-in-pastel', '2026-10-09T10:00:00Z']])
+  assert.deepEqual(await alice.as('select entity from public.sync_signals'), [{ entity: 'BUILT_IN_RECIPE_MARK' }])
+  assert.deepEqual((await pull(bob, 'BUILT_IN_RECIPE_MARK', 0)).rows, [])
+  assert.deepEqual(await bob.as('select * from public.built_in_recipe_marks'), [])
+  await assert.rejects(bob.as(`delete from public.built_in_recipe_marks`), /permission denied/)
+})
+
 test('derived assets only accept libraries of the same account and a consistent key', async () => {
   const library = (await alice.as(`select public.sync_link_library('immich', 'fp-1', 'Casa', null) as id`))[0].id
   const again = (await alice.as(`select public.sync_link_library('immich', 'fp-1', 'Casa nova', $1) as id`, [alice.device]))[0].id
@@ -259,6 +277,7 @@ test('removing a device keeps the libraries; deleting the account deletes everyt
   await alice.as(`select public.sync_link_library('device', $1, 'Pixel 8', $2)`, ['device|' + alice.device, alice.device])
   await push(alice, 'RECIPE', [change(alice, SHA_A, {})])
   await push(alice, 'PROJECT', [change(alice, 'p', {})])
+  await push(alice, 'BUILT_IN_RECIPE_MARK', [change(alice, 'built-in-pastel', { isFavorite: true })])
   await alice.as(`select public.sync_record_conflict('RECIPE', $1, 1, '{}', now(), null)`, [SHA_A])
 
   await alice.as('delete from public.devices where id = $1', [alice.device])
@@ -266,7 +285,7 @@ test('removing a device keeps the libraries; deleting the account deletes everyt
 
   await db.query('delete from auth.users where id = $1', [alice.id])
   for (const table of ['devices', 'libraries', 'recipes', 'derived_assets', 'saved_recipes',
-    'composition_templates', 'composition_projects', 'brand_kits', 'revisions', 'sync_signals']) {
+    'composition_templates', 'composition_projects', 'brand_kits', 'built_in_recipe_marks', 'revisions', 'sync_signals']) {
     const left = (await db.query(`select count(*)::int as n from public.${table} where user_id = $1`, [alice.id])).rows[0].n
     assert.equal(left, 0, table)
   }

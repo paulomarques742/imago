@@ -96,6 +96,7 @@ enum class SyncEntity(val wireName: String) {
     TEMPLATE("TEMPLATE"),
     PROJECT("PROJECT"),
     BRAND_KIT("BRAND_KIT"),
+    BUILT_IN_RECIPE_MARK("BUILT_IN_RECIPE_MARK"),
 
     /** The recipe versions that lost a conflict; only received. */
     RECIPE_CONFLICT("RECIPE_CONFLICT");

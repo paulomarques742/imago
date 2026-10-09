@@ -7,6 +7,7 @@ import eu.studio742.imago.core.data.RecipeRepository
 import eu.studio742.imago.core.data.SavedRecipeRepository
 import eu.studio742.imago.core.immich.ImmichApi
 import eu.studio742.imago.core.model.BUILT_IN_RECIPES
+import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.Tone
@@ -41,6 +42,9 @@ class RecipeEditorTest {
         override suspend fun list() = stored.values.toList()
         override suspend fun save(recipe: SavedRecipe) { stored[recipe.id] = recipe }
         override suspend fun delete(id: String) { stored.remove(id) }
+        val marks = mutableMapOf<String, BuiltInRecipeMark>()
+        override suspend fun builtInMarks() = marks.values.toList()
+        override suspend fun saveBuiltInMark(mark: BuiltInRecipeMark) { marks[mark.id] = mark }
     }
 
     /** What this path never touches: any call is a test failure, not a silent default. */
@@ -215,6 +219,36 @@ class RecipeEditorTest {
 
         assertEquals(0.5f, viewModel.state.value.recipe!!.tone.exposure)
         assertFalse(viewModel.state.value.hasUnsavedRecipeChanges)
+    }
+
+    @Test
+    fun `applying an app filter records its last use, and its heart is kept apart from it`() {
+        val filter = BUILT_IN_RECIPES.first()
+        openRecipe(RecipeSource.Saved(original))
+
+        viewModel.applyBuiltInRecipe(filter.id)
+        awaitState { state -> state.builtInMarks.any { it.id == filter.id && it.usedAt != null } }
+        viewModel.toggleBuiltInRecipeFavorite(filter.id)
+        awaitState { state -> state.builtInMarks.any { it.id == filter.id && it.isFavorite } }
+
+        val mark = repository.marks.getValue(filter.id)
+        assertTrue(mark.isFavorite)
+        assertNotNull("the heart does not erase the last use", mark.usedAt)
+        assertEquals("the filter is not copied into the person's recipes", 1, repository.stored.size)
+    }
+
+    @Test
+    fun `the library marks an app filter as a favourite and back`() {
+        val filter = BUILT_IN_RECIPES.last()
+        val library = RecipeLibraryViewModel(repository)
+        runBlocking { withTimeout(5_000) { library.state.first { !it.isLoading } } }
+
+        library.toggleBuiltInFavorite(filter.id)
+        runBlocking { withTimeout(5_000) { library.state.first { s -> s.builtInMarks.any { it.id == filter.id && it.isFavorite } } } }
+        library.toggleBuiltInFavorite(filter.id)
+        runBlocking { withTimeout(5_000) { library.state.first { s -> s.builtInMarks.any { it.id == filter.id && !it.isFavorite } } } }
+
+        assertFalse(repository.marks.getValue(filter.id).isFavorite)
     }
 
     @Test

@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 import eu.studio742.imago.core.data.SavedRecipeRepository
 import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.i18n.appString
+import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.feature.library.LibraryNavBar
 import eu.studio742.imago.feature.library.LibraryNavDestination
@@ -34,6 +35,7 @@ import java.util.UUID
 
 data class RecipeLibraryUiState(
     val recipes: List<SavedRecipe> = emptyList(),
+    val builtInMarks: List<BuiltInRecipeMark> = emptyList(),
     val isLoading: Boolean = true,
 )
 
@@ -49,13 +51,22 @@ open class RecipeLibraryViewModel(
         mutableState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
             val items = runCatching { savedRecipes.list() }.getOrDefault(emptyList())
-            mutableState.update { it.copy(recipes = items, isLoading = false) }
+            val marks = runCatching { savedRecipes.builtInMarks() }.getOrDefault(emptyList())
+            mutableState.update { it.copy(recipes = items, builtInMarks = marks, isLoading = false) }
         }
     }
 
     fun toggleFavorite(id: String) {
         val recipe = mutableState.value.recipes.firstOrNull { it.id == id } ?: return
         persist(recipe.copy(isFavorite = !recipe.isFavorite, updatedAt = Instant.now().toString()))
+    }
+
+    fun toggleBuiltInFavorite(id: String) {
+        val mark = mutableState.value.builtInMarks.firstOrNull { it.id == id } ?: BuiltInRecipeMark(id)
+        viewModelScope.launch {
+            runCatching { savedRecipes.saveBuiltInMark(mark.copy(isFavorite = !mark.isFavorite)) }
+            refresh()
+        }
     }
 
     fun rename(id: String, name: String, collection: String) {
@@ -160,14 +171,16 @@ fun RecipeLibraryRoute(
     gridState.SaveableStateProvider("grid") {
         RecipeLibraryScreen(
             saved = state.recipes.toCards(),
-            builtIn = builtInCards(),
+            builtIn = builtInCards(state.builtInMarks),
             isLoading = state.isLoading,
             assetId = sampleAssetId,
             onBack = onBack,
             onSelect = { card ->
                 editingKey = if (card.isBuiltIn) RecipeSource.builtInKey(card.id) else RecipeSource.savedKey(card.id)
             },
-            onToggleFavorite = { viewModel.toggleFavorite(it.id) },
+            onToggleFavorite = { card ->
+                if (card.isBuiltIn) viewModel.toggleBuiltInFavorite(card.id) else viewModel.toggleFavorite(card.id)
+            },
             onRename = { card -> renaming = state.recipes.firstOrNull { it.id == card.id } },
             onDuplicate = { viewModel.duplicate(it.id) },
             onDelete = { card -> deleting = state.recipes.firstOrNull { it.id == card.id } },
@@ -189,6 +202,7 @@ fun RecipeLibraryRoute(
             title = stringResource(Res.string.editor_organize_recipe),
             initialName = recipe.name,
             initialCollection = recipe.collection,
+            collections = state.recipes.collections(),
             confirmLabel = stringResource(Res.string.editor_save_changes),
             onDismiss = { renaming = null },
             onConfirm = { name, collection ->

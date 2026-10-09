@@ -38,4 +38,11 @@ object UnifiedMigration {
             UNIFIED_STACKS_SQL.forEach(db::execSQL)
         }
     }
+
+    /** The marks on the app's presets. */
+    val MIGRATION_16_17 = object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(BUILT_IN_RECIPE_MARKS_SQL)
+        }
+    }
 }

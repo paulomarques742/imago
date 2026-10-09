@@ -34,6 +34,12 @@ val UNIFIED_STACKS_SQL = listOf(
     "CREATE TABLE IF NOT EXISTS `unified_stacks` (`serverKey` TEXT NOT NULL, `libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `groupId` TEXT NOT NULL, `isCover` INTEGER NOT NULL, `groupSize` INTEGER NOT NULL, `deviceAssetId` TEXT, `serverAssetId` TEXT, PRIMARY KEY(`serverKey`, `libraryKey`, `assetId`))",
 )
 
+/** Version 17: the person's heart and last use on the app's presets, which sync like their own recipes. */
+const val BUILT_IN_RECIPE_MARKS_SQL =
+    "CREATE TABLE IF NOT EXISTS `built_in_recipe_marks` (`id` TEXT NOT NULL, `isFavorite` INTEGER NOT NULL, " +
+        "`usedAt` TEXT, `updatedAt` TEXT NOT NULL, `remoteRevision` INTEGER, `editedAt` TEXT NOT NULL DEFAULT '', " +
+        "`editedByDevice` TEXT, `deletedAt` TEXT, `dirty` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))"
+
 /** The index of version 12, as Room names it; the same statement on both apps. */
 const val UNIFIED_INDEX_SQL =
     "CREATE INDEX IF NOT EXISTS index_assets_libraryKey_originalFileName ON assets (libraryKey, originalFileName)"

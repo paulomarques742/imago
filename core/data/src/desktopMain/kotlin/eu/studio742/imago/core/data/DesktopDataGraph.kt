@@ -53,6 +53,10 @@ class DesktopDataGraph(
             override fun migrate(connection: androidx.sqlite.SQLiteConnection) {
                 UNIFIED_STACKS_SQL.forEach { connection.execSQL(it) }
             }
+        }, object : androidx.room.migration.Migration(16, 17) {
+            override fun migrate(connection: androidx.sqlite.SQLiteConnection) {
+                connection.execSQL(BUILT_IN_RECIPE_MARKS_SQL)
+            }
         })
         .setQueryCoroutineContext(Dispatchers.IO)
         .build()

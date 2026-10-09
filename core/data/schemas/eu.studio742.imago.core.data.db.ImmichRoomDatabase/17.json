@@ -1,0 +1,1208 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 17,
+    "identityHash": "a8dc868f29a1c9a07e8be9f1893c7f76",
+    "entities": [
+      {
+        "tableName": "assets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `id` TEXT NOT NULL, `checksum` TEXT NOT NULL, `originalFileName` TEXT NOT NULL, `fileCreatedAt` TEXT NOT NULL, `localDateTime` TEXT NOT NULL, `width` INTEGER, `height` INTEGER, `isFavorite` INTEGER NOT NULL, `isEdited` INTEGER NOT NULL, `hasLocalRecipe` INTEGER NOT NULL, `type` TEXT NOT NULL, `mimeType` TEXT, `durationMs` INTEGER, `folderId` TEXT, `folderName` TEXT, `sizeBytes` INTEGER, `isArchived` INTEGER NOT NULL DEFAULT 0, `stackId` TEXT, `stackCount` INTEGER, PRIMARY KEY(`libraryKey`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "checksum",
+            "columnName": "checksum",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalFileName",
+            "columnName": "originalFileName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileCreatedAt",
+            "columnName": "fileCreatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localDateTime",
+            "columnName": "localDateTime",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "width",
+            "columnName": "width",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "height",
+            "columnName": "height",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isFavorite",
+            "columnName": "isFavorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isEdited",
+            "columnName": "isEdited",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hasLocalRecipe",
+            "columnName": "hasLocalRecipe",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "folderId",
+            "columnName": "folderId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "folderName",
+            "columnName": "folderName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sizeBytes",
+            "columnName": "sizeBytes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isArchived",
+            "columnName": "isArchived",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "stackId",
+            "columnName": "stackId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "stackCount",
+            "columnName": "stackCount",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_assets_libraryKey_fileCreatedAt_id",
+            "unique": false,
+            "columnNames": [
+              "libraryKey",
+              "fileCreatedAt",
+              "id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_assets_libraryKey_fileCreatedAt_id` ON `${TABLE_NAME}` (`libraryKey`, `fileCreatedAt`, `id`)"
+          },
+          {
+            "name": "index_assets_libraryKey_sizeBytes_fileCreatedAt",
+            "unique": false,
+            "columnNames": [
+              "libraryKey",
+              "sizeBytes",
+              "fileCreatedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_assets_libraryKey_sizeBytes_fileCreatedAt` ON `${TABLE_NAME}` (`libraryKey`, `sizeBytes`, `fileCreatedAt`)"
+          },
+          {
+            "name": "index_assets_libraryKey_originalFileName",
+            "unique": false,
+            "columnNames": [
+              "libraryKey",
+              "originalFileName"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_assets_libraryKey_originalFileName` ON `${TABLE_NAME}` (`libraryKey`, `originalFileName`)"
+          }
+        ]
+      },
+      {
+        "tableName": "library_identities",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "remote_keys",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `filter` TEXT NOT NULL, `nextPage` INTEGER, PRIMARY KEY(`libraryKey`, `filter`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "filter",
+            "columnName": "filter",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextPage",
+            "columnName": "nextPage",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "filter"
+          ]
+        }
+      },
+      {
+        "tableName": "recipes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `recipeJson` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `contentSha1` TEXT, `hintsJson` TEXT, `remoteRevision` INTEGER, `editedAt` TEXT NOT NULL DEFAULT '', `editedByDevice` TEXT, `deletedAt` TEXT, `dirty` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`libraryKey`, `assetId`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "assetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipeJson",
+            "columnName": "recipeJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentSha1",
+            "columnName": "contentSha1",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "hintsJson",
+            "columnName": "hintsJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.remoteRevision",
+            "columnName": "remoteRevision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sync.editedAt",
+            "columnName": "editedAt",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "sync.editedByDevice",
+            "columnName": "editedByDevice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "assetId"
+          ]
+        }
+      },
+      {
+        "tableName": "saved_recipes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `id` TEXT NOT NULL, `name` TEXT NOT NULL, `collection` TEXT NOT NULL, `recipeJson` TEXT NOT NULL, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `isFavorite` INTEGER NOT NULL, `usedAt` TEXT, `remoteRevision` INTEGER, `editedAt` TEXT NOT NULL DEFAULT '', `editedByDevice` TEXT, `deletedAt` TEXT, `dirty` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`libraryKey`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "collection",
+            "columnName": "collection",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipeJson",
+            "columnName": "recipeJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isFavorite",
+            "columnName": "isFavorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "usedAt",
+            "columnName": "usedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.remoteRevision",
+            "columnName": "remoteRevision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sync.editedAt",
+            "columnName": "editedAt",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "sync.editedByDevice",
+            "columnName": "editedByDevice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "derived_assets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `derivedAssetId` TEXT NOT NULL, `originalAssetId` TEXT NOT NULL, `createdAt` TEXT NOT NULL, `remoteRevision` INTEGER, `editedAt` TEXT NOT NULL DEFAULT '', `editedByDevice` TEXT, `deletedAt` TEXT, `dirty` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`libraryKey`, `derivedAssetId`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "derivedAssetId",
+            "columnName": "derivedAssetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalAssetId",
+            "columnName": "originalAssetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sync.remoteRevision",
+            "columnName": "remoteRevision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sync.editedAt",
+            "columnName": "editedAt",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "sync.editedByDevice",
+            "columnName": "editedByDevice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "derivedAssetId"
+          ]
+        }
+      },
+      {
+        "tableName": "composition_projects",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `id` TEXT NOT NULL, `name` TEXT NOT NULL, `projectJson` TEXT NOT NULL, `revision` INTEGER NOT NULL, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `remoteRevision` INTEGER, `editedAt` TEXT NOT NULL DEFAULT '', `editedByDevice` TEXT, `deletedAt` TEXT, `dirty` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`libraryKey`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectJson",
+            "columnName": "projectJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revision",
+            "columnName": "revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sync.remoteRevision",
+            "columnName": "remoteRevision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sync.editedAt",
+            "columnName": "editedAt",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "sync.editedByDevice",
+            "columnName": "editedByDevice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "composition_templates",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `id` TEXT NOT NULL, `name` TEXT NOT NULL, `templateJson` TEXT NOT NULL, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `remoteRevision` INTEGER, `editedAt` TEXT NOT NULL DEFAULT '', `editedByDevice` TEXT, `deletedAt` TEXT, `dirty` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`libraryKey`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "templateJson",
+            "columnName": "templateJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sync.remoteRevision",
+            "columnName": "remoteRevision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sync.editedAt",
+            "columnName": "editedAt",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "sync.editedByDevice",
+            "columnName": "editedByDevice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "brand_kits",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `kitJson` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `remoteRevision` INTEGER, `editedAt` TEXT NOT NULL DEFAULT '', `editedByDevice` TEXT, `deletedAt` TEXT, `dirty` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`libraryKey`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kitJson",
+            "columnName": "kitJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sync.remoteRevision",
+            "columnName": "remoteRevision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sync.editedAt",
+            "columnName": "editedAt",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "sync.editedByDevice",
+            "columnName": "editedByDevice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey"
+          ]
+        }
+      },
+      {
+        "tableName": "catalog_months",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `month` TEXT NOT NULL, `assetCount` INTEGER NOT NULL, `syncedAt` TEXT NOT NULL, PRIMARY KEY(`libraryKey`, `month`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "month",
+            "columnName": "month",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetCount",
+            "columnName": "assetCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncedAt",
+            "columnName": "syncedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "month"
+          ]
+        }
+      },
+      {
+        "tableName": "sync_cursors",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`entity` TEXT NOT NULL, `cursor` INTEGER NOT NULL, PRIMARY KEY(`entity`))",
+        "fields": [
+          {
+            "fieldPath": "entity",
+            "columnName": "entity",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cursor",
+            "columnName": "cursor",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "entity"
+          ]
+        }
+      },
+      {
+        "tableName": "library_links",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`localKey` TEXT NOT NULL, `remoteLibraryId` TEXT NOT NULL, PRIMARY KEY(`localKey`))",
+        "fields": [
+          {
+            "fieldPath": "localKey",
+            "columnName": "localKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteLibraryId",
+            "columnName": "remoteLibraryId",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "localKey"
+          ]
+        }
+      },
+      {
+        "tableName": "content_hashes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `sha1` TEXT NOT NULL, `size` INTEGER, `dateModified` INTEGER, PRIMARY KEY(`libraryKey`, `assetId`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "assetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sha1",
+            "columnName": "sha1",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "dateModified",
+            "columnName": "dateModified",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "assetId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_content_hashes_sha1",
+            "unique": false,
+            "columnNames": [
+              "sha1"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_content_hashes_sha1` ON `${TABLE_NAME}` (`sha1`)"
+          }
+        ]
+      },
+      {
+        "tableName": "remote_recipes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contentSha1` TEXT NOT NULL, `recipeJson` TEXT NOT NULL, `revision` INTEGER NOT NULL, `editedAt` TEXT NOT NULL, `editedByDevice` TEXT, `hintsJson` TEXT, PRIMARY KEY(`contentSha1`))",
+        "fields": [
+          {
+            "fieldPath": "contentSha1",
+            "columnName": "contentSha1",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipeJson",
+            "columnName": "recipeJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revision",
+            "columnName": "revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "editedAt",
+            "columnName": "editedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "editedByDevice",
+            "columnName": "editedByDevice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "hintsJson",
+            "columnName": "hintsJson",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "contentSha1"
+          ]
+        }
+      },
+      {
+        "tableName": "recipe_conflicts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `recipeJson` TEXT NOT NULL, `deviceName` TEXT NOT NULL, `editedAt` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "assetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recipeJson",
+            "columnName": "recipeJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceName",
+            "columnName": "deviceName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "editedAt",
+            "columnName": "editedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_recipe_conflicts_libraryKey_assetId",
+            "unique": false,
+            "columnNames": [
+              "libraryKey",
+              "assetId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recipe_conflicts_libraryKey_assetId` ON `${TABLE_NAME}` (`libraryKey`, `assetId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "candidate_rejections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contentSha1` TEXT NOT NULL, `libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `rejectedAt` TEXT NOT NULL, PRIMARY KEY(`contentSha1`, `libraryKey`, `assetId`))",
+        "fields": [
+          {
+            "fieldPath": "contentSha1",
+            "columnName": "contentSha1",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "assetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rejectedAt",
+            "columnName": "rejectedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "contentSha1",
+            "libraryKey",
+            "assetId"
+          ]
+        }
+      },
+      {
+        "tableName": "asset_locations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `checksum` TEXT NOT NULL, `latitude` REAL, `longitude` REAL, PRIMARY KEY(`libraryKey`, `assetId`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "assetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "checksum",
+            "columnName": "checksum",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "assetId"
+          ]
+        }
+      },
+      {
+        "tableName": "archived_assets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, PRIMARY KEY(`libraryKey`, `assetId`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "assetId",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "assetId"
+          ]
+        }
+      },
+      {
+        "tableName": "stack_members",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `stackId` TEXT NOT NULL, `primaryAssetId` TEXT NOT NULL, `originalFileName` TEXT, `fileCreatedAt` TEXT, PRIMARY KEY(`libraryKey`, `assetId`))",
+        "fields": [
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "assetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stackId",
+            "columnName": "stackId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "primaryAssetId",
+            "columnName": "primaryAssetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalFileName",
+            "columnName": "originalFileName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fileCreatedAt",
+            "columnName": "fileCreatedAt",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "libraryKey",
+            "assetId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_stack_members_libraryKey_stackId",
+            "unique": false,
+            "columnNames": [
+              "libraryKey",
+              "stackId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_stack_members_libraryKey_stackId` ON `${TABLE_NAME}` (`libraryKey`, `stackId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "unified_stacks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverKey` TEXT NOT NULL, `libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `groupId` TEXT NOT NULL, `isCover` INTEGER NOT NULL, `groupSize` INTEGER NOT NULL, `deviceAssetId` TEXT, `serverAssetId` TEXT, PRIMARY KEY(`serverKey`, `libraryKey`, `assetId`))",
+        "fields": [
+          {
+            "fieldPath": "serverKey",
+            "columnName": "serverKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "libraryKey",
+            "columnName": "libraryKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "assetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "groupId",
+            "columnName": "groupId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isCover",
+            "columnName": "isCover",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "groupSize",
+            "columnName": "groupSize",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceAssetId",
+            "columnName": "deviceAssetId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "serverAssetId",
+            "columnName": "serverAssetId",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverKey",
+            "libraryKey",
+            "assetId"
+          ]
+        }
+      },
+      {
+        "tableName": "built_in_recipe_marks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `isFavorite` INTEGER NOT NULL, `usedAt` TEXT, `updatedAt` TEXT NOT NULL, `remoteRevision` INTEGER, `editedAt` TEXT NOT NULL DEFAULT '', `editedByDevice` TEXT, `deletedAt` TEXT, `dirty` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isFavorite",
+            "columnName": "isFavorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "usedAt",
+            "columnName": "usedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sync.remoteRevision",
+            "columnName": "remoteRevision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sync.editedAt",
+            "columnName": "editedAt",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "sync.editedByDevice",
+            "columnName": "editedByDevice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sync.dirty",
+            "columnName": "dirty",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a8dc868f29a1c9a07e8be9f1893c7f76')"
+    ]
+  }
+}

@@ -17,6 +17,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import eu.studio742.imago.core.data.ContentHashRepository
 import eu.studio742.imago.core.data.db.BrandKitEntity
+import eu.studio742.imago.core.data.db.BuiltInRecipeMarkEntity
 import eu.studio742.imago.core.data.db.CompositionTemplateEntity
 import eu.studio742.imago.core.data.db.ImmichRoomDatabase
 import eu.studio742.imago.core.data.db.SavedRecipeEntity
@@ -65,6 +66,32 @@ class SyncEngineTest {
         assertEquals(1L, preset.sync.remoteRevision)
         assertEquals(0, engine.status.value.pending)
         assertNull(engine.status.value.error)
+    }
+
+    @Test
+    fun `the heart on an app preset goes up, and the one from another device arrives`() = runBlocking {
+        server.signIn()
+        database.builtInRecipeMarkDao().upsert(
+            BuiltInRecipeMarkEntity("built-in-pastel", isFavorite = true, usedAt = null, updatedAt = "2026-09-16T10:00:00Z", sync = dirty("2026-09-16T10:00:00Z")),
+        )
+        server.store(
+            SyncEntity.BUILT_IN_RECIPE_MARK, "built-in-dramatic",
+            buildJsonObject {
+                put("isFavorite", JsonPrimitive(false))
+                put("usedAt", JsonPrimitive("2026-09-16T09:00:00Z"))
+            },
+            "2026-09-16T09:00:00Z", DEVICE_B,
+        )
+
+        assertTrue(engine.syncNow())
+
+        val sent = server.row(SyncEntity.BUILT_IN_RECIPE_MARK, "built-in-pastel")!!
+        assertEquals("true", sent.payload.string("isFavorite"))
+        assertFalse(database.builtInRecipeMarkDao().getAny("built-in-pastel")!!.sync.dirty)
+        val received = database.builtInRecipeMarkDao().getAny("built-in-dramatic")!!
+        assertFalse(received.isFavorite)
+        assertEquals("2026-09-16T09:00:00Z", received.usedAt)
+        assertFalse(received.sync.dirty)
     }
 
     @Test

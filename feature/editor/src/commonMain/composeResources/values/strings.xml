@@ -67,6 +67,8 @@
     <string name="editor_name">Name</string>
     <string name="editor_collection">Collection</string>
     <string name="editor_collection_hint">E.g. Portraits, Travel or Black and white</string>
+    <string name="editor_new_collection">New collection</string>
+    <string name="editor_new_collection_name">Collection name</string>
     <string name="editor_group_vignette">Vignette</string>
     <string name="editor_amount">Amount</string>
     <string name="editor_midpoint">Midpoint</string>
@@ -211,8 +213,8 @@
     <string name="editor_organize">Organize</string>
     <string name="editor_create_recipe">Create recipe</string>
     <string name="editor_create_recipe_hint">Save your adjustments as a custom recipe.</string>
-    <string name="editor_tab_recipes">Recipes</string>
-    <string name="editor_tab_filters">Filters</string>
+    <string name="editor_tab_mine">Mine</string>
+    <string name="editor_tab_imago">IMAGO</string>
     <string name="editor_tab_favorites">Favorites</string>
     <string name="editor_tab_recent">Recent</string>
     <string name="editor_empty_saved">You haven’t saved any recipes yet.</string>

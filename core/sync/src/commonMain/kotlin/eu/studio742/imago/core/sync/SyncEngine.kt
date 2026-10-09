@@ -99,6 +99,8 @@ class SyncEngine(
         RecipeConflictSync(recipes, names),
         DerivedAssetSync(database),
         ProjectSync(database, translator, hashes, texts, now),
+        // Last: it depends on nothing, and a backend that does not know it yet only fails this one.
+        BuiltInRecipeMarkSync(database),
     )
     private val mutableStatus = MutableStateFlow(SyncStatus())
     val status: StateFlow<SyncStatus> = mutableStatus.asStateFlow()
