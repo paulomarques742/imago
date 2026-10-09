@@ -34,7 +34,7 @@ interface AssetLocationDao {
         """
         SELECT a.id AS assetId, l.latitude AS latitude, l.longitude AS longitude
         FROM assets a JOIN asset_locations l ON l.libraryKey = a.libraryKey AND l.assetId = a.id AND l.checksum = a.checksum
-        WHERE a.libraryKey = :libraryKey AND a.isArchived = 0 AND l.latitude IS NOT NULL AND l.longitude IS NOT NULL
+        WHERE a.libraryKey = :libraryKey AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = a.libraryKey AND m.assetId = a.id AND m.assetId != m.primaryAssetId) AND l.latitude IS NOT NULL AND l.longitude IS NOT NULL
         """,
     )
     suspend fun located(libraryKey: String): List<LocatedAsset>

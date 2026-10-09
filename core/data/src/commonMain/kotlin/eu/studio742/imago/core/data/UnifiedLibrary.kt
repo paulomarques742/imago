@@ -242,7 +242,7 @@ class UnifiedLibrary(
     override fun previewUrl(assetId: String) = routed(assetId) { previewUrl(it) }
     override fun videoPlaybackUrl(assetId: String) = routed(assetId) { videoPlaybackUrl(it) }
     override fun apiKey(assetId: String) = routed(assetId) { apiKey(it) }
-    override val canStack: Boolean get() = server.canStack
+    override val canStack: Boolean get() = server.canStack || device.canStack
 
     override suspend fun stackTogether(assetIds: List<String>) {
         val refs = assetIds.map(AssetReference::parse)

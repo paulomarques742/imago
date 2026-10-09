@@ -105,6 +105,12 @@ class DeviceLibraryRepository @Inject constructor(
         folderPathCache = folderPathCache + paths
     }
 
+    override suspend fun rowsOf(ids: Collection<String>): List<AssetEntity> = withContext(Dispatchers.IO) {
+        ids.mapNotNull { runCatching { ContentUris.parseId(Uri.parse(it)) }.getOrNull() }.distinct().chunked(500).flatMap { batch ->
+            readMedia("_id IN (${batch.joinToString(",")})", null).first
+        }
+    }
+
     /** The photos and videos [selection] picks, as catalogue rows, with the path of each one's folder. */
     private fun readMedia(selection: String?, args: Array<String>?): Pair<List<AssetEntity>, Map<String, String>> {
         val rows = mutableListOf<AssetEntity>()

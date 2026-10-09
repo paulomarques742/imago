@@ -28,11 +28,112 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
     }
 
     /** Swaps the whole catalogue in one transaction; photos with a recipe keep the mark. */
-    protected suspend fun replaceCatalog(rows: List<AssetEntity>) = database.withTransaction {
-        database.assetDao().deleteLibrary(DEVICE_LIBRARY_ID)
-        database.assetDao().upsertAll(rows)
-        database.assetDao().restoreLocalRecipeFlags(DEVICE_LIBRARY_ID)
-        database.assetDao().restoreArchivedFlags(DEVICE_LIBRARY_ID)
+    protected suspend fun replaceCatalog(rows: List<AssetEntity>) {
+        database.withTransaction {
+            database.assetDao().deleteLibrary(DEVICE_LIBRARY_ID)
+            database.assetDao().upsertAll(rows)
+            database.assetDao().restoreLocalRecipeFlags(DEVICE_LIBRARY_ID)
+            database.assetDao().restoreArchivedFlags(DEVICE_LIBRARY_ID)
+        }
+        val present = rows.map { it.id }.toSet()
+        settleStacks(gone = database.stackMemberDao().all(DEVICE_LIBRARY_ID).map { it.assetId }.filterNot(present::contains).toSet())
+    }
+
+    /**
+     * The rows of these photos as the source has them now — MediaStore on Android, the files on the
+     * computer. The catalogue leaves out the photos under a stack's cover; this is how one comes back
+     * when it leaves the stack, or is shown in the stack's strip.
+     */
+    protected open suspend fun rowsOf(ids: Collection<String>): List<AssetEntity> = emptyList()
+
+    /**
+     * Puts the catalogue in line with this device's stacks: the photos in [gone] leave them, a stack
+     * of one is undone, each cover carries its count, this app's exports leave the grid, and a photo
+     * out of every stack is back in the catalogue if it had left it.
+     *
+     * The photos under a cover stay in the catalogue; the grid's queries leave them out. Taking them
+     * out of it would let the unified library show the server's copy of each in its place — it hides
+     * a server photo only when the phone's copy is there.
+     *
+     * The exports are told apart by their name: on this device they have no record to go by — the
+     * records sync between devices, and an id of this device's means nothing on another.
+     */
+    private suspend fun settleStacks(gone: Set<String>) {
+        val dao = database.stackMemberDao()
+        val before = dao.all(DEVICE_LIBRARY_ID)
+        val members = settleLocalStacks(before, gone)
+        val stacked = members.map { it.assetId }.toSet()
+        val covers = members.filter { it.isCover }
+        val freed = before.map { it.assetId }.filterNot { it in stacked || it in gone }
+        val catalogued = (covers.map { it.assetId } + freed).chunked(500)
+            .flatMap { database.assetDao().byIds(DEVICE_LIBRARY_ID, it) }
+            .map { it.id }
+            .toSet()
+        val back = rowsOf((covers.map { it.assetId } + freed).filterNot(catalogued::contains))
+        val sizes = members.groupingBy { it.stackId }.eachCount()
+        database.withTransaction {
+            dao.clear(DEVICE_LIBRARY_ID)
+            dao.insertAll(members)
+            database.assetDao().upsertAll(back)
+            database.assetDao().purgeAppExports(DEVICE_LIBRARY_ID)
+            database.assetDao().clearStacks(DEVICE_LIBRARY_ID)
+            covers.forEach { database.assetDao().setStack(DEVICE_LIBRARY_ID, it.assetId, it.stackId, sizes.getValue(it.stackId)) }
+            database.assetDao().restoreLocalRecipeFlags(DEVICE_LIBRARY_ID)
+            database.assetDao().restoreArchivedFlags(DEVICE_LIBRARY_ID)
+        }
+    }
+
+    override val canStack: Boolean get() = true
+
+    override suspend fun stackTogether(assetIds: List<String>) {
+        val dao = database.stackMemberDao()
+        val members = stackedTogether(DEVICE_LIBRARY_ID, assetIds, dao.all(DEVICE_LIBRARY_ID), java.util.UUID.randomUUID().toString())
+        database.withTransaction {
+            dao.clear(DEVICE_LIBRARY_ID)
+            dao.insertAll(members)
+        }
+        settleStacks(gone = emptySet())
+    }
+
+    override suspend fun makeStackCover(assetId: String) {
+        val dao = database.stackMemberDao()
+        val stack = dao.ofAssets(DEVICE_LIBRARY_ID, listOf(assetId)).firstOrNull()?.stackId ?: error("The photo is in no stack")
+        val members = dao.ofStacks(DEVICE_LIBRARY_ID, listOf(stack))
+        database.withTransaction {
+            dao.clearStack(DEVICE_LIBRARY_ID, stack)
+            dao.insertAll(members.map { it.copy(primaryAssetId = assetId) })
+        }
+        settleStacks(gone = emptySet())
+    }
+
+    override suspend fun removeFromStack(assetId: String) {
+        val dao = database.stackMemberDao()
+        val member = dao.ofAssets(DEVICE_LIBRARY_ID, listOf(assetId)).firstOrNull() ?: error("The photo is in no stack")
+        val rest = dao.ofStacks(DEVICE_LIBRARY_ID, listOf(member.stackId)).filterNot { it.assetId == assetId }
+        val cover = rest.firstOrNull { it.isCover }?.assetId ?: rest.firstOrNull()?.assetId
+        database.withTransaction {
+            dao.clearStack(DEVICE_LIBRARY_ID, member.stackId)
+            dao.insertAll(rest.map { it.copy(primaryAssetId = cover ?: it.primaryAssetId) })
+        }
+        settleStacks(gone = emptySet())
+    }
+
+    override suspend fun unstack(assetId: String) {
+        val dao = database.stackMemberDao()
+        val stack = dao.ofAssets(DEVICE_LIBRARY_ID, listOf(assetId)).firstOrNull()?.stackId ?: error("The photo is in no stack")
+        dao.clearStack(DEVICE_LIBRARY_ID, stack)
+        settleStacks(gone = emptySet())
+    }
+
+    override suspend fun stackMembers(assetId: String): List<ImmichAsset> {
+        val dao = database.stackMemberDao()
+        val stack = dao.ofAssets(DEVICE_LIBRARY_ID, listOf(assetId)).firstOrNull()?.stackId ?: return emptyList()
+        val members = dao.ofStacks(DEVICE_LIBRARY_ID, listOf(stack)).sortedByDescending { it.isCover }
+        if (members.size < 2) return emptyList()
+        val ids = members.map { it.assetId }
+        val known = database.assetDao().byIds(DEVICE_LIBRARY_ID, ids).associateBy { it.id }
+        val read = rowsOf(ids.filterNot(known::containsKey)).associateBy { it.id }
+        return ids.mapNotNull { (known[it] ?: read[it])?.toDomain() }
     }
 
     override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?): Flow<PagingData<ImmichAsset>> {
@@ -57,12 +158,15 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
      * no longer has. After moving, copying, marking or deleting a few photos this is all that
      * changed — reading the whole catalogue again took seconds on a phone with tens of thousands.
      */
-    protected suspend fun replaceRows(ids: Collection<String>, rows: List<AssetEntity>) = database.withTransaction {
+    protected suspend fun replaceRows(ids: Collection<String>, rows: List<AssetEntity>) {
         val found = rows.map { it.id }.toSet()
-        ids.filterNot(found::contains).forEach { database.assetDao().delete(DEVICE_LIBRARY_ID, it) }
-        database.assetDao().upsertAll(rows)
-        database.assetDao().restoreLocalRecipeFlags(DEVICE_LIBRARY_ID)
-        database.assetDao().restoreArchivedFlags(DEVICE_LIBRARY_ID)
+        database.withTransaction {
+            ids.filterNot(found::contains).forEach { database.assetDao().delete(DEVICE_LIBRARY_ID, it) }
+            database.assetDao().upsertAll(rows)
+            database.assetDao().restoreLocalRecipeFlags(DEVICE_LIBRARY_ID)
+            database.assetDao().restoreArchivedFlags(DEVICE_LIBRARY_ID)
+        }
+        settleStacks(gone = ids.filterNot(found::contains).toSet())
     }
 
     override val canArchive: Boolean get() = true

@@ -116,6 +116,13 @@ class FolderLibraryRepository(
         }
     }
 
+    override suspend fun rowsOf(ids: Collection<String>): List<AssetEntity> = withContext(Dispatchers.IO) {
+        val favorites = readList(FAVORITES_KEY).toSet()
+        ids.mapNotNull { id ->
+            runCatching { Path.of(URI(id)) }.getOrNull()?.takeIf { Files.isRegularFile(it) }?.let { entity(it, favorites) }
+        }
+    }
+
     private fun entity(file: Path, favorites: Set<String>): AssetEntity? {
         val extension = file.extension.lowercase()
         val type = when (extension) {

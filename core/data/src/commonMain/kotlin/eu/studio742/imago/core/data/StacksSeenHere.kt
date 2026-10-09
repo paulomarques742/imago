@@ -145,3 +145,31 @@ internal fun ImmichStack.pairsAfterUndoing(exports: List<DerivedAssetEntity>): L
             listOf(face) + (listOf(original) + own.map { it.derivedAssetId } - face)
         }
 }
+
+/**
+ * This device's stacks as they still stand, without the photos in [gone] — no longer on the device.
+ * A stack left with one photo is undone; one whose cover is gone takes another photo as its cover.
+ */
+internal fun settleLocalStacks(members: List<StackMemberEntity>, gone: Set<String>): List<StackMemberEntity> =
+    members.filterNot { it.assetId in gone }
+        .groupBy { it.stackId }
+        .filterValues { it.size >= 2 }
+        .flatMap { (_, photos) ->
+            val cover = photos.firstOrNull { it.isCover }?.assetId ?: photos.first().assetId
+            photos.map { it.copy(primaryAssetId = cover) }
+        }
+
+/**
+ * A new stack of [assetIds], the first as its cover. A photo already in a stack brings that whole
+ * stack along, as stacking a cover does in Immich.
+ */
+internal fun stackedTogether(
+    libraryKey: String,
+    assetIds: List<String>,
+    members: List<StackMemberEntity>,
+    newStackId: String,
+): List<StackMemberEntity> {
+    val joined = assetIds.mapNotNull { id -> members.firstOrNull { it.assetId == id }?.stackId }.toSet()
+    val photos = (assetIds + members.filter { it.stackId in joined }.map { it.assetId }).distinct()
+    return members.filterNot { it.stackId in joined } + photos.map { StackMemberEntity(libraryKey, it, newStackId, assetIds.first()) }
+}

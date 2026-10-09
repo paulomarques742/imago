@@ -8,8 +8,12 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 
 /**
- * A photo of an Immich stack, as the server's list of stacks says and as IMAGO shows it: this app's
- * exports are left out, and [primaryAssetId] is the original standing in for an export cover.
+ * A photo of a stack, as IMAGO shows it.
+ *
+ * For an Immich library it is the server's list of stacks, read again on every sync, with this app's
+ * exports left out and [primaryAssetId] the original standing in for an export cover. For this
+ * device's library — the phone, the computer's folders — it is the stacks themselves: neither Android
+ * nor a folder has any, and this is the only place they are kept.
  *
  * The timeline only names the covers. This is what tells the other photos of a stack apart when an
  * album or a search brings them — the search does not say which stack a photo is in — so they stay
@@ -39,6 +43,9 @@ interface StackMemberDao {
 
     @Query("DELETE FROM stack_members WHERE libraryKey = :libraryKey AND stackId = :stackId")
     suspend fun clearStack(libraryKey: String, stackId: String)
+
+    @Query("SELECT * FROM stack_members WHERE libraryKey = :libraryKey")
+    suspend fun all(libraryKey: String): List<StackMemberEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(rows: List<StackMemberEntity>)

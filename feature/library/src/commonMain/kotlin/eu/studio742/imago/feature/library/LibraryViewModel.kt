@@ -704,13 +704,14 @@ open class LibraryViewModel(
         )
     }
 
-    /** Stacking takes two photos or more, all of one Immich library. */
+    /**
+     * Stacking takes two photos or more, all of one library — this device's, or one Immich's. A stack
+     * never mixes the two: the phone's are kept by this app, Immich's on the server.
+     */
     fun canStackSelection(selection: List<AssetUiModel>): Boolean {
         if (selection.size < 2 || !library.canStack) return false
         val libraryId = selection.map { runCatching { AssetReference.parse(it.id).libraryId }.getOrNull() }.toSet().singleOrNull()
-        return libraryId != null &&
-            libraryId != eu.studio742.imago.core.model.DEVICE_LIBRARY_ID &&
-            libraryId != eu.studio742.imago.core.model.OPENED_LIBRARY_ID
+        return libraryId != null && libraryId != eu.studio742.imago.core.model.OPENED_LIBRARY_ID
     }
 
     /** Stacks the chosen photos, the first one chosen as the cover, as in Immich. */

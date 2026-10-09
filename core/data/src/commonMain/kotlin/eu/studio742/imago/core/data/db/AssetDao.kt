@@ -23,7 +23,7 @@ interface AssetDao {
     @Query(
         """
         SELECT folderId, folderName, id AS coverId, MAX(fileCreatedAt) AS endDate, COUNT(*) AS assetCount
-        FROM assets WHERE libraryKey = :libraryKey
+        FROM assets WHERE libraryKey = :libraryKey AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = assets.libraryKey AND m.assetId = assets.id AND m.assetId != m.primaryAssetId)
         GROUP BY folderId
         ORDER BY endDate DESC
         """,
@@ -40,7 +40,7 @@ interface AssetDao {
         SELECT a.*, (a.libraryKey = :server OR EXISTS (SELECT 1 FROM assets s WHERE s.libraryKey = :server AND s.originalFileName = a.originalFileName AND ABS(julianday(s.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)) AS alsoOnServer
         FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
-          AND a.isArchived = 0
+          AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = a.libraryKey AND m.assetId = a.id AND m.assetId != m.primaryAssetId)
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
@@ -63,7 +63,7 @@ interface AssetDao {
         """
         SELECT COUNT(*) FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
-          AND a.isArchived = 0
+          AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = a.libraryKey AND m.assetId = a.id AND m.assetId != m.primaryAssetId)
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
@@ -88,7 +88,7 @@ interface AssetDao {
         """
         SELECT COUNT(*) FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
-          AND a.isArchived = 0
+          AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = a.libraryKey AND m.assetId = a.id AND m.assetId != m.primaryAssetId)
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
@@ -114,7 +114,7 @@ interface AssetDao {
                COUNT(*) AS assetCount
         FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
-          AND a.isArchived = 0
+          AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = a.libraryKey AND m.assetId = a.id AND m.assetId != m.primaryAssetId)
         GROUP BY substr(CASE WHEN a.localDateTime = '' THEN a.fileCreatedAt ELSE a.localDateTime END, 1, 7)
         ORDER BY month DESC
         """,
@@ -128,7 +128,7 @@ interface AssetDao {
     @Query(
         """
         SELECT * FROM assets
-        WHERE libraryKey = :libraryKey AND isArchived = 0 AND substr(localDateTime, 6, 5) = :monthDay AND substr(localDateTime, 1, 4) < :year
+        WHERE libraryKey = :libraryKey AND isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = assets.libraryKey AND m.assetId = assets.id AND m.assetId != m.primaryAssetId) AND substr(localDateTime, 6, 5) = :monthDay AND substr(localDateTime, 1, 4) < :year
         ORDER BY localDateTime DESC, id DESC
         """,
     )
@@ -145,6 +145,12 @@ interface AssetDao {
         """,
     )
     suspend fun restoreArchivedFlags(libraryKey: String)
+
+    @Query("UPDATE assets SET stackId = NULL, stackCount = NULL WHERE libraryKey = :libraryKey")
+    suspend fun clearStacks(libraryKey: String)
+
+    @Query("UPDATE assets SET stackId = :stackId, stackCount = :stackCount WHERE libraryKey = :libraryKey AND id = :id")
+    suspend fun setStack(libraryKey: String, id: String, stackId: String, stackCount: Int)
 
     @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey AND isArchived = 1 ORDER BY fileCreatedAt DESC, id DESC")
     fun archivedPagingSource(libraryKey: String): PagingSource<Int, AssetEntity>
@@ -228,6 +234,7 @@ interface AssetDao {
           AND (:monthEnd IS NULL OR fileCreatedAt < :monthEnd)
           AND (:albumId IS NULL OR folderId = :albumId)
           AND (:albumId IS NOT NULL OR isArchived = 0)
+          AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = assets.libraryKey AND m.assetId = assets.id AND m.assetId != m.primaryAssetId)
           AND (:query IS NULL OR originalFileName LIKE '%' || :query || '%')
         ORDER BY fileCreatedAt DESC, id DESC
         """,
@@ -260,7 +267,7 @@ interface AssetDao {
         """
         SELECT COUNT(*) FROM assets
         WHERE libraryKey = :libraryKey
-          AND isArchived = 0
+          AND isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = assets.libraryKey AND m.assetId = assets.id AND m.assetId != m.primaryAssetId)
           AND (:favoritesOnly = 0 OR isFavorite = 1)
           AND (:editedOnly = 0 OR isEdited = 1 OR hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR fileCreatedAt >= :monthStart)
@@ -291,7 +298,7 @@ interface AssetDao {
         """
         SELECT COUNT(*) FROM assets
         WHERE libraryKey = :libraryKey
-          AND isArchived = 0
+          AND isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = assets.libraryKey AND m.assetId = assets.id AND m.assetId != m.primaryAssetId)
           AND (:favoritesOnly = 0 OR isFavorite = 1)
           AND (:editedOnly = 0 OR isEdited = 1 OR hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR fileCreatedAt >= :monthStart)
@@ -415,7 +422,7 @@ interface AssetDao {
         SELECT substr(CASE WHEN localDateTime = '' THEN fileCreatedAt ELSE localDateTime END, 1, 7) || '-01' AS month,
                COUNT(*) AS assetCount
         FROM assets
-        WHERE libraryKey = :libraryKey AND isArchived = 0
+        WHERE libraryKey = :libraryKey AND isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = assets.libraryKey AND m.assetId = assets.id AND m.assetId != m.primaryAssetId)
         GROUP BY substr(CASE WHEN localDateTime = '' THEN fileCreatedAt ELSE localDateTime END, 1, 7)
         ORDER BY month DESC
         """,
