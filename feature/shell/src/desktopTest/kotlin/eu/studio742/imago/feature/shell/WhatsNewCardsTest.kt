@@ -32,7 +32,7 @@ import java.util.Locale
 import javax.imageio.ImageIO
 
 /**
- * The 0.12.0 news cards, on a phone-sized screen in both languages. Every card shows its title, and
+ * The 0.20.0 news cards, on a phone-sized screen in both languages. Every card shows its title, and
  * the last one ends the deck. With `IMAGO_SCREENSHOTS` set to a folder, each card is saved there.
  */
 @OptIn(ExperimentalTestApi::class)

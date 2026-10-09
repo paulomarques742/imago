@@ -10,20 +10,20 @@ import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.ui.graphics.vector.ImageVector
 import eu.studio742.imago.feature.shell.resources.Res
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_1_title
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_1_body
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_2_title
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_2_body
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_3_title
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_3_body
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_4_title
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_4_body
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_5_title
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_5_body
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_6_title
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_6_body
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_7_title
-import eu.studio742.imago.feature.shell.resources.shell_news_0_12_0_7_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_1_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_1_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_2_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_2_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_3_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_3_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_4_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_4_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_5_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_5_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_6_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_6_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_7_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_20_0_7_body
 import eu.studio742.imago.feature.shell.resources.shell_news_0_11_0_1
 import eu.studio742.imago.feature.shell.resources.shell_news_0_11_0_2
 import eu.studio742.imago.feature.shell.resources.shell_news_0_11_0_3
@@ -68,15 +68,15 @@ internal class Release(
  */
 internal val Releases: List<Release> = listOf(
     Release(
-        AppVersion(0, 12, 0),
+        AppVersion(0, 20, 0),
         pages = listOf(
-            NewsPage(Icons.Outlined.PhotoLibrary, Res.string.shell_news_0_12_0_1_title, Res.string.shell_news_0_12_0_1_body),
-            NewsPage(Icons.Outlined.TravelExplore, Res.string.shell_news_0_12_0_2_title, Res.string.shell_news_0_12_0_2_body),
-            NewsPage(Icons.Outlined.Layers, Res.string.shell_news_0_12_0_3_title, Res.string.shell_news_0_12_0_3_body),
-            NewsPage(Icons.Outlined.Straighten, Res.string.shell_news_0_12_0_4_title, Res.string.shell_news_0_12_0_4_body),
-            NewsPage(Icons.Outlined.Palette, Res.string.shell_news_0_12_0_5_title, Res.string.shell_news_0_12_0_5_body),
-            NewsPage(Icons.Outlined.Tune, Res.string.shell_news_0_12_0_6_title, Res.string.shell_news_0_12_0_6_body),
-            NewsPage(Icons.Outlined.PhoneAndroid, Res.string.shell_news_0_12_0_7_title, Res.string.shell_news_0_12_0_7_body),
+            NewsPage(Icons.Outlined.PhotoLibrary, Res.string.shell_news_0_20_0_1_title, Res.string.shell_news_0_20_0_1_body),
+            NewsPage(Icons.Outlined.TravelExplore, Res.string.shell_news_0_20_0_2_title, Res.string.shell_news_0_20_0_2_body),
+            NewsPage(Icons.Outlined.Layers, Res.string.shell_news_0_20_0_3_title, Res.string.shell_news_0_20_0_3_body),
+            NewsPage(Icons.Outlined.Straighten, Res.string.shell_news_0_20_0_4_title, Res.string.shell_news_0_20_0_4_body),
+            NewsPage(Icons.Outlined.Palette, Res.string.shell_news_0_20_0_5_title, Res.string.shell_news_0_20_0_5_body),
+            NewsPage(Icons.Outlined.Tune, Res.string.shell_news_0_20_0_6_title, Res.string.shell_news_0_20_0_6_body),
+            NewsPage(Icons.Outlined.PhoneAndroid, Res.string.shell_news_0_20_0_7_title, Res.string.shell_news_0_20_0_7_body),
         ),
     ),
     Release(
