@@ -198,6 +198,9 @@ internal fun editorTools(recipeMode: Boolean): List<EditorTool> =
     if (recipeMode) EditorTool.entries - EditorTool.CROP else EditorTool.entries
 
 enum class HslColorBand { RED, ORANGE, YELLOW, GREEN, AQUA, BLUE, PURPLE, MAGENTA }
+
+/** Which point curve the curve tool edits: the composite one, or one channel's. */
+enum class CurveChannel { RGB, RED, GREEN, BLUE }
 enum class HslComponent { HUE, SATURATION, LUMINANCE }
 
 /**
@@ -365,6 +368,14 @@ val HslColorBand.labelRes: StringResource
 @Composable
 fun HslColorBand.historyLabel(): String = stringResource(labelRes)
 
+val CurveChannel.labelRes: StringResource
+    get() = when (this) {
+        CurveChannel.RGB -> Res.string.editor_curve_channel_rgb
+        CurveChannel.RED -> Res.string.editor_curve_channel_red
+        CurveChannel.GREEN -> Res.string.editor_curve_channel_green
+        CurveChannel.BLUE -> Res.string.editor_curve_channel_blue
+    }
+
 val HslComponent.labelRes: StringResource
     get() = when (this) {
         HslComponent.HUE -> Res.string.editor_component_hue
@@ -426,6 +437,7 @@ data class EditorUiState(
     val panel: EditorPanel = EditorPanel.LIGHT,
     val sheet: EditorSheet = EditorSheet.ADJUSTMENTS,
     val selectedHslBand: HslColorBand = HslColorBand.RED,
+    val curveChannel: CurveChannel = CurveChannel.RGB,
     val selectedColorGradeWheel: ColorGradeWheel = ColorGradeWheel.SHADOWS,
     val selectedMaskId: String? = null,
     /** "Show mask" pins the red; otherwise it only lights up during the gesture. */
@@ -835,6 +847,8 @@ open class EditorViewModel(
 
     fun selectHslBand(band: HslColorBand) = mutableState.update { it.copy(selectedHslBand = band) }
 
+    fun selectCurveChannel(channel: CurveChannel) = mutableState.update { it.copy(curveChannel = channel) }
+
     fun selectColorGradeWheel(wheel: ColorGradeWheel) =
         mutableState.update { it.copy(selectedColorGradeWheel = wheel) }
     fun showOriginal(show: Boolean) = mutableState.update { it.copy(showOriginal = show) }
@@ -934,51 +948,52 @@ open class EditorViewModel(
 
     fun addCurvePoint(x: Int, y: Int) {
         val current = state.value.recipe ?: return
-        val points = current.editableCurvePoints()
+        val channel = state.value.curveChannel
+        val points = current.editableCurvePoints(channel)
         val updatedPoints = points.withAddedCurvePoint(x, y)
         if (updatedPoints == points) return
-        beginCurveEdit(current)
-        applyCurvePoints(current, updatedPoints)
+        beginCurveEdit(current, channel)
+        applyCurvePoints(current, channel, updatedPoints)
     }
 
     fun moveCurvePoint(index: Int, x: Int, y: Int) {
         val current = state.value.recipe ?: return
-        val points = current.editableCurvePoints()
+        val channel = state.value.curveChannel
+        val points = current.editableCurvePoints(channel)
         if (index !in points.indices) return
-        beginCurveEdit(current)
+        beginCurveEdit(current, channel)
         val updated = points.withMovedCurvePoint(index, x, y)
         if (updated == points) return
-        applyCurvePoints(current, updated)
+        applyCurvePoints(current, channel, updated)
     }
 
     fun removeCurvePoint(index: Int) {
         val current = state.value.recipe ?: return
-        val points = current.editableCurvePoints()
+        val channel = state.value.curveChannel
+        val points = current.editableCurvePoints(channel)
         val updatedPoints = points.withRemovedCurvePoint(index)
         if (updatedPoints == points) return
-        beginCurveEdit(current)
-        applyCurvePoints(current, updatedPoints)
+        beginCurveEdit(current, channel)
+        applyCurvePoints(current, channel, updatedPoints)
         finishAdjustment()
     }
 
+    /** Puts back the curve on screen — the composite or one channel's — and leaves the others. */
     fun resetCurve() {
         val current = state.value.recipe ?: return
-        val neutral = listOf(
-            eu.studio742.imago.core.model.CurvePoint(0, 0),
-            eu.studio742.imago.core.model.CurvePoint(255, 255),
-        )
-        if (current.editableCurvePoints() == neutral) return
-        beginCurveEdit(current, detail = uiText(Res.string.editor_history_reset_f))
-        applyCurvePoints(current, neutral)
+        val channel = state.value.curveChannel
+        if (current.editableCurvePoints(channel) == IDENTITY_CURVE) return
+        beginCurveEdit(current, channel, detail = uiText(Res.string.editor_history_reset_f))
+        applyCurvePoints(current, channel, IDENTITY_CURVE)
         finishAdjustment()
     }
 
-    private fun beginCurveEdit(current: EditRecipe, detail: UiText = uiText(Res.string.editor_tone_curve)) {
+    private fun beginCurveEdit(current: EditRecipe, channel: CurveChannel, detail: UiText? = null) {
         if (editStart != null) return
         editStart = current
         pendingChange = PendingChange.Fixed(
             label = uiText(Res.string.editor_chip_curve),
-            detail = detail,
+            detail = detail ?: if (channel == CurveChannel.RGB) uiText(Res.string.editor_tone_curve) else UiText.Resource(channel.labelRes),
             valueText = null,
             icon = HistoryIcon.CURVE,
         )
@@ -986,12 +1001,13 @@ open class EditorViewModel(
 
     private fun applyCurvePoints(
         current: EditRecipe,
+        channel: CurveChannel,
         points: List<eu.studio742.imago.core.model.CurvePoint>,
     ) {
         val updated = current.copy(
             processVersion = CURRENT_PROCESS_VERSION,
             geometry = current.geometry.activeAtProcess(current.processVersion),
-            toneCurve = current.toneCurve.copy(rgb = points),
+            toneCurve = current.toneCurve.withPoints(channel, points),
             updatedAt = Instant.now().toString(),
         )
         mutableState.update { it.copy(recipe = updated, isSaving = true) }
@@ -2080,11 +2096,35 @@ private fun Geometry.activeAtProcess(processVersion: Int): Geometry = copy(
     perspective = if (processVersion >= 10) perspective else Perspective(),
 )
 
-fun EditRecipe.editableCurvePoints(): List<eu.studio742.imago.core.model.CurvePoint> {
-    // Before process 11 the curve was always pinned to the corners; a recipe from then that lacked a
-    // corner point drew one anyway, and editing it has to start from what was drawn.
-    return normalizeCurvePoints(toneCurve.rgb, pinnedToCorners = processVersion < 11)
+fun EditRecipe.editableCurvePoints(channel: CurveChannel = CurveChannel.RGB): List<eu.studio742.imago.core.model.CurvePoint> =
+    when (channel) {
+        // Before process 11 the curve was always pinned to the corners; a recipe from then that lacked a
+        // corner point drew one anyway, and editing it has to start from what was drawn.
+        CurveChannel.RGB -> normalizeCurvePoints(toneCurve.rgb, pinnedToCorners = processVersion < 11)
+        // A channel curve only exists from process 12, so it was never pinned.
+        CurveChannel.RED -> normalizeCurvePoints(toneCurve.red ?: IDENTITY_CURVE)
+        CurveChannel.GREEN -> normalizeCurvePoints(toneCurve.green ?: IDENTITY_CURVE)
+        CurveChannel.BLUE -> normalizeCurvePoints(toneCurve.blue ?: IDENTITY_CURVE)
+    }
+
+/** A channel back to the straight line is no channel curve at all: the recipe stays as an older app wrote it. */
+private fun eu.studio742.imago.core.model.ToneCurve.withPoints(
+    channel: CurveChannel,
+    points: List<eu.studio742.imago.core.model.CurvePoint>,
+): eu.studio742.imago.core.model.ToneCurve {
+    val channelPoints = points.takeUnless { it == IDENTITY_CURVE }
+    return when (channel) {
+        CurveChannel.RGB -> copy(rgb = points)
+        CurveChannel.RED -> copy(red = channelPoints)
+        CurveChannel.GREEN -> copy(green = channelPoints)
+        CurveChannel.BLUE -> copy(blue = channelPoints)
+    }
 }
+
+private val IDENTITY_CURVE = listOf(
+    eu.studio742.imago.core.model.CurvePoint(0, 0),
+    eu.studio742.imago.core.model.CurvePoint(255, 255),
+)
 
 private fun normalizeCurvePoints(
     source: List<eu.studio742.imago.core.model.CurvePoint>,

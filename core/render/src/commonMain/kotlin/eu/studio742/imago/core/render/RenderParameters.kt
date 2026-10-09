@@ -18,6 +18,10 @@ data class RenderParameters(
     val whites: Float = 0f,
     val blacks: Float = 0f,
     val toneCurveRgb: List<Float> = identityToneCurve(),
+    /** The red, green and blue point curves. Each one runs after [toneCurveRgb], as in Lightroom. */
+    val toneCurveRed: List<Float> = identityToneCurve(),
+    val toneCurveGreen: List<Float> = identityToneCurve(),
+    val toneCurveBlue: List<Float> = identityToneCurve(),
     val hslBands: List<HslRenderBand> = neutralHslBands(),
     val vibrance: Float = 0f,
     val saturation: Float = 0f,
@@ -53,7 +57,28 @@ data class RenderParameters(
 ) {
     init {
         require(toneCurveRgb.size == CURVE_SAMPLE_COUNT)
+        require(toneCurveRed.size == CURVE_SAMPLE_COUNT)
+        require(toneCurveGreen.size == CURVE_SAMPLE_COUNT)
+        require(toneCurveBlue.size == CURVE_SAMPLE_COUNT)
         require(hslBands.size == HSL_BAND_COUNT)
+    }
+
+    /**
+     * What each channel goes through: the composite curve and then that channel's own, made into one
+     * table per channel, interleaved red, green, blue. The preview and the export both read this one,
+     * so a channel curve cannot look one way on the screen and another in the file.
+     *
+     * Made once per set of parameters, outside the equality: the export reads it for every pixel.
+     */
+    val channelToneCurves: FloatArray by lazy {
+        val tables = FloatArray(CURVE_SAMPLE_COUNT * 3)
+        for (sample in 0 until CURVE_SAMPLE_COUNT) {
+            val composite = toneCurveRgb[sample]
+            tables[sample * 3] = sampleToneCurve(toneCurveRed, composite)
+            tables[sample * 3 + 1] = sampleToneCurve(toneCurveGreen, composite)
+            tables[sample * 3 + 2] = sampleToneCurve(toneCurveBlue, composite)
+        }
+        tables
     }
 
     val isNeutral: Boolean
@@ -262,6 +287,14 @@ const val CURVE_SAMPLE_COUNT = 256
 const val HSL_BAND_COUNT = 8
 
 fun identityToneCurve(): List<Float> = List(CURVE_SAMPLE_COUNT) { it / 255f }
+
+/** A curve's value at [value], between its two nearest samples. */
+fun sampleToneCurve(curve: List<Float>, value: Float): Float {
+    val position = value.coerceIn(0f, 1f) * (CURVE_SAMPLE_COUNT - 1)
+    val left = position.toInt()
+    val right = (left + 1).coerceAtMost(CURVE_SAMPLE_COUNT - 1)
+    return curve[left] + (curve[right] - curve[left]) * (position - left)
+}
 
 fun neutralHslBands(): List<HslRenderBand> = List(HSL_BAND_COUNT) { HslRenderBand() }
 

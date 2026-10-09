@@ -86,6 +86,10 @@
     <string name="editor_panel_masks">Masks</string>
     <string name="editor_tone_curve">Tone Curve</string>
     <string name="editor_curve_hint">Tap to add · drag to adjust · double-tap to remove</string>
+    <string name="editor_curve_channel_rgb">RGB</string>
+    <string name="editor_curve_channel_red">Red</string>
+    <string name="editor_curve_channel_green">Green</string>
+    <string name="editor_curve_channel_blue">Blue</string>
     <string name="editor_crop_frame">Adjustable crop frame</string>
     <string name="editor_aspect_free_state">Free aspect ratio</string>
     <string name="editor_crop_move_left">Move crop left</string>

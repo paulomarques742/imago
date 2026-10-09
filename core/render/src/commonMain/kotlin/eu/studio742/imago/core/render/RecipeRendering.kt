@@ -1,6 +1,7 @@
 package eu.studio742.imago.core.render
 
 import eu.studio742.imago.core.model.CropRect
+import eu.studio742.imago.core.model.CurvePoint
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.Geometry
 import eu.studio742.imago.core.model.LocalMask
@@ -11,6 +12,16 @@ import eu.studio742.imago.core.model.UPRIGHT_OFF
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.roundToInt
+
+private fun EditRecipe.pointCurveLut(points: List<CurvePoint>) = buildToneCurveLut(
+    points = points.map { it.x to it.y },
+    interpolation = if (processVersion >= 2) ToneCurveInterpolation.PCHIP else ToneCurveInterpolation.LINEAR,
+    flatBeyondEnds = processVersion >= 11,
+)
+
+/** The channel curves only exist from process 12; a missing one is the identity. */
+private fun EditRecipe.channelCurveLut(points: List<CurvePoint>?) =
+    if (processVersion >= 12 && points != null) pointCurveLut(points) else identityToneCurve()
 
 /**
  * The recipe translated into what the render pipeline understands.
@@ -32,11 +43,10 @@ fun EditRecipe.toRenderParameters() = RenderParameters(
     shadows = tone.shadows,
     whites = tone.whites,
     blacks = tone.blacks,
-    toneCurveRgb = buildToneCurveLut(
-        points = toneCurve.rgb.map { it.x to it.y },
-        interpolation = if (processVersion >= 2) ToneCurveInterpolation.PCHIP else ToneCurveInterpolation.LINEAR,
-        flatBeyondEnds = processVersion >= 11,
-    ),
+    toneCurveRgb = pointCurveLut(toneCurve.rgb),
+    toneCurveRed = channelCurveLut(toneCurve.red),
+    toneCurveGreen = channelCurveLut(toneCurve.green),
+    toneCurveBlue = channelCurveLut(toneCurve.blue),
     hslBands = listOf(hsl.red, hsl.orange, hsl.yellow, hsl.green, hsl.aqua, hsl.blue, hsl.purple, hsl.magenta)
         .map { HslRenderBand(it.hue, it.saturation, it.luminance) },
     vibrance = presence.vibrance,

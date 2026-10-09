@@ -5,6 +5,11 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 12 activates `toneCurve.red`, `green` and `blue`, which were in the schema from the start and never
+ * written. Each runs after the composite curve, the order that the best evidence about Lightroom
+ * points to (Adobe does not document it; Photoshop does the opposite). An older app would draw a
+ * recipe with them as if they were not there, so it has to ask to be updated instead.
+ *
  * 11 frees the tone curve's end points. Below the first point and above the last the curve holds
  * its height, as in Lightroom, instead of being pinned to (0, 0) and (255, 255). Earlier editors
  * always kept a point at 0 and one at 255, and every built-in look has them, so no recipe already
@@ -29,7 +34,7 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 11
+const val CURRENT_PROCESS_VERSION = 12
 
 @Serializable
 data class EditRecipe(
@@ -77,6 +82,7 @@ data class Presence(
 @Serializable
 data class CurvePoint(val x: Int, val y: Int)
 
+/** The point curves. A channel curve that is null is the identity, which is how every recipe starts. */
 @Serializable
 data class ToneCurve(
     val rgb: List<CurvePoint> = listOf(CurvePoint(0, 0), CurvePoint(255, 255)),

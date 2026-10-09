@@ -367,9 +367,10 @@ object BitmapPhotoProcessor {
         tonalLuminance = luminance(red, green, blue).coerceIn(0f, 1f)
         remapLuminance(midtoneContrastLuminance(tonalLuminance, tone.contrast / 100f))
 
-        red = curveSample(parameters.toneCurveRgb, red)
-        green = curveSample(parameters.toneCurveRgb, green)
-        blue = curveSample(parameters.toneCurveRgb, blue)
+        val curves = parameters.channelToneCurves
+        red = channelCurveSample(curves, red, 0)
+        green = channelCurveSample(curves, green, 1)
+        blue = channelCurveSample(curves, blue, 2)
         val hslColor = applyHslBands(floatArrayOf(red, green, blue), parameters.hslBands)
         red = hslColor[0]
         green = hslColor[1]
@@ -446,11 +447,12 @@ object BitmapPhotoProcessor {
         }
     }
 
-    private fun curveSample(curve: List<Float>, value: Float): Float {
+    /** One channel of [RenderParameters.channelToneCurves], read as the shader reads `uToneCurve`. */
+    private fun channelCurveSample(curves: FloatArray, value: Float, channel: Int): Float {
         val position = value.coerceIn(0f, 1f) * 255f
         val left = floor(position).toInt()
         val right = (left + 1).coerceAtMost(255)
-        return mix(curve[left], curve[right], position - left)
+        return mix(curves[left * 3 + channel], curves[right * 3 + channel], position - left)
     }
 
     private fun srgbToLinear(value: Float): Float =

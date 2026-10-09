@@ -44,6 +44,18 @@ class RecipeRenderingTest {
         assertEquals(40f / 255f, recipe(processVersion = 11, toneCurve = curve).toRenderParameters().toneCurveRgb.first(), 0.0001f)
     }
 
+    /** The channel curves exist from process 12; an older recipe that somehow carries one draws without it. */
+    @Test
+    fun channelCurvesOnlyCountFromProcessTwelve() {
+        val curve = ToneCurve(blue = listOf(CurvePoint(0, 40), CurvePoint(255, 255)))
+
+        assertEquals(identityToneCurve(), recipe(processVersion = 11, toneCurve = curve).toRenderParameters().toneCurveBlue)
+        val current = recipe(processVersion = 12, toneCurve = curve).toRenderParameters()
+        assertEquals(40f / 255f, current.toneCurveBlue.first(), 0.0001f)
+        assertEquals(identityToneCurve(), current.toneCurveRed)
+        assertEquals(identityToneCurve(), current.toneCurveGreen)
+    }
+
     /** A recipe from before version 10 cannot carry a perspective; if one arrives, it stays inert. */
     @Test
     fun perspectiveOnlyCountsFromProcessTen() {

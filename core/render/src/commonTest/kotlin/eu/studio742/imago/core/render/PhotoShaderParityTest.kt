@@ -470,6 +470,15 @@ class PhotoShaderParityTest {
         )
     }
 
+    /** The preview reads the same per-channel tables as the export, composite curve first. */
+    @Test
+    fun theToneCurveIsOneTablePerChannel() {
+        val tone = PhotoShaders.TONE
+        assertTrue(tone.contains("uniform highp sampler2D uToneCurve;"))
+        assertTrue(tone.contains("mix(texelFetch(uToneCurve, ivec2(left.b, 0), 0).b, texelFetch(uToneCurve, ivec2(right.b, 0), 0).b, amount.b)"))
+        assertTrue(tone.contains("color = curveSample(color);"))
+    }
+
     private fun assertContains(fragment: String, what: String) {
         assertTrue(
             "The shader should contain $what — \"$fragment\". If it changed in PhotoEffects, change it here too.",

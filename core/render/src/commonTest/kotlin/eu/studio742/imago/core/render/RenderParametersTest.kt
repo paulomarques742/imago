@@ -79,6 +79,33 @@ class RenderParametersTest {
         assertTrue(curve.subList(170, 256).all { it in (60f / 255f)..1f })
     }
 
+    @Test fun eachChannelCurveRunsAfterTheCompositeOne() {
+        val composite = buildToneCurveLut(listOf(0 to 0, 128 to 192, 255 to 255), flatBeyondEnds = true)
+        val blue = buildToneCurveLut(listOf(0 to 0, 192 to 64, 255 to 255), flatBeyondEnds = true)
+        val tables = RenderParameters(toneCurveRgb = composite, toneCurveBlue = blue).channelToneCurves
+
+        // Mid-grey goes up to 192 through the composite, and the blue curve takes 192 down to 64.
+        assertEquals(192f / 255f, tables[128 * 3], 0.0001f)
+        assertEquals(192f / 255f, tables[128 * 3 + 1], 0.0001f)
+        assertEquals(64f / 255f, tables[128 * 3 + 2], 0.0001f)
+        // In the other order — blue first — it would have been composite(blue(128)), somewhere else.
+        val blueFirst = sampleToneCurve(composite, sampleToneCurve(blue, 128f / 255f))
+        assertTrue("blue first gives ${blueFirst * 255}", kotlin.math.abs(blueFirst - 64f / 255f) > 10f / 255f)
+    }
+
+    @Test fun aBlueCurveChangesOnlyTheBlueOfAnExportedPixel() {
+        val source = 0xFF808080.toInt()
+        val neutral = RenderParameters()
+        val bluer = RenderParameters(toneCurveBlue = buildToneCurveLut(listOf(0 to 0, 128 to 200, 255 to 255), flatBeyondEnds = true))
+        val before = BitmapPhotoProcessor.processPixel(source, neutral, neutral.effectiveTone())
+        val after = BitmapPhotoProcessor.processPixel(source, bluer, bluer.effectiveTone())
+
+        assertEquals(before ushr 16 and 0xFF, after ushr 16 and 0xFF)
+        assertEquals(before ushr 8 and 0xFF, after ushr 8 and 0xFF)
+        assertTrue((after and 0xFF) > (before and 0xFF) + 40)
+        assertFalse(bluer.isNeutral)
+    }
+
     @Test fun neutralCpuPixelIsStableWithinOneChannelValue() {
         val source = 0xFF4A80C0.toInt()
         val parameters = RenderParameters()

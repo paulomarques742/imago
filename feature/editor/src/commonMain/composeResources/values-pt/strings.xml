@@ -86,6 +86,10 @@
     <string name="editor_panel_masks">Máscaras</string>
     <string name="editor_tone_curve">Curva tonal</string>
     <string name="editor_curve_hint">Toque para adicionar · arraste para ajustar · toque duplo para remover</string>
+    <string name="editor_curve_channel_rgb">RGB</string>
+    <string name="editor_curve_channel_red">Vermelho</string>
+    <string name="editor_curve_channel_green">Verde</string>
+    <string name="editor_curve_channel_blue">Azul</string>
     <string name="editor_crop_frame">Moldura de corte ajustável</string>
     <string name="editor_aspect_free_state">Proporção livre</string>
     <string name="editor_crop_move_left">Mover corte para a esquerda</string>

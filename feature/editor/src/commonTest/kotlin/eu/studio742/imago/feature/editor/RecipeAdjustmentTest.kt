@@ -181,6 +181,13 @@ class RecipeAdjustmentTest {
     }
 
     @Test
+    fun aChannelWithoutItsOwnCurveStartsAsTheStraightLine() {
+        val recipe = neutral.copy(toneCurve = ToneCurve(rgb = listOf(CurvePoint(0, 20), CurvePoint(255, 255))))
+        assertEquals(listOf(CurvePoint(0, 0), CurvePoint(255, 255)), recipe.editableCurvePoints(CurveChannel.BLUE))
+        assertEquals(listOf(CurvePoint(0, 20), CurvePoint(255, 255)), recipe.editableCurvePoints(CurveChannel.RGB))
+    }
+
+    @Test
     fun legacyLinearRecipesRemainStableUntilCurveIsEdited() {
         val points = listOf(CurvePoint(0, 0), CurvePoint(64, 20), CurvePoint(128, 200), CurvePoint(255, 255))
         val legacy = neutral.copy(processVersion = 1, toneCurve = neutral.toneCurve.copy(rgb = points))

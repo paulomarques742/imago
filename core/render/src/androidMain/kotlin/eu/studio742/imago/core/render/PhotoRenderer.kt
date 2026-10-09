@@ -45,6 +45,12 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private var composite: GlProgram? = null
 
     private var sourceTexture = 0
+    private var toneCurveTexture = 0
+    /** The tables now in [toneCurveTexture]; uploaded again only when the curves change. */
+    private var uploadedToneCurves: FloatArray? = null
+    private val toneCurveTexels = ByteBuffer.allocateDirect(CURVE_SAMPLE_COUNT * 4 * Float.SIZE_BYTES)
+        .order(ByteOrder.nativeOrder())
+        .asFloatBuffer()
     private var surfaceWidth = 1
     private var surfaceHeight = 1
     private var imageWidth = 1
@@ -138,6 +144,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         allTargets.forEach(GlRenderTarget::forget)
         halfFloatTargets = true
         sourceTexture = createSourceTexture()
+        toneCurveTexture = createToneCurveTexture()
+        uploadedToneCurves = null
         pendingUpload = bitmap != null
     }
 
@@ -345,7 +353,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         program.float("uShadows", active.shadows / 100f)
         program.float("uWhites", active.whites / 100f)
         program.float("uBlacks", active.blacks / 100f)
-        program.floats("uToneCurve", CURVE_SAMPLE_COUNT, active.toneCurveRgb.toFloatArray())
+        uploadToneCurves(active.channelToneCurves)
+        program.sampler("uToneCurve", toneCurveTexture, TONE_CURVE_UNIT)
         val hslValues = active.hslBands.flatMap { band ->
             listOf(band.hue / 100f, band.saturation / 100f, band.luminance / 100f)
         }.toFloatArray()
@@ -582,6 +591,36 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         return ids[0]
     }
 
+    /** 256 × 1 texels of 32-bit float: no precision lost against the export, which reads the same tables. */
+    private fun createToneCurveTexture(): Int {
+        val ids = IntArray(1)
+        GLES30.glGenTextures(1, ids, 0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, ids[0])
+        // Float textures cannot be filtered in ES 3.0; the shader reads texels and interpolates itself.
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_NEAREST)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_NEAREST)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        return ids[0]
+    }
+
+    private fun uploadToneCurves(tables: FloatArray) {
+        if (uploadedToneCurves === tables) return
+        toneCurveTexels.position(0)
+        for (sample in 0 until CURVE_SAMPLE_COUNT) {
+            toneCurveTexels.put(tables[sample * 3]).put(tables[sample * 3 + 1]).put(tables[sample * 3 + 2]).put(1f)
+        }
+        toneCurveTexels.position(0)
+        // Its own unit: whatever unit is active now holds a texture this pass is about to sample.
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + TONE_CURVE_UNIT)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, toneCurveTexture)
+        GLES30.glTexImage2D(
+            GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA32F, CURVE_SAMPLE_COUNT, 1, 0,
+            GLES30.GL_RGBA, GLES30.GL_FLOAT, toneCurveTexels,
+        )
+        uploadedToneCurves = tables
+    }
+
     private companion object {
         const val STRIDE = 4 * Float.SIZE_BYTES
     }
@@ -595,3 +634,6 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
  * would give a mask reading the wrong texture.
  */
 private const val MASK_FIELD_UNIT = 5
+
+/** The tone curve's tables, read only by the tonal step; the first unit after the mask field's. */
+private const val TONE_CURVE_UNIT = 6

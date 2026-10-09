@@ -11,6 +11,7 @@ import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.Tone
+import eu.studio742.imago.core.render.toRenderParameters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -219,6 +220,31 @@ class RecipeEditorTest {
 
         assertEquals(0.5f, viewModel.state.value.recipe!!.tone.exposure)
         assertFalse(viewModel.state.value.hasUnsavedRecipeChanges)
+    }
+
+    @Test
+    fun `a point on the blue curve leaves the composite alone, and reset puts back only blue`() {
+        openRecipe(RecipeSource.Saved(original))
+        viewModel.moveCurvePoint(1, 255, 255)
+        viewModel.addCurvePoint(128, 160)
+        viewModel.finishAdjustment()
+        val composite = viewModel.state.value.recipe!!.toneCurve.rgb
+
+        viewModel.selectCurveChannel(CurveChannel.BLUE)
+        viewModel.addCurvePoint(128, 90)
+        viewModel.finishAdjustment()
+
+        val edited = viewModel.state.value.recipe!!
+        assertEquals(composite, edited.toneCurve.rgb)
+        assertEquals(listOf(0, 128, 255), edited.toneCurve.blue!!.map { it.x })
+        assertNull(edited.toneCurve.red)
+        assertEquals(12, edited.processVersion)
+        assertTrue(edited.toRenderParameters().toneCurveBlue[128] < 100f / 255f)
+
+        viewModel.resetCurve()
+
+        assertNull("the straight line is no channel curve", viewModel.state.value.recipe!!.toneCurve.blue)
+        assertEquals(composite, viewModel.state.value.recipe!!.toneCurve.rgb)
     }
 
     @Test

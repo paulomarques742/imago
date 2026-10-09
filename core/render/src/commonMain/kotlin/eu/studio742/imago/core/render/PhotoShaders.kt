@@ -278,18 +278,27 @@ internal object PhotoShaders {
         uniform float uShadows;
         uniform float uWhites;
         uniform float uBlacks;
-        uniform float uToneCurve[256];
+        // The composite curve and then each channel's, one texel per sample (channelToneCurves). A
+        // texture and not a uniform array: three columns of 256 rows would push the other uniforms
+        // past the 256 vectors some GPUs allow, and the program would no longer link.
+        uniform highp sampler2D uToneCurve;
         uniform vec3 uHslBands[8];
         uniform float uVibrance;
         uniform float uSaturation;
         in vec2 vTexCoord;
         out vec4 fragColor;
 """ + MASK_BASE_UNIFORMS + MASK_TONE_UNIFORMS + BASE_TONE + SELECTIVE_TONE + """
-        float curveSample(float value) {
-            float position = clamp(value, 0.0, 1.0) * 255.0;
-            int left = int(floor(position));
-            int right = min(left + 1, 255);
-            return mix(uToneCurve[left], uToneCurve[right], fract(position));
+        vec3 curveSample(vec3 value) {
+            vec3 position = clamp(value, 0.0, 1.0) * 255.0;
+            ivec3 left = ivec3(floor(position));
+            ivec3 right = min(left + 1, ivec3(255));
+            vec3 amount = fract(position);
+            // texelFetch and the mix by hand, as the export does it: no filtering to differ by.
+            return vec3(
+                mix(texelFetch(uToneCurve, ivec2(left.r, 0), 0).r, texelFetch(uToneCurve, ivec2(right.r, 0), 0).r, amount.r),
+                mix(texelFetch(uToneCurve, ivec2(left.g, 0), 0).g, texelFetch(uToneCurve, ivec2(right.g, 0), 0).g, amount.g),
+                mix(texelFetch(uToneCurve, ivec2(left.b, 0), 0).b, texelFetch(uToneCurve, ivec2(right.b, 0), 0).b, amount.b)
+            );
         }
 
         vec3 rgbToHsv(vec3 c) {
@@ -370,7 +379,7 @@ internal object PhotoShaders {
             color = remapLuminance(color, locallyAdaptedHighlights(tonalLuminance, base, highlights));
             tonalLuminance = clamp(luminance(color), 0.0, 1.0);
             color = remapLuminance(color, applyMidtoneContrast(tonalLuminance, contrast));
-            color = vec3(curveSample(color.r), curveSample(color.g), curveSample(color.b));
+            color = curveSample(color);
             color = applyHslBands(color);
             float perceived = luminance(color);
             color = mix(vec3(perceived), color, 1.0 + saturation);

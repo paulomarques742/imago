@@ -329,6 +329,7 @@ fun EditorRoute(
         onUndo = viewModel::undo,
         onRedo = viewModel::redo,
         onSelectHslBand = viewModel::selectHslBand,
+        onSelectCurveChannel = viewModel::selectCurveChannel,
         onAddCurvePoint = viewModel::addCurvePoint,
         onMoveCurvePoint = viewModel::moveCurvePoint,
         onRemoveCurvePoint = viewModel::removeCurvePoint,
@@ -501,6 +502,7 @@ private fun EditorScreen(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onSelectHslBand: (HslColorBand) -> Unit,
+    onSelectCurveChannel: (CurveChannel) -> Unit,
     onAddCurvePoint: (Int, Int) -> Unit,
     onMoveCurvePoint: (Int, Int, Int) -> Unit,
     onRemoveCurvePoint: (Int) -> Unit,
@@ -582,7 +584,7 @@ private fun EditorScreen(
     var lastAdjustment by remember(assetId) { mutableStateOf<Adjustment?>(null) }
     val panelHeight = when (state.sheet) {
         EditorSheet.CROP -> ImagoSizes.CropPanelHeight
-        // The curve itself is over the photo; down here only its name and its way out are left.
+        // The curve itself is over the photo; down here only its name, its way out and the channels.
         EditorSheet.CURVE -> CURVE_PANEL_HEIGHT
         // Colour grading is the only tool whose control is a circle, and a circle cannot be cut: the
         // angle is half of what it says. It asks for more height than the sliders, and gives it back
@@ -1575,6 +1577,7 @@ private fun EditorScreen(
                         onAdjustmentFinished = onAdjustmentFinished,
                         onResetAdjustment = onResetAdjustment,
                         onSelectHslBand = onSelectHslBand,
+                        onSelectCurveChannel = onSelectCurveChannel,
                         onAddCurvePoint = onAddCurvePoint,
                         onMoveCurvePoint = onMoveCurvePoint,
                         onRemoveCurvePoint = onRemoveCurvePoint,
@@ -1616,10 +1619,16 @@ private fun EditorScreen(
                 }
             }
 
-            val curvePoints = state.recipe?.editableCurvePoints()
+            val curvePoints = state.recipe?.editableCurvePoints(state.curveChannel)
             if (toolsVisible && state.sheet == EditorSheet.CURVE && curvePoints != null) {
                 CurveOverlay(
-                    lut = state.renderParameters.toneCurveRgb,
+                    lut = when (state.curveChannel) {
+                        CurveChannel.RGB -> state.renderParameters.toneCurveRgb
+                        CurveChannel.RED -> state.renderParameters.toneCurveRed
+                        CurveChannel.GREEN -> state.renderParameters.toneCurveGreen
+                        CurveChannel.BLUE -> state.renderParameters.toneCurveBlue
+                    },
+                    color = state.curveChannel.curveColor(),
                     points = curvePoints,
                     onEditing = { editingKey = it },
                     onAddPoint = onAddCurvePoint,
@@ -2060,6 +2069,7 @@ private fun AdjustmentPanel(
     onAdjustmentFinished: () -> Unit,
     onResetAdjustment: (Adjustment) -> Unit,
     onSelectHslBand: (HslColorBand) -> Unit,
+    onSelectCurveChannel: (CurveChannel) -> Unit,
     onAddCurvePoint: (Int, Int) -> Unit,
     onMoveCurvePoint: (Int, Int, Int) -> Unit,
     onRemoveCurvePoint: (Int) -> Unit,
@@ -2160,6 +2170,8 @@ private fun AdjustmentPanel(
                 }
                 EditorSheet.CURVE -> CurvePanel(
                     editingKey = editingKey,
+                    channel = state.curveChannel,
+                    onSelectChannel = onSelectCurveChannel,
                     onReset = onResetCurve,
                     onClose = { onSelectSheet(EditorSheet.ADJUSTMENTS) },
                 )
@@ -2585,13 +2597,15 @@ private fun EditorPanel.vector() = when (this) {
 }
 
 /**
- * The curve's place in the drawer: its name, the way back and the reset. The curve itself is drawn
- * over the photo ([CurveOverlay]), large, as Lightroom does it — in a slice of the drawer it was too
- * small for a finger to place a point with any precision.
+ * The curve's place in the drawer: its name, the way back, the reset and the channel. The curve
+ * itself is drawn over the photo ([CurveOverlay]), large, as Lightroom does it — in a slice of the
+ * drawer it was too small for a finger to place a point with any precision.
  */
 @Composable
 private fun CurvePanel(
     editingKey: Any?,
+    channel: CurveChannel,
+    onSelectChannel: (CurveChannel) -> Unit,
     onReset: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -2609,12 +2623,52 @@ private fun CurvePanel(
             onClose = onClose,
             onReset = onReset,
         )
+        CurveChannelRow(selected = channel, onSelect = onSelectChannel)
         Text(
             stringResource(Res.string.editor_curve_hint),
             style = MaterialTheme.typography.bodySmall,
             color = ImagoColors.TextTertiary,
         )
     }
+}
+
+/** The four curves, as Lightroom's row of discs: the composite in white, then red, green and blue. */
+@Composable
+private fun CurveChannelRow(selected: CurveChannel, onSelect: (CurveChannel) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
+        CurveChannel.entries.forEach { channel ->
+            val label = stringResource(channel.labelRes)
+            val isSelected = channel == selected
+            Box(
+                modifier = Modifier
+                    .size(ImagoSizes.TouchTarget)
+                    .clip(CircleShape)
+                    .selectable(selected = isSelected, role = Role.Tab, onClick = { onSelect(channel) })
+                    // The colour is the only clue on screen; TalkBack needs the name.
+                    .semantics { contentDescription = label },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .size(if (isSelected) 27.dp else 23.dp)
+                        .clip(CircleShape)
+                        .background(channel.curveColor())
+                        .then(
+                            if (isSelected) Modifier.border(2.dp, ImagoColors.Ivory, CircleShape)
+                            else Modifier.border(1.dp, ImagoColors.BorderVisible, CircleShape),
+                        ),
+                )
+            }
+        }
+    }
+}
+
+/** The channel's colour, for its disc and for its line over the photo. */
+private fun CurveChannel.curveColor() = when (this) {
+    CurveChannel.RGB -> ImagoColors.BrandWhite
+    CurveChannel.RED -> Color(0xFFE14B4B)
+    CurveChannel.GREEN -> Color(0xFF52A86A)
+    CurveChannel.BLUE -> Color(0xFF4F79D8)
 }
 
 /**
@@ -2630,6 +2684,7 @@ private fun CurvePanel(
 @Composable
 private fun CurveOverlay(
     lut: List<Float>,
+    color: Color,
     points: List<eu.studio742.imago.core.model.CurvePoint>,
     onEditing: (Any?) -> Unit,
     onAddPoint: (Int, Int) -> Unit,
@@ -2705,13 +2760,13 @@ private fun CurveOverlay(
                 }
             }
             drawPath(curve, Color.Black.copy(alpha = 0.45f), style = Stroke(width = 4.dp.toPx()))
-            drawPath(curve, ImagoColors.BrandWhite, style = Stroke(width = 2.dp.toPx()))
+            drawPath(curve, color, style = Stroke(width = 2.dp.toPx()))
             points.forEachIndexed { index, point ->
                 val center = plot.toScreen(point)
                 val active = activePoint == index
                 val radius = if (active) 10.dp.toPx() else 8.dp.toPx()
                 drawCircle(Color.Black.copy(alpha = 0.45f), radius = radius + 1.5.dp.toPx(), center = center)
-                drawCircle(ImagoColors.BrandWhite, radius = radius, center = center)
+                drawCircle(color, radius = radius, center = center)
             }
         }
     }
@@ -3473,8 +3528,8 @@ private fun Modifier.drawerHandle(
         }
 }
 
-/** The drawer's height with the curve open: the handle, the header and the hint. */
-private val CURVE_PANEL_HEIGHT = 120.dp
+/** The drawer's height with the curve open: the handle, the header, the channels and the hint. */
+private val CURVE_PANEL_HEIGHT = 168.dp
 
 /**
  * How far the plot steps in from the curve's own box. The end points sit on the plot's edge, and
