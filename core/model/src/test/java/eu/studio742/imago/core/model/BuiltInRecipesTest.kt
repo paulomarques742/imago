@@ -22,7 +22,7 @@ class BuiltInRecipesTest {
     fun presetsDeclareSchemaV1AndTheCurrentPipeline() {
         BUILT_IN_RECIPES.forEach { preset ->
             assertEquals(1, preset.recipe.schemaVersion)
-            assertEquals(CURRENT_PROCESS_VERSION, preset.recipe.processVersion)
+            assertEquals(PRESETS_PROCESS_VERSION, preset.recipe.processVersion)
         }
     }
 

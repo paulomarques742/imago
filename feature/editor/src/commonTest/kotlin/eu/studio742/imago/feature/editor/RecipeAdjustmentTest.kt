@@ -12,6 +12,9 @@ import eu.studio742.imago.core.model.ToneCurve
 import eu.studio742.imago.core.model.HslBand
 import eu.studio742.imago.core.model.CURRENT_PROCESS_VERSION
 import eu.studio742.imago.core.render.toRenderParameters
+import eu.studio742.imago.core.render.lightWhiteBalanceOf
+import eu.studio742.imago.core.model.WhiteBalance
+import eu.studio742.imago.core.model.BUILT_IN_RECIPES
 
 class RecipeAdjustmentTest {
     private val neutral = EditRecipe(
@@ -185,6 +188,37 @@ class RecipeAdjustmentTest {
         val recipe = neutral.copy(toneCurve = ToneCurve(rgb = listOf(CurvePoint(0, 20), CurvePoint(255, 255))))
         assertEquals(listOf(CurvePoint(0, 0), CurvePoint(255, 255)), recipe.editableCurvePoints(CurveChannel.BLUE))
         assertEquals(listOf(CurvePoint(0, 20), CurvePoint(255, 255)), recipe.editableCurvePoints(CurveChannel.RGB))
+    }
+
+    @Test
+    fun anOlderWhiteBalanceOpensConvertedToTheLightModel() {
+        val older = neutral.copy(
+            processVersion = 10,
+            whiteBalance = WhiteBalance(temp = 26f, tint = 6f),
+            toneCurve = ToneCurve(rgb = listOf(CurvePoint(20, 0), CurvePoint(235, 255))),
+        )
+
+        val opened = older.openedForEditing()
+
+        assertEquals(CURRENT_PROCESS_VERSION, opened.processVersion)
+        assertEquals(lightWhiteBalanceOf(older.whiteBalance), opened.whiteBalance)
+        assertTrue("the light model needs less for the same warmth", opened.whiteBalance.temp < 26f)
+        // At process 10 the curve was pinned to its corners; opened at 13 it has to say so itself.
+        assertEquals(listOf(0, 20, 235, 255), opened.toneCurve.rgb.map { it.x })
+    }
+
+    @Test
+    fun aRecipeWithoutWhiteBalanceOpensAsItWas() {
+        val older = neutral.copy(processVersion = 10, toneCurve = ToneCurve(rgb = listOf(CurvePoint(20, 0), CurvePoint(235, 255))))
+        assertEquals(older, older.openedForEditing())
+    }
+
+    @Test
+    fun anAppPresetIsAppliedWithItsWhiteBalanceConverted() {
+        val goldenHour = BUILT_IN_RECIPES.first { it.recipe.whiteBalance != WhiteBalance() }.recipe
+        val applied = goldenHour.rebasedOnto(neutral, "2026-10-09T12:00:00Z")
+        assertEquals(CURRENT_PROCESS_VERSION, applied.processVersion)
+        assertEquals(lightWhiteBalanceOf(goldenHour.whiteBalance), applied.whiteBalance)
     }
 
     @Test

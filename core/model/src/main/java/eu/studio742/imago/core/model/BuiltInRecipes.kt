@@ -30,7 +30,14 @@ private const val BUILT_IN_ASSET_ID = "built-in"
  *
  * `assetId` and the dates only gain meaning when the recipe is applied — `rebasedOnto` swaps the
  * three for the target photo.
+ *
+ * The presets were tuned under process 12, whose white balance is three gentle gains, and say so:
+ * applied, their Temperature and Tint are converted to the light model like any older recipe's, and
+ * they keep the look they were tuned for.
  */
+/** The process the presets were tuned under. */
+const val PRESETS_PROCESS_VERSION = 12
+
 private fun preset(
     whiteBalance: WhiteBalance = WhiteBalance(),
     tone: Tone = Tone(),
@@ -41,6 +48,7 @@ private fun preset(
 ) = EditRecipe(
     assetId = BUILT_IN_ASSET_ID,
     originalChecksum = "",
+    processVersion = PRESETS_PROCESS_VERSION,
     createdAt = "",
     updatedAt = "",
     whiteBalance = whiteBalance,

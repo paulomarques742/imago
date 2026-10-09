@@ -207,6 +207,25 @@ internal class EffectiveTone {
     var texture = 0f
     var clarity = 0f
     var dehaze = 0f
+    /** From process 13 the white balance is a light and an adaptation; before it, three gains. */
+    var lightWhiteBalance = true
+
+    private var matrixTemperature = Float.NaN
+    private var matrixTint = Float.NaN
+    private var matrix = FloatArray(9)
+
+    /**
+     * The white balance matrix for this pixel's Temperature and Tint. Kept while they repeat — the
+     * whole photo, without masks — since building it is far dearer than using it.
+     */
+    fun whiteBalanceMatrix(): FloatArray {
+        if (temperature != matrixTemperature || tint != matrixTint) {
+            matrix = WhiteBalanceModel.matrix(temperature / 100f, tint / 100f)
+            matrixTemperature = temperature
+            matrixTint = tint
+        }
+        return matrix
+    }
 
     fun loadGlobal(parameters: RenderParameters) {
         temperature = parameters.temperature
@@ -222,5 +241,6 @@ internal class EffectiveTone {
         texture = parameters.texture
         clarity = parameters.clarity
         dehaze = parameters.dehaze
+        lightWhiteBalance = parameters.lightWhiteBalance
     }
 }

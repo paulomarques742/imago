@@ -5,6 +5,11 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 13 makes Temperature and Tint a light: a point on the Planckian locus, moved off it by the tint,
+ * that a Bradford adaptation takes to D65 (`WhiteBalanceModel` in the renderer). Before it they were
+ * three gains too weak for a tungsten cast. An older recipe keeps the gains until it is edited; then
+ * its values are converted so that its greys keep their colour.
+ *
  * 12 activates `toneCurve.red`, `green` and `blue`, which were in the schema from the start and never
  * written. Each runs after the composite curve, the order that the best evidence about Lightroom
  * points to (Adobe does not document it; Photoshop does the opposite). An older app would draw a
@@ -34,7 +39,7 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 12
+const val CURRENT_PROCESS_VERSION = 13
 
 @Serializable
 data class EditRecipe(

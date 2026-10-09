@@ -56,6 +56,14 @@ class RecipeRenderingTest {
         assertEquals(identityToneCurve(), current.toneCurveGreen)
     }
 
+    /** The white balance is a light from process 13; an older recipe keeps its three gains. */
+    @Test
+    fun theLightWhiteBalanceCountsFromProcessThirteen() {
+        assertFalse(recipe(processVersion = 12).toRenderParameters().lightWhiteBalance)
+        assertTrue(recipe(processVersion = 13).toRenderParameters().lightWhiteBalance)
+        assertTrue("an older neutral recipe is still neutral", recipe(processVersion = 12).toRenderParameters().isNeutral)
+    }
+
     /** A recipe from before version 10 cannot carry a perspective; if one arrives, it stays inert. */
     @Test
     fun perspectiveOnlyCountsFromProcessTen() {

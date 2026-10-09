@@ -11,6 +11,8 @@ import eu.studio742.imago.core.model.MaskShape
 data class RenderParameters(
     val temperature: Float = 0f,
     val tint: Float = 0f,
+    /** Temperature and Tint as a light ([WhiteBalanceModel]), from process 13; false is the older three gains. */
+    val lightWhiteBalance: Boolean = true,
     val exposure: Float = 0f,
     val contrast: Float = 0f,
     val highlights: Float = 0f,
@@ -81,8 +83,9 @@ data class RenderParameters(
         tables
     }
 
+    // Either white balance model does nothing at 0, 0: which one it is says nothing about neutrality.
     val isNeutral: Boolean
-        get() = this == RenderParameters()
+        get() = copy(lightWhiteBalance = true) == RenderParameters()
 
     val isColorNeutral: Boolean
         get() = copy(
@@ -95,6 +98,7 @@ data class RenderParameters(
             mirrorH = false,
             mirrorV = false,
             perspective = PerspectiveParameters(),
+            lightWhiteBalance = true,
         ) == RenderParameters()
 
     /**

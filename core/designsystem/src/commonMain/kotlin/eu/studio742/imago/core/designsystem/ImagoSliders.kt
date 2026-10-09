@@ -63,7 +63,7 @@ private val TrackHeight = 2.dp
  * A parameter that goes from cold to warm deserves to say so on the scale itself; the others have no
  * axis with a chromatic meaning and stay neutral, or the colour would lie about what the value does.
  */
-enum class ImagoScaleTint { NEUTRAL, TEMPERATURE }
+enum class ImagoScaleTint { NEUTRAL, TEMPERATURE, TINT }
 
 /**
  * The editor's slider.
@@ -226,6 +226,17 @@ private fun tickColor(tint: ImagoScaleTint, position: Float): Color = when (tint
             lerpColor(cold, neutral, position * 2f)
         } else {
             lerpColor(neutral, warm, (position - 0.5f) * 2f)
+        }
+    }
+    // Tint runs from green to magenta, as Lightroom's track does.
+    ImagoScaleTint.TINT -> {
+        val green = Color(0xFF5DB85D)
+        val magenta = Color(0xFFD45AB8)
+        val neutral = ImagoColors.Ivory
+        if (position < 0.5f) {
+            lerpColor(green, neutral, position * 2f)
+        } else {
+            lerpColor(neutral, magenta, (position - 0.5f) * 2f)
         }
     }
 }

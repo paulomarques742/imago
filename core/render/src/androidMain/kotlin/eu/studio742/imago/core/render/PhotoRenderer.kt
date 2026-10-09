@@ -322,6 +322,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         program.vec2("uSourceTexel", 1f / imageWidth, 1f / imageHeight)
         program.float("uTemperature", active.temperature / 100f)
         program.float("uTint", active.tint / 100f)
+        bindWhiteBalance(program, active)
         program.float("uExposure", active.exposure)
         program.float("uWhites", active.whites / 100f)
         program.float("uBlacks", active.blacks / 100f)
@@ -347,6 +348,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
 
         program.float("uTemperature", active.temperature / 100f)
         program.float("uTint", active.tint / 100f)
+        bindWhiteBalance(program, active)
         program.float("uExposure", active.exposure)
         program.float("uContrast", active.contrast / 100f)
         program.float("uHighlights", active.highlights / 100f)
@@ -589,6 +591,23 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
         return ids[0]
+    }
+
+    /**
+     * The white balance of both passes that develop the base tone. The matrix at the global sliders
+     * is built once here; the constants let the shader build it per pixel where a mask moves them.
+     */
+    private fun bindWhiteBalance(program: GlProgram, active: RenderParameters) {
+        program.boolean("uLightWhiteBalance", active.lightWhiteBalance)
+        if (!active.lightWhiteBalance) return
+        program.mat3("uWhiteBalance", WhiteBalanceModel.matrix(active.temperature / 100f, active.tint / 100f))
+        program.mat3("uWhiteBalanceFromLms", WhiteBalanceModel.fromLms)
+        program.mat3("uWhiteBalanceToLms", WhiteBalanceModel.toLms)
+        program.mat3("uWhiteBalanceBradford", WhiteBalanceModel.bradford)
+        val lms = WhiteBalanceModel.d65Lms
+        program.vec3("uWhiteBalanceD65Lms", lms[0], lms[1], lms[2])
+        val offset = WhiteBalanceModel.d65Offset
+        program.vec2("uWhiteBalanceD65Offset", offset[0], offset[1])
     }
 
     /** 256 × 1 texels of 32-bit float: no precision lost against the export, which reads the same tables. */

@@ -179,10 +179,51 @@ internal object PhotoShaders {
             return dot(c, vec3(0.2126, 0.7152, 0.0722));
         }
 
+        // WhiteBalanceModel, for the pixels where a mask moves Temperature or Tint; elsewhere the
+        // matrix built in Kotlin at the global sliders. The constants come from there as uniforms.
+        vec2 planckUv(float mired) {
+            float kelvin = clamp(1.0e6 / mired, 1667.0, 25000.0);
+            float t = 1.0e3 / kelvin;
+            float x = kelvin <= 4000.0
+                ? ((-0.2661239 * t - 0.2343589) * t + 0.8776956) * t + 0.179910
+                : ((-3.0258469 * t + 2.1070379) * t + 0.2226347) * t + 0.240390;
+            float y = kelvin <= 2222.0
+                ? ((-1.1063814 * x - 1.34811020) * x + 2.18555832) * x - 0.20219683
+                : kelvin <= 4000.0
+                    ? ((-0.9549476 * x - 1.37418593) * x + 2.09137015) * x - 0.16748867
+                    : ((3.0817580 * x - 5.87338670) * x + 3.75112997) * x - 0.37001483;
+            float d = -2.0 * x + 12.0 * y + 3.0;
+            return vec2(4.0 * x / d, 6.0 * y / d);
+        }
+
+        mat3 whiteBalanceAt(float temperature, float tint) {
+            if (temperature == uTemperature && tint == uTint) return uWhiteBalance;
+            float t = clamp(temperature, -1.0, 1.0);
+            float s = clamp(tint, -1.0, 1.0);
+            float mired = t < 0.0
+                ? 153.75153752 + (500.0 - 153.75153752) * -t
+                : 153.75153752 - (153.75153752 - 40.0) * t;
+            vec2 tangent = normalize(planckUv(mired + 0.5) - planckUv(mired - 0.5));
+            vec2 normal = vec2(-tangent.y, tangent.x);
+            vec2 uv = planckUv(mired) + normal * s * 0.05 + uWhiteBalanceD65Offset;
+            float d = 2.0 * uv.x - 8.0 * uv.y + 4.0;
+            float x = 3.0 * uv.x / d;
+            float y = 2.0 * uv.y / d;
+            vec3 light = uWhiteBalanceBradford * vec3(x / y, 1.0, (1.0 - x - y) / y);
+            vec3 gains = uWhiteBalanceD65Lms / light;
+            mat3 m = uWhiteBalanceFromLms * mat3(gains.x, 0.0, 0.0, 0.0, gains.y, 0.0, 0.0, 0.0, gains.z) * uWhiteBalanceToLms;
+            float grey = dot(vec3(0.2126729, 0.7151522, 0.0721750), m * vec3(1.0));
+            return m * (1.0 / grey);
+        }
+
         vec3 applyBaseTone(vec3 srgb, float temperature, float tint, float exposure, float whites, float blacks) {
             vec3 linear = toLinear(srgb);
-            linear *= vec3(1.0 + 0.20 * temperature, 1.0 + 0.05 * tint, 1.0 - 0.20 * temperature);
-            linear *= vec3(1.0 + 0.08 * tint, 1.0 - 0.10 * tint, 1.0 + 0.08 * tint);
+            if (uLightWhiteBalance == 1) {
+                linear = whiteBalanceAt(temperature, tint) * linear;
+            } else {
+                linear *= vec3(1.0 + 0.20 * temperature, 1.0 + 0.05 * tint, 1.0 - 0.20 * temperature);
+                linear *= vec3(1.0 + 0.08 * tint, 1.0 - 0.10 * tint, 1.0 + 0.08 * tint);
+            }
             linear *= exp2(exposure);
             float l = luminance(linear);
             linear += blacks * (1.0 - smoothstep(0.0, 0.35, l)) * 0.18;
@@ -236,6 +277,13 @@ internal object PhotoShaders {
         uniform vec2 uSourceTexel;
         uniform float uTemperature;
         uniform float uTint;
+        uniform int uLightWhiteBalance;
+        uniform mat3 uWhiteBalance;
+        uniform mat3 uWhiteBalanceFromLms;
+        uniform mat3 uWhiteBalanceToLms;
+        uniform mat3 uWhiteBalanceBradford;
+        uniform vec3 uWhiteBalanceD65Lms;
+        uniform vec2 uWhiteBalanceD65Offset;
         uniform float uExposure;
         uniform float uWhites;
         uniform float uBlacks;
@@ -272,6 +320,13 @@ internal object PhotoShaders {
         uniform int uLocalEnabled;
         uniform float uTemperature;
         uniform float uTint;
+        uniform int uLightWhiteBalance;
+        uniform mat3 uWhiteBalance;
+        uniform mat3 uWhiteBalanceFromLms;
+        uniform mat3 uWhiteBalanceToLms;
+        uniform mat3 uWhiteBalanceBradford;
+        uniform vec3 uWhiteBalanceD65Lms;
+        uniform vec2 uWhiteBalanceD65Offset;
         uniform float uExposure;
         uniform float uContrast;
         uniform float uHighlights;

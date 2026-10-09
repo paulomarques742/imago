@@ -24,12 +24,8 @@ class WhiteBalancePickTest {
         assertTrue("$what came out ($r, $g, $b)", abs(r - g) <= 1 && abs(g - b) <= 1 && abs(r - b) <= 1)
     }
 
-    /**
-     * Within reach means within what the sliders can do: at ±100 the temperature only scales red and
-     * blue by 0.8 and 1.2, so a strong tungsten cast stops at the end (see the last test).
-     */
-    @Test fun aColourCastWithinReachComesOutGrey() {
-        for (cast in listOf(0xFFA0968C.toInt(), 0xFF8C96A0.toInt(), 0xFF909A90.toInt(), 0xFF9A909A.toInt(), 0xFF55504A.toInt())) {
+    @Test fun aColourCastComesOutGrey() {
+        for (cast in listOf(0xFFA0968C.toInt(), 0xFF8C96A0.toInt(), 0xFF909A90.toInt(), 0xFF9A909A.toInt(), 0xFF55504A.toInt(), 0xFFB49A80.toInt(), 0xFF7890B8.toInt())) {
             val pick = neutralWhiteBalanceOf(IntArray(25) { cast })
             assertNotNull(pick)
             assertGrey(exported(cast, pick!!), "%08X".format(cast))
@@ -61,8 +57,8 @@ class WhiteBalancePickTest {
     }
 
     @Test fun aCastPastTheSlidersStopsAtTheirEnds() {
-        val pick = neutralWhiteBalanceOf(intArrayOf(0xFFB49A80.toInt()))!!
-        assertEquals(-100f, pick.temperature, 0.001f)
-        assertTrue(pick.tint in -100f..100f)
+        val pick = neutralWhiteBalanceOf(intArrayOf(0xFFE0300A.toInt()))!!
+        assertTrue("$pick", pick.temperature in -100f..100f && pick.tint in -100f..100f)
+        assertTrue("$pick", abs(pick.temperature) == 100f || abs(pick.tint) == 100f)
     }
 }

@@ -282,7 +282,7 @@ class RecipeEditorTest {
         assertEquals(composite, edited.toneCurve.rgb)
         assertEquals(listOf(0, 128, 255), edited.toneCurve.blue!!.map { it.x })
         assertNull(edited.toneCurve.red)
-        assertEquals(12, edited.processVersion)
+        assertEquals(eu.studio742.imago.core.model.CURRENT_PROCESS_VERSION, edited.processVersion)
         assertTrue(edited.toRenderParameters().toneCurveBlue[128] < 100f / 255f)
 
         viewModel.resetCurve()

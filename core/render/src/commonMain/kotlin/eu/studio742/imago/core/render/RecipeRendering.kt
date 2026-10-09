@@ -37,6 +37,7 @@ private fun EditRecipe.channelCurveLut(points: List<CurvePoint>?) =
 fun EditRecipe.toRenderParameters() = RenderParameters(
     temperature = whiteBalance.temp,
     tint = whiteBalance.tint,
+    lightWhiteBalance = processVersion >= 13,
     exposure = tone.exposure,
     contrast = tone.contrast,
     highlights = tone.highlights,

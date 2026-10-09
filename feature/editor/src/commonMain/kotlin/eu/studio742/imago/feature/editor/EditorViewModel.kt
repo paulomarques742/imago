@@ -39,6 +39,8 @@ import eu.studio742.imago.core.data.SavedRecipeRepository
 import eu.studio742.imago.core.model.BUILT_IN_RECIPES
 import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.render.NeutralWhiteBalance
+import eu.studio742.imago.core.render.hasWhiteBalance
+import eu.studio742.imago.core.render.withLightWhiteBalance
 import eu.studio742.imago.core.model.BuiltInRecipe
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.CURRENT_PROCESS_VERSION
@@ -648,7 +650,7 @@ open class EditorViewModel(
                         val base = EditRecipe(assetId = RECIPE_EDIT_ASSET_ID, originalChecksum = "", createdAt = now, updatedAt = now)
                         storedRecipe?.rebasedOnto(base, now) ?: base
                     } else {
-                        storedRecipe ?: EditRecipe(
+                        storedRecipe?.openedForEditing() ?: EditRecipe(
                             assetId = asset.id,
                             originalChecksum = asset.checksum,
                             createdAt = now,
@@ -2150,7 +2152,24 @@ internal fun EditRecipe.storedOver(stored: EditRecipe, now: String): EditRecipe 
     updatedAt = now,
 )
 
-internal fun EditRecipe.rebasedOnto(target: EditRecipe, now: String): EditRecipe = copy(
+/**
+ * A recipe from before the white balance became a light, brought to the current process as it opens,
+ * with its Temperature and Tint converted: the sliders show the values that keep its look, and the
+ * first drag starts from them instead of jumping. It is only written back if the photo is edited.
+ * What other gates of older versions would change is carried along — the dormant geometry, the curve
+ * pinned to its corners — except the linear curve of process 1, which no editing ever kept either.
+ */
+internal fun EditRecipe.openedForEditing(): EditRecipe {
+    if (processVersion >= CURRENT_PROCESS_VERSION || !hasWhiteBalance()) return this
+    return withLightWhiteBalance().copy(
+        processVersion = CURRENT_PROCESS_VERSION,
+        geometry = geometry.activeAtProcess(processVersion),
+        toneCurve = toneCurve.copy(rgb = editableCurvePoints()),
+    )
+}
+
+/** Applying a recipe stamps it with the current process: its white balance is converted first. */
+internal fun EditRecipe.rebasedOnto(target: EditRecipe, now: String): EditRecipe = withLightWhiteBalance().copy(
     assetId = target.assetId,
     originalChecksum = target.originalChecksum,
     createdAt = target.createdAt,

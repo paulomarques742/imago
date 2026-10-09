@@ -1701,10 +1701,10 @@ private fun EditorScreen(
                         valueText = formatAdjustmentValue(adjustment, value),
                         value = value,
                         range = adjustment.range,
-                        tint = if (adjustment == Adjustment.TEMPERATURE || adjustment == Adjustment.EXPOSURE) {
-                            ImagoScaleTint.TEMPERATURE
-                        } else {
-                            ImagoScaleTint.NEUTRAL
+                        tint = when (adjustment) {
+                            Adjustment.TEMPERATURE, Adjustment.EXPOSURE -> ImagoScaleTint.TEMPERATURE
+                            Adjustment.TINT -> ImagoScaleTint.TINT
+                            else -> ImagoScaleTint.NEUTRAL
                         },
                         formatBound = { formatAdjustmentValue(adjustment, it) },
                     )

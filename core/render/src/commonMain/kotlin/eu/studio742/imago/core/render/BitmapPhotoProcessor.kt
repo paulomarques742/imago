@@ -307,11 +307,21 @@ object BitmapPhotoProcessor {
         var green = srgbToLinear(rgb[1])
         var blue = srgbToLinear(rgb[2])
 
-        val temperature = tone.temperature / 100f
-        val tint = tone.tint / 100f
-        red *= (1f + 0.20f * temperature) * (1f + 0.08f * tint)
-        green *= (1f + 0.05f * tint) * (1f - 0.10f * tint)
-        blue *= (1f - 0.20f * temperature) * (1f + 0.08f * tint)
+        if (tone.lightWhiteBalance) {
+            val m = tone.whiteBalanceMatrix()
+            val r = red
+            val g = green
+            val b = blue
+            red = m[0] * r + m[1] * g + m[2] * b
+            green = m[3] * r + m[4] * g + m[5] * b
+            blue = m[6] * r + m[7] * g + m[8] * b
+        } else {
+            val temperature = tone.temperature / 100f
+            val tint = tone.tint / 100f
+            red *= (1f + 0.20f * temperature) * (1f + 0.08f * tint)
+            green *= (1f + 0.05f * tint) * (1f - 0.10f * tint)
+            blue *= (1f - 0.20f * temperature) * (1f + 0.08f * tint)
+        }
         val exposure = 2f.pow(tone.exposure)
         red *= exposure
         green *= exposure
