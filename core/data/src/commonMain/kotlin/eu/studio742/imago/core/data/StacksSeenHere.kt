@@ -35,10 +35,17 @@ internal data class StackSeenHere(
 
 /**
  * [originalOf] maps each export this app made to the photo it came from. An export without the
- * record — sent from another device before it synced — is still told apart by its file name.
+ * record — sent from another device before it synced — is still told apart by its file name and
+ * moment. An export whose original is not in the stack is a photo like the others: it may be the
+ * only copy left.
  */
 internal fun ImmichStack.seenHere(originalOf: Map<String, String>): StackSeenHere? {
-    fun isExport(asset: ImmichAsset) = asset.id in originalOf || isImmichRoomExport(asset.originalFileName)
+    val ids = assets.map { it.id }.toSet()
+    // An export counts as one only while its original is in the stack to stand for it.
+    fun isExport(asset: ImmichAsset) = originalOf[asset.id]?.let { it in ids } == true ||
+        (asset.id !in originalOf && isImmichRoomExport(asset.originalFileName) && assets.any { other ->
+            other.id != asset.id && isExportOf(asset.originalFileName, asset.fileCreatedAt, other.originalFileName, other.fileCreatedAt)
+        })
     val photos = assets.filterNot(::isExport)
     val primary = assets.firstOrNull { it.id == primaryAssetId }?.takeUnless(::isExport)
     val cover = primary
@@ -56,6 +63,9 @@ internal fun ImmichStack.seenHere(originalOf: Map<String, String>): StackSeenHer
  * or was fetched for it. Every stack's count is the one of [stacks], the photos that are not exports;
  * a stack of fewer than two has no badge. Without [stacks] for a stack — a key without `stack.read` —
  * a cover keeps the timeline's count, and an original standing in has none.
+ *
+ * An export whose original is not in [presentOriginals] — deleted, and the export is the only copy
+ * left — is a photo like any other.
  */
 internal fun timelineRows(
     libraryKey: String,
@@ -63,6 +73,7 @@ internal fun timelineRows(
     known: Map<String, AssetEntity>,
     stacks: Map<String, List<StackMemberEntity>>,
     originalOf: Map<String, String>,
+    presentOriginals: Set<String>,
 ): List<AssetEntity> = assets.mapNotNull { asset ->
     val members = asset.stackId?.let { stacks[it] }
     fun AssetEntity.withStack(): AssetEntity = when {
@@ -70,13 +81,15 @@ internal fun timelineRows(
         members.size >= 2 -> copy(stackId = asset.stackId, stackCount = members.size)
         else -> copy(stackId = null, stackCount = null)
     }
+    val asItself = AssetEntity.fromDomain(libraryKey, asset).keeping(known[asset.id])
     when {
-        asset.id !in originalOf -> AssetEntity.fromDomain(libraryKey, asset).keeping(known[asset.id]).withStack()
+        asset.id !in originalOf || originalOf.getValue(asset.id) !in presentOriginals -> asItself.withStack()
         // A loose export: its original is in the timeline on its own.
         asset.stackId == null -> null
         else -> {
             val standIn = members?.firstOrNull()?.primaryAssetId ?: originalOf.getValue(asset.id)
             known[standIn]?.let { row -> if (members == null) row.copy(stackId = null, stackCount = null) else row.withStack() }
+                ?: asItself.withStack()
         }
     }
 }.distinctBy { it.id }

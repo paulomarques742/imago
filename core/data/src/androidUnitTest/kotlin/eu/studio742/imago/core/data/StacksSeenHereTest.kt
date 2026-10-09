@@ -62,7 +62,7 @@ class StacksSeenHereTest {
 
     @Test fun anExportWithoutItsRecordIsToldApartByItsName() {
         // Exported from another device before the record came over.
-        val stack = ImmichStack("s1", "edit", listOf(asset("edit", "photo_ImmichRoom.jpg"), asset("original")))
+        val stack = ImmichStack("s1", "edit", listOf(asset("edit", "photo_ImmichRoom.jpg"), asset("original", "photo.heic")))
 
         val seen = stack.seenHere(emptyMap())!!
 
@@ -85,7 +85,7 @@ class StacksSeenHereTest {
         val originalOf = mapOf("edit" to "original", "stray" to "plain")
 
         assertEquals(listOf("original"), standInsNeeded(timeline, stacks, originalOf))
-        val rows = timelineRows(library, timeline, mapOf("original" to original), stacks, originalOf).associateBy { it.id }
+        val rows = timelineRows(library, timeline, mapOf("original" to original), stacks, originalOf, presentOriginals = setOf("original", "plain")).associateBy { it.id }
 
         // The export's place goes to its original, with no badge: the stack is only it and its edit.
         assertEquals(setOf("original", "real-cover", "plain"), rows.keys)
@@ -103,8 +103,31 @@ class StacksSeenHereTest {
             known = emptyMap(),
             stacks = emptyMap(),
             originalOf = emptyMap(),
+            presentOriginals = emptySet(),
         )
         assertEquals(3, rows.single().stackCount)
+    }
+
+    @Test fun anExportWhoseOriginalIsGoneShowsInTheTimeline() {
+        val rows = timelineRows(
+            library,
+            listOf(asset("stray"), asset("edit", stackId = "s1", stackCount = 2)),
+            known = emptyMap(),
+            stacks = emptyMap(),
+            originalOf = mapOf("stray" to "deleted", "edit" to "also-deleted"),
+            presentOriginals = emptySet(),
+        )
+        assertEquals(setOf("stray", "edit"), rows.map { it.id }.toSet())
+    }
+
+    @Test fun anExportWithoutItsOriginalInTheStackIsOneOfItsPhotos() {
+        // The original was deleted; the export and a RAW are what is left of the stack.
+        val stack = ImmichStack("s1", "edit", listOf(asset("edit"), asset("raw", "photo.dng")))
+
+        val seen = stack.seenHere(mapOf("edit" to "deleted"))!!
+
+        assertEquals("edit", seen.cover.id)
+        assertEquals(2, seen.size)
     }
 
     private fun export(id: String, of: String, at: String) = DerivedAssetEntity(library, id, of, createdAt = at)

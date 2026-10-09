@@ -115,11 +115,44 @@ class LocalStacksTest {
         assertEquals(3, grid().single().stackCount)
     }
 
-    @Test fun thisAppsExportsDoNotShow() = runBlocking {
-        val device = Device(listOf(row("a"), row("edit", name = "a_ImmichRoom.jpg")))
+    @Test fun anExportHidesOnlyWhileItsOriginalIsThere() = runBlocking {
+        val moment = "2025-10-08T10:00:00.000Z"
+        val original = row("a", "IMG 1.HEIC", createdAt = moment)
+        val export = row("edit", "IMG_1_ImmichRoom.jpg", createdAt = moment)
+        val device = Device(listOf(original, export))
+        device.syncCatalog()
+        assertEquals(listOf("a"), grid().map { it.id })
+
+        // The original was deleted: the export is the only copy left, and shows.
+        device.files = listOf(export)
+        device.syncCatalog()
+        assertEquals(listOf("edit"), grid().map { it.id })
+
+        // It came back: the export hides again.
+        device.files = listOf(original, export)
+        device.syncCatalog()
+        assertEquals(listOf("a"), grid().map { it.id })
+    }
+
+    @Test fun aNameLikeAnExportFromAnotherMomentIsAPhotoOfItsOwn() = runBlocking {
+        val device = Device(
+            listOf(
+                row("a", "IMG_1.jpg", createdAt = "2025-10-08T10:00:00.000Z"),
+                row("other", "IMG_1_ImmichRoom.jpg", createdAt = "2025-12-24T10:00:00.000Z"),
+            ),
+        )
         device.syncCatalog()
 
-        assertEquals(listOf("a"), grid().map { it.id })
+        assertEquals(setOf("a", "other"), grid().map { it.id }.toSet())
+    }
+
+    @Test fun anExportIsToldByTheNameItsOriginalWouldGiveIt() {
+        val at = "2025-10-08T10:00:00.000Z"
+        assertEquals(true, isExportOf("IMG_1_ImmichRoom.jpg", at, "IMG 1.HEIC", "2025-10-08T11:30:00Z"))
+        assertEquals(false, isExportOf("IMG_1_ImmichRoom.jpg", at, "IMG_2.jpg", at))
+        assertEquals(false, isExportOf("IMG_1_ImmichRoom.jpg", at, "IMG_1.jpg", "2025-10-10T10:00:00.000Z"))
+        // A server row before its name is known says nothing.
+        assertEquals(false, isExportOf("IMG_1_ImmichRoom.jpg", at, "", at))
     }
 
     @Test fun inTheUnifiedLibraryAPhotoUnderACoverDoesNotShowThroughItsServerCopy() = runBlocking {

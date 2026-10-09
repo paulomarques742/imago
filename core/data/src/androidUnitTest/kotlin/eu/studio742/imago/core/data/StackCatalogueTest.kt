@@ -108,15 +108,23 @@ class StackCatalogueTest {
             // "edit" is Immich's cover over "original"; here the original stands for the stack.
             database.stackMemberDao().insertAll(listOf(StackMemberEntity(library, "original", "s1", "original")))
 
+            database.derivedAssetDao().insertMissing(
+                listOf(
+                    eu.studio742.imago.core.data.db.DerivedAssetEntity(library, "edit", "original", createdAt = "2026-10-08T00:00:00Z"),
+                    eu.studio742.imago.core.data.db.DerivedAssetEntity(library, "stray", "deleted", createdAt = "2026-10-08T00:00:00Z"),
+                ),
+            )
+
             val returned = database.upsertFromSearch(
                 library,
                 listOf(asset("edit"), asset("original"), asset("stray")),
                 derivedIds = setOf("edit", "stray"),
             )
 
-            assertEquals(listOf("original"), returned.map { it.id })
+            // "stray" came from a photo that is gone: it is the only copy left, and shows.
+            assertEquals(listOf("original", "stray"), returned.map { it.id })
             // A stack of one photo once the exports are out: no badge.
-            assertNull(returned.single().stackCount)
+            assertNull(returned.first().stackCount)
         } finally {
             database.close()
         }

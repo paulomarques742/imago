@@ -75,7 +75,7 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
             dao.clear(DEVICE_LIBRARY_ID)
             dao.insertAll(members)
             database.assetDao().upsertAll(back)
-            database.assetDao().purgeAppExports(DEVICE_LIBRARY_ID)
+            database.hideExportsWithOriginals(DEVICE_LIBRARY_ID)
             database.assetDao().clearStacks(DEVICE_LIBRARY_ID)
             covers.forEach { database.assetDao().setStack(DEVICE_LIBRARY_ID, it.assetId, it.stackId, sizes.getValue(it.stackId)) }
             database.assetDao().restoreLocalRecipeFlags(DEVICE_LIBRARY_ID)

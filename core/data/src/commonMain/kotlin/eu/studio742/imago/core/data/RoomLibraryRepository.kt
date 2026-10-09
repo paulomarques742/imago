@@ -362,7 +362,12 @@ class RoomLibraryRepository @Inject constructor(
         val fetched = (missing - elsewhere.keys).mapNotNull { id ->
             runCatching { AssetEntity.fromDomain(libraryKey, api.getAssetDetail(connection, id).asset.copy(id = id)) }.getOrNull()
         }.associateBy { it.id }
-        val rows = timelineRows(libraryKey, shown, existing + elsewhere + fetched, stacks, originalOf)
+        // An export hides only while its original is in the library to stand for it.
+        val originals = shown.mapNotNull { originalOf[it.id] }.distinct()
+        val present = originals.filter { it in existing || it in elsewhere || it in fetched }.toSet() +
+            originals.chunked(SQL_VARIABLES_PER_QUERY).flatMap { database.assetDao().byIds(libraryKey, it) }.map { it.id } +
+            originals.chunked(SQL_VARIABLES_PER_QUERY).flatMap { database.stackMemberDao().ofAssets(libraryKey, it) }.map { it.assetId }
+        val rows = timelineRows(libraryKey, shown, existing + elsewhere + fetched, stacks, originalOf, present)
         database.withTransaction {
             database.assetDao().deleteMonth(libraryKey, month)
             database.assetDao().upsertAll(rows)
@@ -458,7 +463,7 @@ class RoomLibraryRepository @Inject constructor(
             database.stackMemberDao().clear(libraryKey)
             database.stackMemberDao().insertAll(seen.flatMap { it.members(libraryKey) })
             database.stackMemberDao().removeCoveredFromCatalogue(libraryKey)
-            database.assetDao().purgeAppExports(libraryKey)
+            database.hideExportsWithOriginals(libraryKey)
             // Every cover with what its stack is here; an original standing in for an export goes in
             // now, as the timeline will not bring it.
             val known = seen.map { it.cover.id }.chunked(SQL_VARIABLES_PER_QUERY)
@@ -672,11 +677,15 @@ internal suspend fun ImmichRoomDatabase.upsertFromSearch(
     val ids = assets.map { it.id }.chunked(SQL_VARIABLES_PER_QUERY)
     val known = ids.flatMap { assetDao().byIds(libraryKey, it) }.associateBy { it.id }
     val membership = ids.flatMap { stackMemberDao().ofAssets(libraryKey, it) }.associateBy { it.assetId }
+    val originalOf = derivedAssetDao().live(libraryKey).associate { it.derivedAssetId to it.originalAssetId }
+    val (exports, photos) = assets.map { AssetEntity.fromDomain(libraryKey, it) }
+        .partition { it.id in derivedIds || it.id in originalOf || isImmichRoomExport(it.originalFileName) }
+    // This app's exports hide while their original is there to stand for them.
+    val hidden = exportsWithOriginal(libraryKey, exports, originalOf, alongside = photos)
     val shown = assets.filter { asset ->
         val member = membership[asset.id]
-        // The photos under a cover stay under it: a search brings them, the grid does not. And this
-        // app's exports never show: their original stands for them.
-        (member == null || member.isCover) && !asset.isAppExport(derivedIds)
+        // The photos under a cover stay under it: a search brings them, the grid does not.
+        (member == null || member.isCover) && asset.id !in hidden
     }
     val sizes = membership.values.filter { it.isCover }.map { it.stackId }.distinct().chunked(SQL_VARIABLES_PER_QUERY)
         .flatMap { stackMemberDao().sizes(libraryKey, it) }
@@ -694,15 +703,6 @@ internal suspend fun ImmichRoomDatabase.upsertFromSearch(
 /** Under SQLite's limit on the variables of one statement, which older Androids keep at 999. */
 private const val SQL_VARIABLES_PER_QUERY = 500
 
-/**
- * A photo that went from this app to Immich. It reappears in the library's next reads as an
- * independent asset, next to the original — and that is what is filtered here.
- *
- * The local record is the reliable source; the file name is the safety net for exports made on
- * another device or before the record existed.
- */
-private fun ImmichAsset.isAppExport(derivedIds: Set<String>): Boolean =
-    id in derivedIds || isImmichRoomExport(originalFileName)
 
 /**
  * What the library shows.
@@ -768,7 +768,7 @@ private class AssetRemoteMediator(
                     // whatever is no longer there disappear. Clearing it on every launch meant
                     // deleting at once the whole timeline it had brought, only to ask for it again a
                     // hundred photos at a time.
-                    database.assetDao().purgeAppExports(libraryKey)
+                    database.hideExportsWithOriginals(libraryKey)
                 }
                 database.upsertFromSearch(
                     libraryKey,

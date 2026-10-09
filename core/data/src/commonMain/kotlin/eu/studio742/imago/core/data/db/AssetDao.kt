@@ -387,20 +387,23 @@ interface AssetDao {
     suspend fun clear(libraryKey: String)
 
     /**
-     * Deletes this app's exports that stayed in the catalogue before they started being filtered.
-     *
-     * The `LIKE` catches those sent from another device, or before the `derived_assets` table
-     * existed — see `isImmichRoomExport`.
+     * The rows that may be this app's exports: recorded as such, or named like one. The `LIKE` catches
+     * those sent from another device, or before the `derived_assets` table existed — see
+     * `isImmichRoomExport`. Whether each one hides is `exportsWithOriginal`'s to say.
      */
     @Query(
         """
-        DELETE FROM assets
+        SELECT * FROM assets
         WHERE libraryKey = :libraryKey
-          AND (id IN (SELECT derivedAssetId FROM derived_assets WHERE libraryKey = :libraryKey)
+          AND (id IN (SELECT derivedAssetId FROM derived_assets WHERE libraryKey = :libraryKey AND deletedAt IS NULL)
                OR originalFileName LIKE '%\_ImmichRoom.jpg' ESCAPE '\')
         """,
     )
-    suspend fun purgeAppExports(libraryKey: String)
+    suspend fun exportCandidates(libraryKey: String): List<AssetEntity>
+
+    /** The photos taken between [from] and [to], instants in the catalogue's own format. */
+    @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey AND fileCreatedAt BETWEEN :from AND :to")
+    suspend fun between(libraryKey: String, from: String, to: String): List<AssetEntity>
 
     @Query("UPDATE assets SET hasLocalRecipe = 1 WHERE libraryKey = :libraryKey AND id = :assetId")
     suspend fun markHasLocalRecipe(libraryKey: String, assetId: String)
