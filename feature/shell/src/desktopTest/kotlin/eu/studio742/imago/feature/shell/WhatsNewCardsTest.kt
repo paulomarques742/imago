@@ -75,6 +75,18 @@ class WhatsNewCardsTest {
 
     @Test fun everyCardInEnglish() = cards(Locale.ENGLISH, "en")
 
+    /** A release written as lines still opens as a card, the one with its list. */
+    @Test fun aReleaseOfLinesIsACardToo() {
+        Locale.setDefault(Locale.ENGLISH)
+        val lines = Releases.first { it.pages.isEmpty() }
+        runDesktopComposeUiTest(width = 1082, height = 2402) {
+            setContent { ImmichRoomTheme { WhatsNewCards(lines, emptyList(), onDone = {}, animate = false) } }
+            onNodeWithText("Version ${lines.version}").fetchSemanticsNode()
+            onNodeWithText(runBlocking { getString(lines.notes.first()) }).fetchSemanticsNode()
+            onNodeWithText("Get started").fetchSemanticsNode()
+        }
+    }
+
     @Test fun theLastCardEndsTheDeck() {
         Locale.setDefault(Locale.ENGLISH)
         var done = 0

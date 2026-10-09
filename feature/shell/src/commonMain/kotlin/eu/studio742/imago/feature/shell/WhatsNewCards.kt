@@ -62,8 +62,9 @@ import org.jetbrains.compose.resources.stringResource
  * A big release's news as cards to swipe through, one theme each, over the colour field of the
  * site's open-source section, drifting slowly.
  *
- * The releases skipped before it, if any, close the deck as one more card with their lines. "Skip"
- * and the last card's button both end it; either way it has been seen.
+ * The releases skipped before it, if any, close the deck as one more card with their lines; a
+ * release written as lines only is that card on its own. "Skip" and the last card's button both
+ * end it; either way it has been seen.
  *
  * @param animate false keeps the backdrop still — for tests and screenshots, where an endless
  *   animation never lets the clock settle.
@@ -77,7 +78,8 @@ internal fun WhatsNewCards(
     initialPage: Int = 0,
     animate: Boolean = true,
 ) {
-    val count = release.pages.size + if (older.isEmpty()) 0 else 1
+    val listed = if (release.pages.isEmpty()) listOf(release) + older else older
+    val count = release.pages.size + if (listed.isEmpty()) 0 else 1
     val pager = rememberPagerState(initialPage = initialPage.coerceIn(0, count - 1)) { count }
     val scope = rememberCoroutineScope()
     val last = pager.currentPage == count - 1
@@ -103,7 +105,7 @@ internal fun WhatsNewCards(
                 if (page < release.pages.size) {
                     NewsPageCard(release.pages[page])
                 } else {
-                    OlderReleasesCard(older)
+                    ReleaseLinesCard(listed, newest = release)
                 }
             }
             PageDots(count = count, current = pager.currentPage, modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -160,17 +162,20 @@ private fun NewsPageCard(page: NewsPage) {
 
 private val CARD_HEIGHT = 420.dp
 
-/** The versions skipped before this one, in the list they were written as. */
+/** Releases told in lines: the newest itself if it has no pages, and the ones skipped before it. */
 @Composable
-private fun OlderReleasesCard(older: List<Release>) {
+private fun ReleaseLinesCard(releases: List<Release>, newest: Release) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Lg),
     ) {
-        older.forEach { release ->
+        releases.forEach { release ->
             Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
                 Text(
-                    stringResource(Res.string.shell_news_also_in, release.version.toString()),
+                    stringResource(
+                        if (release === newest) Res.string.shell_news_version else Res.string.shell_news_also_in,
+                        release.version.toString(),
+                    ),
                     style = MaterialTheme.typography.titleMedium,
                     color = ImagoColors.BrandWhite,
                 )

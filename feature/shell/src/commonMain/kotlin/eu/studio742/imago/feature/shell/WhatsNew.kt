@@ -6,12 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -33,59 +30,28 @@ import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.feature.shell.resources.Res
 import eu.studio742.imago.feature.shell.resources.shell_about_title
 import eu.studio742.imago.feature.shell.resources.shell_about_version
-import eu.studio742.imago.feature.shell.resources.shell_news_close
 import eu.studio742.imago.feature.shell.resources.shell_news_title
-import eu.studio742.imago.feature.shell.resources.shell_news_version
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * What changed, newest version first. Closing it any way — the button, outside, back — counts as
- * seen: it is shown once, not until the person agrees to it.
+ * What changed, newest version first, always as the cards ([WhatsNewCards]). Closing it any way —
+ * the last button, Skip, outside, back — counts as seen: it is shown once, not until the person
+ * agrees to it.
  */
 @Composable
 internal fun WhatsNewDialog(releases: List<Release>, onDismiss: () -> Unit) {
-    val newest = releases.firstOrNull()
-    if (newest != null && newest.pages.isNotEmpty()) {
-        Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            WhatsNewCards(
-                release = newest,
-                older = releases.drop(1),
-                onDone = onDismiss,
-                modifier = Modifier
-                    .padding(ImagoSpacing.Lg)
-                    .widthIn(max = 440.dp)
-                    .fillMaxWidth(),
-            )
-        }
-        return
+    val newest = releases.firstOrNull() ?: return
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        WhatsNewCards(
+            release = newest,
+            older = releases.drop(1),
+            onDone = onDismiss,
+            modifier = Modifier
+                .padding(ImagoSpacing.Lg)
+                .widthIn(max = 440.dp)
+                .fillMaxWidth(),
+        )
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.shell_news_title)) },
-        text = {
-            Column(
-                Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Lg),
-            ) {
-                releases.forEach { release ->
-                    Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
-                        Text(
-                            stringResource(Res.string.shell_news_version, release.version.toString()),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = ImagoColors.TextPrimary,
-                        )
-                        release.notes.forEach { note ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
-                                Text("•", style = MaterialTheme.typography.bodyMedium, color = ImagoColors.Gold)
-                                Text(stringResource(note), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.shell_news_close)) } },
-    )
 }
 
 /** The installed version in the settings, with the way back to what changed in it. */
