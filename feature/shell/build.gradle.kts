@@ -61,6 +61,11 @@ kotlin {
         }
         getByName("desktopTest").dependencies {
             implementation(libs.junit4)
+            // The news cards are drawn in the tests, as the app draws them: Skia's native library,
+            // which in a Compose app comes with the window, and the UI test runner.
+            implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.9.4.2")
+            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+            implementation(compose.uiTest)
         }
         androidMain.dependencies {
             implementation(libs.hilt.android)

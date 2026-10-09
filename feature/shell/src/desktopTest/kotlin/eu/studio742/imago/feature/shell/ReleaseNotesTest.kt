@@ -64,7 +64,7 @@ class ReleaseNotesTest {
         val versions = Releases.map { it.version }
         assertEquals(versions.sortedDescending(), versions)
         assertEquals(versions.distinct(), versions)
-        assertTrue(Releases.all { it.notes.isNotEmpty() })
+        assertTrue(Releases.all { it.notes.isNotEmpty() || it.pages.isNotEmpty() })
         assertTrue(Releases.all { it.version > VersionBeforeNews })
     }
 

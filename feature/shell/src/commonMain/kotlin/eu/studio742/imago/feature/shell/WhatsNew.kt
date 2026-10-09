@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -23,6 +24,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
@@ -40,6 +44,21 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 internal fun WhatsNewDialog(releases: List<Release>, onDismiss: () -> Unit) {
+    val newest = releases.firstOrNull()
+    if (newest != null && newest.pages.isNotEmpty()) {
+        Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            WhatsNewCards(
+                release = newest,
+                older = releases.drop(1),
+                onDone = onDismiss,
+                modifier = Modifier
+                    .padding(ImagoSpacing.Lg)
+                    .widthIn(max = 440.dp)
+                    .fillMaxWidth(),
+            )
+        }
+        return
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.shell_news_title)) },
