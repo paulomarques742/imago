@@ -24,6 +24,16 @@ val STACK_SQL = listOf(
     "CREATE INDEX IF NOT EXISTS `index_stack_members_libraryKey_stackId` ON `stack_members` (`libraryKey`, `stackId`)",
 )
 
+/**
+ * Version 16: the name and moment of each photo of a server's stacks, and the stacks as the unified
+ * library shows them — a phone stack and a server stack that share photos are one stack there.
+ */
+val UNIFIED_STACKS_SQL = listOf(
+    "ALTER TABLE `stack_members` ADD COLUMN `originalFileName` TEXT",
+    "ALTER TABLE `stack_members` ADD COLUMN `fileCreatedAt` TEXT",
+    "CREATE TABLE IF NOT EXISTS `unified_stacks` (`serverKey` TEXT NOT NULL, `libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `groupId` TEXT NOT NULL, `isCover` INTEGER NOT NULL, `groupSize` INTEGER NOT NULL, `deviceAssetId` TEXT, `serverAssetId` TEXT, PRIMARY KEY(`serverKey`, `libraryKey`, `assetId`))",
+)
+
 /** The index of version 12, as Room names it; the same statement on both apps. */
 const val UNIFIED_INDEX_SQL =
     "CREATE INDEX IF NOT EXISTS index_assets_libraryKey_originalFileName ON assets (libraryKey, originalFileName)"

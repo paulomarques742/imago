@@ -34,6 +34,13 @@ internal fun isExportOf(exportName: String, exportCreatedAt: String, originalNam
     return Duration.between(exported, taken).abs() < SAME_MOMENT
 }
 
+/** Whether two capture moments are the same photo's: the unified library's rule, less than a day apart. */
+internal fun sameMoment(first: String, second: String): Boolean {
+    val a = momentOf(first) ?: return false
+    val b = momentOf(second) ?: return false
+    return Duration.between(a, b).abs() < SAME_MOMENT
+}
+
 private fun momentOf(value: String): Instant? =
     runCatching { Instant.parse(value) }.getOrNull() ?: runCatching { OffsetDateTime.parse(value).toInstant() }.getOrNull()
 

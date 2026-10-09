@@ -29,6 +29,12 @@ data class StackMemberEntity(
     val assetId: String,
     val stackId: String,
     val primaryAssetId: String,
+    /**
+     * The photo's name and moment, for a server's stacks: the photos under a cover are not in the
+     * catalogue, and this is how the unified library finds each one's copy on the phone.
+     */
+    val originalFileName: String? = null,
+    val fileCreatedAt: String? = null,
 ) {
     val isCover: Boolean get() = assetId == primaryAssetId
 }

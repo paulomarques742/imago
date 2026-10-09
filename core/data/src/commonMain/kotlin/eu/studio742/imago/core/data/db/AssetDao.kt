@@ -37,10 +37,12 @@ interface AssetDao {
      */
     @Query(
         """
-        SELECT a.*, (a.libraryKey = :server OR EXISTS (SELECT 1 FROM assets s WHERE s.libraryKey = :server AND s.originalFileName = a.originalFileName AND ABS(julianday(s.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)) AS alsoOnServer
+        SELECT a.*, (a.libraryKey = :server OR EXISTS (SELECT 1 FROM assets s WHERE s.libraryKey = :server AND s.originalFileName = a.originalFileName AND ABS(julianday(s.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)) AS alsoOnServer,
+               (SELECT u.groupId FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 1) AS unifiedStackId,
+               (SELECT u.groupSize FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 1) AS unifiedStackSize
         FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
-          AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = a.libraryKey AND m.assetId = a.id AND m.assetId != m.primaryAssetId)
+          AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 0)
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
@@ -63,7 +65,7 @@ interface AssetDao {
         """
         SELECT COUNT(*) FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
-          AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = a.libraryKey AND m.assetId = a.id AND m.assetId != m.primaryAssetId)
+          AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 0)
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
@@ -88,7 +90,7 @@ interface AssetDao {
         """
         SELECT COUNT(*) FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
-          AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = a.libraryKey AND m.assetId = a.id AND m.assetId != m.primaryAssetId)
+          AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 0)
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
@@ -114,7 +116,7 @@ interface AssetDao {
                COUNT(*) AS assetCount
         FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
-          AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = a.libraryKey AND m.assetId = a.id AND m.assetId != m.primaryAssetId)
+          AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 0)
         GROUP BY substr(CASE WHEN a.localDateTime = '' THEN a.fileCreatedAt ELSE a.localDateTime END, 1, 7)
         ORDER BY month DESC
         """,
@@ -158,7 +160,7 @@ interface AssetDao {
     /** Both sides' archives; a photo archived on both is the phone's, as in the timeline. */
     @Query(
         """
-        SELECT a.*, (a.libraryKey = :server) AS alsoOnServer FROM assets a
+        SELECT a.*, (a.libraryKey = :server) AS alsoOnServer, NULL AS unifiedStackId, NULL AS unifiedStackSize FROM assets a
         WHERE a.isArchived = 1
           AND (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.isArchived = 1 AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
         ORDER BY a.fileCreatedAt DESC, a.id DESC
@@ -190,6 +192,9 @@ interface AssetDao {
         """,
     )
     suspend fun counterpart(libraryKey: String, id: String, otherKey: String): String?
+
+    @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey AND originalFileName IN (:names)")
+    suspend fun byNames(libraryKey: String, names: List<String>): List<AssetEntity>
 
     /** A gallery row by the end of its `Uri` (`%/media/123`): the volume in the middle varies by who asks. */
     @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey AND id LIKE :suffix LIMIT 1")
@@ -449,4 +454,7 @@ data class FolderStart(val folderId: String?, val startDate: String)
 data class UnifiedAssetRow(
     @androidx.room.Embedded val asset: AssetEntity,
     val alsoOnServer: Boolean,
+    /** The stack this row is the cover of in the unified library, and how many photos it holds. */
+    val unifiedStackId: String? = null,
+    val unifiedStackSize: Int? = null,
 )

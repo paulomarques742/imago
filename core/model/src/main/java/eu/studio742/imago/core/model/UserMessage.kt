@@ -119,6 +119,9 @@ enum class UserMessage {
 
     /** Several folders chosen. Argument: how many. */
     FOLDERS_MANY,
+
+    /** Photos to stack that are not two on the phone, nor two on the server. */
+    STACK_APART,
 }
 
 /** A sentence for the person that is not a failure — a state, a summary. [args] go in, in order. */

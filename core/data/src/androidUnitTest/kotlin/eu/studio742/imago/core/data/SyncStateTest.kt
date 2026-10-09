@@ -75,7 +75,7 @@ class SyncStateTest {
         old.version = 10
         old.close()
         val upgraded = Room.databaseBuilder(context, ImmichRoomDatabase::class.java, name)
-            .addMigrations(SyncMigration.MIGRATION_10_11, UnifiedMigration.MIGRATION_11_12, UnifiedMigration.MIGRATION_12_13, UnifiedMigration.MIGRATION_13_14, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_14_15).allowMainThreadQueries().build()
+            .addMigrations(SyncMigration.MIGRATION_10_11, UnifiedMigration.MIGRATION_11_12, UnifiedMigration.MIGRATION_12_13, UnifiedMigration.MIGRATION_13_14, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_14_15, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_15_16).allowMainThreadQueries().build()
         try {
             val sql = upgraded.openHelper.writableDatabase // Room validates the whole schema here.
             val recipe = upgraded.recipeDao().get("lib", "photo")!!

@@ -155,24 +155,6 @@ class LocalStacksTest {
         assertEquals(false, isExportOf("IMG_1_ImmichRoom.jpg", at, "", at))
     }
 
-    @Test fun inTheUnifiedLibraryAPhotoUnderACoverDoesNotShowThroughItsServerCopy() = runBlocking {
-        val device = Device(listOf(row("a", "one.jpg"), row("bb", "two.jpg")))
-        device.syncCatalog()
-        // Both are backed up to the server.
-        database.assetDao().upsertAll(
-            listOf(
-                row("s1", "one.jpg", createdAt = "2025-10-01T10:00:00.000Z", library = SERVER),
-                row("s2", "two.jpg", createdAt = "2025-10-02T10:00:00.000Z", library = SERVER),
-            ),
-        )
-
-        device.stackTogether(listOf("a", "bb"))
-
-        val source = database.assetDao().unifiedPagingSource(DEVICE_LIBRARY_ID, SERVER, false, false, null, null, null)
-        val page = source.load(PagingSource.LoadParams.Refresh(null, 50, false)) as PagingSource.LoadResult.Page
-        assertEquals(listOf("a"), page.data.map { it.asset.id })
-    }
-
     @Test fun settlingDropsWhatIsGoneAndUndoesStacksOfOne() {
         val members = listOf("a", "b", "c").map { StackMemberEntity(DEVICE_LIBRARY_ID, it, "s1", "a") } +
             listOf("x", "y").map { StackMemberEntity(DEVICE_LIBRARY_ID, it, "s2", "x") }

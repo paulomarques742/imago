@@ -36,6 +36,7 @@
     <string name="message_device_access_selected">Access to selected photos and videos</string>
     <string name="message_device_access_one_type">Access limited to one type of content</string>
     <string name="message_device_access_none">Allow access to photos and videos</string>
+    <string name="message_stack_apart">These photos are not together on the phone or on Immich</string>
     <string name="message_folders_none">No folder chosen</string>
     <string name="message_folders_one">1 folder: %1$s</string>
     <plurals name="sync_pending_offline">

@@ -32,6 +32,7 @@
     <string name="message_device_access_selected">Acesso às fotografias e vídeos selecionados</string>
     <string name="message_device_access_one_type">Acesso limitado a um tipo de conteúdo</string>
     <string name="message_device_access_none">Permita o acesso às fotografias e vídeos</string>
+    <string name="message_stack_apart">Estas fotografias não estão juntas nem no telemóvel nem no Immich</string>
     <string name="message_folders_none">Nenhuma pasta escolhida</string>
     <string name="message_folders_one">1 pasta: %1$s</string>
     <plurals name="sync_pending_offline">

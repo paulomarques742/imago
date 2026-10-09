@@ -1,5 +1,8 @@
 package eu.studio742.imago.core.data
 
+import eu.studio742.imago.core.data.db.UnifiedAssetRow
+import eu.studio742.imago.core.model.requireUser
+import eu.studio742.imago.core.model.UserMessage
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
@@ -88,7 +91,7 @@ class UnifiedLibrary(
             )
         }.flow.map { page ->
             page.map { row ->
-                row.asset.toDomain().copy(id = AssetReference(row.asset.libraryKey, row.asset.id).encode(), isOnServer = row.alsoOnServer)
+                row.toUnified()
             }
         }
     }
@@ -108,9 +111,47 @@ class UnifiedLibrary(
     override suspend fun timeBuckets(): List<ImmichTimeBucket> =
         database.assetDao().unifiedTimeBuckets(DEVICE_LIBRARY_ID, serverId).map { ImmichTimeBucket(it.month, it.assetCount) }
 
-    override suspend fun syncCatalog() = coroutineScope {
-        launch { runCatching { device.syncCatalog() } }
-        server.syncCatalog()
+    override suspend fun syncCatalog() {
+        coroutineScope {
+            launch { runCatching { device.syncCatalog() } }
+            server.syncCatalog()
+        }
+        rebuildStacks()
+    }
+
+    /**
+     * The unified stacks, worked out again from the phone's and the server's. A server photo finds its
+     * phone copy as the timeline does: the same name, taken less than a day apart.
+     */
+    private suspend fun rebuildStacks() {
+        val local = database.stackMemberDao().all(DEVICE_LIBRARY_ID)
+        val remote = database.stackMemberDao().all(serverId)
+        val names = remote.mapNotNull { it.originalFileName }.distinct()
+        val onPhone = names.chunked(500).flatMap { database.assetDao().byNames(DEVICE_LIBRARY_ID, it) }.groupBy { it.originalFileName }
+        val phoneCopyOf = remote.mapNotNull { member ->
+            val name = member.originalFileName ?: return@mapNotNull null
+            val taken = member.fileCreatedAt ?: return@mapNotNull null
+            onPhone[name]?.firstOrNull { sameMoment(it.fileCreatedAt, taken) }?.let { member.assetId to it.id }
+        }.toMap()
+        val rows = unifiedStacks(serverId, local, remote, phoneCopyOf)
+        database.withTransaction {
+            database.unifiedStackDao().clear(serverId)
+            database.unifiedStackDao().insertAll(rows)
+        }
+    }
+
+    /**
+     * A row of the unified timeline as a photo: its stack is the unified one. A server row keeps the
+     * timeline's own when the server's stacks cannot be read — a key without `stack.read`.
+     */
+    private fun UnifiedAssetRow.toUnified(): ImmichAsset {
+        val ownStack = asset.libraryKey != DEVICE_LIBRARY_ID
+        return asset.toDomain().copy(
+            id = AssetReference(asset.libraryKey, asset.id).encode(),
+            isOnServer = alsoOnServer,
+            stackId = unifiedStackId ?: asset.stackId.takeIf { ownStack },
+            stackCount = unifiedStackSize ?: asset.stackCount.takeIf { ownStack },
+        )
     }
 
     override suspend fun loadMonth(month: String) = coroutineScope {
@@ -244,31 +285,57 @@ class UnifiedLibrary(
     override fun apiKey(assetId: String) = routed(assetId) { apiKey(it) }
     override val canStack: Boolean get() = server.canStack || device.canStack
 
+    /** A photo of the unified library on each side: its id on the phone and on the server, when it is there. */
+    private data class Sides(val phone: String?, val server: String?)
+
+    private suspend fun sidesOf(assetId: String): Sides {
+        val reference = AssetReference.parse(assetId)
+        val stacked = database.unifiedStackDao().of(serverId, reference.libraryId, reference.localId)
+        val phone = stacked?.deviceAssetId
+            ?: reference.localId.takeIf { reference.libraryId == DEVICE_LIBRARY_ID }
+            ?: database.assetDao().counterpart(serverId, reference.localId, DEVICE_LIBRARY_ID)
+        val onServer = stacked?.serverAssetId
+            ?: reference.localId.takeIf { reference.libraryId == serverId }
+            ?: database.assetDao().counterpart(DEVICE_LIBRARY_ID, reference.localId, serverId)
+        return Sides(phone, onServer)
+    }
+
+    /**
+     * Stacks the photos on both sides at once: on the server those that are there, on the phone those
+     * that are there — a photo on both goes into both. Fewer than two on each side stacks nothing.
+     */
     override suspend fun stackTogether(assetIds: List<String>) {
-        val refs = assetIds.map(AssetReference::parse)
-        val libraryId = refs.first().libraryId
-        require(refs.all { it.libraryId == libraryId }) { "A stack is of one library" }
-        libraryOf(libraryId).stackTogether(refs.map { it.localId })
+        val sides = assetIds.map { sidesOf(it) }
+        val onServer = sides.mapNotNull { it.server }.distinct()
+        val onPhone = sides.mapNotNull { it.phone }.distinct()
+        requireUser(onServer.size >= 2 || onPhone.size >= 2, UserMessage.STACK_APART)
+        if (onServer.size >= 2) server.stackTogether(onServer)
+        if (onPhone.size >= 2) device.stackTogether(onPhone)
+        rebuildStacks()
     }
 
-    override suspend fun makeStackCover(assetId: String) {
-        val reference = AssetReference.parse(assetId)
-        libraryOf(reference.libraryId).makeStackCover(reference.localId)
-    }
+    override suspend fun makeStackCover(assetId: String) = onBothSides(assetId) { makeStackCover(it) }
+    override suspend fun removeFromStack(assetId: String) = onBothSides(assetId) { removeFromStack(it) }
+    override suspend fun unstack(assetId: String) = onBothSides(assetId) { unstack(it) }
 
-    override suspend fun removeFromStack(assetId: String) {
-        val reference = AssetReference.parse(assetId)
-        libraryOf(reference.libraryId).removeFromStack(reference.localId)
-    }
-
-    override suspend fun unstack(assetId: String) {
-        val reference = AssetReference.parse(assetId)
-        libraryOf(reference.libraryId).unstack(reference.localId)
+    /** A change to the stack a photo is in, on each side where it is in one. */
+    private suspend fun onBothSides(assetId: String, change: suspend LibraryRepository.(String) -> Unit) {
+        val sides = sidesOf(assetId)
+        val onPhone = sides.phone?.takeIf { database.stackMemberDao().ofAssets(DEVICE_LIBRARY_ID, listOf(it)).isNotEmpty() }
+        val onServer = sides.server?.takeIf {
+            database.stackMemberDao().ofAssets(serverId, listOf(it)).isNotEmpty() ||
+                database.assetDao().byIds(serverId, listOf(it)).firstOrNull()?.stackId != null
+        }
+        check(onPhone != null || onServer != null) { "The photo is in no stack" }
+        onPhone?.let { device.change(it) }
+        onServer?.let { server.change(it) }
+        rebuildStacks()
     }
 
     override suspend fun stackChanged(assetId: String) {
         val reference = AssetReference.parse(assetId)
         libraryOf(reference.libraryId).stackChanged(reference.localId)
+        rebuildStacks()
     }
 
     override suspend fun exportOriginal(assetId: String): String? {
@@ -276,10 +343,32 @@ class UnifiedLibrary(
         return libraryOf(reference.libraryId).exportOriginal(reference.localId)?.let { AssetReference(reference.libraryId, it).encode() }
     }
 
+    /**
+     * The photos of the unified stack [assetId] is in, the cover first: each by its phone copy when
+     * there is one. The server's photos under a cover are not in the catalogue, and are asked for.
+     */
     override suspend fun stackMembers(assetId: String): List<ImmichAsset> {
         val reference = AssetReference.parse(assetId)
-        return libraryOf(reference.libraryId).stackMembers(reference.localId)
-            .map { it.copy(id = AssetReference(reference.libraryId, it.id).encode(), isOnServer = reference.libraryId != DEVICE_LIBRARY_ID) }
+        val stacked = database.unifiedStackDao().of(serverId, reference.libraryId, reference.localId) ?: return emptyList()
+        val group = database.unifiedStackDao().group(serverId, stacked.groupId)
+        val onPhone = database.assetDao().byIds(DEVICE_LIBRARY_ID, group.mapNotNull { it.deviceAssetId }).associateBy { it.id }
+        val serverOnly = group.filter { it.libraryKey == serverId }.map { it.assetId }
+        val catalogued = database.assetDao().byIds(serverId, serverOnly).associateBy { it.id }
+        val asked = (serverOnly - catalogued.keys).firstOrNull()
+            ?.let { runCatching { server.stackMembers(it) }.getOrDefault(emptyList()) }
+            .orEmpty()
+            .associateBy { it.id }
+        return group.mapNotNull { photo ->
+            if (photo.libraryKey == DEVICE_LIBRARY_ID) {
+                onPhone[photo.assetId]?.toDomain()?.copy(
+                    id = AssetReference(DEVICE_LIBRARY_ID, photo.assetId).encode(),
+                    isOnServer = photo.serverAssetId != null,
+                )
+            } else {
+                (catalogued[photo.assetId]?.toDomain() ?: asked[photo.assetId])
+                    ?.copy(id = AssetReference(serverId, photo.assetId).encode(), isOnServer = true)
+            }
+        }
     }
 
     override suspend fun assetDetail(assetId: String): ImmichAssetDetail {

@@ -3,6 +3,8 @@ package eu.studio742.imago.core.data
 import eu.studio742.imago.core.data.db.AssetEntity
 import eu.studio742.imago.core.data.db.DerivedAssetEntity
 import eu.studio742.imago.core.data.db.StackMemberEntity
+import eu.studio742.imago.core.data.db.UnifiedStackEntity
+import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichStack
 import eu.studio742.imago.core.model.isImmichRoomExport
@@ -30,7 +32,9 @@ internal data class StackSeenHere(
     /** The count for the badge, or null when there is no stack to show. */
     val size: Int? get() = photos.size.takeIf { isStack }
 
-    fun members(libraryKey: String) = photos.map { StackMemberEntity(libraryKey, it.id, id, cover.id) }
+    fun members(libraryKey: String) = photos.map {
+        StackMemberEntity(libraryKey, it.id, id, cover.id, it.originalFileName.ifBlank { null }, it.fileCreatedAt)
+    }
 }
 
 /**
@@ -185,4 +189,57 @@ internal fun stackedTogether(
     val joined = assetIds.mapNotNull { id -> members.firstOrNull { it.assetId == id }?.stackId }.toSet()
     val photos = (assetIds + members.filter { it.stackId in joined }.map { it.assetId }).distinct()
     return members.filterNot { it.stackId in joined } + photos.map { StackMemberEntity(libraryKey, it, newStackId, assetIds.first()) }
+}
+
+/**
+ * The unified library's stacks for the server [serverKey]: the phone's [local] stacks and the
+ * server's [remote] ones, each server photo shown by its copy on the phone where [phoneCopyOf] has
+ * one. Stacks that share a photo are one stack; the server's cover leads — it is what the web and
+ * other apps show — then the phone's; a group of fewer than two photos is none.
+ */
+internal fun unifiedStacks(
+    serverKey: String,
+    local: List<StackMemberEntity>,
+    remote: List<StackMemberEntity>,
+    phoneCopyOf: Map<String, String>,
+): List<UnifiedStackEntity> {
+    data class Shown(val libraryKey: String, val assetId: String)
+    fun shownOfRemote(id: String) = phoneCopyOf[id]?.let { Shown(DEVICE_LIBRARY_ID, it) } ?: Shown(serverKey, id)
+    val parent = LinkedHashMap<Shown, Shown>()
+    fun root(of: Shown): Shown {
+        var at = of
+        while (parent.getValue(at) != at) at = parent.getValue(at)
+        return at
+    }
+    fun join(photos: List<Shown>) {
+        photos.forEach { parent.putIfAbsent(it, it) }
+        photos.drop(1).forEach { other ->
+            val a = root(photos.first())
+            val b = root(other)
+            if (a != b) parent[b] = a
+        }
+    }
+    val serverIdOf = mutableMapOf<Shown, String>()
+    remote.groupBy { it.stackId }.values.forEach { members ->
+        join(members.map { member -> shownOfRemote(member.assetId).also { serverIdOf[it] = member.assetId } })
+    }
+    local.groupBy { it.stackId }.values.forEach { members -> join(members.map { Shown(DEVICE_LIBRARY_ID, it.assetId) }) }
+    val remoteCovers = remote.filter { it.isCover }.map { shownOfRemote(it.assetId) }.toSet()
+    val localCovers = local.filter { it.isCover }.map { Shown(DEVICE_LIBRARY_ID, it.assetId) }.toSet()
+    return parent.keys.groupBy(::root).values.filter { it.size >= 2 }.flatMap { photos ->
+        val cover = photos.firstOrNull { it in remoteCovers } ?: photos.firstOrNull { it in localCovers } ?: photos.first()
+        val groupId = "${cover.libraryKey}:${cover.assetId}"
+        photos.map { photo ->
+            UnifiedStackEntity(
+                serverKey = serverKey,
+                libraryKey = photo.libraryKey,
+                assetId = photo.assetId,
+                groupId = groupId,
+                isCover = photo == cover,
+                groupSize = photos.size,
+                deviceAssetId = photo.assetId.takeIf { photo.libraryKey == DEVICE_LIBRARY_ID },
+                serverAssetId = serverIdOf[photo] ?: photo.assetId.takeIf { photo.libraryKey == serverKey },
+            )
+        }
+    }
 }

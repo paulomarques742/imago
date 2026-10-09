@@ -31,4 +31,11 @@ object UnifiedMigration {
             STACK_SQL.forEach(db::execSQL)
         }
     }
+
+    /** The stacks as the unified library shows them, and the names that find each photo's phone copy. */
+    val MIGRATION_15_16 = object : Migration(15, 16) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            UNIFIED_STACKS_SQL.forEach(db::execSQL)
+        }
+    }
 }
