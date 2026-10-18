@@ -434,4 +434,15 @@
     </plurals>
     <string name="library_permission_stack_update">Changes a stack’s cover and takes photos out of it</string>
     <string name="library_permission_stack_delete">Undoes stacks</string>
+    <string name="library_all_albums_setting">Albums in “All”</string>
+    <string name="library_all_albums_every">Every album shows in “All”.</string>
+    <plurals name="library_all_albums_hidden">
+        <item quantity="one">%1$d album left out of “All”, “On this day” and the unified library.</item>
+        <item quantity="other">%1$d albums left out of “All”, “On this day” and the unified library.</item>
+    </plurals>
+    <string name="library_all_albums_choose">Choose albums</string>
+    <string name="library_all_albums_body">Unticked albums stay out of “All”, “On this day” and the unified library. They still show in Recent, Favorites and Edited, and in the album itself.</string>
+    <string name="library_all_albums_show_all">Show all</string>
+    <string name="library_all_albums_empty">No albums on this device yet.</string>
+    <string name="library_save">Save</string>
 </resources>

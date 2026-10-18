@@ -151,7 +151,8 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
         return Pager(PagingConfig(pageSize = 100, initialLoadSize = 100, enablePlaceholders = true, jumpThreshold = 300)) {
             database.assetDao().pagingSource(DEVICE_LIBRARY_ID, filter == LibraryFilter.FAVORITES,
                 filter == LibraryFilter.EDITED, start?.let { "${it}T00:00:00.000Z" },
-                month?.let { "${LocalDate.parse(it).withDayOfMonth(1).plusMonths(1)}T00:00:00.000Z" }, query, albumId)
+                month?.let { "${LocalDate.parse(it).withDayOfMonth(1).plusMonths(1)}T00:00:00.000Z" }, query, albumId,
+                hideFolders = filter == LibraryFilter.ALL)
         }.flow.map { page -> page.map(AssetEntity::toDomain) }
     }
     override suspend fun albums(): List<ImmichAlbum> {
@@ -176,6 +177,26 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
             database.assetDao().restoreArchivedFlags(DEVICE_LIBRARY_ID)
         }
         settleStacks(gone = ids.filterNot(found::contains).toSet())
+    }
+
+    override fun hiddenAlbums(): Flow<Set<String>> =
+        database.hiddenFolderDao().observe(DEVICE_LIBRARY_ID).map { it.toSet() }
+
+    override suspend fun setHiddenAlbums(albumIds: Set<String>) = database.withTransaction {
+        database.hiddenFolderDao().clear(DEVICE_LIBRARY_ID)
+        database.hiddenFolderDao().insertAll(albumIds.map { HiddenFolderEntity(DEVICE_LIBRARY_ID, it) })
+    }
+
+    /**
+     * Renames through [rename] without the album coming back into "All": on both platforms a new name
+     * is a new id. Renamed onto an album that was already there, it takes that one's choice.
+     */
+    protected suspend fun renamingKeepsHidden(albumId: String, rename: suspend () -> String): String {
+        val before = database.assetDao().folders(DEVICE_LIBRARY_ID).mapNotNull { it.folderId }.toSet()
+        val renamed = rename()
+        val hidden = hiddenAlbums().first()
+        if (renamed != albumId && albumId in hidden && renamed !in before) setHiddenAlbums(hidden - albumId + renamed)
+        return renamed
     }
 
     override val canArchive: Boolean get() = true
@@ -212,6 +233,7 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
             query = query?.trim()?.takeIf(String::isNotEmpty),
             anchorCreatedAt = createdAt,
             anchorId = assetId,
+            hideFolders = filter == LibraryFilter.ALL,
         )
     }
 
@@ -236,6 +258,7 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
             // Everything after the end of this day is more recent than the destination; what is left
             // starts exactly on it.
             boundary = "${date.plusDays(1)}T00:00:00.000Z",
+            hideFolders = filter == LibraryFilter.ALL,
         )
     }
 

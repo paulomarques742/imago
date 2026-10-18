@@ -43,6 +43,7 @@ interface AssetDao {
         FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
           AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 0)
+          AND (:hideFolders = 0 OR NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = a.libraryKey AND h.folderId = a.folderId))
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
@@ -59,6 +60,7 @@ interface AssetDao {
         monthStart: String?,
         monthEnd: String?,
         query: String?,
+        hideFolders: Boolean = false,
     ): PagingSource<Int, UnifiedAssetRow>
 
     @Query(
@@ -66,6 +68,7 @@ interface AssetDao {
         SELECT COUNT(*) FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
           AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 0)
+          AND (:hideFolders = 0 OR NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = a.libraryKey AND h.folderId = a.folderId))
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
@@ -84,6 +87,7 @@ interface AssetDao {
         query: String?,
         anchorCreatedAt: String,
         anchorId: String,
+        hideFolders: Boolean = false,
     ): Int
 
     @Query(
@@ -91,6 +95,7 @@ interface AssetDao {
         SELECT COUNT(*) FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
           AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 0)
+          AND (:hideFolders = 0 OR NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = a.libraryKey AND h.folderId = a.folderId))
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
@@ -108,6 +113,7 @@ interface AssetDao {
         monthEnd: String?,
         query: String?,
         boundary: String,
+        hideFolders: Boolean = false,
     ): Int
 
     @Query(
@@ -117,6 +123,7 @@ interface AssetDao {
         FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
           AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 0)
+          AND NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = a.libraryKey AND h.folderId = a.folderId)
         GROUP BY substr(CASE WHEN a.localDateTime = '' THEN a.fileCreatedAt ELSE a.localDateTime END, 1, 7)
         ORDER BY month DESC
         """,
@@ -130,7 +137,7 @@ interface AssetDao {
     @Query(
         """
         SELECT * FROM assets
-        WHERE libraryKey = :libraryKey AND isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = assets.libraryKey AND m.assetId = assets.id AND m.assetId != m.primaryAssetId) AND substr(localDateTime, 6, 5) = :monthDay AND substr(localDateTime, 1, 4) < :year
+        WHERE libraryKey = :libraryKey AND isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = assets.libraryKey AND m.assetId = assets.id AND m.assetId != m.primaryAssetId) AND NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = assets.libraryKey AND h.folderId = assets.folderId) AND substr(localDateTime, 6, 5) = :monthDay AND substr(localDateTime, 1, 4) < :year
         ORDER BY localDateTime DESC, id DESC
         """,
     )
@@ -239,6 +246,7 @@ interface AssetDao {
           AND (:monthEnd IS NULL OR fileCreatedAt < :monthEnd)
           AND (:albumId IS NULL OR folderId = :albumId)
           AND (:albumId IS NOT NULL OR isArchived = 0)
+          AND (:hideFolders = 0 OR :albumId IS NOT NULL OR NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = assets.libraryKey AND h.folderId = assets.folderId))
           AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = assets.libraryKey AND m.assetId = assets.id AND m.assetId != m.primaryAssetId)
           AND (:query IS NULL OR originalFileName LIKE '%' || :query || '%')
         ORDER BY fileCreatedAt DESC, id DESC
@@ -252,6 +260,7 @@ interface AssetDao {
         monthEnd: String?,
         query: String?,
         albumId: String? = null,
+        hideFolders: Boolean = false,
     ): PagingSource<Int, AssetEntity>
 
     @Query("UPDATE assets SET isFavorite = :isFavorite WHERE libraryKey = :libraryKey AND id = :assetId")
@@ -273,6 +282,7 @@ interface AssetDao {
         SELECT COUNT(*) FROM assets
         WHERE libraryKey = :libraryKey
           AND isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = assets.libraryKey AND m.assetId = assets.id AND m.assetId != m.primaryAssetId)
+          AND (:hideFolders = 0 OR NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = assets.libraryKey AND h.folderId = assets.folderId))
           AND (:favoritesOnly = 0 OR isFavorite = 1)
           AND (:editedOnly = 0 OR isEdited = 1 OR hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR fileCreatedAt >= :monthStart)
@@ -289,6 +299,7 @@ interface AssetDao {
         monthEnd: String?,
         query: String?,
         boundary: String,
+        hideFolders: Boolean = false,
     ): Int
 
     /**
@@ -304,6 +315,7 @@ interface AssetDao {
         SELECT COUNT(*) FROM assets
         WHERE libraryKey = :libraryKey
           AND isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = assets.libraryKey AND m.assetId = assets.id AND m.assetId != m.primaryAssetId)
+          AND (:hideFolders = 0 OR NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = assets.libraryKey AND h.folderId = assets.folderId))
           AND (:favoritesOnly = 0 OR isFavorite = 1)
           AND (:editedOnly = 0 OR isEdited = 1 OR hasLocalRecipe = 1)
           AND (:monthStart IS NULL OR fileCreatedAt >= :monthStart)
@@ -324,6 +336,7 @@ interface AssetDao {
         query: String?,
         anchorCreatedAt: String,
         anchorId: String,
+        hideFolders: Boolean = false,
     ): Int
 
     /** The date of a catalogue photo, to serve as the anchor for [countBefore]. */
@@ -431,6 +444,7 @@ interface AssetDao {
                COUNT(*) AS assetCount
         FROM assets
         WHERE libraryKey = :libraryKey AND isArchived = 0 AND NOT EXISTS (SELECT 1 FROM stack_members m WHERE m.libraryKey = assets.libraryKey AND m.assetId = assets.id AND m.assetId != m.primaryAssetId)
+          AND NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = assets.libraryKey AND h.folderId = assets.folderId)
         GROUP BY substr(CASE WHEN localDateTime = '' THEN fileCreatedAt ELSE localDateTime END, 1, 7)
         ORDER BY month DESC
         """,

@@ -434,4 +434,15 @@
     </plurals>
     <string name="library_permission_stack_update">Muda a capa de uma pilha e tira fotografias dela</string>
     <string name="library_permission_stack_delete">Desfaz pilhas</string>
+    <string name="library_all_albums_setting">Álbuns em «Todas»</string>
+    <string name="library_all_albums_every">Todos os álbuns aparecem em «Todas».</string>
+    <plurals name="library_all_albums_hidden">
+        <item quantity="one">%1$d álbum fora de «Todas», de «Neste dia» e da biblioteca unificada.</item>
+        <item quantity="other">%1$d álbuns fora de «Todas», de «Neste dia» e da biblioteca unificada.</item>
+    </plurals>
+    <string name="library_all_albums_choose">Escolher álbuns</string>
+    <string name="library_all_albums_body">Os álbuns desmarcados ficam fora de «Todas», de «Neste dia» e da biblioteca unificada. Continuam em Recentes, Favoritas e Editadas, e dentro do próprio álbum.</string>
+    <string name="library_all_albums_show_all">Mostrar todos</string>
+    <string name="library_all_albums_empty">Ainda não há álbuns neste dispositivo.</string>
+    <string name="library_save">Guardar</string>
 </resources>

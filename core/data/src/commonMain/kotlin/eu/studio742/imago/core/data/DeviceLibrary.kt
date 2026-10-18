@@ -3,8 +3,10 @@ package eu.studio742.imago.core.data
 import eu.studio742.imago.core.model.FolderTransfer
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.UserText
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 
 /**
  * This device's library — the gallery on Android, the chosen folders on desktop.
@@ -29,6 +31,14 @@ interface DeviceLibrary : LibraryRepository {
     val rememberedTransfer: StateFlow<FolderTransfer?> get() = NeverRemembered
 
     fun rememberTransfer(transfer: FolderTransfer?) = Unit
+
+    /**
+     * The albums whose photos stay out of "All", "On this day" and the unified library. Empty — every
+     * album shows — until the person unticks one; a library without folder albums never has any.
+     */
+    fun hiddenAlbums(): Flow<Set<String>> = flowOf(emptySet())
+
+    suspend fun setHiddenAlbums(albumIds: Set<String>) = Unit
 
     /** The files other apps open with IMAGO, as a library; null where nothing opens it. */
     val openedFiles: LibraryRepository? get() = null

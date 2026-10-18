@@ -361,12 +361,12 @@ class DeviceLibraryRepository @Inject constructor(
     }
 
     /** Renaming a folder is moving everything in it to a folder with the new name, which MediaStore gives another id. */
-    override suspend fun renameAlbum(albumId: String, name: String): String {
+    override suspend fun renameAlbum(albumId: String, name: String): String = renamingKeepsHidden(albumId) {
         editableFolder(albumId)
         val target = deviceAlbumFolder(name) ?: throw UserMessageException(UserMessage.FILE_UNAVAILABLE)
         val result = transferTo(target, idsIn(albumId), FolderTransfer.MOVE)
         check(result.failed == 0) { "${result.failed} files could not be moved to $target" }
-        return folderPaths().entries.firstOrNull { it.value.equals(target, ignoreCase = true) }?.key ?: albumId
+        folderPaths().entries.firstOrNull { it.value.equals(target, ignoreCase = true) }?.key ?: albumId
     }
 
     /** A folder only exists with files in it: deleting the album is sending them to the trash. */

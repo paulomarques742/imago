@@ -46,6 +46,10 @@ const val BUILT_IN_RECIPE_MARKS_SQL =
  */
 const val SAVED_RECIPE_PARTS_SQL = "ALTER TABLE `saved_recipes` ADD COLUMN `parts` TEXT"
 
+/** Version 19: the albums of this device left out of "All", "On this day" and the unified library. */
+const val HIDDEN_FOLDERS_SQL =
+    "CREATE TABLE IF NOT EXISTS `hidden_folders` (`libraryKey` TEXT NOT NULL, `folderId` TEXT NOT NULL, PRIMARY KEY(`libraryKey`, `folderId`))"
+
 /** The index of version 12, as Room names it; the same statement on both apps. */
 const val UNIFIED_INDEX_SQL =
     "CREATE INDEX IF NOT EXISTS index_assets_libraryKey_originalFileName ON assets (libraryKey, originalFileName)"

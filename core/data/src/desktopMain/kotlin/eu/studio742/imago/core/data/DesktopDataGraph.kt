@@ -61,6 +61,10 @@ class DesktopDataGraph(
             override fun migrate(connection: androidx.sqlite.SQLiteConnection) {
                 connection.execSQL(SAVED_RECIPE_PARTS_SQL)
             }
+        }, object : androidx.room.migration.Migration(18, 19) {
+            override fun migrate(connection: androidx.sqlite.SQLiteConnection) {
+                connection.execSQL(HIDDEN_FOLDERS_SQL)
+            }
         })
         .setQueryCoroutineContext(Dispatchers.IO)
         .build()

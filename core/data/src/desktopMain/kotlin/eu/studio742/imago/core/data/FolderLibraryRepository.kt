@@ -294,7 +294,10 @@ class FolderLibraryRepository(
      * The folder takes the new name, with everything in it. When another folder beside it already
      * has that name, the photos join that one, as on the phone.
      */
-    override suspend fun renameAlbum(albumId: String, name: String): String {
+    override suspend fun renameAlbum(albumId: String, name: String): String =
+        renamingKeepsHidden(albumId) { renameFolder(albumId, name) }
+
+    private suspend fun renameFolder(albumId: String, name: String): String {
         val folder = ownedFolder(albumId)
         val folderName = requireNotNull(albumFolderName(name)) { "Nothing of \"$name\" makes a folder name" }
         val target = folder.resolveSibling(folderName)

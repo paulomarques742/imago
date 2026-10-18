@@ -203,6 +203,7 @@ actual fun ColumnScope.DeviceLibraryAccess(viewModel: LibrarySettingsViewModel, 
         }
     }
     FolderTransferSetting(viewModel.device)
+    AllViewAlbumsSetting(viewModel.device)
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.material3.TextButton(onClick = {
         context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,

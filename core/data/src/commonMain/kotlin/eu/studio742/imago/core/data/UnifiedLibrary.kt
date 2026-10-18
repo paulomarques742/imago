@@ -83,6 +83,7 @@ class UnifiedLibrary(
             database.assetDao().unifiedPagingSource(
                 device = DEVICE_LIBRARY_ID,
                 server = serverId,
+                hideFolders = filter == LibraryFilter.ALL,
                 favoritesOnly = filter == LibraryFilter.FAVORITES,
                 editedOnly = filter == LibraryFilter.EDITED,
                 monthStart = range.start,
@@ -213,6 +214,7 @@ class UnifiedLibrary(
         return database.assetDao().unifiedCountBefore(
             device = DEVICE_LIBRARY_ID,
             server = serverId,
+            hideFolders = filter == LibraryFilter.ALL,
             favoritesOnly = filter == LibraryFilter.FAVORITES,
             editedOnly = filter == LibraryFilter.EDITED,
             monthStart = range.start,
@@ -228,6 +230,7 @@ class UnifiedLibrary(
         return database.assetDao().unifiedCountNewerThan(
             device = DEVICE_LIBRARY_ID,
             server = serverId,
+            hideFolders = filter == LibraryFilter.ALL,
             favoritesOnly = filter == LibraryFilter.FAVORITES,
             editedOnly = filter == LibraryFilter.EDITED,
             monthStart = range.start,

@@ -124,6 +124,7 @@ actual fun ColumnScope.DeviceLibraryAccess(viewModel: LibrarySettingsViewModel, 
         Text(stringResource(Res.string.library_add_folder))
     }
     FolderTransferSetting(folders)
+    AllViewAlbumsSetting(folders)
 }
 
 /** On a computer sharing is keeping copies: the originals are downloaded straight into the folder picked. */
