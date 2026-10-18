@@ -29,7 +29,7 @@ import androidx.room.RoomDatabaseConstructor
         UnifiedStackEntity::class,
         BuiltInRecipeMarkEntity::class,
     ],
-    version = 17,
+    version = 18,
     exportSchema = true,
 )
 @ConstructedBy(ImmichRoomDatabaseConstructor::class)

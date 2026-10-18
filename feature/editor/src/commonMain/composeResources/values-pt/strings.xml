@@ -316,4 +316,13 @@
     <string name="editor_panel_expand">Expandir o painel</string>
     <string name="editor_panel_shrink">Encolher o painel</string>
     <string name="editor_panel_close">Fechar o painel</string>
+    <string name="editor_copy">Copiar</string>
+    <string name="editor_parts_title">O que aplica</string>
+    <string name="editor_parts_all">Tudo</string>
+    <string name="editor_parts_none">Nada</string>
+    <string name="editor_parts_count">%1$d de %2$d</string>
+    <string name="editor_parts_expand">Mostrar o que %1$s inclui</string>
+    <string name="editor_parts_collapse">Esconder o que %1$s inclui</string>
+    <string name="editor_part_geometry">Geometria</string>
+    <string name="editor_part_rotate_flip">Rodar e espelhar</string>
 </resources>

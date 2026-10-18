@@ -9,6 +9,9 @@ import eu.studio742.imago.core.immich.ImmichApi
 import eu.studio742.imago.core.model.BUILT_IN_RECIPES
 import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.EditRecipe
+import eu.studio742.imago.core.model.Effects
+import eu.studio742.imago.core.model.Geometry
+import eu.studio742.imago.core.model.RecipePart
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.Tone
 import eu.studio742.imago.core.render.NeutralWhiteBalance
@@ -49,8 +52,15 @@ class RecipeEditorTest {
         override suspend fun saveBuiltInMark(mark: BuiltInRecipeMark) { marks[mark.id] = mark }
     }
 
+    /** What the recipe dialogs last ticked, as the configuration keeps it. */
+    private var partsChoice: String? = null
+
     /** What this path never touches: any call is a test failure, not a silent default. */
-    private inline fun <reified T> unused(): T = Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, _ ->
+    private inline fun <reified T> unused(): T = Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, args ->
+        when (method.name) {
+            "getRecipePartsChoice" -> return@newProxyInstance partsChoice
+            "setRecipePartsChoice" -> return@newProxyInstance Unit.also { partsChoice = args[0] as String? }
+        }
         error("${T::class.simpleName}.${method.name} is not used by the recipe editor")
     } as T
 
@@ -198,6 +208,78 @@ class RecipeEditorTest {
         assertEquals(1.2f, copy.recipe.tone.exposure)
         assertEquals("the original stays as last saved", original, repository.stored.getValue("mine"))
         assertFalse(viewModel.state.value.hasUnsavedRecipeChanges)
+    }
+
+    @Test
+    fun `pasting writes only what was ticked when copying, and the geometry starts unticked`() {
+        openRecipe(RecipeSource.New())
+        assertEquals(RecipePart.LOOK, viewModel.state.value.recipeParts)
+        setExposure(1.2f)
+        viewModel.updateStraighten(5f)
+        viewModel.finishAdjustment()
+
+        viewModel.copyCurrentRecipe(viewModel.state.value.recipeParts)
+        setExposure(0f)
+        viewModel.updateStraighten(2f)
+        viewModel.finishAdjustment()
+        viewModel.pasteCopiedRecipe()
+
+        val pasted = viewModel.state.value.recipe!!
+        assertEquals(1.2f, pasted.tone.exposure)
+        assertEquals(2f, pasted.geometry.straighten)
+    }
+
+    @Test
+    fun `the last choice is remembered, geometry included`() {
+        openRecipe(RecipeSource.New())
+        val chosen = setOf(RecipePart.EXPOSURE, RecipePart.STRAIGHTEN)
+
+        viewModel.copyCurrentRecipe(chosen)
+
+        assertEquals(chosen, viewModel.state.value.recipeParts)
+        assertEquals("EXPOSURE,STRAIGHTEN", partsChoice)
+    }
+
+    @Test
+    fun `a recipe saved before the choice opens on the sample without its geometry`() {
+        val tilted = original.copy(recipe = original.recipe.copy(geometry = Geometry(straighten = 7f)))
+        repository.stored["mine"] = tilted
+
+        openRecipe(RecipeSource.Saved(tilted))
+
+        assertEquals(0.5f, viewModel.state.value.recipe!!.tone.exposure)
+        assertEquals(0f, viewModel.state.value.recipe!!.geometry.straighten)
+        assertFalse(viewModel.state.value.hasUnsavedRecipeChanges)
+    }
+
+    @Test
+    fun `a new recipe keeps what was ticked`() {
+        openRecipe(RecipeSource.New())
+        setExposure(0.7f)
+
+        viewModel.saveRecipeEdits("Exposure only", "Mine", setOf(RecipePart.EXPOSURE))
+        awaitState { it.recipeEdit?.saved != null }
+
+        val created = repository.stored.getValue(viewModel.state.value.recipeEdit!!.saved!!.id)
+        assertEquals(setOf(RecipePart.EXPOSURE), created.parts)
+        assertEquals(setOf(RecipePart.EXPOSURE), viewModel.state.value.recipeParts)
+    }
+
+    @Test
+    fun `what is touched on the sample goes with the recipe from then on, and what was left out is kept`() {
+        val tilted = original.copy(recipe = original.recipe.copy(geometry = Geometry(straighten = 7f), effects = Effects(grainAmount = 30f)))
+        repository.stored["mine"] = tilted
+        openRecipe(RecipeSource.Saved(tilted))
+        viewModel.updateStraighten(3f)
+        viewModel.finishAdjustment()
+
+        viewModel.saveRecipeEdits()
+        awaitState { !it.hasUnsavedRecipeChanges }
+
+        val saved = repository.stored.getValue("mine")
+        assertEquals(RecipePart.LEGACY + RecipePart.STRAIGHTEN, saved.parts)
+        assertEquals(3f, saved.recipe.geometry.straighten)
+        assertEquals(30f, saved.recipe.effects.grainAmount)
     }
 
     @Test

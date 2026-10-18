@@ -66,6 +66,14 @@ interface ConfigurationRepository {
      * an install from before it was recorded.
      */
     var lastSeenAppVersion: String?
+
+    /**
+     * The parts of a recipe last chosen to copy or to save, as `RecipePart` names separated by commas.
+     * Null until a first choice; it stays on this device.
+     */
+    var recipePartsChoice: String?
+        get() = null
+        set(_) = Unit
     val connection: Flow<ImmichConnection?>
     fun currentConnection(): ImmichConnection?
     suspend fun validateAndSave(serverUrl: String, apiKey: String): ServerVersion

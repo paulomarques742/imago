@@ -31,6 +31,8 @@ import java.lang.reflect.Proxy
 @OptIn(ExperimentalCoroutinesApi::class)
 class PerspectiveEditingTest {
     private inline fun <reified T> unused(): T = Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, _ ->
+        // Every editor reads, as it starts, what the recipe dialogs last ticked; none was ticked here.
+        if (method.name == "getRecipePartsChoice") return@newProxyInstance null
         error("${T::class.simpleName}.${method.name} is not used by the perspective")
     } as T
 

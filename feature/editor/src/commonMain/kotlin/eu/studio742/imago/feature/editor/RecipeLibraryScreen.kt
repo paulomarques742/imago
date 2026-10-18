@@ -67,6 +67,7 @@ import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.label
+import eu.studio742.imago.core.model.withPartsFrom
 
 /** A recipe as the grid shows it, whether it comes from the app or from the user's library. */
 data class RecipeCard(
@@ -110,7 +111,14 @@ fun List<SavedRecipe>.toCards(): List<RecipeCard> = map {
         name = it.name,
         description = it.collection,
         group = it.collection,
-        recipe = it.recipe,
+        // The preview shows what applying it does, and a recipe never takes along what it leaves out.
+        recipe = EditRecipe(
+            assetId = it.recipe.assetId,
+            originalChecksum = it.recipe.originalChecksum,
+            processVersion = it.recipe.processVersion,
+            createdAt = it.recipe.createdAt,
+            updatedAt = it.recipe.updatedAt,
+        ).withPartsFrom(it.recipe, it.appliedParts),
         isBuiltIn = false,
         isFavorite = it.isFavorite,
         usedAt = it.usedAt,

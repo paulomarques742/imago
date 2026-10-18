@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.AlertDialog
@@ -37,6 +39,7 @@ import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
+import eu.studio742.imago.core.model.RecipePart
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.feature.editor.resources.*
 import org.jetbrains.compose.resources.stringResource
@@ -58,6 +61,9 @@ internal fun chosenCollection(typed: String, existing: List<String>): String {
  * Names a recipe and puts it in a collection. The collections that exist are chips to pick from,
  * and the last chip opens a field for a new one — typing the same name twice by hand was how a
  * library ended up with "Travel" and "Travels".
+ *
+ * With [initialParts] it also asks what the recipe applies, as Lightroom's New Preset dialog does;
+ * [onConfirm] then gets the parts chosen, and null without them.
  */
 @Composable
 internal fun RecipeDetailsDialog(
@@ -67,7 +73,8 @@ internal fun RecipeDetailsDialog(
     collections: List<String>,
     confirmLabel: String,
     onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit,
+    onConfirm: (name: String, collection: String, parts: Set<RecipePart>?) -> Unit,
+    initialParts: Set<RecipePart>? = null,
 ) {
     val defaultCollection = stringResource(Res.string.editor_default_collection)
     val start = initialCollection.trim().ifBlank { defaultCollection }
@@ -79,13 +86,17 @@ internal fun RecipeDetailsDialog(
     var selected by remember(start) { mutableStateOf(chosenCollection(start, choices)) }
     var creating by remember { mutableStateOf(false) }
     var newCollection by remember { mutableStateOf("") }
+    var parts by remember(initialParts) { mutableStateOf(initialParts) }
     val result = if (creating) chosenCollection(newCollection, choices) else selected
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -131,12 +142,13 @@ internal fun RecipeDetailsDialog(
                     )
                     LaunchedEffect(Unit) { focus.requestFocus() }
                 }
+                parts?.let { chosen -> RecipePartsPicker(chosen, { parts = it }) }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(name.trim(), result) },
-                enabled = name.isNotBlank() && result.isNotBlank(),
+                onClick = { onConfirm(name.trim(), result, parts) },
+                enabled = name.isNotBlank() && result.isNotBlank() && parts?.isEmpty() != true,
             ) { Text(confirmLabel) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.editor_cancel)) } },

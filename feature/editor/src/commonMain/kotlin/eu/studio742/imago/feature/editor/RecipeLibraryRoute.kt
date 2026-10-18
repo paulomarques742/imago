@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import eu.studio742.imago.core.data.SavedRecipeRepository
+import eu.studio742.imago.core.model.RecipePart
 import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.i18n.appString
 import eu.studio742.imago.core.model.BuiltInRecipeMark
@@ -69,7 +70,7 @@ open class RecipeLibraryViewModel(
         }
     }
 
-    fun rename(id: String, name: String, collection: String) {
+    fun rename(id: String, name: String, collection: String, parts: Set<RecipePart>? = null) {
         val recipe = mutableState.value.recipes.firstOrNull { it.id == id } ?: return
         val cleanName = name.trim()
         if (cleanName.isBlank()) return
@@ -78,6 +79,7 @@ open class RecipeLibraryViewModel(
                 name = cleanName,
                 collection = collection.trim(),
                 updatedAt = Instant.now().toString(),
+                parts = parts?.let(recipe::partsAfterChoosing) ?: recipe.parts,
             ),
         )
     }
@@ -205,10 +207,11 @@ fun RecipeLibraryRoute(
             collections = state.recipes.collections(),
             confirmLabel = stringResource(Res.string.editor_save_changes),
             onDismiss = { renaming = null },
-            onConfirm = { name, collection ->
-                viewModel.rename(recipe.id, name, collection)
+            onConfirm = { name, collection, parts ->
+                viewModel.rename(recipe.id, name, collection, parts)
                 renaming = null
             },
+            initialParts = recipe.appliedParts,
         )
     }
     deleting?.let { recipe ->

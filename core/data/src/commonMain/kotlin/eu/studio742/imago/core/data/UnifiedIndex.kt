@@ -40,6 +40,12 @@ const val BUILT_IN_RECIPE_MARKS_SQL =
         "`usedAt` TEXT, `updatedAt` TEXT NOT NULL, `remoteRevision` INTEGER, `editedAt` TEXT NOT NULL DEFAULT '', " +
         "`editedByDevice` TEXT, `deletedAt` TEXT, `dirty` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))"
 
+/**
+ * Version 18: which parts of a saved recipe applying it writes, as their names separated by commas.
+ * Null in the recipes saved before, which keep applying everything but the geometry.
+ */
+const val SAVED_RECIPE_PARTS_SQL = "ALTER TABLE `saved_recipes` ADD COLUMN `parts` TEXT"
+
 /** The index of version 12, as Room names it; the same statement on both apps. */
 const val UNIFIED_INDEX_SQL =
     "CREATE INDEX IF NOT EXISTS index_assets_libraryKey_originalFileName ON assets (libraryKey, originalFileName)"

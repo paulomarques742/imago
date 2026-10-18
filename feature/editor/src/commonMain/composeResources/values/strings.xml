@@ -316,4 +316,13 @@
     <string name="editor_panel_expand">Expand the panel</string>
     <string name="editor_panel_shrink">Shrink the panel</string>
     <string name="editor_panel_close">Close the panel</string>
+    <string name="editor_copy">Copy</string>
+    <string name="editor_parts_title">What it applies</string>
+    <string name="editor_parts_all">All</string>
+    <string name="editor_parts_none">None</string>
+    <string name="editor_parts_count">%1$d of %2$d</string>
+    <string name="editor_parts_expand">Show what %1$s includes</string>
+    <string name="editor_parts_collapse">Hide what %1$s includes</string>
+    <string name="editor_part_geometry">Geometry</string>
+    <string name="editor_part_rotate_flip">Rotate and flip</string>
 </resources>

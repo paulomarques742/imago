@@ -8,6 +8,7 @@ import eu.studio742.imago.core.data.db.SavedRecipeEntity
 import eu.studio742.imago.core.data.db.SyncState
 import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.EditRecipe
+import eu.studio742.imago.core.model.RecipePart
 import eu.studio742.imago.core.model.SavedRecipe
 import java.time.Instant
 import javax.inject.Inject
@@ -33,6 +34,7 @@ class RoomSavedRecipeRepository @Inject constructor(
             updatedAt = entity.updatedAt,
             isFavorite = entity.isFavorite,
             usedAt = entity.usedAt,
+            parts = entity.parts?.let { RecipePart.parse(it.split(',')) },
         )
     }
 
@@ -49,6 +51,8 @@ class RoomSavedRecipeRepository @Inject constructor(
             updatedAt = recipe.updatedAt,
             isFavorite = recipe.isFavorite,
             usedAt = recipe.usedAt,
+            // In the enum's order, so that the same choice is always the same text and saving it again is no change.
+            parts = recipe.parts?.sorted()?.joinToString(",") { it.name },
         )
         if (previous != null && previous.sync.deletedAt == null && previous.copy(sync = SyncState()) == entity) return@withTransaction
         dao.upsert(entity.copy(sync = (previous?.sync ?: SyncState()).edited(Instant.now().toString())))

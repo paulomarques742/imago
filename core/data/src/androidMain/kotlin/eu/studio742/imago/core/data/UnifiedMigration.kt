@@ -45,4 +45,9 @@ object UnifiedMigration {
             db.execSQL(BUILT_IN_RECIPE_MARKS_SQL)
         }
     }
+    val MIGRATION_17_18 = object : Migration(17, 18) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(SAVED_RECIPE_PARTS_SQL)
+        }
+    }
 }

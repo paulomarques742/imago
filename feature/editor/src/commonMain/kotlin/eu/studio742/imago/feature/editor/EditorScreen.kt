@@ -197,6 +197,7 @@ import eu.studio742.imago.core.designsystem.LocalImagoWindow
 import eu.studio742.imago.core.designsystem.LocalReducedMotion
 import eu.studio742.imago.core.designsystem.imagoGlassBlur
 import eu.studio742.imago.core.designsystem.imagoTween
+import eu.studio742.imago.core.model.RecipePart
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.CropRect
 import eu.studio742.imago.core.model.EditRecipe
@@ -290,6 +291,7 @@ fun EditorRoute(
     var namingRecipe by rememberSaveable { mutableStateOf(false) }
     var confirmingDelete by rememberSaveable { mutableStateOf(false) }
     var leaveOnceSaved by rememberSaveable { mutableStateOf(false) }
+    var copyingRecipe by rememberSaveable { mutableStateOf(false) }
     val leave = {
         viewModel.saveNow()
         onBack()
@@ -351,7 +353,7 @@ fun EditorRoute(
         onToggleMirrorHorizontal = viewModel::toggleMirrorHorizontal,
         onToggleMirrorVertical = viewModel::toggleMirrorVertical,
         onResetGeometry = viewModel::resetGeometry,
-        onCopyRecipe = viewModel::copyCurrentRecipe,
+        onCopyRecipe = { if (state.recipe != null) copyingRecipe = true },
         onPasteRecipe = viewModel::pasteCopiedRecipe,
         onSaveRecipe = viewModel::saveCurrentRecipe,
         onApplySavedRecipe = viewModel::applySavedRecipe,
@@ -463,9 +465,21 @@ fun EditorRoute(
                 namingRecipe = false
                 leaveOnceSaved = false
             },
-            onConfirm = { name, collection ->
-                viewModel.saveRecipeEdits(name, collection)
+            onConfirm = { name, collection, parts ->
+                viewModel.saveRecipeEdits(name, collection, parts)
                 namingRecipe = false
+            },
+            // What was touched on the sample is ticked from the start: it is why the recipe is being saved.
+            initialParts = state.recipeParts + (state.recipe?.let { edit?.baseline?.changedParts(it) }.orEmpty()),
+        )
+    }
+    if (copyingRecipe) {
+        CopyRecipeDialog(
+            initial = state.recipeParts,
+            onDismiss = { copyingRecipe = false },
+            onCopy = { parts ->
+                viewModel.copyCurrentRecipe(parts)
+                copyingRecipe = false
             },
         )
     }
@@ -534,12 +548,12 @@ private fun EditorScreen(
     onResetGeometry: () -> Unit,
     onCopyRecipe: () -> Unit,
     onPasteRecipe: () -> Unit,
-    onSaveRecipe: (String, String) -> Unit,
+    onSaveRecipe: (String, String, Set<RecipePart>) -> Unit,
     onApplySavedRecipe: (String) -> Unit,
     onApplyBuiltInRecipe: (String) -> Unit,
     onToggleRecipeFavorite: (String) -> Unit,
     onToggleBuiltInRecipeFavorite: (String) -> Unit,
-    onUpdateSavedRecipe: (String, String, String) -> Unit,
+    onUpdateSavedRecipe: (String, String, String, Set<RecipePart>) -> Unit,
     onDeleteSavedRecipe: (String) -> Unit,
     onConsumeRecipeNotice: () -> Unit,
     onExportGallery: () -> Unit,
@@ -1934,10 +1948,11 @@ private fun EditorScreen(
             collections = state.savedRecipes.collections(),
             confirmLabel = stringResource(Res.string.editor_tool_save),
             onDismiss = { showSaveRecipeDialog = false },
-            onConfirm = { name, collection ->
-                onSaveRecipe(name, collection)
+            onConfirm = { name, collection, parts ->
+                onSaveRecipe(name, collection, parts ?: state.recipeParts)
                 showSaveRecipeDialog = false
             },
+            initialParts = state.recipeParts,
         )
     }
     editingSavedRecipe?.let { saved ->
@@ -1951,11 +1966,12 @@ private fun EditorScreen(
                 editingSavedRecipe = null
                 showRecipeLibrary = true
             },
-            onConfirm = { name, collection ->
-                onUpdateSavedRecipe(saved.id, name, collection)
+            onConfirm = { name, collection, parts ->
+                onUpdateSavedRecipe(saved.id, name, collection, parts ?: saved.appliedParts)
                 editingSavedRecipe = null
                 showRecipeLibrary = true
             },
+            initialParts = saved.appliedParts,
         )
     }
     if (showRecipeLibrary) {

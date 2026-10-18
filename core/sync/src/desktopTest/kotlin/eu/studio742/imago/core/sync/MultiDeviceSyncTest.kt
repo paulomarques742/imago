@@ -308,6 +308,24 @@ class MultiDeviceSyncTest {
     }
 
     @Test
+    fun `what a saved recipe applies reaches the other device, and an old one stays without a choice`() = runBlocking {
+        val photo = phone.immichPhoto("unlinked-library", "asset-10", sha1("parts".toByteArray()))
+        phone.database.savedRecipeDao().upsert(
+            SavedRecipeEntity(GLOBAL_LIBRARY_ID, "chosen", "Chosen", "", recipeJson(photo, 1f), "", "", parts = "EXPOSURE,CROP",
+                sync = SyncState().edited("2026-10-18T10:00:00Z")),
+        )
+        phone.database.savedRecipeDao().upsert(
+            SavedRecipeEntity(GLOBAL_LIBRARY_ID, "old", "Old", "", recipeJson(photo, 1f), "", "", sync = SyncState().edited("2026-10-18T10:00:00Z")),
+        )
+
+        assertTrue(phone.engine.syncNow())
+        computer.engine.syncNow()
+
+        assertEquals("EXPOSURE,CROP", computer.database.savedRecipeDao().getAny(GLOBAL_LIBRARY_ID, "chosen")!!.parts)
+        assertNull(computer.database.savedRecipeDao().getAny(GLOBAL_LIBRARY_ID, "old")!!.parts)
+    }
+
+    @Test
     fun `an unlinked library leaves the project unsent, with a notice`() = runBlocking {
         val photo = phone.immichPhoto("unlinked-library", "asset-8", sha1("x".toByteArray()))
         phone.project("p1", "Projecto", photo, "2026-09-16T10:00:00Z")

@@ -3,6 +3,7 @@ package eu.studio742.imago.core.sync
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -167,6 +168,7 @@ internal class SavedRecipeSync(
                 updatedAt = payload.string("updatedAt").orEmpty(),
                 isFavorite = payload.boolean("isFavorite"),
                 usedAt = payload.string("usedAt"),
+                parts = (payload["parts"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }?.joinToString(","),
                 sync = change.syncState(),
             ),
         )
@@ -191,6 +193,9 @@ internal class SavedRecipeSync(
                 put("updatedAt", JsonPrimitive(entity.updatedAt))
                 put("isFavorite", JsonPrimitive(entity.isFavorite))
                 entity.usedAt?.let { put("usedAt", JsonPrimitive(it)) }
+                entity.parts?.let { parts ->
+                    put("parts", JsonArray(parts.split(',').filter(String::isNotEmpty).map(::JsonPrimitive)))
+                }
             },
             editedAt = entity.sync.editedAt,
             deleted = entity.sync.deletedAt != null,

@@ -149,6 +149,10 @@ class EncryptedConfigurationRepository(
         get() = preferences.getString("last_seen_app_version")
         set(value) { preferences.write(mapOf("last_seen_app_version" to value)) }
 
+    override var recipePartsChoice: String?
+        get() = preferences.getString("recipe_parts_choice")
+        set(value) { preferences.write(mapOf("recipe_parts_choice" to value)) }
+
     override fun completeWelcome() {
         check(preferences.write(mapOf(WELCOME_KEY to "true")))
         welcome.value = true

@@ -130,7 +130,7 @@ class RecipeLibraryTest {
                     collections = collections,
                     confirmLabel = "Save",
                     onDismiss = {},
-                    onConfirm = { name, collection -> confirmed = name to collection },
+                    onConfirm = { name, collection, _ -> confirmed = name to collection },
                 )
             }
             choose()

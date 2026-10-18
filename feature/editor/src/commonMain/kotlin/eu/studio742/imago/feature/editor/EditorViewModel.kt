@@ -74,7 +74,9 @@ import eu.studio742.imago.core.model.ColorGrading
 import eu.studio742.imago.core.model.ColorWheel
 import eu.studio742.imago.core.model.HslBand
 import eu.studio742.imago.core.model.ToneCurve
+import eu.studio742.imago.core.model.RecipePart
 import eu.studio742.imago.core.model.SavedRecipe
+import eu.studio742.imago.core.model.withPartsFrom
 import eu.studio742.imago.core.immich.ImmichApi
 import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
 import eu.studio742.imago.core.immich.requirePermission
@@ -468,6 +470,8 @@ data class EditorUiState(
     val savedRecipes: List<SavedRecipe> = emptyList(),
     val builtInMarks: List<BuiltInRecipeMark> = emptyList(),
     val canPasteRecipe: Boolean = false,
+    /** What the dialogs that copy or save a recipe start with: the last choice made on this device. */
+    val recipeParts: Set<RecipePart> = RecipePart.LOOK,
     val isRecipeLibraryLoading: Boolean = false,
     val recipeNotice: UiText? = null,
     /** The versions of this photo that lost conflicts with other devices. */
@@ -584,7 +588,10 @@ open class EditorViewModel(
         ) : PendingChange
     }
 
+    private var copiedParts: Set<RecipePart> = RecipePart.LOOK
+
     init {
+        mutableState.update { it.copy(recipeParts = configuration.rememberedRecipeParts()) }
         refreshSavedRecipes()
     }
 
@@ -617,6 +624,7 @@ open class EditorViewModel(
             savedRecipes = retained.savedRecipes,
             builtInMarks = retained.builtInMarks,
             canPasteRecipe = copiedRecipe != null,
+            recipeParts = retained.recipeParts,
             isRecipeLibraryLoading = retained.isRecipeLibraryLoading,
             recipeNotice = retained.recipeNotice,
         )
@@ -635,6 +643,7 @@ open class EditorViewModel(
                             }
                         }
                     }
+                    val appliedParts = (target as? PhotoEditTarget.Recipe)?.source?.appliedParts ?: RecipePart.entries.toSet()
                     val now = Instant.now().toString()
                     val fromStore = stored.await()
                     // A recipe from a newer app never goes through the old pipeline: the original
@@ -648,7 +657,7 @@ open class EditorViewModel(
                         // Seen through `rebasedOnto`, a recipe is exactly what applying it to a photo
                         // would give — the sample shows the truth, not the stored record.
                         val base = EditRecipe(assetId = RECIPE_EDIT_ASSET_ID, originalChecksum = "", createdAt = now, updatedAt = now)
-                        storedRecipe?.rebasedOnto(base, now) ?: base
+                        storedRecipe?.rebasedOnto(base, now, appliedParts) ?: base
                     } else {
                         storedRecipe?.openedForEditing() ?: EditRecipe(
                             assetId = asset.id,
@@ -732,7 +741,12 @@ open class EditorViewModel(
         activeTarget = null
         recipeSessionKey = null
         mutableState.update {
-            EditorUiState(savedRecipes = it.savedRecipes, builtInMarks = it.builtInMarks, canPasteRecipe = it.canPasteRecipe)
+            EditorUiState(
+                savedRecipes = it.savedRecipes,
+                builtInMarks = it.builtInMarks,
+                canPasteRecipe = it.canPasteRecipe,
+                recipeParts = it.recipeParts,
+            )
         }
     }
 
@@ -740,20 +754,29 @@ open class EditorViewModel(
      * Saves the recipe editor's work. A recipe that is already the user's is updated where it is; a
      * filter or a new recipe becomes a new one, under [name] and [collection].
      */
-    fun saveRecipeEdits(name: String? = null, collection: String? = null) {
+    fun saveRecipeEdits(name: String? = null, collection: String? = null, parts: Set<RecipePart>? = null) {
         val edit = state.value.recipeEdit ?: return
         val current = state.value.recipe ?: return
         if (needsNewerApp) return
         val now = Instant.now().toString()
         val existing = edit.saved
         val saved = if (existing != null) {
-            existing.copy(recipe = current.storedOver(existing.recipe, now), updatedAt = now)
+            // What was touched here goes with the recipe from now on: changing a part on the sample and
+            // then seeing it left out of every photo would be an edit thrown away without a word.
+            val applied = existing.appliedParts + edit.baseline.changedParts(current)
+            existing.copy(
+                recipe = current.rebasedOnto(existing.recipe, now, applied).storedOver(existing.recipe, now),
+                updatedAt = now,
+                parts = applied,
+            )
         } else {
             val cleanName = name?.trim().orEmpty()
             if (cleanName.isBlank()) {
                 mutableState.update { it.copy(recipeNotice = uiText(Res.string.editor_recipe_name_needed)) }
                 return
             }
+            val chosen = parts ?: state.value.recipeParts
+            rememberRecipeParts(chosen)
             SavedRecipe(
                 id = UUID.randomUUID().toString(),
                 name = cleanName,
@@ -761,6 +784,7 @@ open class EditorViewModel(
                 recipe = current.copy(updatedAt = now),
                 createdAt = now,
                 updatedAt = now,
+                parts = chosen,
             )
         }
         persistRecipeEdit(saved, current, uiText(Res.string.editor_recipe_saved))
@@ -786,6 +810,7 @@ open class EditorViewModel(
                 recipe = current.copy(updatedAt = now),
                 createdAt = now,
                 updatedAt = now,
+                parts = (edit.saved?.appliedParts ?: RecipePart.LOOK) + edit.baseline.changedParts(current),
             )
             persistRecipeEdit(copy, current, uiText(Res.string.editor_recipe_duplicated, copy.name))
         }
@@ -1547,19 +1572,27 @@ open class EditorViewModel(
         )
     }
 
-    fun copyCurrentRecipe() {
+    /** Copies the [parts] chosen in the dialog; pasting writes only those over the other photo. */
+    fun copyCurrentRecipe(parts: Set<RecipePart>) {
         copiedRecipe = state.value.recipe ?: return
+        copiedParts = parts
+        rememberRecipeParts(parts)
         mutableState.update { it.copy(canPasteRecipe = true, recipeNotice = uiText(Res.string.editor_recipe_copied)) }
     }
 
     fun pasteCopiedRecipe() {
         val source = copiedRecipe ?: return
-        applyReusableRecipe(source, uiText(Res.string.editor_recipe_pasted))
+        applyReusableRecipe(source, copiedParts, uiText(Res.string.editor_recipe_pasted))
     }
 
     fun applySavedRecipe(id: String) {
         val saved = state.value.savedRecipes.firstOrNull { it.id == id } ?: return
-        applyReusableRecipe(saved.recipe, uiText(Res.string.editor_recipe_applied, saved.name), label = saved.name.asUiText())
+        applyReusableRecipe(
+            saved.recipe,
+            saved.appliedParts,
+            uiText(Res.string.editor_recipe_applied, saved.name),
+            label = saved.name.asUiText(),
+        )
         // The "Recent" tab only exists because this is recorded; without a stamp the recipe would
         // never get there, however much it was used.
         viewModelScope.launch {
@@ -1571,7 +1604,13 @@ open class EditorViewModel(
     /** Applies one of the app's presets. The preset is code; only its last use is recorded. */
     fun applyBuiltInRecipe(id: String) {
         val builtIn = BUILT_IN_RECIPES.firstOrNull { it.id == id } ?: return
-        applyReusableRecipe(builtIn.recipe, uiText(Res.string.editor_filter_applied, builtIn.nameText()), label = builtIn.nameText())
+        // The app's filters are looks: they never crop, tilt or mask the photo they are put on.
+        applyReusableRecipe(
+            builtIn.recipe,
+            RecipePart.LOOK,
+            uiText(Res.string.editor_filter_applied, builtIn.nameText()),
+            label = builtIn.nameText(),
+        )
         val mark = state.value.builtInMarks.firstOrNull { it.id == id } ?: BuiltInRecipeMark(id)
         viewModelScope.launch {
             runCatching { savedRecipes.saveBuiltInMark(mark.copy(usedAt = Instant.now().toString())) }
@@ -1599,13 +1638,14 @@ open class EditorViewModel(
         }
     }
 
-    fun saveCurrentRecipe(name: String, collection: String) {
+    fun saveCurrentRecipe(name: String, collection: String, parts: Set<RecipePart>) {
         val current = state.value.recipe ?: return
         val cleanName = name.trim()
         if (cleanName.isBlank()) {
             mutableState.update { it.copy(recipeNotice = uiText(Res.string.editor_recipe_name_needed)) }
             return
         }
+        rememberRecipeParts(parts)
         val now = Instant.now().toString()
         val saved = SavedRecipe(
             id = UUID.randomUUID().toString(),
@@ -1615,6 +1655,7 @@ open class EditorViewModel(
             recipe = current,
             createdAt = now,
             updatedAt = now,
+            parts = parts,
         )
         viewModelScope.launch {
             runCatching { savedRecipes.save(saved) }
@@ -1626,7 +1667,7 @@ open class EditorViewModel(
         }
     }
 
-    fun updateSavedRecipe(id: String, name: String, collection: String) {
+    fun updateSavedRecipe(id: String, name: String, collection: String, parts: Set<RecipePart>) {
         val existing = state.value.savedRecipes.firstOrNull { it.id == id } ?: return
         val cleanName = name.trim()
         if (cleanName.isBlank()) return
@@ -1634,6 +1675,7 @@ open class EditorViewModel(
             name = cleanName,
             collection = collection.trim(),
             updatedAt = Instant.now().toString(),
+            parts = existing.partsAfterChoosing(parts),
         )
         viewModelScope.launch {
             runCatching { savedRecipes.save(updated) }
@@ -1655,6 +1697,11 @@ open class EditorViewModel(
     }
 
     fun consumeRecipeNotice() = mutableState.update { it.copy(recipeNotice = null) }
+
+    private fun rememberRecipeParts(parts: Set<RecipePart>) {
+        configuration.rememberRecipeParts(parts)
+        mutableState.update { it.copy(recipeParts = parts) }
+    }
 
     fun undo() = applyHistoryMove { history.undo() }
 
@@ -1811,11 +1858,16 @@ open class EditorViewModel(
         mutableState.update { it.copy(recipeNotice = uiText(Res.string.editor_version_applied, version.deviceName)) }
     }
 
-    private fun applyReusableRecipe(source: EditRecipe, message: UiText, label: UiText = uiText(Res.string.editor_history_recipe)) {
+    private fun applyReusableRecipe(
+        source: EditRecipe,
+        parts: Set<RecipePart>,
+        message: UiText,
+        label: UiText = uiText(Res.string.editor_history_recipe),
+    ) {
         val current = state.value.recipe ?: return
         editStart = null
         pendingChange = null
-        val applied = source.rebasedOnto(current, Instant.now().toString())
+        val applied = source.rebasedOnto(current, Instant.now().toString(), parts)
         setRecipeAndSave(applied)
         pushHistory(
             HistoryEntry(
@@ -2168,16 +2220,34 @@ internal fun EditRecipe.openedForEditing(): EditRecipe {
     )
 }
 
-/** Applying a recipe stamps it with the current process: its white balance is converted first. */
-internal fun EditRecipe.rebasedOnto(target: EditRecipe, now: String): EditRecipe = withLightWhiteBalance().copy(
-    assetId = target.assetId,
-    originalChecksum = target.originalChecksum,
-    createdAt = target.createdAt,
-    updatedAt = now,
-    derivedAssetId = null,
-    geometry = geometry.activeAtProcess(processVersion),
-    processVersion = CURRENT_PROCESS_VERSION,
-)
+/**
+ * Applying a recipe stamps the result with the current process: both white balances are converted
+ * first, and both geometries woken as their process had them. What [parts] leaves out stays the target's.
+ */
+internal fun EditRecipe.rebasedOnto(
+    target: EditRecipe,
+    now: String,
+    parts: Set<RecipePart> = RecipePart.entries.toSet(),
+): EditRecipe {
+    val source = withLightWhiteBalance().copy(geometry = geometry.activeAtProcess(processVersion))
+    val base = target.withLightWhiteBalance().copy(geometry = target.geometry.activeAtProcess(target.processVersion))
+    return base.withPartsFrom(source, parts).copy(
+        updatedAt = now,
+        derivedAssetId = null,
+        processVersion = CURRENT_PROCESS_VERSION,
+    )
+}
+
+/** The parts in which [other] differs from this recipe. */
+internal fun EditRecipe.changedParts(other: EditRecipe): Set<RecipePart> =
+    RecipePart.entries.filterTo(mutableSetOf()) { withPartsFrom(other, setOf(it)) != this }
+
+/** What a recipe from [this] source writes over a photo. */
+internal val RecipeSource.appliedParts: Set<RecipePart>
+    get() = when (this) {
+        is RecipeSource.Saved -> saved.appliedParts
+        is RecipeSource.BuiltIn, is RecipeSource.New -> RecipePart.LOOK
+    }
 
 private fun Geometry.activeAtProcess(processVersion: Int): Geometry = copy(
     cropRect = if (processVersion >= 6) cropRect else CropRect(),

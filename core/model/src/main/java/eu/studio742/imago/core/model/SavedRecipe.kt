@@ -13,7 +13,14 @@ data class SavedRecipe(
     val isFavorite: Boolean = false,
     /** When it was last applied. Null while it never has been. */
     val usedAt: String? = null,
-)
+    /**
+     * What applying it writes over a photo. [recipe] is kept whole, so that a part switched on later
+     * still has its values. Null in a recipe saved before the choice existed.
+     */
+    val parts: Set<RecipePart>? = null,
+) {
+    val appliedParts: Set<RecipePart> get() = parts ?: RecipePart.LEGACY
+}
 
 /**
  * What the person marked on one of the app's presets. The preset itself is code and never changes;
