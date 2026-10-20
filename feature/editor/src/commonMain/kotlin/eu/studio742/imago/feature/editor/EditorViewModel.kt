@@ -23,6 +23,7 @@ import eu.studio742.imago.core.render.pixelWidth
 import eu.studio742.imago.core.render.softwareBitmap
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -1945,7 +1946,6 @@ open class EditorViewModel(
             }.onSuccess { message ->
                 mutableState.update { it.copy(isExporting = false, exportPhase = null, exportMessage = message) }
             }.onFailure { error ->
-                error.printStackTrace() // TEMP-DEBUG
                 mutableState.update {
                     it.copy(
                         isExporting = false,
@@ -2420,9 +2420,16 @@ open class EditorViewModel(
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
             delay(1_000)
-            runCatching { recipes.save(recipe) }
-                .onSuccess { mutableState.update { it.copy(isSaving = false) } }
-                .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(), isSaving = false) } }
+            try {
+                recipes.save(recipe)
+                mutableState.update { it.copy(isSaving = false) }
+            } catch (cancelled: CancellationException) {
+                // The next change cancelled this save to make its own: not a failure. Caught as one,
+                // a quick series of adjustments on a slow save (an Immich photo) showed an error.
+                throw cancelled
+            } catch (error: Exception) {
+                mutableState.update { it.copy(error = error.toUiText(), isSaving = false) }
+            }
         }
     }
 

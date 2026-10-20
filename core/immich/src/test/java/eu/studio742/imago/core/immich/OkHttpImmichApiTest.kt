@@ -470,6 +470,24 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun aBucketTimestampWithoutAZoneIsUtc() = runTest {
+        // Immich 3 writes the bucket's timestamps without the zone. The contract says UTC: read so,
+        // the upload of an edit gets an ISO 8601 datetime it accepts, and the local time is not empty.
+        server.enqueue(
+            MockResponse().setBody(
+                """{"id":["a1"],"fileCreatedAt":["2026-10-04T18:20:00"],"isFavorite":[false],"isImage":[true],
+                   "isTrashed":[false],"duration":[null],"ratio":[1.5],"localOffsetHours":[1.0],
+                   "visibility":["timeline"]}""".trimIndent(),
+            ),
+        )
+
+        val asset = api.getTimeBucketAssets(connection(), "2026-10-01").single()
+
+        assertEquals("2026-10-04T18:20:00Z", asset.fileCreatedAt)
+        assertEquals("2026-10-04T19:20", asset.localDateTime)
+    }
+
+    @Test
     fun aMonthSaysWhichPhotosAreStackCoversAndHowManyTheyHold() = runTest {
         server.enqueue(
             MockResponse().setBody(

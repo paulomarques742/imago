@@ -44,7 +44,9 @@ import java.io.IOException
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import kotlin.math.roundToLong
 
 class OkHttpImmichApi(
@@ -1183,7 +1185,7 @@ private data class TimeBucketAssetsDto(
         if (isTrashed.getOrNull(index) == true) return@mapNotNull null
         val visible = visibility.getOrNull(index)
         if (visible != null && !visible.equals("timeline", ignoreCase = true)) return@mapNotNull null
-        val createdAt = fileCreatedAt.getOrNull(index) ?: return@mapNotNull null
+        val createdAt = fileCreatedAt.getOrNull(index)?.let(::utcInstant) ?: return@mapNotNull null
         val image = isImage.getOrNull(index) ?: true
         // The aspect ratio is what the grid needs to reserve the tile; the real dimensions come
         // with the detail. A thousand is just the scale at which the ratio is stored without losing precision.
@@ -1215,6 +1217,16 @@ private data class TimeBucketAssetsDto(
  * runtime.
  */
 private const val BUCKET_RATIO_SCALE = 1_000.0
+
+/**
+ * The bucket's timestamp as an ISO instant. The contract says UTC, and Immich 2 wrote it with the
+ * zone; Immich 3 writes it without ("2026-10-04T18:20:00"). Kept that way, the upload of an edit was
+ * refused — it wants an ISO 8601 datetime with a zone — and the local time below came out empty.
+ */
+private fun utcInstant(value: String): String =
+    runCatching { OffsetDateTime.parse(value) }.map { value }
+        .recoverCatching { LocalDateTime.parse(value).toInstant(ZoneOffset.UTC).toString() }
+        .getOrDefault(value)
 
 /**
  * The local time the photo was taken, which is how Immich groups the months.
