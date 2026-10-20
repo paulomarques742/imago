@@ -76,6 +76,12 @@ class PhoneScreensCapture {
     private val out = System.getProperty("imago.capture.out")?.let(::File)
     private val photos = System.getProperty("imago.capture.photos")?.let { Path.of(it) }
     private val profile = System.getProperty("imago.capture.profile")?.let { Path.of(it) }
+    /**
+     * A `.env` file with `IMMICH_URL` and `IMMICH_API_KEY`: the run connects to that server and shows
+     * its library instead of the folder. Read from the file so the key never goes on a command line.
+     */
+    private val immichEnv = System.getProperty("imago.capture.immichEnv")?.let(::File)
+
     /** Which scenes to make (`scroll,edit,compose`); all of them when not given. */
     private val scenes = System.getProperty("imago.capture.scenes")?.split(",")?.map(String::trim)
 
@@ -92,6 +98,12 @@ class PhoneScreensCapture {
         val paths = AppPaths(profile!!)
         val graph = DesktopDataGraph(paths.root)
         runBlocking { graph.folders.addFolder(photos!!) }
+        immichEnv?.let { file ->
+            val env = file.readLines().filter { "=" in it && !it.startsWith("#") }
+                .associate { it.substringBefore("=").trim() to it.substringAfter("=").trim().trim('"') }
+            runBlocking { graph.configuration.saveLibrary(null, "Home", env.getValue("IMMICH_URL"), env.getValue("IMMICH_API_KEY")) }
+            graph.configuration.selectLibrary(graph.configuration.libraries.value.first { !it.isDevice }.id)
+        }
         graph.configuration.completeWelcome()
         val languageSettings = DesktopLanguageSettings(paths.root.resolve("language"))
         val secrets = WindowsSecretStore(paths.secrets)
@@ -287,6 +299,67 @@ class PhoneScreensCapture {
                 wb.pause(20)
                 clip("33-wb", frames = wb.frames) { wb.run(it) }
                 tree("33-wb")
+            }
+            // Reel 03: the library on an Immich server, a photo edited, and the export back to it.
+            if (wants("immich-explore")) {
+                tree("41-immich-library")
+                onNodeWithContentDescription("Open porto-river.jpg").performScrollTo().performClick()
+                settle(4_000)
+                onNodeWithText("Edit").performClick()
+                settle(5_000)
+                shot("42-editor")
+                onNodeWithContentDescription("Export").performClick()
+                settle(2_500)
+                shot("43-export")
+                tree("43-export")
+            }
+            // Reel 03, for real: the server's library scrolling, the photo edited by a finger, and the
+            // edit sent back to Immich, where it is stacked on the original. The export happens once
+            // per run: each run adds one more edit to the demo account's stack.
+            if (wants("immich")) {
+                clip("41-scroll", frames = 60) { frame ->
+                    when {
+                        frame == 0 -> screen.performTouchInput { down(Offset(width * 0.5f, height * 0.8f)) }
+                        frame < 45 -> screen.performTouchInput { moveBy(Offset(0f, -20f)) }
+                        frame == 45 -> screen.performTouchInput { up() }
+                    }
+                }
+                settle(1_000)
+                onNodeWithContentDescription("Open porto-river.jpg").performScrollTo().performClick()
+                settle(4_000)
+                onNodeWithText("Edit").performClick()
+                settle(5_000)
+                onAllNodesWithText("Adjust")[0].performClick()
+                settle(2_000)
+                val edit = Gestures(this)
+                edit.pause(8)
+                edit.drag("Exposure", dx = 70f, frames = 14)
+                edit.pause(8)
+                edit.drag("Contrast", dx = 130f, frames = 14)
+                edit.pause(8)
+                edit.scrollPanel(dy = -330f, frames = 12)
+                edit.pause(4)
+                edit.drag("Highlights", dx = -220f, frames = 16)
+                edit.pause(6)
+                edit.drag("Shadows", dx = 170f, frames = 14)
+                edit.pause(8)
+                edit.tap(contentDescription = "Color")
+                edit.pause(10)
+                edit.drag("Vibrance", dx = 200f, frames = 14)
+                edit.pause(16)
+                clip("42-edit", frames = edit.frames) { edit.run(it) }
+                tree("42-edit")
+
+                val send = Gestures(this)
+                send.pause(6)
+                send.tap(contentDescription = "Export")
+                send.pause(24)
+                send.tapText("Send to Immich")
+                send.pause(60)
+                clip("43-send", frames = send.frames) { send.run(it) }
+                settle(6_000)
+                shot("44-sent")
+                tree("44-sent")
             }
             // The tablet: the same photo, before and after the phone edited it (run with
             // -Pimago.capture.device=tablet on the profile the phone's run used).
