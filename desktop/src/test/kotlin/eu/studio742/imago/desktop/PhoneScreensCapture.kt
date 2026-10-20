@@ -259,6 +259,35 @@ class PhoneScreensCapture {
                 clip("24-good", frames = good.frames) { good.run(it) }
                 tree("24-good")
             }
+            // Reel 05: an orange café under tungsten light, and the white balance eyedropper.
+            if (wants("wb")) {
+                onNodeWithContentDescription("Open cafe-tungsten.jpg").performScrollTo().performClick()
+                settle(3_000)
+                onNodeWithText("Edit").performClick()
+                settle(4_000)
+                onAllNodesWithText("Adjust")[0].performClick()
+                settle(1_500)
+                onNodeWithContentDescription("Color").performClick()
+                settle(1_500)
+                shot("31-cafe")
+                onNodeWithContentDescription("Pick the white balance on the photo").performClick()
+                settle(2_000)
+                shot("32-picker")
+                // The loupe, from the middle of the photo to the white cups on the shelf: the colour
+                // corrects itself live as it moves. Then accepted, and the original once for comparison.
+                val wb = Gestures(this)
+                wb.pause(12)
+                wb.dragBetween(Offset(539f, 1104f), Offset(917f, 1017f), frames = 45)
+                wb.pause(20)
+                wb.tap(contentDescription = "Apply")
+                wb.pause(24)
+                wb.tap(contentDescription = "Show original")
+                wb.pause(30)
+                wb.tap(contentDescription = "Back to the edited version")
+                wb.pause(20)
+                clip("33-wb", frames = wb.frames) { wb.run(it) }
+                tree("33-wb")
+            }
             // The tablet: the same photo, before and after the phone edited it (run with
             // -Pimago.capture.device=tablet on the profile the phone's run used).
             for (moment in listOf("before", "after")) {
@@ -370,6 +399,21 @@ class PhoneScreensCapture {
                         }
                         frames - 1 -> root.performTouchInput { moveTo(start + Offset(0f, dy)); up() }
                         else -> root.performTouchInput { moveTo(start + Offset(0f, dy * ease(frame / (frames - 1f)))) }
+                    }
+                }
+            }
+        }
+
+        /** A finger from [from] to [to], in the window's pixels: the white balance loupe, for one. */
+        fun dragBetween(from: Offset, to: Offset, frames: Int) {
+            for (frame in 0 until frames) {
+                steps += {
+                    val root = test.onAllNodes(isRoot())[0]
+                    val at = from + (to - from) * ease(frame / (frames - 1f))
+                    when (frame) {
+                        0 -> root.performTouchInput { down(from) }
+                        frames - 1 -> root.performTouchInput { moveTo(to); up() }
+                        else -> root.performTouchInput { moveTo(at) }
                     }
                 }
             }
