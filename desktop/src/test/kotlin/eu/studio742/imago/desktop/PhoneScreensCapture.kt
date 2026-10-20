@@ -218,7 +218,7 @@ class PhoneScreensCapture {
                 original.tap(contentDescription = "Show original")
                 original.pause(45)
                 // The same button, now offering the edit back.
-                original.tap(contentDescription = "Show edited")
+                original.tap(contentDescription = "Back to the edited version")
                 original.pause(12)
                 clip("22-original", frames = original.frames) { original.run(it) }
 
@@ -226,9 +226,9 @@ class PhoneScreensCapture {
                 val history = Gestures(this)
                 history.tapText("History")
                 history.pause(16)
-                history.tapTextStarting("Contrast,")
+                history.tapText("Contrast")
                 history.pause(16)
-                history.tapTextStarting("Exposure,")
+                history.tapText("Exposure")
                 history.pause(16)
                 history.tap(contentDescription = "Undo")
                 history.pause(20)
@@ -252,9 +252,8 @@ class PhoneScreensCapture {
                 good.drag("Shadows", dx = 150f, frames = 14)
                 good.pause(8)
                 good.tap(contentDescription = "Color")
+                // The Color tab keeps where it was scrolled: Vibrance is already on screen.
                 good.pause(10)
-                good.scrollPanel(dy = -330f, frames = 10, from = "Temp")
-                good.pause(4)
                 good.drag("Vibrance", dx = 150f, frames = 14)
                 good.pause(16)
                 clip("24-good", frames = good.frames) { good.run(it) }
@@ -379,15 +378,6 @@ class PhoneScreensCapture {
         fun tapText(text: String) {
             // The first match: a family's tab comes before a layout that may share its name.
             steps += { test.onAllNodesWithText(text)[0].performClick() }
-        }
-
-        /** Taps the first node whose text starts with [prefix]: a history entry reads "Contrast, …". */
-        fun tapTextStarting(prefix: String) {
-            steps += {
-                test.onAllNodes(hasText(prefix, substring = true)).filter(SemanticsMatcher("starts with $prefix") { node ->
-                    node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text.startsWith(prefix) }
-                })[0].performClick()
-            }
         }
 
         fun tap(contentDescription: String) {
