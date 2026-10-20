@@ -361,6 +361,33 @@ class PhoneScreensCapture {
                 shot("44-sent")
                 tree("44-sent")
             }
+            // Reel 06, One slider: Dehaze. A hazy valley, the slider pushed both ways, then the original.
+            if (wants("dehaze")) {
+                onNodeWithContentDescription("Open haze-valley.jpg").performScrollTo().performClick()
+                settle(3_000)
+                onNodeWithText("Edit").performClick()
+                settle(4_000)
+                onAllNodesWithText("Adjust")[0].performClick()
+                settle(1_500)
+                onNodeWithContentDescription("Detail").performClick()
+                settle(1_500)
+                shot("51-detail")
+                tree("51-detail")
+                val dehaze = Gestures(this)
+                dehaze.pause(14)
+                dehaze.drag("Dehaze", dx = 275f, frames = 30)
+                dehaze.pause(30)
+                dehaze.drag("Dehaze", dx = -495f, frames = 36)
+                dehaze.pause(30)
+                dehaze.drag("Dehaze", dx = 385f, frames = 26)
+                dehaze.pause(24)
+                dehaze.tap(contentDescription = "Show original")
+                dehaze.pause(30)
+                dehaze.tap(contentDescription = "Back to the edited version")
+                dehaze.pause(20)
+                clip("52-dehaze", frames = dehaze.frames) { dehaze.run(it) }
+                tree("52-dehaze")
+            }
             // The tablet: the same photo, before and after the phone edited it (run with
             // -Pimago.capture.device=tablet on the profile the phone's run used).
             for (moment in listOf("before", "after")) {
