@@ -16,6 +16,7 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 import eu.studio742.imago.core.model.LocalMask
+import eu.studio742.imago.core.model.MaskComponent
 import eu.studio742.imago.core.model.MaskShape
 import eu.studio742.imago.core.render.FrameGeometry
 
@@ -60,6 +61,16 @@ class MaskProjection(
         return Offset(bounds.left + scratch[0] * bounds.width, bounds.top + scratch[1] * bounds.height)
     }
 
+    /**
+     * A distance on screen, from [at], measured on the photo in units of its height — how much of the
+     * photo a brush of [radius] pixels covers at this zoom, crop and rotation.
+     */
+    fun imageRadius(at: Offset, radius: Float): Float {
+        val centre = toImage(at)
+        val edge = toImage(at + Offset(radius, 0f))
+        return hypot((edge.x - centre.x) * imageAspect, edge.y - centre.y)
+    }
+
     /** From screen pixels to normalised image coordinates. */
     fun toImage(position: Offset): Offset {
         val u = if (bounds.width != 0f) (position.x - bounds.left) / bounds.width else 0f
@@ -89,9 +100,12 @@ private fun MaskProjection.handleAt(
     return toScreen(centreX + dx / imageAspect, centreY + dy)
 }
 
-/** Where this mask's handles are, or null if it has no shape at all. */
-fun maskHandlesOf(mask: LocalMask, projection: MaskProjection): MaskHandles? {
-    val component = mask.components.firstOrNull() ?: return null
+/** Where the handles of one of the mask's components are, or null if it has no such component. */
+fun maskHandlesOf(mask: LocalMask, projection: MaskProjection, component: Int = 0): MaskHandles? =
+    mask.components.getOrNull(component)?.let { maskHandlesOf(it, projection) }
+
+/** Where a component's handles are, or null if it carries no shape. */
+fun maskHandlesOf(component: MaskComponent, projection: MaskProjection): MaskHandles? {
     return when (component.shape) {
         MaskShape.RADIAL -> component.radial?.let { radial ->
             MaskHandles(
@@ -117,8 +131,24 @@ fun maskHandlesOf(mask: LocalMask, projection: MaskProjection): MaskHandles? {
                 rotate = projection.handleAt(linear.x, linear.y, linear.angle, ROTATE_HANDLE_GAP, 0f),
             )
         }
+        // A brush has no handles: it is painted, not dragged.
+        MaskShape.BRUSH -> null
     }
 }
+
+/**
+ * Where a component's pin goes: a gradient's centre, or the start of a brush's first stroke, which is
+ * where Lightroom puts it. Null for a brush with nothing painted.
+ */
+fun componentPin(component: MaskComponent, projection: MaskProjection): Offset? =
+    maskHandlesOf(component, projection)?.centre
+        ?: component.brush?.strokes?.firstOrNull()?.points?.takeIf { it.size >= 2 }?.let { projection.toScreen(it[0], it[1]) }
+
+/**
+ * The brush's circle on the photo: where the finger or the pointer is, how far the brush reaches and
+ * where its hard core ends.
+ */
+data class BrushCursor(val centre: Offset, val radius: Float, val feather: Float)
 
 /**
  * Which of the handles the finger grabbed, if any.
@@ -139,37 +169,86 @@ fun hitMaskHandle(handles: MaskHandles, position: Offset, radius: Float): MaskHa
 }
 
 /**
- * The mask's frame over the photo: the shape and the handles.
+ * The mask's frame over the photo: the shapes, the selected one's handles, and a pin on each of the
+ * others — Lightroom's pins, which are how another shape of the same mask is picked on the photo.
  *
  * The red **fill** is not drawn here — it comes out of the pipeline itself, in `COMPOSITE`. Drawing
  * it here too would be a second interpretation of the mask, and the two would disagree as soon as
- * there was inversion or composition of components. Only the outline is drawn here, which is the
+ * there was inversion or composition of components. Only the outlines are drawn here, which is the
  * only part the pipeline cannot show.
  */
 @Composable
 fun MaskOverlay(
     mask: LocalMask,
+    selectedComponent: Int,
     bounds: PhotoBounds,
     geometry: FrameGeometry,
     modifier: Modifier = Modifier,
+    brushCursor: BrushCursor? = null,
 ) {
     Canvas(modifier = modifier) {
         val projection = MaskProjection(bounds, geometry)
-        drawMaskOutline(mask, projection)
-        maskHandlesOf(mask, projection)?.let { handles ->
-            listOfNotNull(handles.radiusX, handles.radiusY, handles.width).forEach { drawHandle(it, filled = false) }
-            drawHandle(handles.rotate, filled = false)
-            drawHandle(handles.centre, filled = true)
+        mask.components.forEachIndexed { index, component ->
+            if (index == selectedComponent) return@forEachIndexed
+            drawComponentOutline(component, projection, OTHER_COMPONENT_ALPHA)
+            componentPin(component, projection)?.let { drawPin(it) }
         }
+        mask.components.getOrNull(selectedComponent)?.let { selected ->
+            drawComponentOutline(selected, projection)
+            val handles = maskHandlesOf(selected, projection)
+            if (handles != null) {
+                listOfNotNull(handles.radiusX, handles.radiusY, handles.width).forEach { drawHandle(it, filled = false) }
+                drawHandle(handles.rotate, filled = false)
+                drawHandle(handles.centre, filled = true)
+            } else {
+                componentPin(selected, projection)?.let { drawHandle(it, filled = true) }
+            }
+        }
+        brushCursor?.let { drawBrushCursor(it) }
+    }
+}
+
+/** Two circles: the brush's reach, and dimmer, where its feather begins. */
+private fun DrawScope.drawBrushCursor(cursor: BrushCursor) {
+    val stroke = OUTLINE_WIDTH.toPx()
+    drawCircle(Color.Black.copy(alpha = 0.5f), radius = cursor.radius + stroke, center = cursor.centre, style = Stroke(width = stroke))
+    drawCircle(OUTLINE_COLOR, radius = cursor.radius, center = cursor.centre, style = Stroke(width = stroke))
+    val inner = cursor.radius * (1f - (cursor.feather / 100f).coerceIn(0f, 1f))
+    if (inner > stroke * 2 && inner < cursor.radius - stroke) {
+        drawCircle(OUTLINE_COLOR.copy(alpha = 0.45f), radius = inner, center = cursor.centre, style = Stroke(width = stroke))
     }
 }
 
 /**
- * The mask's shape without its handles: the editor draws the handles on top, the "Show your edit"
- * video draws the shape alone while the mask's sliders rise.
+ * The component whose pin is under the finger, among those not selected; null when none is. The
+ * selected one's handles are tested first by the caller, so a pin under a handle never steals it.
+ */
+fun hitMaskComponentPin(
+    mask: LocalMask,
+    selectedComponent: Int,
+    projection: MaskProjection,
+    position: Offset,
+    radius: Float,
+): Int? = mask.components.indices
+    .filter { it != selectedComponent }
+    .mapNotNull { index ->
+        componentPin(mask.components[index], projection)?.let { centre ->
+            index to hypot(centre.x - position.x, centre.y - position.y)
+        }
+    }
+    .filter { (_, distance) -> distance <= radius }
+    .minByOrNull { (_, distance) -> distance }
+    ?.first
+
+/**
+ * The mask's shapes without their handles: the editor draws the handles on top, the "Show your edit"
+ * video draws the shapes alone while the mask's sliders rise.
  */
 internal fun DrawScope.drawMaskOutline(mask: LocalMask, projection: MaskProjection, alpha: Float = 1f) {
-    val component = mask.components.firstOrNull() ?: return
+    mask.components.forEach { drawComponentOutline(it, projection, alpha) }
+}
+
+private fun DrawScope.drawComponentOutline(component: MaskComponent, projection: MaskProjection, alpha: Float = 1f) {
     when (component.shape) {
         MaskShape.RADIAL -> component.radial?.let { radial ->
             // The ellipse is drawn point by point and projected, and not with `drawOval`: under a
@@ -183,6 +262,8 @@ internal fun DrawScope.drawMaskOutline(mask: LocalMask, projection: MaskProjecti
                 drawProjectedLine(projection, linear.x, linear.y, linear.angle, offset, lineAlpha * alpha)
             }
         }
+        // What a brush covers is shown by the red, which comes from the pipeline itself.
+        MaskShape.BRUSH -> Unit
     }
 }
 
@@ -228,6 +309,13 @@ private fun DrawScope.drawProjectedLine(
         end = end,
         strokeWidth = OUTLINE_WIDTH.toPx(),
     )
+}
+
+/** Another shape's pin: smaller and dimmer than a handle, so it does not read as one. */
+private fun DrawScope.drawPin(position: Offset) {
+    val radius = PIN_RADIUS.toPx()
+    drawCircle(color = Color.Black.copy(alpha = 0.5f), radius = radius + HANDLE_STROKE.toPx(), center = position)
+    drawCircle(color = OUTLINE_COLOR.copy(alpha = OTHER_COMPONENT_ALPHA), radius = radius, center = position)
 }
 
 private fun DrawScope.drawHandle(position: Offset, filled: Boolean) {
@@ -290,6 +378,7 @@ fun maskAngleFrom(
 fun MaskShape.rotateHandleOffset(): Float = when (this) {
     MaskShape.RADIAL -> 180f
     MaskShape.LINEAR -> 0f
+    MaskShape.BRUSH -> 0f
 }
 
 private const val ELLIPSE_STEPS = 64
@@ -306,22 +395,26 @@ private const val LINE_REACH = 4f
 private val HANDLE_RADIUS = 10.dp
 private val HANDLE_RADIUS_SECONDARY = 9.dp
 private val HANDLE_STROKE = 2.dp
+private val PIN_RADIUS = 6.dp
 private val OUTLINE_WIDTH = 1.5.dp
+
+/** The shapes of the mask that are not being edited: present, but behind the one that is. */
+private const val OTHER_COMPONENT_ALPHA = 0.45f
 
 /** The rotation handle's offset, in units of image height. */
 private const val ROTATE_HANDLE_GAP = 0.11f
 private val OUTLINE_COLOR = Color(0xFFF2F2F0)
 
-/** The mask's centre in normalised image coordinates, or null if it has no shape. */
-fun LocalMask.centreInImage(): Offset? = components.firstOrNull()?.let { component ->
-    component.radial?.let { Offset(it.x, it.y) } ?: component.linear?.let { Offset(it.x, it.y) }
+/** A component's centre in normalised image coordinates, or null if it has no shape. */
+fun LocalMask.centreInImage(component: Int = 0): Offset? = components.getOrNull(component)?.let { shape ->
+    shape.radial?.let { Offset(it.x, it.y) } ?: shape.linear?.let { Offset(it.x, it.y) }
 }
 
-/** The mask's angle, in degrees. */
-fun LocalMask.angleInImage(): Float = components.firstOrNull()?.let { component ->
-    component.radial?.angle ?: component.linear?.angle
+/** A component's angle, in degrees. */
+fun LocalMask.angleInImage(component: Int = 0): Float = components.getOrNull(component)?.let { shape ->
+    shape.radial?.angle ?: shape.linear?.angle
 } ?: 0f
 
-/** The angular offset of this mask's rotation handle. */
-fun LocalMask.rotateHandleOffset(): Float =
-    components.firstOrNull()?.shape?.rotateHandleOffset() ?: 0f
+/** The angular offset of a component's rotation handle. */
+fun LocalMask.rotateHandleOffset(component: Int = 0): Float =
+    components.getOrNull(component)?.shape?.rotateHandleOffset() ?: 0f

@@ -105,6 +105,7 @@ internal fun Adjustment.reelPanel(): ReelPanel = when (this) {
     Adjustment.PERSPECTIVE_ASPECT, Adjustment.PERSPECTIVE_SCALE, Adjustment.PERSPECTIVE_OFFSET_X,
     Adjustment.PERSPECTIVE_OFFSET_Y,
     -> ReelPanel.GEOMETRY
+    Adjustment.MASK_AMOUNT -> ReelPanel.MASKS
 }
 
 /** The order of the editor's sliders inside each panel. */
@@ -118,7 +119,8 @@ private val EFFECTS_ORDER = listOf(
     Adjustment.VIGNETTE_AMOUNT, Adjustment.VIGNETTE_MIDPOINT, Adjustment.VIGNETTE_ROUNDNESS,
     Adjustment.VIGNETTE_FEATHER, Adjustment.GRAIN_AMOUNT, Adjustment.GRAIN_SIZE, Adjustment.GRAIN_ROUGHNESS,
 )
-private val LOCAL_ORDER = LIGHT_ORDER + COLOR_ORDER + DETAIL_ORDER
+/** The mask panel's order: the Amount on top, as in the editor, then the thirteen adjustments. */
+private val LOCAL_ORDER = listOf(Adjustment.MASK_AMOUNT) + LIGHT_ORDER + COLOR_ORDER + DETAIL_ORDER
 
 /**
  * The value a control shows for [recipe], or null for the controls that have no number — a curve,
@@ -131,7 +133,7 @@ fun ReelControl.valueIn(recipe: EditRecipe): Float? = when (this) {
     is ReelControl.Slider -> recipe.adjustmentValue(adjustment)
     is ReelControl.HslSlider -> recipe.hslBand(band).component(component)
     is ReelControl.GradeSlider -> recipe.colorGradeWheel(wheel).component(component)
-    is ReelControl.MaskSlider -> recipe.localAdjustmentValue(maskId, adjustment)
+    is ReelControl.MaskSlider -> recipe.maskSliderValue(maskId, adjustment)
     ReelControl.Straighten -> recipe.geometry.straighten
     is ReelControl.Curve, ReelControl.Rotation, ReelControl.FlipHorizontal, ReelControl.FlipVertical,
     ReelControl.Crop, ReelControl.Upright, is ReelControl.MaskArea,
@@ -186,7 +188,7 @@ internal fun changedControls(from: EditRecipe, to: EditRecipe): List<ReelControl
             add(ReelControl.MaskArea(id))
         }
         LOCAL_ORDER
-            .filter { from.localAdjustmentValue(id, it) != to.localAdjustmentValue(id, it) }
+            .filter { from.maskSliderValue(id, it) != to.maskSliderValue(id, it) }
             .forEach { add(ReelControl.MaskSlider(id, it)) }
     }
 }

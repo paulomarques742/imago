@@ -63,6 +63,7 @@ class RecipeEditorTest {
         when (method.name) {
             "getRecipePartsChoice" -> return@newProxyInstance partsChoice
             "setRecipePartsChoice" -> return@newProxyInstance Unit.also { partsChoice = args[0] as String? }
+            "getBrushTool" -> return@newProxyInstance null
         }
         error("${T::class.simpleName}.${method.name} is not used by the recipe editor")
     } as T

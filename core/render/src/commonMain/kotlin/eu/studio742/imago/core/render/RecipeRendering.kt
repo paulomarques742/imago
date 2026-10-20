@@ -5,7 +5,11 @@ import eu.studio742.imago.core.model.CurvePoint
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.Geometry
 import eu.studio742.imago.core.model.LocalMask
-import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
+import eu.studio742.imago.core.model.BRUSH_MASKS_PROCESS_VERSION
+import eu.studio742.imago.core.model.COMBINED_MASKS_PROCESS_VERSION
+import eu.studio742.imago.core.model.MAX_BRUSH_COMPONENTS
+import eu.studio742.imago.core.model.MAX_MASK_COMPONENTS
+import eu.studio742.imago.core.model.maxLocalMasks
 import eu.studio742.imago.core.model.MaskComponent
 import eu.studio742.imago.core.model.MaskShape
 import eu.studio742.imago.core.model.UPRIGHT_OFF
@@ -33,8 +37,12 @@ private fun EditRecipe.channelCurveLut(points: List<CurvePoint>?) =
  * The `processVersion`s keep the promise made to whoever edited before each step existed: a recipe
  * saved in version 5 did not know about crop, and reinterpreting it with the default crop would change
  * a photo the user considered finished.
+ *
+ * @param showMask a mask the editor has open: it reaches the render even with no adjustments, so that
+ *   its red overlay shows while it is being drawn — a brush has no outline, and without this nothing
+ *   at all would show where it was painting. With no adjustments it changes no pixel.
  */
-fun EditRecipe.toRenderParameters() = RenderParameters(
+fun EditRecipe.toRenderParameters(showMask: String? = null) = RenderParameters(
     temperature = whiteBalance.temp,
     tint = whiteBalance.tint,
     lightWhiteBalance = processVersion >= 13,
@@ -76,7 +84,7 @@ fun EditRecipe.toRenderParameters() = RenderParameters(
         processVersion >= 10 -> geometry.perspective.toRenderPerspective().copy(distortion = 0f)
         else -> PerspectiveParameters()
     },
-    masks = if (processVersion >= 8) masks.toRenderSpecs() else emptyList(),
+    masks = if (processVersion >= 8) masks.toRenderSpecs(processVersion, showMask) else emptyList(),
 )
 
 fun eu.studio742.imago.core.model.Perspective.toRenderPerspective() = PerspectiveParameters(
@@ -118,23 +126,57 @@ private fun eu.studio742.imago.core.model.ColorWheel.toRenderRange(): ColorGrade
  * The angle is converted to cosine and sine already here, once per component instead of once per
  * texel — and, more than that, so that the CPU and the GPU start from exactly the same two numbers
  * instead of each doing its own trigonometry.
+ *
+ * The Amount is applied here too, to the parameters: the shader and the pixel loop never learn it
+ * exists. The component budget is also enforced here and not in the GPU's uniform upload, so that a
+ * recipe past it loses the same components on both sides.
  */
-private fun List<LocalMask>.toRenderSpecs(): List<MaskRenderSpec> = asSequence()
-    .filter { it.enabled && it.components.isNotEmpty() && !it.adjustments.isNeutral }
-    .take(MAX_LOCAL_MASKS)
-    .map { mask ->
-        MaskRenderSpec(
-            components = mask.components.mapNotNull { it.toRenderComponent() },
-            inverted = mask.inverted,
-            adjustments = mask.adjustments,
-            id = mask.id,
+private fun List<LocalMask>.toRenderSpecs(processVersion: Int, showMask: String?): List<MaskRenderSpec> {
+    val combined = processVersion >= COMBINED_MASKS_PROCESS_VERSION
+    var budget = MAX_MASK_COMPONENTS
+    var brushes = 0
+    return asSequence()
+        .map { mask -> mask to if (combined) mask.effectiveAdjustments else mask.adjustments }
+        .filter { (mask, adjustments) ->
+            mask.enabled && mask.components.isNotEmpty() && (!adjustments.isNeutral || mask.id == showMask)
+        }
+        .take(maxLocalMasks(processVersion))
+        .map { (mask, adjustments) ->
+            val components = mask.components
+                .mapNotNull { it.toRenderComponent(processVersion) }
+                .take(budget)
+                .mapNotNull { component ->
+                    when {
+                        component.shape != MaskShape.BRUSH || component.strokes.isEmpty() -> component
+                        brushes < MAX_BRUSH_COMPONENTS -> component.copy(brushIndex = brushes++)
+                        else -> null
+                    }
+                }
+            budget -= components.size
+            MaskRenderSpec(
+                components = components,
+                inverted = mask.inverted,
+                adjustments = adjustments,
+                id = mask.id,
+            )
+        }
+        .filter { it.components.isNotEmpty() }
+        .toList()
+}
+
+/**
+ * A component without its shape's payload describes no region and is discarded, and so is a brush in
+ * a recipe from before brushes existed.
+ */
+private fun MaskComponent.toRenderComponent(processVersion: Int): MaskRenderComponent? = when (shape) {
+    MaskShape.BRUSH -> brush?.takeIf { processVersion >= BRUSH_MASKS_PROCESS_VERSION }?.let {
+        MaskRenderComponent(
+            shape = MaskShape.BRUSH,
+            op = op,
+            inverted = inverted,
+            strokes = it.strokes.filter { stroke -> stroke.points.size >= 2 && stroke.radius > 0f },
         )
     }
-    .filter { it.components.isNotEmpty() }
-    .toList()
-
-/** A component without its shape's payload describes no region and is discarded. */
-private fun MaskComponent.toRenderComponent(): MaskRenderComponent? = when (shape) {
     MaskShape.LINEAR -> linear?.let {
         val radians = Math.toRadians(it.angle.toDouble())
         MaskRenderComponent(

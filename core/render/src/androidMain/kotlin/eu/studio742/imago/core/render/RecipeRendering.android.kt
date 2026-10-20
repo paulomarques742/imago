@@ -23,6 +23,7 @@ fun renderRecipePreview(source: Bitmap, recipe: EditRecipe): Bitmap {
     val parameters = recipe.toRenderParameters()
     // Before the crop, which is when the original image's dimensions still exist.
     val geometry = parameters.frameGeometry(source.width, source.height)
+    val brushes = BrushRasters.of(parameters, BitmapSurface(source))
     val cropped = applyRecipeGeometry(source, recipe.activeGeometry())
     // The processor writes pixels directly: it needs a mutable ARGB_8888 bitmap. A crop may return an
     // immutable one, and Coil may hand over a hardware bitmap — in either case the copy is what serves
@@ -32,7 +33,7 @@ fun renderRecipePreview(source: Bitmap, recipe: EditRecipe): Bitmap {
         else -> cropped.copy(Bitmap.Config.ARGB_8888, true)
             .also { if (cropped !== source) cropped.recycle() }
     }
-    return BitmapPhotoProcessor.renderInPlace(working, parameters, geometry)
+    return BitmapPhotoProcessor.renderInPlace(working, parameters, geometry, brushes)
 }
 
 /**

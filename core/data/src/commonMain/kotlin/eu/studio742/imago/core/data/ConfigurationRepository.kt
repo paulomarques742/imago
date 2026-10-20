@@ -27,6 +27,11 @@ interface ConfigurationRepository {
     val reelStyle: String? get() = null
 
     fun setReelStyle(style: String) = Unit
+
+    /** The mask brush's settings, as the editor encodes them; null before the brush is first touched. */
+    val brushTool: String? get() = null
+
+    fun setBrushTool(encoded: String) = Unit
     fun source(id: String): eu.studio742.imago.core.model.LibrarySource
     suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String): ServerVersion
     suspend fun testLibrary(id: String): ServerVersion

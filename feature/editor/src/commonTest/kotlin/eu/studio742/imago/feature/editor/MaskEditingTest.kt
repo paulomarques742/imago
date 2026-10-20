@@ -1,12 +1,15 @@
 package eu.studio742.imago.feature.editor
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
+import eu.studio742.imago.core.model.MAX_MASK_COMPONENTS
+import eu.studio742.imago.core.model.MaskOp
 import eu.studio742.imago.core.model.MaskShape
 import eu.studio742.imago.core.render.toRenderParameters
 
@@ -170,5 +173,110 @@ class MaskEditingTest {
 
         assertEquals(1, working.toRenderParameters().masks.size)
         assertTrue(working.copy(processVersion = 7).toRenderParameters().masks.isEmpty())
+    }
+
+    /** A combined shape goes at the end, with its operation, and reaches the render in that order. */
+    @Test
+    fun combinedShapesKeepTheirOrderAndOperation() {
+        val (recipe, id) = withRadial()
+        val (subtracted, first) = recipe.withNewMaskComponent(id, MaskShape.LINEAR, MaskOp.SUBTRACT)
+        val (intersected, second) = subtracted.withNewMaskComponent(id, MaskShape.RADIAL, MaskOp.INTERSECT)
+
+        assertEquals(1, first)
+        assertEquals(2, second)
+        val working = intersected.withLocalAdjustment(id, Adjustment.EXPOSURE, 1f)
+        val rendered = working.toRenderParameters().masks.single().components
+        assertEquals(listOf(MaskOp.ADD, MaskOp.SUBTRACT, MaskOp.INTERSECT), rendered.map { it.op })
+        assertEquals(listOf(MaskShape.RADIAL, MaskShape.LINEAR, MaskShape.RADIAL), rendered.map { it.shape })
+    }
+
+    /** The handles of the second shape move the second shape, and leave the first where it was. */
+    @Test
+    fun geometryEditsTargetTheChosenShape() {
+        val (recipe, id) = withRadial()
+        val (combined, index) = recipe.withNewMaskComponent(id, MaskShape.RADIAL, MaskOp.SUBTRACT)
+        val shape = checkNotNull(index)
+
+        val moved = combined.withMaskMoved(id, 0.1f, 0f, component = shape)
+            .withMaskRadius(id, radiusX = 0.5f, component = shape)
+            .withMaskRotation(id, 45f, component = shape)
+
+        assertEquals(0.5f to 0.5f, moved.maskCentre(id))
+        assertEquals(0.6f, checkNotNull(moved.maskCentre(id, shape)).first, 1e-6f)
+        assertEquals(0.5f, checkNotNull(moved.maskRadii(id, shape)).first)
+        assertEquals(45f, moved.maskRotation(id, shape))
+        assertEquals(0f, moved.maskRotation(id))
+    }
+
+    /** Removing the first shape makes the next one the seed, written as Add; removing the last removes the mask. */
+    @Test
+    fun removingShapesReseedsAndFinallyRemovesTheMask() {
+        val (recipe, id) = withRadial()
+        val (combined, _) = recipe.withNewMaskComponent(id, MaskShape.LINEAR, MaskOp.SUBTRACT)
+
+        val reseeded = combined.withoutMaskComponent(id, 0)
+        val left = checkNotNull(reseeded.mask(id)).components.single()
+        assertEquals(MaskShape.LINEAR, left.shape)
+        assertEquals(MaskOp.ADD, left.op)
+
+        assertNull(reseeded.withoutMaskComponent(id, 0).mask(id))
+    }
+
+    /** The copy goes right after the original, with its shapes and adjustments, under its own id. */
+    @Test
+    fun duplicatingPutsTheCopyRightAfterTheOriginal() {
+        val (first, firstId) = neutral.withNewMask(MaskShape.RADIAL, "Radial 1")
+        val (both, _) = first.withNewMask(MaskShape.LINEAR, "Linear 1")
+        val working = both.withLocalAdjustment(checkNotNull(firstId), Adjustment.CLARITY, 30f)
+
+        val (duplicated, copyId) = working.withDuplicatedMask(firstId, invert = false)
+        assertEquals(listOf(firstId, copyId), duplicated.masks.take(2).map { it.id })
+        val copy = duplicated.masks[1]
+        assertEquals(working.masks[0].components, copy.components)
+        assertEquals(30f, copy.adjustments.clarity)
+        assertEquals("Radial 2", copy.name)
+        assertFalse(copy.inverted)
+
+        val (inverted, invertedId) = working.withDuplicatedMask(firstId, invert = true)
+        assertTrue(checkNotNull(inverted.mask(checkNotNull(invertedId))).inverted)
+    }
+
+    @Test
+    fun duplicatingRespectsTheMaskLimit() {
+        var recipe = neutral
+        repeat(MAX_LOCAL_MASKS) { recipe = recipe.withNewMask(MaskShape.RADIAL, "Radial").first }
+
+        val (unchanged, refused) = recipe.withDuplicatedMask(recipe.masks.first().id, invert = false)
+        assertNull(refused)
+        assertEquals(recipe, unchanged)
+    }
+
+    /** The shapes are counted across masks: the field shader's arrays are shared. */
+    @Test
+    fun theShapeBudgetIsSharedByAllMasks() {
+        val (recipe, id) = withRadial()
+        var working = recipe
+        repeat(MAX_MASK_COMPONENTS - 1) {
+            working = working.withNewMaskComponent(id, MaskShape.RADIAL, MaskOp.ADD).first
+        }
+
+        assertEquals(MAX_MASK_COMPONENTS, working.maskComponentCount)
+        assertNull(working.withNewMaskComponent(id, MaskShape.RADIAL, MaskOp.ADD).second)
+        assertNull(working.withNewMask(MaskShape.LINEAR, "Linear 1").second)
+    }
+
+    /** The Amount is a mask slider, kept in the mask and clamped to Lightroom's 0 to 200. */
+    @Test
+    fun theAmountIsAMaskSlider() {
+        val (recipe, id) = withRadial()
+
+        assertTrue(Adjustment.MASK_AMOUNT.isMaskSlider())
+        assertFalse(Adjustment.MASK_AMOUNT.isLocal())
+        assertEquals(100f, recipe.maskSliderValue(id, Adjustment.MASK_AMOUNT))
+        assertEquals(200f, recipe.withMaskSlider(id, Adjustment.MASK_AMOUNT, 500f).maskSliderValue(id, Adjustment.MASK_AMOUNT))
+        assertEquals(
+            1.5f,
+            recipe.withMaskSlider(id, Adjustment.EXPOSURE, 1.5f).maskSliderValue(id, Adjustment.EXPOSURE),
+        )
     }
 }

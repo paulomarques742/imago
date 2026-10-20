@@ -5,6 +5,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sign
 import eu.studio742.imago.core.model.LocalAdjustments
+import eu.studio742.imago.core.model.BrushStroke
 import eu.studio742.imago.core.model.MaskOp
 import eu.studio742.imago.core.model.MaskShape
 
@@ -110,6 +111,10 @@ data class RenderParameters(
     val needsMaskField: Boolean
         get() = masks.isNotEmpty()
 
+    /** True when a mask has a painted brush: the field is then built finer, so its edges stay sharp. */
+    val hasBrushes: Boolean
+        get() = masks.any { mask -> mask.components.any { it.brushIndex >= 0 } }
+
     /** True if some mask touches one of these adjustments. */
     private fun anyMask(select: (LocalAdjustments) -> Float): Boolean =
         masks.any { select(it.adjustments) != 0f }
@@ -191,7 +196,21 @@ data class MaskRenderComponent(
     val radiusY: Float = 0.3f,
     val feather: Float = 50f,
     val roundness: Float = 0f,
-)
+    /**
+     * A brush's layer among the render's brush rasters, or −1 for a brush with nothing painted yet —
+     * which weighs zero everywhere, and so still means something under Intersect.
+     */
+    val brushIndex: Int = -1,
+    /** A brush's strokes, for whoever paints the raster. The field only reads [brushIndex]. */
+    val strokes: List<BrushStroke> = emptyList(),
+) {
+    /**
+     * Shape, operation and inversion in one integer, as the field shader's `uComponentKind` reads
+     * them: shape in bits 0-1, operation in 2-3, inversion in 4.
+     */
+    val packedKind: Int
+        get() = shape.ordinal or (op.ordinal shl 2) or ((if (inverted) 1 else 0) shl 4)
+}
 
 /** Minimum zoom that keeps the canvas fully covered during a fine rotation. */
 fun straightenCoverScale(imageAspect: Float, degrees: Float): Float {

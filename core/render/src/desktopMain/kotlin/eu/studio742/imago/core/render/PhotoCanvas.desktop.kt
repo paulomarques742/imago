@@ -38,6 +38,9 @@ actual fun PhotoCanvas(
 ) {
     val source = remember(bitmap) { bitmap.toPixelBuffer() }
     val draft = remember(source) { RecipePixels.reduce(source, DRAFT_SIDE) }
+    // Painted over the full photo and given to the draft too: a brush raster does not depend on the
+    // size of what it is drawn on, and a stroke being drawn only adds its newest dabs.
+    val brushCache = remember(source) { BrushRasterCache() }
     val active = if (showOriginal) RenderParameters() else parameters
     var frame by remember(source) { mutableStateOf<ImageBitmap?>(null) }
 
@@ -46,10 +49,12 @@ actual fun PhotoCanvas(
             // The draft says it is a draft: without that, the grain would come out with the granularity
             // of its eight hundred pixels and change look when full resolution replaced it.
             val scale = draft.width.toFloat() / source.width
-            frame = withContext(Dispatchers.Default) { renderFrame(draft, active, maskOverlay, scale) }
+            frame = withContext(Dispatchers.Default) {
+                renderFrame(draft, active, maskOverlay, brushCache.of(active, source), scale)
+            }
             delay(FULL_RESOLUTION_PAUSE_MS)
         }
-        frame = withContext(Dispatchers.Default) { renderFrame(source, active, maskOverlay) }
+        frame = withContext(Dispatchers.Default) { renderFrame(source, active, maskOverlay, brushCache.of(active, source)) }
     }
 
     Canvas(modifier) {
@@ -80,20 +85,34 @@ actual fun PhotoCanvas(
     }
 }
 
+private fun BrushRasterCache.of(parameters: RenderParameters, source: PixelBuffer): BrushRasters =
+    if (parameters.hasBrushes) {
+        rasters(parameters, source.width.toFloat() / source.height, source) { BrushReference.of(source) }
+    } else {
+        BrushRasters.NONE
+    }
+
 private fun renderFrame(
     source: PixelBuffer,
     parameters: RenderParameters,
     maskOverlay: Int,
+    brushes: BrushRasters,
     renderScale: Float = 1f,
 ): ImageBitmap {
-    val framed = RecipePixels.render(source, parameters, renderScale)
-    if (maskOverlay in 0 until minOf(parameters.masks.size, MAX_LOCAL_MASKS)) tintMask(framed, source, parameters, maskOverlay)
+    val framed = RecipePixels.render(source, parameters, renderScale, brushes)
+    if (maskOverlay in 0 until minOf(parameters.masks.size, MAX_LOCAL_MASKS)) tintMask(framed, source, parameters, maskOverlay, brushes)
     return framed.toSkiaBitmap().asComposeImageBitmap()
 }
 
 /** The same blend as the shader: 45% of the mask's weight towards a fixed red. */
-private fun tintMask(framed: PixelBuffer, source: PixelBuffer, parameters: RenderParameters, index: Int) {
-    val field = LocalMaskField.build(framed.width, framed.height, parameters, parameters.frameGeometry(source.width, source.height))
+private fun tintMask(framed: PixelBuffer, source: PixelBuffer, parameters: RenderParameters, index: Int, brushes: BrushRasters) {
+    val field = LocalMaskField.build(
+        framed.width,
+        framed.height,
+        parameters,
+        parameters.frameGeometry(source.width, source.height),
+        brushes,
+    )
     val weights = FloatArray(MAX_LOCAL_MASKS)
     for (y in 0 until framed.height) for (x in 0 until framed.width) {
         field.at((x + .5f) / framed.width, (y + .5f) / framed.height, weights)

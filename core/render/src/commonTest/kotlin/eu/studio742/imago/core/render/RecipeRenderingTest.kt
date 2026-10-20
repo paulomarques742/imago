@@ -15,6 +15,12 @@ import eu.studio742.imago.core.model.Perspective
 import eu.studio742.imago.core.model.Tone
 import eu.studio742.imago.core.model.ToneCurve
 import eu.studio742.imago.core.model.CurvePoint
+import eu.studio742.imago.core.model.LocalAdjustments
+import eu.studio742.imago.core.model.LocalMask
+import eu.studio742.imago.core.model.MaskComponent
+import eu.studio742.imago.core.model.MaskOp
+import eu.studio742.imago.core.model.MaskShape
+import eu.studio742.imago.core.model.RadialMask
 
 private fun recipe(
     processVersion: Int = CURRENT_PROCESS_VERSION,
@@ -34,7 +40,54 @@ private fun recipe(
     toneCurve = toneCurve,
 )
 
+private fun radialMask(id: String, amount: Float = 100f, components: Int = 1) = LocalMask(
+    id = id,
+    components = List(components) { index ->
+        MaskComponent(
+            shape = MaskShape.RADIAL,
+            op = if (index == 0) MaskOp.ADD else MaskOp.SUBTRACT,
+            radial = RadialMask(),
+        )
+    },
+    adjustments = LocalAdjustments(exposure = 1f, clarity = 20f),
+    amount = amount,
+)
+
 class RecipeRenderingTest {
+    /** From process 15 the Amount scales what reaches the render; at zero the mask does not reach it at all. */
+    @Test
+    fun theMaskAmountScalesTheAdjustmentsFromProcessFifteen() {
+        val masks = listOf(radialMask("half", amount = 50f), radialMask("off", amount = 0f), radialMask("double", amount = 200f))
+
+        val rendered = recipe().copy(masks = masks).toRenderParameters().masks
+        assertEquals(listOf("half", "double"), rendered.map { it.id })
+        assertEquals(LocalAdjustments(exposure = 0.5f, clarity = 10f), rendered[0].adjustments)
+        assertEquals(LocalAdjustments(exposure = 2f, clarity = 40f), rendered[1].adjustments)
+
+        val older = recipe(processVersion = 14).copy(masks = masks).toRenderParameters().masks
+        assertEquals(3, older.size)
+        assertTrue(older.all { it.adjustments == LocalAdjustments(exposure = 1f, clarity = 20f) })
+    }
+
+    /** Eight masks from process 15; a recipe of an earlier process keeps drawing its first four. */
+    @Test
+    fun eightMasksDrawFromProcessFifteen() {
+        val masks = List(10) { radialMask("m$it") }
+
+        assertEquals(8, recipe().copy(masks = masks).toRenderParameters().masks.size)
+        assertEquals(4, recipe(processVersion = 14).copy(masks = masks).toRenderParameters().masks.size)
+    }
+
+    /** The component budget is spent in order, so the CPU and the GPU drop the same components. */
+    @Test
+    fun componentsPastTheBudgetAreDroppedInOrder() {
+        val masks = List(8) { radialMask("m$it", components = 5) }
+
+        val rendered = recipe().copy(masks = masks).toRenderParameters().masks
+        assertEquals(32, rendered.sumOf { it.components.size })
+        assertEquals(List(6) { 5 } + 2, rendered.map { it.components.size })
+    }
+
     /** The curve's end points are free from process 11; before it, the corners are still pinned. */
     @Test
     fun freedCurveEndPointsOnlyCountFromProcessEleven() {

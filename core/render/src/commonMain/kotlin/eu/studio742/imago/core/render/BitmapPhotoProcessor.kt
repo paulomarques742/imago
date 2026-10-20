@@ -29,14 +29,17 @@ object BitmapPhotoProcessor {
      *   which draws the image at its resolution, and less than one in a preview draft. Only grain uses
      *   it, and it uses it because it lives in image pixels: without this, the draft showed coarse the
      *   granularity the file shows fine, and the preview changed look when full resolution replaced it.
+     * @param brushes the rasters of the masks' brushes, from [BrushRasters.of] with the photo in image
+     *   space — which only the caller still has, before the geometry. Without them a brush draws nothing.
      */
     fun <T : PixelSurface> renderInPlace(
         bitmap: T,
         parameters: RenderParameters,
         geometry: FrameGeometry? = null,
         renderScale: Float = 1f,
+        brushes: BrushRasters = BrushRasters.NONE,
     ): T {
-        if (!parameters.isColorNeutral) process(bitmap, parameters, geometry, renderScale)
+        if (!parameters.isColorNeutral) process(bitmap, parameters, geometry, renderScale, brushes)
         geometry?.takeIf { it.showsOutside }?.let { paintOutside(bitmap, it) }
         return bitmap
     }
@@ -69,6 +72,7 @@ object BitmapPhotoProcessor {
         parameters: RenderParameters,
         geometry: FrameGeometry?,
         renderScale: Float,
+        brushes: BrushRasters,
     ) {
         val field = if (parameters.needsMaskField) {
             LocalMaskField.build(
@@ -76,6 +80,7 @@ object BitmapPhotoProcessor {
                 framedHeight = bitmap.height,
                 parameters = parameters,
                 geometry = geometry ?: FrameGeometry(bitmap.width, bitmap.height),
+                brushes = brushes,
             )
         } else {
             null

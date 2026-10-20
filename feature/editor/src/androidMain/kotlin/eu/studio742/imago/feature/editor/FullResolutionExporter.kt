@@ -17,6 +17,8 @@ import eu.studio742.imago.core.immich.ImmichApi
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.Geometry
 import eu.studio742.imago.core.render.BitmapPhotoProcessor
+import eu.studio742.imago.core.render.BitmapSurface
+import eu.studio742.imago.core.render.BrushRasters
 import eu.studio742.imago.core.render.renderInPlace
 import eu.studio742.imago.core.render.activeGeometry
 import eu.studio742.imago.core.render.toRenderParameters
@@ -54,11 +56,13 @@ class FullResolutionExporter @Inject constructor(
             // way to rebuild it.
             val oriented = checkNotNull(bitmap)
             val geometry = parameters.frameGeometry(oriented.width, oriented.height)
+            // Painted now, over the photo as it was shot: after the geometry it no longer exists.
+            val brushes = BrushRasters.of(parameters, BitmapSurface(oriented))
             bitmap = applyGeometry(oriented, recipe.activeGeometry())
             val working = checkNotNull(bitmap)
             onPhase(uiText(Res.string.editor_phase_processing, working.width, working.height))
             withContext(Dispatchers.Default) {
-                BitmapPhotoProcessor.renderInPlace(working, parameters, geometry)
+                BitmapPhotoProcessor.renderInPlace(working, parameters, geometry, brushes)
             }
             onPhase(uiText(Res.string.editor_phase_encoding))
             withContext(Dispatchers.IO) {

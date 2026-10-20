@@ -5,6 +5,13 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 16 activates brush mask components (`MaskShape.BRUSH`). An app at 15 would decode the recipe and draw
+ * the brush as nothing; one at 14 or earlier cannot decode the new shape and skips the recipe in sync.
+ *
+ * 15 activates the mask Amount (`LocalMask.amount`) and lets a recipe have eight masks instead of
+ * four. An older app would draw a mask at 50% at full strength and drop the masks after the fourth,
+ * so it has to ask to be updated instead.
+ *
  * 14 activates `geometry.perspective.distortion`, Lightroom's barrel and pincushion slider. It is
  * radial and comes before the virtual camera, on the photo as the lens drew it. An older app would draw
  * a recipe with it as if it were not there, so it has to ask to be updated instead.
@@ -43,7 +50,7 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 14
+const val CURRENT_PROCESS_VERSION = 16
 
 @Serializable
 data class EditRecipe(

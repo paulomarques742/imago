@@ -143,6 +143,13 @@ class EncryptedConfigurationRepository(
         preferences.write(mapOf(REEL_STYLE_KEY to style))
     }
 
+    override val brushTool: String? get() = preferences.getString(BRUSH_TOOL_KEY)
+
+    /** Like the reel's style: losing it only means the brush starts from its defaults. */
+    override fun setBrushTool(encoded: String) {
+        preferences.write(mapOf(BRUSH_TOOL_KEY to encoded))
+    }
+
     override fun setShowOnThisDay(show: Boolean) {
         requireUser(preferences.write(mapOf(ON_THIS_DAY_KEY to show.toString())), UserMessage.CONFIGURATION_NOT_SAVED)
         onThisDay.value = show
@@ -328,6 +335,7 @@ class EncryptedConfigurationRepository(
         const val WELCOME_KEY = "welcome_completed"
         const val ON_THIS_DAY_KEY = "show_on_this_day"
         const val REEL_STYLE_KEY = "reel_style"
+        const val BRUSH_TOOL_KEY = "brush_tool"
         const val HIDDEN_FROM_GRID_KEY = "albums_hidden_from_grid"
     }
 }

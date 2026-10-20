@@ -592,6 +592,12 @@ object PhotoEffects {
     const val MASK_FIELD_DIVISOR = 8
 
     /**
+     * The field's divisor when a mask has a brush. A gradient is smooth and one eighth samples it
+     * without loss; a painted edge is not, and at one eighth it would be eight pixels wide.
+     */
+    const val MASK_FIELD_BRUSH_DIVISOR = 2
+
+    /**
      * Minimum side of the field.
      *
      * `RecipePreviewCache` generates preset thumbnails from a 220 px source; at one eighth that would

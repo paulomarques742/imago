@@ -31,9 +31,12 @@ internal class LocalMaskField private constructor(
     private val height: Int,
     private val count: Int,
 ) {
+    /** One value per mask of this render, not per possible mask: a brush field has millions of texels. */
+    private val stride = count.coerceAtLeast(1)
+
     /**
      * The mask weights at this point of the frame, sampled as the GL sampler would. Writes into [out],
-     * which must have [MAX_LOCAL_MASKS] slots.
+     * which must have [MAX_LOCAL_MASKS] slots; those past the render's masks are zero.
      */
     fun at(u: Float, v: Float, out: FloatArray) {
         val x = u * width - 0.5f
@@ -46,10 +49,10 @@ internal class LocalMaskField private constructor(
         val x1 = (left + 1).coerceIn(0, width - 1)
         val y0 = top.coerceIn(0, height - 1)
         val y1 = (top + 1).coerceIn(0, height - 1)
-        val topLeft = (y0 * width + x0) * MAX_LOCAL_MASKS
-        val topRight = (y0 * width + x1) * MAX_LOCAL_MASKS
-        val bottomLeft = (y1 * width + x0) * MAX_LOCAL_MASKS
-        val bottomRight = (y1 * width + x1) * MAX_LOCAL_MASKS
+        val topLeft = (y0 * width + x0) * stride
+        val topRight = (y0 * width + x1) * stride
+        val bottomLeft = (y1 * width + x0) * stride
+        val bottomRight = (y1 * width + x1) * stride
         for (channel in 0 until MAX_LOCAL_MASKS) {
             if (channel >= count) {
                 out[channel] = 0f
@@ -106,30 +109,52 @@ internal class LocalMaskField private constructor(
     }
 
     companion object {
+        /**
+         * @param brushes the rasters of [parameters]' brushes. Without them a brush weighs zero — the
+         *   caller is the one holding the photo in image space, which the Auto Mask needs.
+         */
         fun build(
             framedWidth: Int,
             framedHeight: Int,
             parameters: RenderParameters,
             geometry: FrameGeometry,
+            brushes: BrushRasters = BrushRasters.NONE,
         ): LocalMaskField {
             val count = parameters.masks.size.coerceAtMost(MAX_LOCAL_MASKS)
-            val width = max(framedWidth / PhotoEffects.MASK_FIELD_DIVISOR, PhotoEffects.MASK_FIELD_MIN)
-            val height = max(framedHeight / PhotoEffects.MASK_FIELD_DIVISOR, PhotoEffects.MASK_FIELD_MIN)
-            val data = FloatArray(width * height * MAX_LOCAL_MASKS)
-            val point = FloatArray(2)
+            val (width, height) = fieldSize(framedWidth, framedHeight, parameters.hasBrushes)
+            val stride = count.coerceAtLeast(1)
+            val data = FloatArray(width * height * stride)
             val aspect = geometry.imageAspect
-            for (row in 0 until height) {
+            // Rows are independent, and a field fine enough for a brush has a few million texels.
+            java.util.stream.IntStream.range(0, height).parallel().forEach { row ->
+                val point = FloatArray(2)
                 val v = (row + 0.5f) / height
                 for (column in 0 until width) {
                     val u = (column + 0.5f) / width
                     geometry.imageFromFramed(u, v, point)
-                    val base = (row * width + column) * MAX_LOCAL_MASKS
+                    val base = (row * width + column) * stride
                     for (index in 0 until count) {
-                        data[base + index] = weightOf(parameters.masks[index], point[0], point[1], aspect)
+                        data[base + index] = weightOf(parameters.masks[index], point[0], point[1], aspect, brushes)
                     }
                 }
             }
             return LocalMaskField(data, width, height, count)
+        }
+
+        /**
+         * One eighth of the frame, as the GPU's; with a brush, one half, so that a painted edge is not
+         * smeared over eight pixels — capped, because on export one half of a 24 Mpx frame would be a
+         * field with more texels than the brush raster it samples.
+         */
+        internal fun fieldSize(framedWidth: Int, framedHeight: Int, brushes: Boolean): Pair<Int, Int> {
+            if (!brushes) {
+                return max(framedWidth / PhotoEffects.MASK_FIELD_DIVISOR, PhotoEffects.MASK_FIELD_MIN) to
+                    max(framedHeight / PhotoEffects.MASK_FIELD_DIVISOR, PhotoEffects.MASK_FIELD_MIN)
+            }
+            val half = max(framedWidth, framedHeight) / PhotoEffects.MASK_FIELD_BRUSH_DIVISOR
+            val scale = if (half > BRUSH_RASTER_SIDE) BRUSH_RASTER_SIDE.toFloat() / half else 1f
+            return max((framedWidth / PhotoEffects.MASK_FIELD_BRUSH_DIVISOR * scale).toInt(), PhotoEffects.MASK_FIELD_MIN) to
+                max((framedHeight / PhotoEffects.MASK_FIELD_BRUSH_DIVISOR * scale).toInt(), PhotoEffects.MASK_FIELD_MIN)
         }
 
         /**
@@ -139,7 +164,13 @@ internal class LocalMaskField private constructor(
          * intersecting against nothing would always give zero, and a mask that started with one of
          * those components would be invisible with no explanation at all.
          */
-        fun weightOf(mask: MaskRenderSpec, x: Float, y: Float, aspect: Float): Float {
+        fun weightOf(
+            mask: MaskRenderSpec,
+            x: Float,
+            y: Float,
+            aspect: Float,
+            brushes: BrushRasters = BrushRasters.NONE,
+        ): Float {
             var accumulated = 0f
             mask.components.forEachIndexed { index, component ->
                 var weight = when (component.shape) {
@@ -166,6 +197,7 @@ internal class LocalMaskField private constructor(
                         roundness = component.roundness,
                         aspect = aspect,
                     )
+                    MaskShape.BRUSH -> brushes[component.brushIndex]?.sample(x, y) ?: 0f
                 }
                 if (component.inverted) weight = 1f - weight
                 accumulated = if (index == 0) {

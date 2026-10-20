@@ -378,6 +378,12 @@ fun EditorRoute(
             MaskActions(
                 onAdd = viewModel::addMask,
                 onSelect = viewModel::selectMask,
+                onSelectComponent = viewModel::selectMaskComponent,
+                onFocusComponent = viewModel::focusMaskComponent,
+                onAddComponent = viewModel::addMaskComponent,
+                onDeleteComponent = viewModel::deleteMaskComponent,
+                onSetComponentInverted = viewModel::setMaskComponentInverted,
+                onDuplicate = viewModel::duplicateMask,
                 onShowList = viewModel::showMaskList,
                 onDelete = viewModel::deleteMask,
                 onSetEnabled = viewModel::setMaskEnabled,
@@ -389,6 +395,13 @@ fun EditorRoute(
                 onSetRadius = viewModel::setMaskRadius,
                 onSetWidth = viewModel::setMaskWidth,
                 onRotate = viewModel::rotateMask,
+                onBrushStart = viewModel::beginBrushStroke,
+                onBrushTo = viewModel::extendBrushStroke,
+                onBrushCancel = viewModel::cancelBrushStroke,
+                onBrushErasing = viewModel::setBrushErasing,
+                onBrushAutoMask = viewModel::setBrushAutoMask,
+                onBrushSetting = viewModel::setBrushSetting,
+                onBrushSettingFinished = viewModel::finishBrushSetting,
             )
         },
         whiteBalanceActions = remember(viewModel) {
@@ -712,6 +725,14 @@ private fun EditorScreen(
     // made the lower half unreachable. Crop is different because the drawer is the mode's only way out.
     val maskingNow by rememberUpdatedState(state.isMaskEditing)
     val selectedMaskNow by rememberUpdatedState(state.selectedMask)
+    val selectedComponentNow by rememberUpdatedState(state.selectedComponent)
+    // A brush selected: one finger paints. The radius is the screen's, in pixels — Lightroom's brush,
+    // which covers less of the photo the closer one zooms in.
+    val paintingNow by rememberUpdatedState(state.isPainting)
+    val brushRadiusPx by rememberUpdatedState(with(chromeDensity) { brushRadiusDp(state.brushTool.active.size).dp.toPx() })
+    var brushFinger by remember(assetId) { mutableStateOf<Offset?>(null) }
+    // The mouse over the photo, so the desktop shows where the brush would land before the click.
+    var brushHover by remember(assetId) { mutableStateOf<Offset?>(null) }
     // The red lights up on touch and goes off on its own shortly after: fixed, it hid the result one is
     // trying to judge. "Show mask" is what pins it.
     var maskTouchCount by remember(assetId) { mutableIntStateOf(0) }
@@ -861,6 +882,13 @@ private fun EditorScreen(
                         if (state.canRedo) onRedo(); true
                     }
                     event.key == Key.Backslash || event.key == Key.Spacebar -> { onShowOriginal(true); true }
+                    // Lightroom's brackets: smaller and larger brush.
+                    state.isPainting && (event.key == Key.LeftBracket || event.key == Key.RightBracket) -> {
+                        val step = if (event.key == Key.LeftBracket) -BRUSH_SIZE_KEY_STEP else BRUSH_SIZE_KEY_STEP
+                        maskActions.onBrushSetting(BrushSetting.SIZE, state.brushTool.active.size + step)
+                        maskActions.onBrushSettingFinished()
+                        true
+                    }
                     event.isCtrlPressed && event.key == Key.C -> { onCopyRecipe(); true }
                     event.isCtrlPressed && event.key == Key.V -> {
                         if (state.canPasteRecipe) onPasteRecipe(); true
@@ -1004,6 +1032,7 @@ private fun EditorScreen(
                             if (maskToDraw != null && maskGeometry != null && stageSize != IntSize.Zero) {
                                 MaskOverlay(
                                     mask = maskToDraw,
+                                    selectedComponent = state.selectedComponent,
                                     bounds = photoBounds(
                                         surfaceWidth = stageSize.width,
                                         surfaceHeight = stageSize.height,
@@ -1014,6 +1043,19 @@ private fun EditorScreen(
                                     ),
                                     geometry = maskGeometry,
                                     modifier = Modifier.fillMaxSize(),
+                                    // While Size or Feather is being dragged the circle sits in the middle
+                                    // of the photo, which is the only way to see what the number means.
+                                    brushCursor = if (state.isPainting) {
+                                        (
+                                            brushFinger ?: brushHover ?: if (editingKey == BrushSetting.SIZE || editingKey == BrushSetting.FEATHER) {
+                                                Offset(stageSize.width / 2f, stageSize.height / 2f)
+                                            } else {
+                                                null
+                                            }
+                                            )?.let { BrushCursor(it, brushRadiusPx, state.brushTool.active.feather) }
+                                    } else {
+                                        null
+                                    },
                                 )
                             }
                             if (cropMode && state.recipe != null) {
@@ -1127,10 +1169,46 @@ private fun EditorScreen(
                                             val activeMask = selectedMaskNow
                                                 ?.takeIf { maskingNow && !cropping && maskGeometry != null }
                                             var maskHandle: MaskHandle? = null
+                                            var activeComponent = selectedComponentNow
+                                            // Painting owns every event of the gesture, the lift
+                                            // included: a dab is a tap, and the tap would otherwise also
+                                            // hide the interface.
+                                            var brushing = false
+                                            var lastBrushPoint = down.position
                                             if (activeMask != null && maskGeometry != null) {
                                                 val projection = MaskProjection(bounds(current), maskGeometry)
-                                                maskHandle = maskHandlesOf(activeMask, projection)?.let {
+                                                maskHandle = maskHandlesOf(activeMask, projection, activeComponent)?.let {
                                                     hitMaskHandle(it, down.position, maskHitRadius)
+                                                }
+                                                // Another shape's pin takes the handles to it, and the
+                                                // finger that landed on it already moves it, as in
+                                                // Lightroom.
+                                                if (maskHandle == null) {
+                                                    hitMaskComponentPin(
+                                                        mask = activeMask,
+                                                        selectedComponent = activeComponent,
+                                                        projection = projection,
+                                                        position = down.position,
+                                                        radius = maskHitRadius,
+                                                    )?.let { pinned ->
+                                                        activeComponent = pinned
+                                                        maskActions.onFocusComponent(pinned)
+                                                        maskHandle = MaskHandle.MOVE
+                                                    }
+                                                }
+                                                if (maskHandle == null && paintingNow) {
+                                                    val start = projection.toImage(down.position)
+                                                    maskActions.onBrushStart(
+                                                        activeMask.id,
+                                                        start.x,
+                                                        start.y,
+                                                        projection.imageRadius(down.position, brushRadiusPx),
+                                                    )
+                                                    brushing = true
+                                                    lastBrushPoint = down.position
+                                                    brushFinger = down.position
+                                                    maskTouchCount++
+                                                    down.consume()
                                                 }
                                                 if (maskHandle != null) {
                                                     maskTouchCount++
@@ -1182,6 +1260,31 @@ private fun EditorScreen(
                                             do {
                                                 val event = awaitPointerEvent()
                                                 val pressed = event.changes.filter { it.pressed }
+                                                if (brushing) event.changes.forEach { it.consume() }
+                                                if (pressed.size >= 2 && brushing) {
+                                                    // Two fingers are for moving the photo, as in
+                                                    // Lightroom: the stroke they interrupted goes away.
+                                                    maskActions.onBrushCancel()
+                                                    brushing = false
+                                                    brushFinger = null
+                                                }
+                                                if (brushing && activeMask != null && maskGeometry != null) {
+                                                    val change = event.changes.firstOrNull() ?: continue
+                                                    val projection = MaskProjection(bounds(current), maskGeometry)
+                                                    // Every position the pointer passed through, not only
+                                                    // this frame's: a fast stroke stays a curve.
+                                                    val positions = change.historical.map { it.position } + change.position
+                                                    positions.forEach { position ->
+                                                        val travelled = (position - lastBrushPoint).getDistance()
+                                                        if (travelled >= brushRadiusPx * BRUSH_POINT_SPACING || (!change.pressed && travelled > 0f)) {
+                                                            val point = projection.toImage(position)
+                                                            maskActions.onBrushTo(activeMask.id, point.x, point.y)
+                                                            lastBrushPoint = position
+                                                        }
+                                                    }
+                                                    brushFinger = change.position
+                                                    continue
+                                                }
                                                 if (pressed.size >= 2) {
                                                     // A second finger abandons the frame and becomes
                                                     // the pinch. From here there is no going back:
@@ -1240,7 +1343,7 @@ private fun EditorScreen(
                                                     val change = pressed.firstOrNull() ?: continue
                                                     val projection = MaskProjection(bounds(current), maskGeometry)
                                                     val now = projection.toImage(change.position)
-                                                    val centre = activeMask.centreInImage()
+                                                    val centre = activeMask.centreInImage(activeComponent)
                                                     val aspect = maskGeometry.imageAspect
                                                     when (maskHandle) {
                                                         MaskHandle.MOVE -> {
@@ -1260,7 +1363,7 @@ private fun EditorScreen(
                                                                     pointX = now.x,
                                                                     pointY = now.y,
                                                                     aspect = aspect,
-                                                                    handleOffset = activeMask.rotateHandleOffset(),
+                                                                    handleOffset = activeMask.rotateHandleOffset(activeComponent),
                                                                 ),
                                                             )
                                                         }
@@ -1272,7 +1375,7 @@ private fun EditorScreen(
                                                                 centreY = centre.y,
                                                                 pointX = now.x,
                                                                 pointY = now.y,
-                                                                angleDegrees = activeMask.angleInImage(),
+                                                                angleDegrees = activeMask.angleInImage(activeComponent),
                                                                 aspect = aspect,
                                                             )
                                                             when (maskHandle) {
@@ -1359,6 +1462,10 @@ private fun EditorScreen(
 
                                             if (cropping && geometry != null) onCropGestureFinished()
                                             if (maskHandle != null) onAdjustmentFinished()
+                                            if (brushing) {
+                                                brushFinger = null
+                                                onAdjustmentFinished()
+                                            }
                                             if (guiding) {
                                                 guideFinger = null
                                                 perspectiveActions.onGuideGestureEnd()
@@ -1393,6 +1500,13 @@ private fun EditorScreen(
                                         awaitPointerEventScope {
                                             while (true) {
                                                 val event = awaitPointerEvent()
+                                                when (event.type) {
+                                                    PointerEventType.Move -> if (event.changes.none { it.pressed }) {
+                                                        brushHover = event.changes.firstOrNull()?.position
+                                                    }
+                                                    PointerEventType.Exit -> brushHover = null
+                                                    else -> Unit
+                                                }
                                                 if (event.type != PointerEventType.Scroll) continue
                                                 val change = event.changes.firstOrNull() ?: continue
                                                 val delta = change.scrollDelta.y
@@ -2334,6 +2448,18 @@ private fun AdjustmentPanel(
                             onAdjustment = onAdjustment,
                             onAdjustmentFinished = onAdjustmentFinished,
                             onResetAdjustment = onResetAdjustment,
+                            // The brush on top, in the same scroll: what it paints and what the
+                            // painting does are one screen, as in Lightroom.
+                            header = {
+                                if (state.isPainting) {
+                                    BrushToolPanel(
+                                        tool = state.brushTool,
+                                        editingKey = editingKey,
+                                        onEditing = onEditing,
+                                        actions = maskActions,
+                                    )
+                                }
+                            },
                         )
                     }
                 }
@@ -2407,8 +2533,13 @@ private fun EditorPanel.adjustmentGroups(): List<AdjustmentGroup> = when (this) 
         ),
     )
     // The thirteen adjustments a region accepts, by the same families as the global categories. The
-    // curve, HSL, vignette and grain are not here — see `Adjustment.isLocal()`.
+    // curve, HSL, vignette and grain are not here — see `Adjustment.isLocal()`. The Amount goes on top,
+    // as in Lightroom: it scales the ones below.
     EditorPanel.MASKS -> listOf(
+        AdjustmentGroup(
+            title = null,
+            entries = listOf(Adjustment.MASK_AMOUNT to stringResource(Res.string.editor_amount)),
+        ),
         AdjustmentGroup(
             title = stringResource(Res.string.editor_panel_light),
             entries = listOf(
@@ -2517,6 +2648,7 @@ private fun SliderPanel(
     onAdjustmentFinished: () -> Unit,
     onResetAdjustment: (Adjustment) -> Unit,
     whiteBalanceActions: WhiteBalancePickActions? = null,
+    header: @Composable () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -2525,6 +2657,7 @@ private fun SliderPanel(
             .padding(horizontal = ImagoSpacing.Lg, vertical = ImagoSpacing.Sm),
         verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs),
     ) {
+        header()
         groups.forEach { group ->
             group.title?.let { title ->
                 val headerAlpha by animateFloatAsState(

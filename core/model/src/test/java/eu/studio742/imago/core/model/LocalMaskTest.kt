@@ -95,7 +95,30 @@ class LocalMaskTest {
     }
 
     @Test
-    fun theMaskLimitIsTheChannelCountOfAnRgbaTexture() {
-        assertEquals(4, MAX_LOCAL_MASKS)
+    fun theMaskLimitIsTheChannelCountOfTwoRgbaTextures() {
+        assertEquals(8, MAX_LOCAL_MASKS)
+        assertEquals(4, maxLocalMasks(14))
+        assertEquals(8, maxLocalMasks(COMBINED_MASKS_PROCESS_VERSION))
+    }
+
+    /** A recipe written before the Amount existed reads as 100%: its masks keep their strength. */
+    @Test
+    fun aMaskWithoutAmountReadsAsFullStrength() {
+        val decoded = json.decodeFromString<LocalMask>("""{"id":"a"}""")
+
+        assertEquals(MASK_AMOUNT_NEUTRAL, decoded.amount)
+        assertEquals(decoded.adjustments, decoded.effectiveAdjustments)
+    }
+
+    @Test
+    fun theAmountScalesEveryAdjustment() {
+        val mask = LocalMask(
+            id = "a",
+            adjustments = LocalAdjustments(exposure = 1f, clarity = -40f, temp = 10f),
+            amount = 150f,
+        )
+
+        assertEquals(LocalAdjustments(exposure = 1.5f, clarity = -60f, temp = 15f), mask.effectiveAdjustments)
+        assertTrue(mask.copy(amount = 0f).effectiveAdjustments.isNeutral)
     }
 }

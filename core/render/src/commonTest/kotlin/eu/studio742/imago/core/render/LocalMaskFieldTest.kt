@@ -2,6 +2,7 @@ package eu.studio742.imago.core.render
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
 import eu.studio742.imago.core.model.LocalAdjustments
 import eu.studio742.imago.core.model.MaskOp
 import eu.studio742.imago.core.model.MaskShape
@@ -122,7 +123,7 @@ class LocalMaskFieldTest {
         )
         val field = LocalMaskField.build(800, 600, parameters, FrameGeometry(4000, 3000))
         val tone = EffectiveTone()
-        val weights = FloatArray(4)
+        val weights = FloatArray(MAX_LOCAL_MASKS)
 
         field.resolve(parameters, 0.5f, 0.5f, weights, tone)
         assertEquals(0.5f + 1f + 2f, tone.exposure, 1e-3f)
@@ -148,7 +149,7 @@ class LocalMaskFieldTest {
         val field = LocalMaskField.build(800, 600, parameters, FrameGeometry(4000, 3000))
         val tone = EffectiveTone()
 
-        field.resolve(parameters, 0.5f, 0.5f, FloatArray(4), tone)
+        field.resolve(parameters, 0.5f, 0.5f, FloatArray(MAX_LOCAL_MASKS), tone)
 
         assertEquals(MAX_LOCAL_EXPOSURE, tone.exposure, 1e-4f)
     }
@@ -182,7 +183,7 @@ class LocalMaskFieldTest {
 
         val wholeField = LocalMaskField.build(4000, 3000, parameters, whole)
         val croppedField = LocalMaskField.build(2000, 1500, parameters, cropped)
-        val out = FloatArray(4)
+        val out = FloatArray(MAX_LOCAL_MASKS)
 
         wholeField.at(0.5f, 0.5f, out)
         val beforeCrop = out[0]
@@ -209,7 +210,7 @@ class LocalMaskFieldTest {
             ),
         )
         val field = LocalMaskField.build(220, 165, parameters, FrameGeometry(220, 165))
-        val out = FloatArray(4)
+        val out = FloatArray(MAX_LOCAL_MASKS)
 
         field.at(0.5f, 0.5f, out)
         assertTrue("the radial's centre should be full, it came ${out[0]}", out[0] > 0.9f)

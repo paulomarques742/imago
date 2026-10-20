@@ -42,7 +42,8 @@ import java.lang.reflect.Proxy
 class GuidedUprightEditingTest {
     private inline fun <reified T> unused(): T = Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, _ ->
         // Every editor reads, as it starts, what the recipe dialogs last ticked; none was ticked here.
-        if (method.name == "getRecipePartsChoice") return@newProxyInstance null
+        // The brush the editor last had in the hand, read at start too; none here either.
+        if (method.name == "getRecipePartsChoice" || method.name == "getBrushTool") return@newProxyInstance null
         error("${T::class.simpleName}.${method.name} is not used by the guided Upright")
     } as T
 

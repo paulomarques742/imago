@@ -10,6 +10,7 @@ import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.roundToInt
+import eu.studio742.imago.core.model.MASKS_PER_FIELD
 import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
 import eu.studio742.imago.core.model.MAX_MASK_COMPONENTS
 import eu.studio742.imago.core.model.MaskShape
@@ -45,6 +46,14 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private var composite: GlProgram? = null
 
     private var sourceTexture = 0
+    /** The brush rasters, one layer each; a 1 × 1 empty layer while there are none, so the sampler always has a texture. */
+    private var brushTexture = 0
+    private var brushTextureWidth = 0
+    private var brushTextureHeight = 0
+    private var brushTextureLayers = 0
+    /** The raster each layer last received; a different one means the whole layer goes up again. */
+    private var uploadedBrushes = arrayOfNulls<BrushRaster>(0)
+    private val brushCache = BrushRasterCache()
     private var toneCurveTexture = 0
     /** The tables now in [toneCurveTexture]; uploaded again only when the curves change. */
     private var uploadedToneCurves: FloatArray? = null
@@ -70,10 +79,12 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private val darkBlur = GlRenderTarget()
     private val localBlur = GlRenderTarget()
     private val maskField = GlRenderTarget()
+    /** Masks five to eight. Allocated the first time a photo has a fifth mask, and kept from then on. */
+    private val maskField2 = GlRenderTarget()
     private val allTargets
         get() = listOf(
             stage, half, halfScratch, bandBlur, quarter,
-            eighth, eighthScratch, coarseBlur, stats, statsScratch, darkBlur, localBlur, maskField,
+            eighth, eighthScratch, coarseBlur, stats, statsScratch, darkBlur, localBlur, maskField, maskField2,
         )
 
     // Filled once per frame and reused: allocating thirteen vectors per pass would be garbage to
@@ -81,12 +92,10 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private val maskWeightsBuffer = FloatArray(MAX_LOCAL_MASKS)
     private val maskComponentA = FloatArray(MAX_MASK_COMPONENTS * 4)
     private val maskComponentB = FloatArray(MAX_MASK_COMPONENTS * 4)
-    private val maskComponentShape = IntArray(MAX_MASK_COMPONENTS)
-    private val maskComponentOp = IntArray(MAX_MASK_COMPONENTS)
-    private val maskComponentInverted = IntArray(MAX_MASK_COMPONENTS)
+    private val maskComponentKind = IntArray(MAX_MASK_COMPONENTS)
     private val maskComponentStart = IntArray(MAX_LOCAL_MASKS)
     private val maskComponentCount = IntArray(MAX_LOCAL_MASKS)
-    private val maskInverted = FloatArray(MAX_LOCAL_MASKS)
+    private val maskInverted = FloatArray(MASKS_PER_FIELD)
 
     // The kernels are fixed: filling the uniform vector once avoids three allocations per frame in a
     // place with no slack to collect them.
@@ -145,6 +154,11 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         halfFloatTargets = true
         sourceTexture = createSourceTexture()
         toneCurveTexture = createToneCurveTexture()
+        brushTexture = createBrushTexture()
+        brushTextureWidth = 0
+        brushTextureHeight = 0
+        brushTextureLayers = 0
+        uploadedBrushes = arrayOfNulls(0)
         uploadedToneCurves = null
         pendingUpload = bitmap != null
     }
@@ -167,11 +181,11 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
 
         val active = if (showOriginal) RenderParameters() else parameters
         if (!ensureStage()) return
-        val masked = active.needsMaskField && buildMaskField(active)
-        val local = active.needsLocalToneMask && buildLocalToneMask(active, masked)
-        renderTone(active, local, masked)
+        val maskFields = if (active.needsMaskField) buildMaskField(active) else 0
+        val local = active.needsLocalToneMask && buildLocalToneMask(active, maskFields)
+        renderTone(active, local, maskFields)
         val detail = active.needsDetailStage && buildDetailPyramid(active)
-        renderComposite(active, detail, masked)
+        renderComposite(active, detail, maskFields)
     }
 
     /**
@@ -183,28 +197,38 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
      *
      * The field lives in image coordinates, like the `stage`, and so this pass knows nothing about
      * crop or rotation. That is what makes geometry a one-sided problem.
+     *
+     * Returns how many halves of the field were built: none when it could not be allocated, two only
+     * when there is a fifth mask.
      */
-    private fun buildMaskField(active: RenderParameters): Boolean {
-        val program = maskFieldProgram ?: return false
-        val divisor = PhotoEffects.MASK_FIELD_DIVISOR
-        val floor = PhotoEffects.MASK_FIELD_MIN
-        maskField.ensure(
-            (imageWidth / divisor).coerceAtLeast(floor),
-            (imageHeight / divisor).coerceAtLeast(floor),
-            halfFloatTargets,
-        )
-        if (!maskField.isComplete) return false
-
+    private fun buildMaskField(active: RenderParameters): Int {
+        val program = maskFieldProgram ?: return 0
         val masks = active.masks.take(MAX_LOCAL_MASKS)
+        val halves = if (masks.size > MASKS_PER_FIELD) 2 else 1
+        val brushes = active.hasBrushes
+        // With a brush, one half and not one eighth: a painted edge is not smooth like a gradient.
+        val divisor = if (brushes) PhotoEffects.MASK_FIELD_BRUSH_DIVISOR else PhotoEffects.MASK_FIELD_DIVISOR
+        val floor = PhotoEffects.MASK_FIELD_MIN
+        val fieldWidth = (imageWidth / divisor).coerceAtLeast(floor)
+        val fieldHeight = (imageHeight / divisor).coerceAtLeast(floor)
+        maskField.ensure(fieldWidth, fieldHeight, halfFloatTargets)
+        if (!maskField.isComplete) return 0
+        if (halves == 2) {
+            maskField2.ensure(fieldWidth, fieldHeight, halfFloatTargets)
+            if (!maskField2.isComplete) return 0
+        }
+
+        if (brushes) uploadBrushes(active)
+
         var componentIndex = 0
         masks.forEachIndexed { maskIndex, mask ->
             maskComponentStart[maskIndex] = componentIndex
-            maskInverted[maskIndex] = if (mask.inverted) 1f else 0f
             var written = 0
             for (component in mask.components) {
                 if (componentIndex >= MAX_MASK_COMPONENTS) break
                 val slot = componentIndex * 4
-                maskComponentA[slot] = component.centreX
+                // A brush only needs its layer; the rest of its vectors are never read.
+                maskComponentA[slot] = if (component.shape == MaskShape.BRUSH) component.brushIndex.toFloat() else component.centreX
                 maskComponentA[slot + 1] = component.centreY
                 maskComponentA[slot + 2] = component.cosAngle
                 maskComponentA[slot + 3] = component.sinAngle
@@ -219,9 +243,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
                 maskComponentB[slot + 1] = component.radiusY
                 maskComponentB[slot + 2] = component.feather
                 maskComponentB[slot + 3] = component.roundness
-                maskComponentShape[componentIndex] = component.shape.ordinal
-                maskComponentOp[componentIndex] = component.op.ordinal
-                maskComponentInverted[componentIndex] = if (component.inverted) 1 else 0
+                maskComponentKind[componentIndex] = component.packedKind
                 componentIndex++
                 written++
             }
@@ -230,24 +252,110 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         for (index in masks.size until MAX_LOCAL_MASKS) {
             maskComponentStart[index] = 0
             maskComponentCount[index] = 0
-            maskInverted[index] = 0f
         }
 
-        maskField.bindAsTarget()
         program.use()
         bindQuad()
         program.float("uImageAspect", imageWidth.toFloat() / imageHeight.coerceAtLeast(1))
-        program.int("uMaskCount", masks.size)
-        program.vec4("uMaskInverted", maskInverted)
         program.ints("uComponentStart", MAX_LOCAL_MASKS, maskComponentStart)
         program.ints("uComponentCount", MAX_LOCAL_MASKS, maskComponentCount)
-        program.ints("uComponentShape", MAX_MASK_COMPONENTS, maskComponentShape)
-        program.ints("uComponentOp", MAX_MASK_COMPONENTS, maskComponentOp)
-        program.ints("uComponentInverted", MAX_MASK_COMPONENTS, maskComponentInverted)
+        program.ints("uComponentKind", MAX_MASK_COMPONENTS, maskComponentKind)
         program.vec4s("uComponentA", MAX_MASK_COMPONENTS, maskComponentA)
         program.vec4s("uComponentB", MAX_MASK_COMPONENTS, maskComponentB)
-        drawQuad()
-        return true
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + BRUSH_UNIT)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D_ARRAY, brushTexture)
+        program.int("uBrushes", BRUSH_UNIT)
+        for (half in 0 until halves) {
+            val offset = half * MASKS_PER_FIELD
+            for (channel in 0 until MASKS_PER_FIELD) {
+                maskInverted[channel] = if (masks.getOrNull(offset + channel)?.inverted == true) 1f else 0f
+            }
+            (if (half == 0) maskField else maskField2).bindAsTarget()
+            program.int("uMaskOffset", offset)
+            program.int("uMaskCount", (masks.size - offset).coerceIn(0, MASKS_PER_FIELD))
+            program.vec4("uMaskInverted", maskInverted)
+            drawQuad()
+        }
+        return halves
+    }
+
+    /**
+     * Brings the brush rasters up to date and uploads what changed: the whole layer when the raster is
+     * new, otherwise only the rectangle its newest dabs touched — a stroke being drawn changes a few
+     * thousand texels of a few million.
+     *
+     * The rasters are painted here, on the GL thread, from the proxy this view shows. The Auto Mask
+     * reads this proxy's colours where the export reads the full photo's, each averaged to the raster's
+     * size, so the two see nearly the same colours and not exactly the same ones.
+     */
+    private fun uploadBrushes(active: RenderParameters) {
+        val source = bitmap ?: return
+        val rasters = brushCache.rasters(active, imageWidth.toFloat() / imageHeight.coerceAtLeast(1), source) {
+            BrushReference.of(BitmapSurface(source))
+        }
+        val first = (0 until rasters.count).firstNotNullOfOrNull { rasters[it] } ?: return
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + BRUSH_UNIT)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D_ARRAY, brushTexture)
+        if (first.width != brushTextureWidth || first.height != brushTextureHeight || rasters.count > brushTextureLayers) {
+            brushTextureWidth = first.width
+            brushTextureHeight = first.height
+            brushTextureLayers = maxOf(rasters.count, brushTextureLayers)
+            GLES30.glTexImage3D(
+                GLES30.GL_TEXTURE_2D_ARRAY, 0, GLES30.GL_R16F,
+                brushTextureWidth, brushTextureHeight, brushTextureLayers, 0,
+                GLES30.GL_RED, GLES30.GL_HALF_FLOAT, null,
+            )
+            uploadedBrushes = arrayOfNulls(brushTextureLayers)
+        }
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 2)
+        for (layer in 0 until rasters.count) {
+            val raster = rasters[layer] ?: continue
+            val dirty = raster.takeDirty()
+            val rect = if (uploadedBrushes[layer] !== raster) {
+                intArrayOf(0, 0, raster.width, raster.height)
+            } else {
+                dirty ?: continue
+            }
+            uploadBrushRect(raster, layer, rect)
+            uploadedBrushes[layer] = raster
+        }
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+    }
+
+    private fun uploadBrushRect(raster: BrushRaster, layer: Int, rect: IntArray) {
+        val (left, top, right, bottom) = rect.toList()
+        val width = right - left
+        val height = bottom - top
+        if (width <= 0 || height <= 0) return
+        val texels = ByteBuffer.allocateDirect(width * height * 2).order(ByteOrder.nativeOrder()).asShortBuffer()
+        for (y in top until bottom) {
+            val row = y * raster.width
+            for (x in left until right) texels.put(halfOfLevel[raster.data[row + x].toInt() and 0xFFFF])
+        }
+        texels.position(0)
+        GLES30.glTexSubImage3D(
+            GLES30.GL_TEXTURE_2D_ARRAY, 0, left, top, layer, width, height, 1,
+            GLES30.GL_RED, GLES30.GL_HALF_FLOAT, texels,
+        )
+    }
+
+    private fun createBrushTexture(): Int {
+        val ids = IntArray(1)
+        GLES30.glGenTextures(1, ids, 0)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + BRUSH_UNIT)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D_ARRAY, ids[0])
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D_ARRAY, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D_ARRAY, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D_ARRAY, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D_ARRAY, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        val empty = ByteBuffer.allocateDirect(2).order(ByteOrder.nativeOrder()).asShortBuffer()
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 2)
+        GLES30.glTexImage3D(
+            GLES30.GL_TEXTURE_2D_ARRAY, 0, GLES30.GL_R16F, 1, 1, 1, 0,
+            GLES30.GL_RED, GLES30.GL_HALF_FLOAT, empty,
+        )
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+        return ids[0]
     }
 
     /**
@@ -267,14 +375,23 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         for (index in 0 until MAX_LOCAL_MASKS) {
             maskWeightsBuffer[index] = masks.getOrNull(index)?.let { select(it.adjustments) * scale } ?: 0f
         }
-        program.vec4(name, maskWeightsBuffer)
+        program.vec4s(name, MAX_LOCAL_MASKS / MASKS_PER_FIELD, maskWeightsBuffer)
+    }
+
+    /**
+     * The two halves of the field, or [fallback] in the units of the halves not built — a sampler
+     * has to point at some texture, even one the shader will not read.
+     */
+    private fun bindMaskFields(program: GlProgram, fields: Int, fallback: Int) {
+        program.sampler("uMaskField", if (fields > 0) maskField.texture else fallback, MASK_FIELD_UNIT)
+        program.sampler("uMaskField2", if (fields > 1) maskField2.texture else fallback, MASK_FIELD_2_UNIT)
+        program.int("uMaskFields", fields)
     }
 
     /** The five adjustments `applyBaseTone` consumes, shared by the tonal step and the base. */
-    private fun bindMaskBase(program: GlProgram, active: RenderParameters, enabled: Boolean) {
-        program.sampler("uMaskField", if (enabled) maskField.texture else sourceTexture, MASK_FIELD_UNIT)
-        program.boolean("uMaskEnabled", enabled)
-        val masks = if (enabled) active.masks else emptyList()
+    private fun bindMaskBase(program: GlProgram, active: RenderParameters, fields: Int) {
+        bindMaskFields(program, fields, sourceTexture)
+        val masks = if (fields > 0) active.masks else emptyList()
         bindMaskAdjustment(program, "uMaskTemperature", masks, 0.01f) { it.temp }
         bindMaskAdjustment(program, "uMaskTint", masks, 0.01f) { it.tint }
         bindMaskAdjustment(program, "uMaskExposure", masks, 1f) { it.exposure }
@@ -305,7 +422,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
      * fill later — [localBlur] is the only texture this path adds to the frame, and it has a
      * sixty-fourth of the image's texels.
      */
-    private fun buildLocalToneMask(active: RenderParameters, masked: Boolean): Boolean {
+    private fun buildLocalToneMask(active: RenderParameters, maskFields: Int): Boolean {
         val program = localBase ?: return false
         val precision = halfFloatTargets
         half.ensure(imageWidth / 2, imageHeight / 2, precision)
@@ -326,7 +443,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         program.float("uExposure", active.exposure)
         program.float("uWhites", active.whites / 100f)
         program.float("uBlacks", active.blacks / 100f)
-        bindMaskBase(program, active, masked)
+        bindMaskBase(program, active, maskFields)
         drawQuad()
 
         reduce(half, quarter)
@@ -335,7 +452,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         return true
     }
 
-    private fun renderTone(active: RenderParameters, localEnabled: Boolean, masked: Boolean) {
+    private fun renderTone(active: RenderParameters, localEnabled: Boolean, maskFields: Int) {
         val program = tone ?: return
         stage.bindAsTarget()
         program.use()
@@ -364,8 +481,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         program.float("uVibrance", active.vibrance / 100f)
         program.float("uSaturation", active.saturation / 100f)
 
-        bindMaskBase(program, active, masked)
-        val masks = if (masked) active.masks else emptyList()
+        bindMaskBase(program, active, maskFields)
+        val masks = if (maskFields > 0) active.masks else emptyList()
         bindMaskAdjustment(program, "uMaskContrast", masks, 0.01f) { it.contrast }
         bindMaskAdjustment(program, "uMaskHighlights", masks, 0.01f) { it.highlights }
         bindMaskAdjustment(program, "uMaskShadows", masks, 0.01f) { it.shadows }
@@ -451,7 +568,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         stats.generateMipmaps()
     }
 
-    private fun renderComposite(active: RenderParameters, detailEnabled: Boolean, masked: Boolean) {
+    private fun renderComposite(active: RenderParameters, detailEnabled: Boolean, maskFields: Int) {
         val program = composite ?: return
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         val viewport = applyFitViewport(active)
@@ -505,13 +622,12 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         program.boolean("uGradingEnabled", active.needsColorGradingStage)
         program.boolean("uEffectsEnabled", active.needsEffectsStage)
 
-        program.sampler("uMaskField", if (masked) maskField.texture else stage.texture, MASK_FIELD_UNIT)
-        program.boolean("uMaskEnabled", masked)
-        val masks = if (masked) active.masks else emptyList()
+        bindMaskFields(program, maskFields, stage.texture)
+        val masks = if (maskFields > 0) active.masks else emptyList()
         bindMaskAdjustment(program, "uMaskTexture", masks, 0.01f) { it.texture }
         bindMaskAdjustment(program, "uMaskClarity", masks, 0.01f) { it.clarity }
         bindMaskAdjustment(program, "uMaskDehaze", masks, 0.01f) { it.dehaze }
-        program.int("uMaskOverlay", if (masked && maskOverlay < masks.size) maskOverlay else -1)
+        program.int("uMaskOverlay", if (maskOverlay < masks.size) maskOverlay else -1)
 
         drawQuad()
     }
@@ -658,3 +774,12 @@ private const val MASK_FIELD_UNIT = 5
 
 /** The tone curve's tables, read only by the tonal step; the first unit after the mask field's. */
 private const val TONE_CURVE_UNIT = 6
+
+/** The second half of the mask field: after the tone curve's, so that no pass shares a unit. */
+private const val MASK_FIELD_2_UNIT = 7
+
+/** The brush rasters, read only by the field pass. */
+private const val BRUSH_UNIT = 8
+
+/** A raster's sixteen-bit level as the half float the texture holds, computed once for all 65 536. */
+private val halfOfLevel = ShortArray(65536) { android.util.Half.toHalf(it / 65535f) }

@@ -1,5 +1,8 @@
 package eu.studio742.imago.core.render
 
+import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
+import eu.studio742.imago.core.model.MAX_MASK_COMPONENTS
+
 /**
  * GLSL source of the preview pipeline.
  *
@@ -49,18 +52,30 @@ internal object PhotoShaders {
      * of the loop and, more importantly, guarantees that this side and Kotlin's start from exactly
      * the same two numbers instead of each doing its own calculation.
      *
+     * Shape, operation and inversion travel packed in one integer per component (`uComponentKind`:
+     * shape in bits 0-1, operation in 2-3, inversion in 4). Three integer arrays would take three
+     * uniform vectors per component on most drivers, and that is what limits how many components fit.
+     *
+     * A brush is not maths but a raster painted in Kotlin (`BrushRaster`), one layer of `uBrushes` per
+     * brush, with the layer in `uComponentA.x` — negative for a brush with nothing painted. It is read
+     * with `textureLod` because the read sits inside a loop and a branch, where implicit derivatives are
+     * undefined.
+     *
      * Dynamic indexing of uniform arrays — which elsewhere in the pipeline would be expensive — is not
      * here: this pass runs at one eighth of the resolution, a sixty-fourth of the texels. The hot path
      * is the tonal step, and there is no loop there, just a dot product.
      */
     private const val MASK_SHAPES = """
         float componentWeight(int index, vec2 point) {
+            int kind = uComponentKind[index];
             vec4 a = uComponentA[index];
             vec4 b = uComponentB[index];
             vec2 delta = vec2((point.x - a.x) * uImageAspect, point.y - a.y);
             vec2 local = vec2(delta.x * a.z + delta.y * a.w, -delta.x * a.w + delta.y * a.z);
             float weight;
-            if (uComponentShape[index] == 0) {
+            if ((kind & 3) == 2) {
+                weight = a.x < 0.0 ? 0.0 : textureLod(uBrushes, vec3(point, a.x), 0.0).r;
+            } else if ((kind & 3) == 0) {
                 float halfWidth = max(b.x, 0.004) * 0.5;
                 weight = smoothstep(-halfWidth, halfWidth, local.y);
             } else {
@@ -71,7 +86,7 @@ internal object PhotoShaders {
                 float inner = 1.0 - clamp(b.z / 100.0, 0.02, 1.0);
                 weight = 1.0 - smoothstep(inner, 1.0, distance);
             }
-            return uComponentInverted[index] == 1 ? 1.0 - weight : weight;
+            return ((kind >> 4) & 1) == 1 ? 1.0 - weight : weight;
         }
 
         // The first component seeds the accumulator instead of combining with it: subtracting or
@@ -85,7 +100,7 @@ internal object PhotoShaders {
                 if (index == 0) {
                     accumulated = weight;
                 } else {
-                    int op = uComponentOp[start + index];
+                    int op = (uComponentKind[start + index] >> 2) & 3;
                     if (op == 1) accumulated = accumulated * (1.0 - weight);
                     else if (op == 2) accumulated = accumulated * weight;
                     else accumulated = max(accumulated, weight);
@@ -96,25 +111,26 @@ internal object PhotoShaders {
     """
 
     /**
-     * The weight of each mask at each point, one channel per mask, at one eighth of the resolution.
+     * The weight of four masks at each point, one channel per mask, at one eighth of the resolution.
      *
      * The field is built in **image** coordinates, which is why geometry never comes near it: the
      * `stage` lives there too, and the tonal step reads both with the same coordinate. Four masks is
      * not a chosen number — it is how many channels an RGBA texture has, and it is what lets the tonal
-     * step apply them all with one dot product per adjustment.
+     * step apply them all with one dot product per adjustment. Masks five to eight are a second pass
+     * into a second texture, with `uMaskOffset` at four; the component arrays are the same in both.
      */
     const val MASK_FIELD = """#version 300 es
         precision highp float;
         uniform float uImageAspect;
+        uniform int uMaskOffset;
         uniform int uMaskCount;
         uniform vec4 uMaskInverted;
-        uniform int uComponentStart[4];
-        uniform int uComponentCount[4];
-        uniform int uComponentShape[8];
-        uniform int uComponentOp[8];
-        uniform int uComponentInverted[8];
-        uniform vec4 uComponentA[8];
-        uniform vec4 uComponentB[8];
+        uniform int uComponentStart[$MAX_LOCAL_MASKS];
+        uniform int uComponentCount[$MAX_LOCAL_MASKS];
+        uniform int uComponentKind[$MAX_MASK_COMPONENTS];
+        uniform vec4 uComponentA[$MAX_MASK_COMPONENTS];
+        uniform vec4 uComponentB[$MAX_MASK_COMPONENTS];
+        uniform highp sampler2DArray uBrushes;
         in vec2 vTexCoord;
         out vec4 fragColor;
 """ + MASK_SHAPES + """
@@ -128,11 +144,36 @@ internal object PhotoShaders {
         // of construct some drivers handle badly, and here it buys nothing: it is four lines.
         void main() {
             vec4 weights = vec4(0.0);
-            if (uMaskCount > 0) weights.x = channelWeight(0, vTexCoord, uMaskInverted.x);
-            if (uMaskCount > 1) weights.y = channelWeight(1, vTexCoord, uMaskInverted.y);
-            if (uMaskCount > 2) weights.z = channelWeight(2, vTexCoord, uMaskInverted.z);
-            if (uMaskCount > 3) weights.w = channelWeight(3, vTexCoord, uMaskInverted.w);
+            if (uMaskCount > 0) weights.x = channelWeight(uMaskOffset, vTexCoord, uMaskInverted.x);
+            if (uMaskCount > 1) weights.y = channelWeight(uMaskOffset + 1, vTexCoord, uMaskInverted.y);
+            if (uMaskCount > 2) weights.z = channelWeight(uMaskOffset + 2, vTexCoord, uMaskInverted.z);
+            if (uMaskCount > 3) weights.w = channelWeight(uMaskOffset + 3, vTexCoord, uMaskInverted.w);
             fragColor = weights;
+        }
+    """
+
+    /**
+     * The two halves of the weight field, and how to weigh an adjustment with them.
+     *
+     * Each local adjustment arrives as two vectors: its value in masks one to four, and in five to
+     * eight. `uMaskFields` says how many halves are bound — zero, one or two — so that a photo with
+     * four masks or fewer does not pay for the second sample.
+     */
+    private const val MASK_FIELDS = """
+        uniform sampler2D uMaskField;
+        uniform sampler2D uMaskField2;
+        uniform int uMaskFields;
+
+        vec4 maskWeightsLow(vec2 point) {
+            return uMaskFields > 0 ? texture(uMaskField, point) : vec4(0.0);
+        }
+
+        vec4 maskWeightsHigh(vec2 point) {
+            return uMaskFields > 1 ? texture(uMaskField2, point) : vec4(0.0);
+        }
+
+        float maskDelta(vec4 low, vec4 high, vec4 values[2]) {
+            return dot(low, values[0]) + dot(high, values[1]);
         }
     """
 
@@ -142,23 +183,21 @@ internal object PhotoShaders {
      * The field is sampled with the same coordinate the image is sampled with, and not the screen's:
      * masks are stuck to the content, not to the framing.
      */
-    private const val MASK_BASE_UNIFORMS = """
-        uniform sampler2D uMaskField;
-        uniform int uMaskEnabled;
-        uniform vec4 uMaskTemperature;
-        uniform vec4 uMaskTint;
-        uniform vec4 uMaskExposure;
-        uniform vec4 uMaskWhites;
-        uniform vec4 uMaskBlacks;
+    private const val MASK_BASE_UNIFORMS = MASK_FIELDS + """
+        uniform vec4 uMaskTemperature[2];
+        uniform vec4 uMaskTint[2];
+        uniform vec4 uMaskExposure[2];
+        uniform vec4 uMaskWhites[2];
+        uniform vec4 uMaskBlacks[2];
     """
 
-    /** Os restantes ajustes locais do passo tonal. */
+    /** The remaining local adjustments of the tonal step. */
     private const val MASK_TONE_UNIFORMS = """
-        uniform vec4 uMaskContrast;
-        uniform vec4 uMaskHighlights;
-        uniform vec4 uMaskShadows;
-        uniform vec4 uMaskVibrance;
-        uniform vec4 uMaskSaturation;
+        uniform vec4 uMaskContrast[2];
+        uniform vec4 uMaskHighlights[2];
+        uniform vec4 uMaskShadows[2];
+        uniform vec4 uMaskVibrance[2];
+        uniform vec4 uMaskSaturation[2];
     """
 
     private const val BASE_TONE = """
@@ -301,12 +340,13 @@ internal object PhotoShaders {
             // This layer MUST see the local exposure. Built with the global one, it would describe an
             // image that is not the one entering step 8, and the two curves would decide what is a
             // highlight and what is a shadow from a neighbourhood that never existed.
-            vec4 w = uMaskEnabled == 1 ? texture(uMaskField, vTexCoord) : vec4(0.0);
-            float temperature = uTemperature + dot(w, uMaskTemperature);
-            float tint = uTint + dot(w, uMaskTint);
-            float exposure = clamp(uExposure + dot(w, uMaskExposure), -5.0, 5.0);
-            float whites = uWhites + dot(w, uMaskWhites);
-            float blacks = uBlacks + dot(w, uMaskBlacks);
+            vec4 w = maskWeightsLow(vTexCoord);
+            vec4 w2 = maskWeightsHigh(vTexCoord);
+            float temperature = uTemperature + maskDelta(w, w2, uMaskTemperature);
+            float tint = uTint + maskDelta(w, w2, uMaskTint);
+            float exposure = clamp(uExposure + maskDelta(w, w2, uMaskExposure), -5.0, 5.0);
+            float whites = uWhites + maskDelta(w, w2, uMaskWhites);
+            float blacks = uBlacks + maskDelta(w, w2, uMaskBlacks);
             vec3 based = applyBaseTone(averaged, temperature, tint, exposure, whites, blacks);
             fragColor = vec4(vec3(luminance(based)), 1.0);
         }
@@ -411,18 +451,19 @@ internal object PhotoShaders {
             // eighth. Adding in parameter space is what makes two overlapping masks of plus one EV
             // each give two, which is what whoever drew them expects; mixing outputs would give an
             // order-dependent result.
-            vec4 w = uMaskEnabled == 1 ? texture(uMaskField, vTexCoord) : vec4(0.0);
-            float exposure = clamp(uExposure + dot(w, uMaskExposure), -5.0, 5.0);
-            float contrast = uContrast + dot(w, uMaskContrast);
-            float highlights = uHighlights + dot(w, uMaskHighlights);
-            float shadows = uShadows + dot(w, uMaskShadows);
-            float saturation = uSaturation + dot(w, uMaskSaturation);
-            float vibrance = uVibrance + dot(w, uMaskVibrance);
+            vec4 w = maskWeightsLow(vTexCoord);
+            vec4 w2 = maskWeightsHigh(vTexCoord);
+            float exposure = clamp(uExposure + maskDelta(w, w2, uMaskExposure), -5.0, 5.0);
+            float contrast = uContrast + maskDelta(w, w2, uMaskContrast);
+            float highlights = uHighlights + maskDelta(w, w2, uMaskHighlights);
+            float shadows = uShadows + maskDelta(w, w2, uMaskShadows);
+            float saturation = uSaturation + maskDelta(w, w2, uMaskSaturation);
+            float vibrance = uVibrance + maskDelta(w, w2, uMaskVibrance);
 
-            float temperature = uTemperature + dot(w, uMaskTemperature);
-            float tint = uTint + dot(w, uMaskTint);
-            float whites = uWhites + dot(w, uMaskWhites);
-            float blacks = uBlacks + dot(w, uMaskBlacks);
+            float temperature = uTemperature + maskDelta(w, w2, uMaskTemperature);
+            float tint = uTint + maskDelta(w, w2, uMaskTint);
+            float whites = uWhites + maskDelta(w, w2, uMaskWhites);
+            float blacks = uBlacks + maskDelta(w, w2, uMaskBlacks);
             vec3 color = applyBaseTone(source.rgb, temperature, tint, exposure, whites, blacks);
 
             // Negative says "no mask", and in that case the curves fall back to the global behaviour.
@@ -530,11 +571,10 @@ internal object PhotoShaders {
         uniform float uTexture;
         uniform float uClarity;
         uniform float uDehaze;
-        uniform sampler2D uMaskField;
-        uniform int uMaskEnabled;
-        uniform vec4 uMaskTexture;
-        uniform vec4 uMaskClarity;
-        uniform vec4 uMaskDehaze;
+""" + MASK_FIELDS + """
+        uniform vec4 uMaskTexture[2];
+        uniform vec4 uMaskClarity[2];
+        uniform vec4 uMaskDehaze[2];
         // Index of the mask to paint on top, or -1 for none. It is a visual aid of the editor and
         // not a render parameter: it lives outside `RenderParameters` on purpose, because those are
         // what the export honours and what decides whether a recipe is neutral.
@@ -877,14 +917,15 @@ internal object PhotoShaders {
             // The field is read at `source` and never at `screen`. Masks are in image coordinates, and
             // sampling them in screen space was silently right as long as there was no crop or
             // rotation — and silently wrong from then on.
-            vec4 w = uMaskEnabled == 1 ? texture(uMaskField, source) : vec4(0.0);
+            vec4 w = maskWeightsLow(source);
+            vec4 w2 = maskWeightsHigh(source);
             if (uDetailEnabled == 1) {
                 color = applyDetail(
                     color,
                     source,
-                    uTexture + dot(w, uMaskTexture),
-                    uClarity + dot(w, uMaskClarity),
-                    uDehaze + dot(w, uMaskDehaze)
+                    uTexture + maskDelta(w, w2, uMaskTexture),
+                    uClarity + maskDelta(w, w2, uMaskClarity),
+                    uDehaze + maskDelta(w, w2, uMaskDehaze)
                 );
             }
             // Step 12 has no neighbourhood or coordinate: it is per pixel, and sits between detail and
@@ -907,7 +948,13 @@ internal object PhotoShaders {
                     uMaskOverlay == 2 ? 1.0 : 0.0,
                     uMaskOverlay == 3 ? 1.0 : 0.0
                 );
-                color = mix(color, vec3(0.90, 0.20, 0.25), dot(w, pick) * 0.45);
+                vec4 pickHigh = vec4(
+                    uMaskOverlay == 4 ? 1.0 : 0.0,
+                    uMaskOverlay == 5 ? 1.0 : 0.0,
+                    uMaskOverlay == 6 ? 1.0 : 0.0,
+                    uMaskOverlay == 7 ? 1.0 : 0.0
+                );
+                color = mix(color, vec3(0.90, 0.20, 0.25), (dot(w, pick) + dot(w2, pickHigh)) * 0.45);
             }
             fragColor = vec4(color, staged.a);
         }

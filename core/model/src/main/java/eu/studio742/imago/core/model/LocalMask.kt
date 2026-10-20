@@ -5,31 +5,60 @@ import kotlinx.serialization.Serializable
 /**
  * How many masks a recipe can have.
  *
- * It is not a number chosen by taste: the weight field the renderer builds is an RGBA texture, and
- * each mask takes one channel. That is what allows applying all four at once with a dot product per
- * parameter, instead of a dynamically indexed loop — which on several GLSL ES compilers falls back
- * to private memory and eats the 16 ms budget on its own. Going up to eight means a second render
- * target and twice the uniforms in the tonal pass.
+ * It is not a number chosen by taste: the weight field the renderer builds is made of RGBA textures,
+ * and each mask takes one channel. That is what allows applying four masks at once with a dot product
+ * per parameter, instead of a dynamically indexed loop — which on several GLSL ES compilers falls back
+ * to private memory and eats the 16 ms budget on its own. Eight is two textures: the second is only
+ * built and sampled when a fifth mask exists.
+ *
+ * Process 14 and earlier stopped at four; [maxLocalMasks] keeps their recipes drawing as they did.
  */
-const val MAX_LOCAL_MASKS = 4
+const val MAX_LOCAL_MASKS = 8
+
+/** The masks a texture of the weight field holds: one per RGBA channel. */
+const val MASKS_PER_FIELD = 4
+
+/** The process from which a recipe can have more than four masks, and [LocalMask.amount] counts. */
+const val COMBINED_MASKS_PROCESS_VERSION = 15
+
+/** How many masks a recipe of this process draws. */
+fun maxLocalMasks(processVersion: Int): Int =
+    if (processVersion >= COMBINED_MASKS_PROCESS_VERSION) MAX_LOCAL_MASKS else MASKS_PER_FIELD
 
 /**
  * How many components fit in total, across all masks.
  *
- * It is the size of the uniform block the field shader declares. Four single-component masks —
- * what the interface can create today — use half; the rest is headroom for when subtract and
- * intersect reach the interface.
+ * It is the size of the uniform arrays the field shader declares. A component costs three vectors —
+ * two of geometry and one packed integer — so 32 take 96 of the 224 that OpenGL ES 3.0 guarantees to a
+ * fragment shader, which leaves the field pass plenty of room.
  */
-const val MAX_MASK_COMPONENTS = 8
+const val MAX_MASK_COMPONENTS = 32
+
+/**
+ * How many brush components fit across all masks.
+ *
+ * Each one is a 2048-pixel weight image — a layer of a texture array on the GPU and a raster in memory
+ * on export — and not a handful of uniforms like a gradient.
+ */
+const val MAX_BRUSH_COMPONENTS = 8
+
+/** The process from which a mask component can be a [MaskShape.BRUSH]. */
+const val BRUSH_MASKS_PROCESS_VERSION = 16
+
+/** The neutral [LocalMask.amount]: the adjustments as they were set. */
+const val MASK_AMOUNT_NEUTRAL = 100f
+const val MASK_AMOUNT_MAX = 200f
 
 /**
  * The shape of a mask component.
  *
- * Adding values is backward compatible: nothing writes them until there is code that produces them,
- * and an old recipe never contains them.
+ * Adding values is backward compatible for old recipes, which never contain them. It is not for old
+ * apps: one that does not know a value cannot decode the recipe at all, and sync skips it — which is
+ * why every new shape also raises the process version, so that the app that can decode it but not draw
+ * it asks to be updated.
  */
 @Serializable
-enum class MaskShape { LINEAR, RADIAL }
+enum class MaskShape { LINEAR, RADIAL, BRUSH }
 
 /** How a component combines with the ones before it in the same mask. */
 @Serializable
@@ -51,7 +80,17 @@ data class LocalMask(
     val inverted: Boolean = false,
     val components: List<MaskComponent> = emptyList(),
     val adjustments: LocalAdjustments = LocalAdjustments(),
-)
+    /**
+     * Lightroom's mask Amount, in percent: it scales every adjustment of the mask at once, from 0 (the
+     * mask does nothing) to 200 (each adjustment doubled). Scaling the parameters and not the weight is
+     * what lets it go past 100 — a weight cannot go above one.
+     */
+    val amount: Float = MASK_AMOUNT_NEUTRAL,
+) {
+    /** The adjustments the renderer applies: the sliders times the Amount. */
+    val effectiveAdjustments: LocalAdjustments
+        get() = if (amount == MASK_AMOUNT_NEUTRAL) adjustments else adjustments.scaled(amount / MASK_AMOUNT_NEUTRAL)
+}
 
 /**
  * A shape inside a mask.
@@ -72,6 +111,7 @@ data class MaskComponent(
     val inverted: Boolean = false,
     val linear: LinearMask? = null,
     val radial: RadialMask? = null,
+    val brush: BrushMask? = null,
 )
 
 /**
@@ -107,6 +147,39 @@ data class RadialMask(
 )
 
 /**
+ * Painted strokes, applied in order: painting raises the weight towards each stroke's density, the
+ * eraser lowers it, and both only inside this component.
+ */
+@Serializable
+data class BrushMask(
+    val strokes: List<BrushStroke> = emptyList(),
+)
+
+/**
+ * One stroke: the finger's path and the brush it was painted with.
+ *
+ * [points] are `x0, y0, x1, y1, …` in normalised coordinates of the original image, like every other
+ * mask, flat so the JSON stays a list of numbers. [radius] is in units of the image's height, as a
+ * radial's radii are: the brush is measured on screen while painting, and what is kept is how much of
+ * the photo it covered.
+ *
+ * [feather], [flow] and [density] go from 0 to 100, as in Lightroom. Feather is the fraction of the
+ * radius taken by the soft edge; flow is how much each dab lays down, so slow strokes build up; density
+ * is the most the stroke can reach however many times it passes. [autoMask] confines the stroke to the
+ * colours under the brush's centre.
+ */
+@Serializable
+data class BrushStroke(
+    val points: List<Float>,
+    val radius: Float,
+    val feather: Float = 50f,
+    val flow: Float = 100f,
+    val density: Float = 100f,
+    val erase: Boolean = false,
+    val autoMask: Boolean = false,
+)
+
+/**
  * The adjustments that can vary by region.
  *
  * There are thirteen, not twenty. Left out are the tone curve and per-band HSL — 256 samples or
@@ -133,4 +206,24 @@ data class LocalAdjustments(
     /** A mask without adjustments has no work to give the renderer, however well drawn it is. */
     val isNeutral: Boolean
         get() = this == LocalAdjustments()
+
+    /**
+     * Every adjustment times [factor]. The `+ 0f` is not noise: a negative value times zero is −0.0,
+     * which a data class compares as different from 0.0, and a mask at 0% would stop being neutral.
+     */
+    fun scaled(factor: Float): LocalAdjustments = LocalAdjustments(
+        exposure = exposure * factor + 0f,
+        contrast = contrast * factor + 0f,
+        highlights = highlights * factor + 0f,
+        shadows = shadows * factor + 0f,
+        whites = whites * factor + 0f,
+        blacks = blacks * factor + 0f,
+        temp = temp * factor + 0f,
+        tint = tint * factor + 0f,
+        vibrance = vibrance * factor + 0f,
+        saturation = saturation * factor + 0f,
+        texture = texture * factor + 0f,
+        clarity = clarity * factor + 0f,
+        dehaze = dehaze * factor + 0f,
+    )
 }

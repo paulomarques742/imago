@@ -49,6 +49,9 @@ import eu.studio742.imago.core.model.CURRENT_PROCESS_VERSION
 import eu.studio742.imago.core.model.RecipeConflictVersion
 import eu.studio742.imago.core.model.LocalMask
 import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
+import eu.studio742.imago.core.model.MAX_MASK_COMPONENTS
+import eu.studio742.imago.core.model.BrushStroke
+import eu.studio742.imago.core.model.MaskOp
 import eu.studio742.imago.core.model.MaskShape
 import eu.studio742.imago.core.model.CropRect
 import eu.studio742.imago.core.model.Geometry
@@ -280,6 +283,8 @@ enum class Adjustment(val neutral: Float, val range: ClosedFloatingPointRange<Fl
     PERSPECTIVE_SCALE(0f, -50f..100f),
     PERSPECTIVE_OFFSET_X(0f, -100f..100f),
     PERSPECTIVE_OFFSET_Y(0f, -100f..100f),
+    /** Lightroom's mask Amount: it lives in the mask, not in the recipe — see [isMaskSlider]. */
+    MASK_AMOUNT(100f, 0f..200f),
 }
 
 /** The sliders of the perspective sheet, in Lightroom's order. */
@@ -345,6 +350,7 @@ val Adjustment.labelRes: StringResource
     Adjustment.PERSPECTIVE_SCALE -> Res.string.editor_adj_perspective_scale
     Adjustment.PERSPECTIVE_OFFSET_X -> Res.string.editor_adj_perspective_offset_x
     Adjustment.PERSPECTIVE_OFFSET_Y -> Res.string.editor_adj_perspective_offset_y
+    Adjustment.MASK_AMOUNT -> Res.string.editor_amount
     }
 
 @Composable
@@ -361,6 +367,7 @@ private fun Adjustment.historyIcon(): HistoryIcon = when (this) {
     Adjustment.TEXTURE, Adjustment.CLARITY, Adjustment.DEHAZE -> HistoryIcon.DETAIL
     Adjustment.GRADE_BLENDING, Adjustment.GRADE_BALANCE -> HistoryIcon.GRADE
     in PERSPECTIVE_ADJUSTMENTS -> HistoryIcon.CROP
+    Adjustment.MASK_AMOUNT -> HistoryIcon.MASK
     else -> HistoryIcon.EFFECTS
 }
 
@@ -455,8 +462,12 @@ data class EditorUiState(
     val whiteBalanceUnreadable: Boolean = false,
     val selectedColorGradeWheel: ColorGradeWheel = ColorGradeWheel.SHADOWS,
     val selectedMaskId: String? = null,
+    /** The component of the selected mask whose handles are on the photo. Read through [selectedComponent]. */
+    val selectedMaskComponent: Int = 0,
     /** "Show mask" pins the red; otherwise it only lights up during the gesture. */
     val maskOverlayPinned: Boolean = false,
+    /** The mask brush in the hand: Brush or Eraser, and both their settings. Remembered on the device. */
+    val brushTool: BrushTool = BrushTool(),
     val maskNotice: UiText? = null,
     /** An automatic Upright mode is looking for the photo's lines. */
     val isDetectingUpright: Boolean = false,
@@ -497,8 +508,16 @@ data class EditorUiState(
             return !current.sameLookAs(edit.baseline)
         }
 
+    /**
+     * What the stage draws. The open mask goes along even with no adjustments yet, so that its red
+     * can show — a brush has no outline, and the first strokes would otherwise paint invisibly.
+     */
     val renderParameters: RenderParameters
-        get() = recipe?.toRenderParameters() ?: RenderParameters()
+        get() = recipe?.toRenderParameters(showMask = selectedMaskId.takeIf { isMaskEditing }) ?: RenderParameters()
+
+    /** The open mask's selected shape is a brush: one finger on the photo paints. */
+    val isPainting: Boolean
+        get() = isMaskEditing && selectedMask?.components?.getOrNull(selectedComponent)?.shape == MaskShape.BRUSH
 
     /** Crop is the only mode that needs to turn off zoom and the pager. */
     val isCropping: Boolean get() = sheet == EditorSheet.CROP
@@ -513,6 +532,13 @@ data class EditorUiState(
     val selectedMask: LocalMask? get() = selectedMaskId?.let { id -> masks.firstOrNull { it.id == id } }
 
     /**
+     * The selected component, always one the mask has. An undo can take away the component that was
+     * selected; the handles then go to the last one left instead of vanishing.
+     */
+    val selectedComponent: Int
+        get() = selectedMaskComponent.coerceIn(0, (selectedMask?.components?.lastIndex ?: 0).coerceAtLeast(0))
+
+    /**
      * A slider's value: the selected mask's when there is one and the adjustment is local, and the
      * global one in every other case.
      *
@@ -523,8 +549,8 @@ data class EditorUiState(
     fun valueOf(adjustment: Adjustment): Float {
         val current = recipe ?: return adjustment.neutral
         val maskId = selectedMaskId
-        return if (maskId != null && adjustment.isLocal() && sheet == EditorSheet.MASK_ADJUSTMENTS) {
-            current.localAdjustmentValue(maskId, adjustment)
+        return if (maskId != null && adjustment.isMaskSlider() && sheet == EditorSheet.MASK_ADJUSTMENTS) {
+            current.maskSliderValue(maskId, adjustment)
         } else {
             current.adjustmentValue(adjustment)
         }
@@ -548,7 +574,7 @@ open class EditorViewModel(
     /** Told when an export changes a stack, so the grid shows the new cover; tests leave it out. */
     private val library: eu.studio742.imago.core.data.LibraryRepository? = null,
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(EditorUiState())
+    private val mutableState = MutableStateFlow(EditorUiState(brushTool = BrushTool.decode(configuration.brushTool)))
     val state = mutableState.asStateFlow()
 
     private val history = EditHistory()
@@ -1032,7 +1058,7 @@ open class EditorViewModel(
         val current = state.value.recipe ?: return
         val snapshot = state.value
         val maskId = snapshot.selectedMaskId
-            ?.takeIf { adjustment.isLocal() && snapshot.sheet == EditorSheet.MASK_ADJUSTMENTS }
+            ?.takeIf { adjustment.isMaskSlider() && snapshot.sheet == EditorSheet.MASK_ADJUSTMENTS }
             ?.takeIf { current.mask(it) != null }
         val clamped = value.coerceIn(adjustment.range.start, adjustment.range.endInclusive).let { bounded ->
             // With the crop constrained the frame cannot shrink below the cover: the slider stops at
@@ -1044,7 +1070,7 @@ open class EditorViewModel(
             }
         }
         val existing = if (maskId != null) {
-            current.localAdjustmentValue(maskId, adjustment)
+            current.maskSliderValue(maskId, adjustment)
         } else {
             current.adjustmentValue(adjustment)
         }
@@ -1057,7 +1083,7 @@ open class EditorViewModel(
         // perspective slider was the one change this step threw away.
         val active = current.copy(geometry = current.geometry.activeAtProcess(current.processVersion))
         val edited = if (maskId != null) {
-            active.withLocalAdjustment(maskId, adjustment, clamped)
+            active.withMaskSlider(maskId, adjustment, clamped)
         } else {
             active.withAdjustment(adjustment, clamped)
         }
@@ -1099,7 +1125,7 @@ open class EditorViewModel(
                     ?: uiText(Res.string.editor_history_manual),
                 valueText = formatAdjustmentValue(
                     change.adjustment,
-                    change.maskId?.let { current.localAdjustmentValue(it, change.adjustment) }
+                    change.maskId?.let { current.maskSliderValue(it, change.adjustment) }
                         ?: current.adjustmentValue(change.adjustment),
                 ).asUiText(),
                 icon = if (change.maskId != null) HistoryIcon.MASK else change.adjustment.historyIcon(),
@@ -1919,6 +1945,7 @@ open class EditorViewModel(
             }.onSuccess { message ->
                 mutableState.update { it.copy(isExporting = false, exportPhase = null, exportMessage = message) }
             }.onFailure { error ->
+                error.printStackTrace() // TEMP-DEBUG
                 mutableState.update {
                     it.copy(
                         isExporting = false,
@@ -2004,13 +2031,20 @@ open class EditorViewModel(
 
     // --- masks ---------------------------------------------------------------------------------
 
-    fun selectMask(maskId: String?) = mutableState.update {
+    fun selectMask(maskId: String?) = selectMaskComponent(maskId, 0)
+
+    /** Opens a mask on one of its components: the sliders below, that component's handles on the photo. */
+    fun selectMaskComponent(maskId: String?, component: Int) = mutableState.update {
         it.copy(
             selectedMaskId = maskId,
+            selectedMaskComponent = component,
             sheet = if (maskId == null) EditorSheet.MASKS else EditorSheet.MASK_ADJUSTMENTS,
             maskOverlayPinned = if (maskId == null) false else it.maskOverlayPinned,
         )
     }
+
+    /** A tap on another component's pin, on the photo: the handles move to it, the sliders stay. */
+    fun focusMaskComponent(component: Int) = mutableState.update { it.copy(selectedMaskComponent = component) }
 
     fun showMaskList() = mutableState.update {
         it.copy(sheet = EditorSheet.MASKS, selectedMaskId = null, maskOverlayPinned = false)
@@ -2036,8 +2070,94 @@ open class EditorViewModel(
         }
         commitMask(updated, detail = uiText(Res.string.editor_history_mask_created), valueText = name.asUiText())
         mutableState.update {
-            it.copy(selectedMaskId = id, sheet = EditorSheet.MASK_ADJUSTMENTS, maskOverlayPinned = true)
+            it.copy(
+                selectedMaskId = id,
+                selectedMaskComponent = 0,
+                sheet = EditorSheet.MASK_ADJUSTMENTS,
+                maskOverlayPinned = true,
+            )
         }
+    }
+
+    /**
+     * Lightroom's Add, Subtract and Intersect: a new shape in the mask, opened right away on its
+     * handles, with the red on — a subtraction cannot be placed without seeing what it takes away.
+     */
+    fun addMaskComponent(maskId: String, shape: MaskShape, op: MaskOp) {
+        val current = state.value.recipe ?: return
+        val (updated, index) = current.withNewMaskComponent(maskId, shape, op)
+        if (index == null) {
+            if (current.mask(maskId) != null) {
+                mutableState.update { it.copy(maskNotice = uiText(Res.string.editor_mask_components_max, MAX_MASK_COMPONENTS)) }
+            }
+            return
+        }
+        val detail = when (op) {
+            MaskOp.ADD -> Res.string.editor_history_mask_shape_added
+            MaskOp.SUBTRACT -> Res.string.editor_history_mask_shape_subtracted
+            MaskOp.INTERSECT -> Res.string.editor_history_mask_shape_intersected
+        }
+        commitMask(updated, detail = uiText(detail), valueText = current.mask(maskId)?.name?.asUiText())
+        mutableState.update {
+            it.copy(
+                selectedMaskId = maskId,
+                selectedMaskComponent = index,
+                sheet = EditorSheet.MASK_ADJUSTMENTS,
+                maskOverlayPinned = true,
+            )
+        }
+    }
+
+    /** Removing the last shape removes the mask, as in Lightroom. */
+    fun deleteMaskComponent(maskId: String, component: Int) {
+        val current = state.value.recipe ?: return
+        val mask = current.mask(maskId) ?: return
+        if (mask.components.size == 1) {
+            deleteMask(maskId)
+            return
+        }
+        commitMask(
+            current.withoutMaskComponent(maskId, component),
+            detail = uiText(Res.string.editor_history_mask_shape_removed),
+            valueText = mask.name.asUiText(),
+        )
+        mutableState.update {
+            if (it.selectedMaskId == maskId && it.selectedMaskComponent >= component) {
+                it.copy(selectedMaskComponent = (it.selectedMaskComponent - 1).coerceAtLeast(0))
+            } else {
+                it
+            }
+        }
+    }
+
+    fun setMaskComponentInverted(maskId: String, component: Int, inverted: Boolean) {
+        val current = state.value.recipe ?: return
+        commitMask(
+            current.withMaskComponentInverted(maskId, component, inverted),
+            detail = uiText(if (inverted) Res.string.editor_history_mask_shape_inverted else Res.string.editor_history_mask_shape_normal),
+            valueText = current.mask(maskId)?.name?.asUiText(),
+        )
+    }
+
+    /** Duplicate, and Duplicate and Invert: the copy goes right after the original and is not opened. */
+    fun duplicateMask(maskId: String, invert: Boolean) {
+        val current = state.value.recipe ?: return
+        val (updated, id) = current.withDuplicatedMask(maskId, invert)
+        if (id == null) {
+            if (current.mask(maskId) == null) return
+            val notice = if (current.masks.size >= MAX_LOCAL_MASKS) {
+                uiText(Res.string.editor_masks_max, MAX_LOCAL_MASKS)
+            } else {
+                uiText(Res.string.editor_mask_components_max, MAX_MASK_COMPONENTS)
+            }
+            mutableState.update { it.copy(maskNotice = notice) }
+            return
+        }
+        commitMask(
+            updated,
+            detail = uiText(if (invert) Res.string.editor_history_mask_duplicated_inverted else Res.string.editor_history_mask_duplicated),
+            valueText = updated.mask(id)?.name?.asUiText(),
+        )
     }
 
     fun deleteMask(maskId: String) {
@@ -2079,16 +2199,85 @@ open class EditorViewModel(
      * and whoever releases it calls [finishAdjustment], as in crop. One entry per gesture, not per frame.
      */
     fun moveMask(maskId: String, deltaX: Float, deltaY: Float) =
-        editMaskGeometry(maskId, uiText(Res.string.editor_history_mask_moved)) { it.withMaskMoved(maskId, deltaX, deltaY) }
+        editMaskGeometry(maskId, uiText(Res.string.editor_history_mask_moved)) {
+            it.withMaskMoved(maskId, deltaX, deltaY, component = state.value.selectedComponent)
+        }
 
     fun setMaskRadius(maskId: String, radiusX: Float? = null, radiusY: Float? = null) =
-        editMaskGeometry(maskId, uiText(Res.string.editor_history_mask_resized)) { it.withMaskRadius(maskId, radiusX, radiusY) }
+        editMaskGeometry(maskId, uiText(Res.string.editor_history_mask_resized)) {
+            it.withMaskRadius(maskId, radiusX, radiusY, component = state.value.selectedComponent)
+        }
 
     fun setMaskWidth(maskId: String, width: Float) =
-        editMaskGeometry(maskId, uiText(Res.string.editor_history_mask_resized)) { it.withMaskWidth(maskId, width) }
+        editMaskGeometry(maskId, uiText(Res.string.editor_history_mask_resized)) {
+            it.withMaskWidth(maskId, width, component = state.value.selectedComponent)
+        }
 
     fun rotateMask(maskId: String, degrees: Float) =
-        editMaskGeometry(maskId, uiText(Res.string.editor_history_rotated)) { it.withMaskRotation(maskId, degrees) }
+        editMaskGeometry(maskId, uiText(Res.string.editor_history_rotated)) {
+            it.withMaskRotation(maskId, degrees, component = state.value.selectedComponent)
+        }
+
+    // --- brush ----------------------------------------------------------------------------------
+
+    fun setBrushErasing(erasing: Boolean) = updateBrushTool { it.copy(erasing = erasing) }
+
+    fun setBrushAutoMask(on: Boolean) = updateBrushTool { it.withActive(it.active.copy(autoMask = on)) }
+
+    /** A brush slider being dragged: kept in the state, written to the device when the finger lifts. */
+    fun setBrushSetting(setting: BrushSetting, value: Float) = mutableState.update {
+        it.copy(brushTool = it.brushTool.withActive(it.brushTool.active.with(setting, value)))
+    }
+
+    fun finishBrushSetting() = configuration.setBrushTool(state.value.brushTool.encode())
+
+    private fun updateBrushTool(change: (BrushTool) -> BrushTool) {
+        mutableState.update { it.copy(brushTool = change(it.brushTool)) }
+        configuration.setBrushTool(state.value.brushTool.encode())
+    }
+
+    /**
+     * A finger lands on the photo with a brush selected: a stroke starts, with the brush in the hand.
+     * [x] and [y] are in normalised image coordinates, [radius] in units of the image's height — the
+     * screen's brush already measured on the photo as it is shown.
+     *
+     * The stroke is one history entry, closed by [finishAdjustment] when the finger lifts.
+     */
+    fun beginBrushStroke(maskId: String, x: Float, y: Float, radius: Float) {
+        val snapshot = state.value
+        val component = snapshot.selectedComponent
+        if (snapshot.recipe?.mask(maskId)?.components?.getOrNull(component)?.shape != MaskShape.BRUSH) return
+        val tool = snapshot.brushTool
+        val settings = tool.active
+        val stroke = BrushStroke(
+            points = listOf(roundedBrushCoordinate(x), roundedBrushCoordinate(y)),
+            radius = radius,
+            feather = settings.feather,
+            flow = settings.flow,
+            density = settings.density,
+            erase = tool.erasing,
+            autoMask = settings.autoMask,
+        )
+        val detail = if (tool.erasing) Res.string.editor_history_mask_erased else Res.string.editor_history_mask_painted
+        editMaskGeometry(maskId, uiText(detail)) { it.withBrushStroke(maskId, component, stroke) }
+    }
+
+    fun extendBrushStroke(maskId: String, x: Float, y: Float) {
+        if (editStart == null) return
+        val component = state.value.selectedComponent
+        editMaskGeometry(maskId, uiText(Res.string.editor_history_mask_painted)) {
+            it.withBrushStrokeExtended(maskId, component, x, y)
+        }
+    }
+
+    /** A second finger turns the stroke into a pinch: what it had painted goes away, as if it never started. */
+    fun cancelBrushStroke() {
+        val start = editStart ?: return
+        editStart = null
+        pendingChange = null
+        mutableState.update { it.copy(recipe = start, isSaving = true) }
+        scheduleSave(start)
+    }
 
     /** Opens the gesture so everything it does falls into a single history entry. */
     fun beginMaskGesture(maskId: String, detail: UiText) {
@@ -2541,6 +2730,8 @@ internal fun EditRecipe.withAdjustment(adjustment: Adjustment, value: Float): Ed
     Adjustment.GRAIN_ROUGHNESS -> copy(effects = effects.copy(grainRoughness = value))
     Adjustment.GRADE_BLENDING -> copy(colorGrading = colorGrading.copy(blending = value))
     Adjustment.GRADE_BALANCE -> copy(colorGrading = colorGrading.copy(balance = value))
+    // Never routed here: a mask slider goes through `withMaskSlider`.
+    Adjustment.MASK_AMOUNT -> this
     Adjustment.PERSPECTIVE_DISTORTION -> withPerspective { copy(distortion = value) }
     Adjustment.PERSPECTIVE_VERTICAL -> withPerspective { copy(vertical = value) }
     Adjustment.PERSPECTIVE_HORIZONTAL -> withPerspective { copy(horizontal = value) }
@@ -2583,6 +2774,7 @@ fun EditRecipe.adjustmentValue(adjustment: Adjustment): Float = when (adjustment
     Adjustment.PERSPECTIVE_SCALE -> geometry.perspective.scale
     Adjustment.PERSPECTIVE_OFFSET_X -> geometry.perspective.offsetX
     Adjustment.PERSPECTIVE_OFFSET_Y -> geometry.perspective.offsetY
+    Adjustment.MASK_AMOUNT -> Adjustment.MASK_AMOUNT.neutral
 }
 
 /** Lightroom's white balance presets for a JPEG, read from a recipe's [WhiteBalance]. */

@@ -30,8 +30,15 @@ object RecipePixels {
      * @param renderScale how big [source] is relative to the image it came from. A preview draft
      *   passes its reduction so that grain, which lives in image pixels, appears with the file's
      *   granularity and not the draft's.
+     * @param brushes the masks' brush rasters. They do not depend on [source]'s size, so a draft can
+     *   take the ones painted over the full photo; by default they are painted over [source].
      */
-    fun render(source: PixelBuffer, params: RenderParameters, renderScale: Float = 1f): PixelBuffer {
+    fun render(
+        source: PixelBuffer,
+        params: RenderParameters,
+        renderScale: Float = 1f,
+        brushes: BrushRasters = BrushRasters.of(params, source),
+    ): PixelBuffer {
         val frame = params.frameGeometry(source.width, source.height)
         val turns = params.normalizedQuarterTurns()
         val width = ((if (turns % 2 == 1) source.height else source.width) * params.cropWidth).roundToInt().coerceAtLeast(1)
@@ -45,7 +52,7 @@ object RecipePixels {
                 framed.pixels[y * width + x] = bilinear(source, uv[0] * source.width - .5f, uv[1] * source.height - .5f)
             }
         }
-        return BitmapPhotoProcessor.renderInPlace(framed, params, frame, renderScale)
+        return BitmapPhotoProcessor.renderInPlace(framed, params, frame, renderScale, brushes)
     }
 
     /**

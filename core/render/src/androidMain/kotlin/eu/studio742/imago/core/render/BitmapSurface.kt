@@ -19,7 +19,13 @@ fun BitmapPhotoProcessor.render(
     source: Bitmap,
     parameters: RenderParameters,
     geometry: FrameGeometry? = null,
-): Bitmap = renderInPlace(source.copy(Bitmap.Config.ARGB_8888, true), parameters, geometry)
+): Bitmap = renderInPlace(
+    source.copy(Bitmap.Config.ARGB_8888, true),
+    parameters,
+    geometry,
+    // Without geometry, [source] is the image itself, and so is what the brushes are painted over.
+    brushes = if (geometry == null) BrushRasters.of(parameters, BitmapSurface(source)) else BrushRasters.NONE,
+)
 
 /**
  * @param geometry the bridge between this bitmap and the original image, needed because the masks
@@ -30,8 +36,9 @@ fun BitmapPhotoProcessor.renderInPlace(
     bitmap: Bitmap,
     parameters: RenderParameters,
     geometry: FrameGeometry? = null,
+    brushes: BrushRasters = BrushRasters.NONE,
 ): Bitmap {
     require(bitmap.isMutable) { "The export image has to be mutable." }
-    renderInPlace(BitmapSurface(bitmap), parameters, geometry)
+    renderInPlace(BitmapSurface(bitmap), parameters, geometry, brushes = brushes)
     return bitmap
 }

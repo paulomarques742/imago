@@ -356,22 +356,55 @@ class PhotoShaderParityTest {
      */
     @Test
     fun theMaskFieldIsSampledInImageSpaceEverywhere() {
-        assertTrue(
-            "The tonal step has to read the field with the image coordinate",
-            PhotoShaders.TONE.contains("texture(uMaskField, vTexCoord)"),
-        )
-        assertTrue(
-            "The local adaptation base has to read the field with the image coordinate",
-            PhotoShaders.LOCAL_BASE.contains("texture(uMaskField, vTexCoord)"),
-        )
-        assertTrue(
-            "The composite has to read the field at \"source\", which is the image coordinate",
-            composite.contains("texture(uMaskField, source)"),
-        )
-        assertTrue(
-            "The composite must NOT read the field at \"screen\": that is the frame's space, not the image's",
-            !composite.contains("texture(uMaskField, screen)"),
-        )
+        listOf("maskWeightsLow", "maskWeightsHigh").forEach { half ->
+            assertTrue(
+                "The tonal step has to read $half with the image coordinate",
+                PhotoShaders.TONE.contains("$half(vTexCoord)"),
+            )
+            assertTrue(
+                "The local adaptation base has to read $half with the image coordinate",
+                PhotoShaders.LOCAL_BASE.contains("$half(vTexCoord)"),
+            )
+            assertTrue(
+                "The composite has to read $half at \"source\", which is the image coordinate",
+                composite.contains("$half(source)"),
+            )
+            assertTrue(
+                "The composite must NOT read $half at \"screen\": that is the frame's space, not the image's",
+                !composite.contains("$half(screen)"),
+            )
+        }
+    }
+
+    /**
+     * The second half of the field is masks five to eight. A pass that forgot it would draw them in the
+     * export, which reads all eight on the CPU, and not in the preview.
+     */
+    @Test
+    fun everyLocalAdjustmentReadsBothHalvesOfTheField() {
+        val shaders = PhotoShaders.TONE + PhotoShaders.LOCAL_BASE + composite
+        listOf(
+            "uMaskExposure", "uMaskContrast", "uMaskHighlights", "uMaskShadows", "uMaskWhites", "uMaskBlacks",
+            "uMaskTemperature", "uMaskTint", "uMaskVibrance", "uMaskSaturation", "uMaskTexture",
+            "uMaskClarity", "uMaskDehaze",
+        ).forEach { name ->
+            assertTrue("\"$name\" has to be declared for both halves", shaders.contains("uniform vec4 $name[2];"))
+            assertTrue("\"$name\" has to be weighed with both halves", shaders.contains("maskDelta(w, w2, $name)"))
+            assertTrue("\"$name\" must not be weighed with one half only", !shaders.contains("dot(w, $name)"))
+        }
+    }
+
+    /** Shape, operation and inversion are packed in one integer; the shader unpacks the same bits. */
+    @Test
+    fun theComponentKindIsUnpackedAsItIsPacked() {
+        val field = PhotoShaders.MASK_FIELD
+        assertTrue(field.contains("(kind & 3) == 0"))
+        assertTrue(field.contains("(uComponentKind[start + index] >> 2) & 3"))
+        assertTrue(field.contains("((kind >> 4) & 1) == 1"))
+        val component = MaskRenderComponent(shape = MaskShape.RADIAL, op = MaskOp.INTERSECT, inverted = true)
+        assertEquals(MaskShape.RADIAL.ordinal, component.packedKind and 3)
+        assertEquals(MaskOp.INTERSECT.ordinal, (component.packedKind shr 2) and 3)
+        assertEquals(1, (component.packedKind shr 4) and 1)
     }
 
     /**
@@ -383,7 +416,7 @@ class PhotoShaderParityTest {
         listOf("uMaskExposure", "uMaskTemperature", "uMaskTint", "uMaskWhites", "uMaskBlacks").forEach { name ->
             assertTrue(
                 "The local adaptation base should add \"$name\", as the tonal step does",
-                PhotoShaders.LOCAL_BASE.contains("dot(w, $name)"),
+                PhotoShaders.LOCAL_BASE.contains("maskDelta(w, w2, $name)"),
             )
         }
     }
@@ -415,12 +448,18 @@ class PhotoShaderParityTest {
     fun theMaskShapeAndOperationCodesMatchTheModelOrdinals() {
         assertEquals("LINEAR has to be zero, which is what the shader compares", 0, MaskShape.LINEAR.ordinal)
         assertEquals(1, MaskShape.RADIAL.ordinal)
+        assertEquals("BRUSH has to be two, which the shader reads from the brush texture", 2, MaskShape.BRUSH.ordinal)
+        assertTrue(
+            "The shader reads a brush from its layer, and a negative layer weighs nothing",
+            PhotoShaders.MASK_FIELD.contains("weight = a.x < 0.0 ? 0.0 : textureLod(uBrushes, vec3(point, a.x), 0.0).r;"),
+        )
+        assertTrue(PhotoShaders.MASK_FIELD.contains("if ((kind & 3) == 2) {"))
         assertEquals(0, MaskOp.ADD.ordinal)
         assertEquals("SUBTRACT has to be one", 1, MaskOp.SUBTRACT.ordinal)
         assertEquals("INTERSECT has to be two", 2, MaskOp.INTERSECT.ordinal)
         assertTrue(
             "The shader compares the shape with zero for the linear",
-            PhotoShaders.MASK_FIELD.contains("uComponentShape[index] == 0"),
+            PhotoShaders.MASK_FIELD.contains("(kind & 3) == 0"),
         )
         assertTrue(
             "The shader treats code one as subtraction",
@@ -440,13 +479,13 @@ class PhotoShaderParityTest {
     fun theMaskAccumulationIsASumOfWeightedDeltas() {
         val tone = PhotoShaders.TONE
         listOf(
-            "clamp(uExposure + dot(w, uMaskExposure), ${MIN_LOCAL_EXPOSURE}, ${MAX_LOCAL_EXPOSURE})"
+            "clamp(uExposure + maskDelta(w, w2, uMaskExposure), ${MIN_LOCAL_EXPOSURE}, ${MAX_LOCAL_EXPOSURE})"
                 to "the local exposure, limited like the slider",
-            "uContrast + dot(w, uMaskContrast)" to "o contraste local",
-            "uHighlights + dot(w, uMaskHighlights)" to "the local highlights",
-            "uShadows + dot(w, uMaskShadows)" to "the local shadows",
-            "uSaturation + dot(w, uMaskSaturation)" to "the local saturation",
-            "uVibrance + dot(w, uMaskVibrance)" to "the local vibrance",
+            "uContrast + maskDelta(w, w2, uMaskContrast)" to "the local contrast",
+            "uHighlights + maskDelta(w, w2, uMaskHighlights)" to "the local highlights",
+            "uShadows + maskDelta(w, w2, uMaskShadows)" to "the local shadows",
+            "uSaturation + maskDelta(w, w2, uMaskSaturation)" to "the local saturation",
+            "uVibrance + maskDelta(w, w2, uMaskVibrance)" to "the local vibrance",
         ).forEach { (fragment, what) ->
             assertTrue(
                 "The tonal step should contain $what — \"$fragment\"",
@@ -456,7 +495,7 @@ class PhotoShaderParityTest {
         listOf("uMaskTexture", "uMaskClarity", "uMaskDehaze").forEach { name ->
             assertTrue(
                 "The composite should add \"$name\" to step 9's global adjustment",
-                composite.contains("dot(w, $name)"),
+                composite.contains("maskDelta(w, w2, $name)"),
             )
         }
     }
@@ -468,7 +507,7 @@ class PhotoShaderParityTest {
     @Test
     fun theMaskOverlayIsDrawnFromTheFieldAndNotFromTheParameters() {
         assertTrue(composite.contains("if (uMaskOverlay >= 0)"))
-        assertTrue(composite.contains("dot(w, pick) * 0.45"))
+        assertTrue(composite.contains("(dot(w, pick) + dot(w2, pickHigh)) * 0.45"))
         assertTrue(
             "The overlay cannot go into RenderParameters",
             RenderParameters::class.java.declaredFields.none { it.name.contains("overlay", ignoreCase = true) },

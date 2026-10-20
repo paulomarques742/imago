@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.render.BitmapPhotoProcessor
+import eu.studio742.imago.core.render.BrushRasters
 import eu.studio742.imago.core.render.NeutralWhiteBalance
 import eu.studio742.imago.core.render.PixelBuffer
 import eu.studio742.imago.core.render.RecipePixels
@@ -96,7 +97,12 @@ object RecipePreviewCache {
         val rendered = withContext(Dispatchers.Default) {
             // A recipe with Auto shows what Auto finds on this photo, which is what applying it does.
             val shown = if (recipe.whiteBalance.auto) recipe.withAutoWhiteBalance(autoOf(origin)) else recipe
-            BitmapPhotoProcessor.renderInPlace(origin.copy(), shown.toRenderParameters()).toImageBitmap()
+            val parameters = shown.toRenderParameters()
+            BitmapPhotoProcessor.renderInPlace(
+                origin.copy(),
+                parameters,
+                brushes = BrushRasters.of(parameters, origin),
+            ).toImageBitmap()
         }
         store(key, rendered)
         return rendered

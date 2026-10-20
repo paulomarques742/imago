@@ -26,11 +26,13 @@ class RecipeAdjustmentTest {
 
     @Test
     fun everyVisibleAdjustmentUpdatesOnlyItsRecipeValue() {
-        Adjustment.entries.forEach { adjustment ->
+        // The mask Amount is a property of a mask and has no value in the recipe's global adjustments.
+        val global = Adjustment.entries.filterNot { it == Adjustment.MASK_AMOUNT }
+        global.forEach { adjustment ->
             val changed = neutral.withAdjustment(adjustment, adjustment.range.endInclusive / 2f)
 
             assertEquals(adjustment.range.endInclusive / 2f, changed.adjustmentValue(adjustment))
-            Adjustment.entries.filterNot { it == adjustment }.forEach { untouched ->
+            global.filterNot { it == adjustment }.forEach { untouched ->
                 assertEquals(untouched.neutral, changed.adjustmentValue(untouched))
             }
         }
