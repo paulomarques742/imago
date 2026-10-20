@@ -70,6 +70,25 @@ class CompositionRoundTripTest {
     }
 
     @Test
+    fun `a background photo keeps its recipe, and one saved before it had none opens without it`() {
+        val now = Instant.EPOCH.toString()
+        val stored = Json { encodeDefaults = true; ignoreUnknownKeys = true; classDiscriminator = "elementType" }
+        val media = MediaReference("asset", "checksum", "photo.jpg")
+        val recipe = PhotoRecipeSnapshot(
+            EditRecipe(assetId = "asset", originalChecksum = "checksum", createdAt = now, updatedAt = now)
+                .let { it.copy(tone = it.tone.copy(exposure = .7f)) },
+        )
+        val background: CompositionBackground = CompositionBackground.Photo(media, recipe = recipe)
+        assertEquals(background, stored.decodeFromString<CompositionBackground>(stored.encodeToString(background)))
+
+        val older = """{"elementType":"photo","media":{"assetId":"asset","checksum":"checksum","fileName":"photo.jpg"},"blurRadius":4.0}"""
+        assertEquals(
+            CompositionBackground.Photo(media, blurRadius = 4f),
+            stored.decodeFromString<CompositionBackground>(older),
+        )
+    }
+
+    @Test
     fun `video cannot cross a page separator`() {
         val now = Instant.EPOCH.toString()
         assertThrows(IllegalArgumentException::class.java) {

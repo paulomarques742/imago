@@ -71,6 +71,19 @@ class LibraryConfigurationTest {
         assertTrue(repo.welcomeCompleted.value)
         assertTrue(EncryptedConfigurationRepository(SharedPreferencesStore(prefs), api).welcomeCompleted.value)
     }
+    @Test fun eachLibraryKeepsWhichAlbumsItsGridLeavesOutThroughARestart() {
+        val prefs = prefs()
+        val repo = EncryptedConfigurationRepository(SharedPreferencesStore(prefs), api)
+        assertEquals(emptyMap<String, Set<String>>(), repo.albumsHiddenFromGrid.value)
+
+        repo.setAlbumsHiddenFromGrid(DEVICE_LIBRARY_ID, setOf("Screenshots", "WhatsApp Images"))
+        repo.setAlbumsHiddenFromGrid("home", setOf("album-1"))
+        repo.setAlbumsHiddenFromGrid("home", emptySet())
+
+        val expected = mapOf(DEVICE_LIBRARY_ID to setOf("Screenshots", "WhatsApp Images"))
+        assertEquals(expected, repo.albumsHiddenFromGrid.value)
+        assertEquals(expected, EncryptedConfigurationRepository(SharedPreferencesStore(prefs), api).albumsHiddenFromGrid.value)
+    }
     @Test fun anInstallFromBeforeTheWelcomeSkipsIt() {
         val withLibraries = prefs()
         EncryptedConfigurationRepository(SharedPreferencesStore(withLibraries), api)

@@ -22,6 +22,11 @@ interface ConfigurationRepository {
     val showOnThisDay: kotlinx.coroutines.flow.StateFlow<Boolean> get() = AlwaysShown
 
     fun setShowOnThisDay(show: Boolean) = Unit
+
+    /** The style of the last "Show your edit" video, by name; null before the first one. */
+    val reelStyle: String? get() = null
+
+    fun setReelStyle(style: String) = Unit
     fun source(id: String): eu.studio742.imago.core.model.LibrarySource
     suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String): ServerVersion
     suspend fun testLibrary(id: String): ServerVersion
@@ -74,6 +79,14 @@ interface ConfigurationRepository {
     var recipePartsChoice: String?
         get() = null
         set(_) = Unit
+
+    /**
+     * The albums each library leaves out of its albums grid, by library id. A choice of this device's,
+     * apart from which albums show in "All" (`DeviceLibrary.hiddenAlbums`).
+     */
+    val albumsHiddenFromGrid: kotlinx.coroutines.flow.StateFlow<Map<String, Set<String>>> get() = NothingHiddenFromGrid
+
+    fun setAlbumsHiddenFromGrid(libraryId: String, albumIds: Set<String>) = Unit
     val connection: Flow<ImmichConnection?>
     fun currentConnection(): ImmichConnection?
     suspend fun validateAndSave(serverUrl: String, apiKey: String): ServerVersion
@@ -87,3 +100,5 @@ fun ConfigurationRepository.activeSource(): kotlinx.coroutines.flow.Flow<eu.stud
     }
 
 private val AlwaysShown: kotlinx.coroutines.flow.StateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(true)
+private val NothingHiddenFromGrid: kotlinx.coroutines.flow.StateFlow<Map<String, Set<String>>> =
+    kotlinx.coroutines.flow.MutableStateFlow(emptyMap())

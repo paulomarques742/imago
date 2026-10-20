@@ -36,6 +36,9 @@ interface LibraryRepository {
         query: String? = null,
     ): Flow<PagingData<ImmichAsset>>
     suspend fun albums(): List<ImmichAlbum>
+
+    /** The albums of [libraryId], with the ids the albums grid gives them when that library is open. */
+    suspend fun albumsOf(libraryId: String): List<ImmichAlbum> = albums()
     suspend fun timeBuckets(): List<ImmichTimeBucket>
 
     /** How the skeleton sync is going, so the library can say. */

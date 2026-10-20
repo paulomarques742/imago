@@ -39,6 +39,8 @@ import eu.studio742.imago.core.data.SavedRecipeRepository
 import eu.studio742.imago.core.model.BUILT_IN_RECIPES
 import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.render.NeutralWhiteBalance
+import eu.studio742.imago.core.render.autoWhiteBalanceOf
+import eu.studio742.imago.core.render.withAutoWhiteBalance
 import eu.studio742.imago.core.render.hasWhiteBalance
 import eu.studio742.imago.core.render.withLightWhiteBalance
 import eu.studio742.imago.core.model.BuiltInRecipe
@@ -67,6 +69,7 @@ import kotlinx.coroutines.withContext
 import eu.studio742.imago.core.model.UPRIGHT_GUIDED
 import eu.studio742.imago.core.model.UPRIGHT_OFF
 import eu.studio742.imago.core.model.UprightGuide
+import eu.studio742.imago.core.model.WhiteBalance
 import eu.studio742.imago.core.render.frameGeometry
 import eu.studio742.imago.core.render.solveGuidedUpright
 import kotlin.math.hypot
@@ -270,6 +273,7 @@ enum class Adjustment(val neutral: Float, val range: ClosedFloatingPointRange<Fl
     GRAIN_ROUGHNESS(50f, 0f..100f),
     GRADE_BLENDING(50f, 0f..100f),
     GRADE_BALANCE(0f, -100f..100f),
+    PERSPECTIVE_DISTORTION(0f, -100f..100f),
     PERSPECTIVE_VERTICAL(0f, -100f..100f),
     PERSPECTIVE_HORIZONTAL(0f, -100f..100f),
     PERSPECTIVE_ASPECT(0f, -100f..100f),
@@ -280,6 +284,7 @@ enum class Adjustment(val neutral: Float, val range: ClosedFloatingPointRange<Fl
 
 /** The sliders of the perspective sheet, in Lightroom's order. */
 val PERSPECTIVE_ADJUSTMENTS = listOf(
+    Adjustment.PERSPECTIVE_DISTORTION,
     Adjustment.PERSPECTIVE_VERTICAL,
     Adjustment.PERSPECTIVE_HORIZONTAL,
     Adjustment.PERSPECTIVE_ASPECT,
@@ -333,6 +338,7 @@ val Adjustment.labelRes: StringResource
     Adjustment.GRAIN_ROUGHNESS -> Res.string.editor_adj_grain_roughness
     Adjustment.GRADE_BLENDING -> Res.string.editor_adj_grading_blending
     Adjustment.GRADE_BALANCE -> Res.string.editor_adj_grading_balance
+    Adjustment.PERSPECTIVE_DISTORTION -> Res.string.editor_adj_perspective_distortion
     Adjustment.PERSPECTIVE_VERTICAL -> Res.string.editor_adj_perspective_vertical
     Adjustment.PERSPECTIVE_HORIZONTAL -> Res.string.editor_adj_perspective_horizontal
     Adjustment.PERSPECTIVE_ASPECT -> Res.string.editor_adj_perspective_aspect
@@ -562,6 +568,9 @@ open class EditorViewModel(
      * image's coordinates, which neither changes.
      */
     private var detectedLines: Pair<Bitmap, List<LineSegment>>? = null
+
+    /** The open photo's Auto white balance, found once: choosing Auto and applying recipes share it. */
+    private var autoWhiteBalance: Pair<Bitmap, NeutralWhiteBalance?>? = null
     private var mirrorJob: Job? = null
     /** The recipe whose geometry is waiting to go to Immich, so leaving the photo does not lose it. */
     private var pendingMirror: EditRecipe? = null
@@ -666,7 +675,14 @@ open class EditorViewModel(
                             updatedAt = now,
                         )
                     }
-                    Triple(bitmap.await(), recipe, storedRecipe != null)
+                    val loaded = bitmap.await()
+                    // A recipe with Auto shows the sample with the sample's own light found.
+                    val shown = if (target is PhotoEditTarget.Recipe && recipe.whiteBalance.auto) {
+                        recipe.withAutoWhiteBalance(autoWhiteBalanceFor(loaded))
+                    } else {
+                        recipe
+                    }
+                    Triple(loaded, shown, storedRecipe != null)
                 }
             }.onSuccess { (bitmap, recipe, existed) ->
                 shouldPersist = target is PhotoEditTarget.Asset && existed
@@ -909,7 +925,7 @@ open class EditorViewModel(
             mutableState.update { it.copy(whiteBalanceUnreadable = true) }
             return
         }
-        val balance = current.whiteBalance.copy(temp = pick.temperature, tint = pick.tint)
+        val balance = current.whiteBalance.copy(temp = pick.temperature, tint = pick.tint, auto = false)
         if (balance == current.whiteBalance) {
             mutableState.update { it.copy(whiteBalanceUnreadable = false) }
             return
@@ -941,6 +957,61 @@ open class EditorViewModel(
             mutableState.update { it.copy(recipe = start, isSaving = true) }
             scheduleSave(start)
         }
+    }
+
+    /**
+     * Lightroom's white balance menu for a JPEG. As Shot is the photo as it came; Auto finds the light
+     * on the photo, and is remembered as Auto so that the recipe finds it again on any other photo it
+     * goes to; Custom keeps the values and lets go of Auto.
+     */
+    fun selectWhiteBalancePreset(preset: WhiteBalancePreset) {
+        val current = state.value.recipe ?: return
+        if (state.value.isPickingWhiteBalance) acceptWhiteBalancePick()
+        when (preset) {
+            WhiteBalancePreset.AS_SHOT -> commitWhiteBalance(WhiteBalance(), preset)
+            WhiteBalancePreset.CUSTOM -> commitWhiteBalance(current.whiteBalance.copy(auto = false), preset)
+            WhiteBalancePreset.AUTO -> {
+                val bitmap = state.value.bitmap ?: return
+                viewModelScope.launch {
+                    val found = autoWhiteBalanceFor(bitmap)
+                    if (state.value.bitmap !== bitmap) return@launch
+                    commitWhiteBalance(WhiteBalance(temp = found?.temperature ?: 0f, tint = found?.tint ?: 0f, auto = true), preset)
+                }
+            }
+        }
+    }
+
+    private fun commitWhiteBalance(balance: WhiteBalance, preset: WhiteBalancePreset) {
+        val current = state.value.recipe ?: return
+        if (balance == current.whiteBalance) return
+        finishAdjustment()
+        editStart = null
+        pendingChange = null
+        val updated = current.copy(
+            processVersion = CURRENT_PROCESS_VERSION,
+            geometry = current.geometry.activeAtProcess(current.processVersion),
+            whiteBalance = balance,
+            updatedAt = Instant.now().toString(),
+        )
+        setRecipeAndSave(updated)
+        pushHistory(
+            HistoryEntry(
+                id = UUID.randomUUID().toString(),
+                label = uiText(Res.string.editor_white_balance),
+                detail = UiText.Resource(preset.labelRes),
+                valueText = null,
+                icon = HistoryIcon.COLOR,
+                timestamp = Instant.now().toString(),
+                recipe = updated,
+            ),
+        )
+    }
+
+    private suspend fun autoWhiteBalanceFor(bitmap: Bitmap): NeutralWhiteBalance? {
+        autoWhiteBalance?.takeIf { it.first === bitmap }?.let { return it.second }
+        val found = withContext(Dispatchers.Default) { autoWhiteBalanceOf(bitmap.toPixelBuffer()) }
+        autoWhiteBalance = bitmap to found
+        return found
     }
 
     fun selectHslBand(band: HslColorBand) = mutableState.update { it.copy(selectedHslBand = band) }
@@ -1006,11 +1077,20 @@ open class EditorViewModel(
      */
     fun finishAdjustment() {
         val start = editStart ?: return
-        val current = state.value.recipe ?: return
+        var current = state.value.recipe ?: return
         val change = pendingChange
         editStart = null
         pendingChange = null
         if (start == current || change == null) return
+        var detectUpright: String? = null
+        if (change is PendingChange.OfAdjustment && change.adjustment == Adjustment.PERSPECTIVE_DISTORTION) {
+            val (resolved, pending) = current.withUprightAfterDistortion()
+            if (resolved != current) {
+                current = resolved
+                setRecipeAndSave(resolved)
+            }
+            detectUpright = pending
+        }
         val entry = when (change) {
             is PendingChange.OfAdjustment -> HistoryEntry(
                 id = UUID.randomUUID().toString(),
@@ -1037,6 +1117,24 @@ open class EditorViewModel(
             )
         }
         pushHistory(entry)
+        detectUpright?.let(::applyAutomaticUpright)
+    }
+
+    /**
+     * The Upright solved again after the distortion moved, as after a quarter turn: guides and lines
+     * are measured with the distortion taken away, and lines that were straight before bend with it.
+     * The guides are this photo's and solve at once, and so do lines already found; an automatic mode
+     * whose lines are not at hand comes back as the mode to detect again, after the step is recorded.
+     */
+    private fun EditRecipe.withUprightAfterDistortion(): Pair<EditRecipe, String?> {
+        val upright = geometry.perspective.upright
+        val lines = detectedLines?.takeIf { it.first === state.value.bitmap }?.second
+        return when {
+            upright == UPRIGHT_GUIDED -> withSolvedGuides(geometry.perspective.guides) to null
+            upright in AUTOMATIC_UPRIGHT_MODES && lines != null -> withAutomaticUpright(lines).first to null
+            upright in AUTOMATIC_UPRIGHT_MODES -> this to upright
+            else -> this to null
+        }
     }
 
     fun resetAdjustment(adjustment: Adjustment) {
@@ -1738,6 +1836,12 @@ open class EditorViewModel(
         }
     }
 
+    /** The style the last "Show your edit" video had: the sheet opens on it. */
+    val reelStyle: ReelStyle
+        get() = configuration.reelStyle?.let { name -> ReelStyle.entries.firstOrNull { it.name == name } } ?: ReelStyle.PANEL
+
+    fun rememberReelStyle(style: ReelStyle) = configuration.setReelStyle(style.name)
+
     fun exportToGallery() = export { asset, jpeg, _ ->
         exporter.saveToDevice(jpeg, exportFileName(asset), asset.fileCreatedAt)
     }
@@ -1867,7 +1971,22 @@ open class EditorViewModel(
         val current = state.value.recipe ?: return
         editStart = null
         pendingChange = null
-        val applied = source.rebasedOnto(current, Instant.now().toString(), parts)
+        val rebased = source.rebasedOnto(current, Instant.now().toString(), parts)
+        val bitmap = state.value.bitmap
+        if (!rebased.whiteBalance.auto || bitmap == null) {
+            commitReusableRecipe(rebased, message, label)
+            return
+        }
+        // An Auto white balance travels as Auto: this photo's light is found, as Lightroom does when
+        // it syncs one.
+        viewModelScope.launch {
+            val found = autoWhiteBalanceFor(bitmap)
+            if (state.value.bitmap !== bitmap) return@launch
+            commitReusableRecipe(rebased.withAutoWhiteBalance(found), message, label)
+        }
+    }
+
+    private fun commitReusableRecipe(applied: EditRecipe, message: UiText, label: UiText) {
         setRecipeAndSave(applied)
         pushHistory(
             HistoryEntry(
@@ -2405,8 +2524,9 @@ internal fun EditRecipe.withAdjustment(adjustment: Adjustment, value: Float): Ed
     Adjustment.SHADOWS -> copy(tone = tone.copy(shadows = value))
     Adjustment.WHITES -> copy(tone = tone.copy(whites = value))
     Adjustment.BLACKS -> copy(tone = tone.copy(blacks = value))
-    Adjustment.TEMPERATURE -> copy(whiteBalance = whiteBalance.copy(temp = value))
-    Adjustment.TINT -> copy(whiteBalance = whiteBalance.copy(tint = value))
+    // A hand on either slider makes the white balance Custom, as in Lightroom.
+    Adjustment.TEMPERATURE -> copy(whiteBalance = whiteBalance.copy(temp = value, auto = false))
+    Adjustment.TINT -> copy(whiteBalance = whiteBalance.copy(tint = value, auto = false))
     Adjustment.VIBRANCE -> copy(presence = presence.copy(vibrance = value))
     Adjustment.SATURATION -> copy(presence = presence.copy(saturation = value))
     Adjustment.TEXTURE -> copy(presence = presence.copy(texture = value))
@@ -2421,6 +2541,7 @@ internal fun EditRecipe.withAdjustment(adjustment: Adjustment, value: Float): Ed
     Adjustment.GRAIN_ROUGHNESS -> copy(effects = effects.copy(grainRoughness = value))
     Adjustment.GRADE_BLENDING -> copy(colorGrading = colorGrading.copy(blending = value))
     Adjustment.GRADE_BALANCE -> copy(colorGrading = colorGrading.copy(balance = value))
+    Adjustment.PERSPECTIVE_DISTORTION -> withPerspective { copy(distortion = value) }
     Adjustment.PERSPECTIVE_VERTICAL -> withPerspective { copy(vertical = value) }
     Adjustment.PERSPECTIVE_HORIZONTAL -> withPerspective { copy(horizontal = value) }
     Adjustment.PERSPECTIVE_ASPECT -> withPerspective { copy(aspect = value) }
@@ -2455,10 +2576,27 @@ fun EditRecipe.adjustmentValue(adjustment: Adjustment): Float = when (adjustment
     Adjustment.GRAIN_ROUGHNESS -> effects.grainRoughness
     Adjustment.GRADE_BLENDING -> colorGrading.blending
     Adjustment.GRADE_BALANCE -> colorGrading.balance
+    Adjustment.PERSPECTIVE_DISTORTION -> geometry.perspective.distortion
     Adjustment.PERSPECTIVE_VERTICAL -> geometry.perspective.vertical
     Adjustment.PERSPECTIVE_HORIZONTAL -> geometry.perspective.horizontal
     Adjustment.PERSPECTIVE_ASPECT -> geometry.perspective.aspect
     Adjustment.PERSPECTIVE_SCALE -> geometry.perspective.scale
     Adjustment.PERSPECTIVE_OFFSET_X -> geometry.perspective.offsetX
     Adjustment.PERSPECTIVE_OFFSET_Y -> geometry.perspective.offsetY
+}
+
+/** Lightroom's white balance presets for a JPEG, read from a recipe's [WhiteBalance]. */
+enum class WhiteBalancePreset(val labelRes: org.jetbrains.compose.resources.StringResource) {
+    AS_SHOT(Res.string.editor_white_balance_as_shot),
+    AUTO(Res.string.editor_white_balance_auto),
+    CUSTOM(Res.string.editor_white_balance_custom),
+    ;
+
+    companion object {
+        fun of(balance: WhiteBalance): WhiteBalancePreset = when {
+            balance.auto -> AUTO
+            balance.isAsShot -> AS_SHOT
+            else -> CUSTOM
+        }
+    }
 }

@@ -445,4 +445,15 @@
     <string name="library_all_albums_show_all">Show all</string>
     <string name="library_all_albums_empty">No albums on this device yet.</string>
     <string name="library_save">Save</string>
+    <string name="library_album_hide">Hide from albums</string>
+    <string name="library_album_unhide">Show in albums</string>
+    <string name="library_album_options">Options for %1$s</string>
+    <plurals name="library_albums_hidden">
+        <item quantity="one">%1$d hidden</item>
+        <item quantity="other">%1$d hidden</item>
+    </plurals>
+    <string name="library_albums_choose_body">Unticked albums leave the albums grid. Their photos stay in the timeline, searching by name still finds them, and “Show all” at the end of the grid brings them back for a while.</string>
+    <string name="library_grid_albums_setting">Albums in the albums grid</string>
+    <string name="library_grid_albums_setting_body">Each library’s choice, on this device. A long press on an album hides it straight from the grid.</string>
+    <string name="library_grid_albums_all">All shown</string>
 </resources>

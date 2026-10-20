@@ -108,6 +108,17 @@ object WhiteBalanceModel {
         return slidersFor(rgb[0].toFloat(), rgb[1].toFloat(), rgb[2].toFloat())
     }
 
+    /**
+     * The colour of the light the sliders (−1..1) describe, in linear sRGB with green at 1: what a grey
+     * looks like under it, and what [slidersFor] turns back into these sliders.
+     */
+    fun lightColour(temperature: Float, tint: Float): FloatArray {
+        val (x, y) = lightXy(temperature.toDouble().coerceIn(-1.0, 1.0), tint.toDouble().coerceIn(-1.0, 1.0))
+        val xyz = doubleArrayOf(x / y, 1.0, (1.0 - x - y) / y)
+        val rgb = DoubleArray(3) { row -> (0 until 3).sumOf { XYZ_TO_RGB[row * 3 + it] * xyz[it] } }
+        return FloatArray(3) { (rgb[it] / rgb[1]).toFloat() }
+    }
+
     /** The light the sliders describe, as CIE xy. */
     private fun lightXy(temperature: Double, tint: Double): Pair<Double, Double> {
         val mired = if (temperature < 0.0) {

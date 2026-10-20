@@ -115,6 +115,17 @@ class AlbumActionsTest {
     }
 
     @Test
+    fun theGridLeavesHiddenAlbumsOutUntilShowAllButASearchStillFindsThem() {
+        val albums = listOf("Camera", "Screenshots", "WhatsApp Images").map { album(canEditContent = false).copy(id = it, name = it) }
+        val hidden = setOf("Screenshots", "WhatsApp Images")
+
+        assertEquals(listOf("Camera"), albumsInGrid(albums, hidden, "").map { it.name })
+        assertEquals(listOf("Screenshots"), albumsInGrid(albums, hidden, "screen").map { it.name })
+        assertEquals(albums, albumsInGrid(albums, emptySet(), ""))
+        assertEquals(albums, albumsInGrid(albums, hidden, "", revealed = true))
+    }
+
+    @Test
     fun searchingPeopleMatchesTheNameAndLeavesTheUnnamedOutOfAnyQuery() {
         val people = listOf("Zoë Martin", "Martin Lee", "").mapIndexed { index, name -> PersonUiModel("p$index", name, "", "") }
 

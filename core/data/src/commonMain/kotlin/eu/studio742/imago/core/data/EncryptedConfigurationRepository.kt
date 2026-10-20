@@ -136,6 +136,13 @@ class EncryptedConfigurationRepository(
     private val onThisDay = MutableStateFlow(preferences.getString(ON_THIS_DAY_KEY) != "false")
     override val showOnThisDay: StateFlow<Boolean> = onThisDay.asStateFlow()
 
+    override val reelStyle: String? get() = preferences.getString(REEL_STYLE_KEY)
+
+    /** Forgetting a style is not worth an error: the next video just starts from the default one. */
+    override fun setReelStyle(style: String) {
+        preferences.write(mapOf(REEL_STYLE_KEY to style))
+    }
+
     override fun setShowOnThisDay(show: Boolean) {
         requireUser(preferences.write(mapOf(ON_THIS_DAY_KEY to show.toString())), UserMessage.CONFIGURATION_NOT_SAVED)
         onThisDay.value = show
@@ -148,6 +155,23 @@ class EncryptedConfigurationRepository(
     override var lastSeenAppVersion: String?
         get() = preferences.getString("last_seen_app_version")
         set(value) { preferences.write(mapOf("last_seen_app_version" to value)) }
+
+    private val hiddenFromGrid = MutableStateFlow(readHiddenFromGrid())
+    override val albumsHiddenFromGrid: StateFlow<Map<String, Set<String>>> = hiddenFromGrid.asStateFlow()
+
+    override fun setAlbumsHiddenFromGrid(libraryId: String, albumIds: Set<String>) {
+        val updated = (hiddenFromGrid.value - libraryId) + (if (albumIds.isEmpty()) emptyMap() else mapOf(libraryId to albumIds))
+        val stored = JsonObject(updated.mapValues { (_, ids) -> JsonArray(ids.sorted().map(::JsonPrimitive)) })
+        requireUser(preferences.write(mapOf(HIDDEN_FROM_GRID_KEY to stored.toString())), UserMessage.CONFIGURATION_NOT_SAVED)
+        hiddenFromGrid.value = updated
+    }
+
+    private fun readHiddenFromGrid(): Map<String, Set<String>> = runCatching {
+        val saved = preferences.getString(HIDDEN_FROM_GRID_KEY) ?: return emptyMap()
+        json.parseToJsonElement(saved).let { it as JsonObject }.mapValues { (_, ids) ->
+            (ids as JsonArray).map { (it as JsonPrimitive).content }.toSet()
+        }
+    }.getOrDefault(emptyMap())
 
     override var recipePartsChoice: String?
         get() = preferences.getString("recipe_parts_choice")
@@ -303,6 +327,8 @@ class EncryptedConfigurationRepository(
         const val FAILURE_REFRESH_INTERVAL_MS = 30_000L
         const val WELCOME_KEY = "welcome_completed"
         const val ON_THIS_DAY_KEY = "show_on_this_day"
+        const val REEL_STYLE_KEY = "reel_style"
+        const val HIDDEN_FROM_GRID_KEY = "albums_hidden_from_grid"
     }
 }
 

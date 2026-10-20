@@ -1439,7 +1439,7 @@ internal fun ComposerCanvas(
                 // every page —, so the stage showed one thing and the file brought another. The
                 // exporter was the one in charge, and it is what the stage now follows.
                 Box(Modifier.offset(x = pageWidth * page.index).size(pageWidth, pageHeight)) {
-                    Background(page.backgroundOverride ?: project.background, previewUrl, apiKey, Modifier.fillMaxSize())
+                    Background(page.backgroundOverride ?: project.background, previewUrl, thumbnailUrl, apiKey, Modifier.fillMaxSize())
                 }
                 Box(
                     Modifier.offset(x = pageWidth * page.index).size(pageWidth, pageHeight)
@@ -1626,7 +1626,13 @@ internal fun ComposerCanvas(
 }
 
 @Composable
-internal fun Background(background: CompositionBackground, previewUrl: (String) -> String, apiKey: (String) -> String, modifier: Modifier) {
+internal fun Background(
+    background: CompositionBackground,
+    previewUrl: (String) -> String,
+    thumbnailUrl: (String) -> String,
+    apiKey: (String) -> String,
+    modifier: Modifier,
+) {
     when (background) {
         is CompositionBackground.Solid -> Box(modifier.background(Color(background.argb)))
         is CompositionBackground.Gradient -> Box(
@@ -1645,20 +1651,35 @@ internal fun Background(background: CompositionBackground, previewUrl: (String) 
             },
         )
         // `Modifier.blur` is a `RenderEffect`, which requires Android 12 — guaranteed by `minSdk` 31.
-        is CompositionBackground.Photo -> AsyncImage(
-            model = ImageRequest.Builder(LocalPlatformContext.current)
-                .data(previewUrl(background.media.assetId))
-                .libraryAuth(apiKey(background.media.assetId))
-                .build(),
-            contentDescription = null,
+        // It goes on the box, so the draft and the large version underneath blur as one image.
+        is CompositionBackground.Photo -> Box(
+            if (background.blurRadius > 0f) modifier.blur(background.blurRadius.dp) else modifier,
+        ) {
+            // The recipe the photo had when it became the background, with the same requests as a
+            // photo element: the background has to show the look the file will have, too.
+            val requests = rememberComposerPhotoRequests(
+                background.media.assetId, background.recipe?.recipe, previewUrl, thumbnailUrl, apiKey,
+            )
             // The same framing pair as the photo/video elements — without it, the "Scale" slider
             // saved the right value (and the export respected it), but the stage always drew the image
             // at 1:1 and the slider seemed to do nothing.
-            alignment = placementAlignment(background.crop),
-            modifier = (if (background.blurRadius > 0f) modifier.blur(background.blurRadius.dp) else modifier)
-                .placementZoom(background.crop),
-            contentScale = ContentScale.Crop,
-        )
+            requests.draft?.let { draft ->
+                AsyncImage(
+                    model = draft,
+                    contentDescription = null,
+                    alignment = placementAlignment(background.crop),
+                    modifier = Modifier.fillMaxSize().placementZoom(background.crop),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+            AsyncImage(
+                model = requests.full,
+                contentDescription = null,
+                alignment = placementAlignment(background.crop),
+                modifier = Modifier.fillMaxSize().placementZoom(background.crop),
+                contentScale = ContentScale.Crop,
+            )
+        }
     }
 }
 
@@ -2129,11 +2150,12 @@ private fun CompositionElement.contentAspect(): Float? {
     }
 }
 
-/** The same for the background, which the exporter draws without any recipe. */
+/** The same for the background, with the recipe it kept — a crop or a quarter turn changes its slack too. */
 private fun CompositionBackground.Photo.contentAspect(): Float? {
     val width = media.width?.takeIf { it > 0L } ?: return null
     val height = media.height?.takeIf { it > 0L } ?: return null
-    return (width.toFloat() / height).takeIf { it.isFinite() && it > 0f }
+    return recipe?.recipe?.editedAspectRatio(width, height)
+        ?: (width.toFloat() / height).takeIf { it.isFinite() && it > 0f }
 }
 
 @Composable

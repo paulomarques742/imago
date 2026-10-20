@@ -48,6 +48,30 @@ object RecipePixels {
         return BitmapPhotoProcessor.renderInPlace(framed, params, frame, renderScale)
     }
 
+    /**
+     * Rows [from] until [until] of [frame] — the size of [source], which is already turned and
+     * flipped — into [out], sampled as the shader samples: what the Android CPU path uses for the lens
+     * distortion its `Canvas` matrix cannot draw. Where the photo does not reach, with the crop
+     * unconstrained, the pixel stays transparent, as the `Canvas` leaves it, for the processor to paint
+     * white.
+     */
+    fun sampleFrameRows(source: PixelBuffer, frame: FrameGeometry, from: Int, until: Int, out: IntArray) {
+        val width = source.width
+        val height = source.height
+        IntStream.range(from, until).parallel().forEach { y ->
+            val uv = FloatArray(2)
+            val row = (y - from) * width
+            for (x in 0 until width) {
+                frame.imageFromFramed((x + .5f) / width, (y + .5f) / height, uv)
+                out[row + x] = if (uv[0].isNaN() || (frame.showsOutside && frame.isOutside(uv))) {
+                    0
+                } else {
+                    bilinear(source, uv[0] * width - .5f, uv[1] * height - .5f)
+                }
+            }
+        }
+    }
+
     /** The image reduced to fit [maxSide], with the same sampling as the geometry. */
     fun reduce(source: PixelBuffer, maxSide: Int): PixelBuffer {
         val scale = maxSide.toFloat() / max(source.width, source.height)

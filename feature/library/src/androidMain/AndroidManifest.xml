@@ -3,10 +3,15 @@
     Sharing requires handing a file to another app, and since Android 7 a `file://` out of the
     process is illegal. The FileProvider is declared here, and not in the `app` module, because the
     library's selection and the detail (which depends on it) both share through it; the manifest
-    merge does the rest.
+    merge does the rest. The upload of what other apps share runs as a dataSync foreground service,
+    declared here too so that the module's own lint sees it.
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <application>
+        <service android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync" tools:node="merge" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.share"

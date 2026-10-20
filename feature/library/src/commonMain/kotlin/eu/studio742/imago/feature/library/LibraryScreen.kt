@@ -480,6 +480,8 @@ private fun LibraryHost(
             onSectionChange = { viewModel.selectSection(it); if (picker == null) viewModel.clearSelection() },
             onSelectMonth = viewModel::selectMonth,
             onOpenAlbum = { viewModel.openAlbum(it); if (picker == null) viewModel.clearSelection() },
+            onHideAlbumsFromGrid = viewModel::hideAlbumsFromGrid,
+            onRevealHiddenAlbums = viewModel::revealHiddenAlbums,
             onCloseAlbum = { viewModel.closeAlbum(); if (picker == null) viewModel.clearSelection() },
             onOpenAsset = onOpenAsset,
             onOpenRecipes = onOpenRecipes,
@@ -537,6 +539,9 @@ private fun LibraryScreen(
     onSectionChange: (LibrarySection) -> Unit,
     onSelectMonth: (String?) -> Unit,
     onOpenAlbum: (AlbumUiModel) -> Unit,
+    /** Which albums the albums grid leaves out from now on. */
+    onHideAlbumsFromGrid: (Set<String>) -> Unit,
+    onRevealHiddenAlbums: () -> Unit,
     onCloseAlbum: () -> Unit,
     onOpenAsset: (AssetUiModel, List<AssetUiModel>) -> Unit,
     onOpenRecipes: () -> Unit,
@@ -756,7 +761,14 @@ private fun LibraryScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             if (uiState.section == LibrarySection.ALBUMS && uiState.selectedAlbum == null) {
-                AlbumBrowser(state = uiState, onOpenAlbum = onOpenAlbum, onRetry = onRefresh, editing = albumEditing)
+                AlbumBrowser(
+                    state = uiState,
+                    onOpenAlbum = onOpenAlbum,
+                    onHideFromGrid = onHideAlbumsFromGrid,
+                    onRevealHidden = onRevealHiddenAlbums,
+                    onRetry = onRefresh,
+                    editing = albumEditing,
+                )
             } else if (uiState.showingPeople && uiState.selectedAlbum == null) {
                 PeopleBrowser(state = uiState, onOpenPerson = onOpenPerson, onRetry = onRefresh)
             } else {
@@ -1556,19 +1568,25 @@ private fun AppendError(message: String?, onRetry: () -> Unit) = Column(
 private fun AlbumBrowser(
     state: LibraryUiState,
     onOpenAlbum: (AlbumUiModel) -> Unit,
+    onHideFromGrid: (Set<String>) -> Unit,
+    onRevealHidden: () -> Unit,
     onRetry: () -> Unit,
     /** Null where albums are not created from here: a picker, the unified library. */
     editing: AlbumEditing?,
 ) {
     val onNewAlbum = editing?.onNewAlbum
     var naming by remember { mutableStateOf(false) }
+    val hidden = state.albumsHiddenFromGrid
+    val revealed = state.revealingHiddenAlbums
+    val shown = remember(state.albums, hidden, state.query, revealed) { albumsInGrid(state.albums, hidden, state.query, revealed) }
+    val hiddenCount = remember(state.albums, hidden) { state.albums.count { it.id in hidden } }
     when {
         state.isLoadingNavigation && state.albums.isEmpty() -> LoadingState()
         state.navigationError != null && state.albums.isEmpty() -> ErrorState(state.navigationError.resolve(), onRetry)
         state.albums.isEmpty() && onNewAlbum == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(stringResource(Res.string.library_no_albums), color = ImagoColors.TextSecondary)
         }
-        state.query.isNotBlank() && albumsMatching(state.albums, state.query).isEmpty() ->
+        state.query.isNotBlank() && shown.isEmpty() ->
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(stringResource(Res.string.library_no_album_match, state.query.trim()), color = ImagoColors.TextSecondary)
             }
@@ -1582,8 +1600,19 @@ private fun AlbumBrowser(
             if (onNewAlbum != null && state.query.isBlank()) {
                 item(key = "new-album") { NewAlbumTile(onClick = { naming = true }) }
             }
-            gridItems(albumsMatching(state.albums, state.query), key = AlbumUiModel::id) { album ->
-                AlbumTile(album, onClick = { onOpenAlbum(album) })
+            gridItems(shown, key = AlbumUiModel::id) { album ->
+                val isHidden = album.id in hidden
+                AlbumTile(
+                    album,
+                    onClick = { onOpenAlbum(album) },
+                    gridChoice = if (isHidden) Res.string.library_album_unhide else Res.string.library_album_hide,
+                    onGridChoice = { onHideFromGrid(if (isHidden) hidden - album.id else hidden + album.id) },
+                )
+            }
+            // Last, so the albums keep their places. Once tapped the hidden ones are in the grid like
+            // the rest, and the tile has nothing left to show.
+            if (state.query.isBlank() && hiddenCount > 0 && !revealed) {
+                item(key = "show-all-albums") { ShowAllAlbumsTile(hiddenCount = hiddenCount, onClick = onRevealHidden) }
             }
         }
     }
@@ -1684,15 +1713,67 @@ private fun NewAlbumTile(onClick: () -> Unit) {
     }
 }
 
+/** The last tile of the albums, shaped like the first: it brings the hidden ones into the grid for now. */
 @Composable
-private fun AlbumTile(album: AlbumUiModel, onClick: () -> Unit) {
-    val context = LocalPlatformContext.current
+private fun ShowAllAlbumsTile(hiddenCount: Int, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(ImagoRadii.Small))
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(bottom = ImagoSpacing.Sm),
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1.18f)
+                .clip(RoundedCornerShape(ImagoRadii.Small))
+                .border(1.dp, ImagoColors.BorderSubtle, RoundedCornerShape(ImagoRadii.Small)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Outlined.Add, contentDescription = null, tint = ImagoColors.Ivory, modifier = Modifier.size(ImagoSizes.IconDefault))
+        }
+        Text(
+            text = stringResource(Res.string.library_all_albums_show_all),
+            style = MaterialTheme.typography.titleSmall,
+            maxLines = 1,
+            modifier = Modifier.padding(top = ImagoSpacing.Sm),
+        )
+        Text(
+            text = pluralStringResource(Res.plurals.library_albums_hidden, hiddenCount, hiddenCount),
+            style = MaterialTheme.typography.bodySmall,
+            color = ImagoColors.TextTertiary,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun AlbumTile(
+    album: AlbumUiModel,
+    onClick: () -> Unit,
+    /** What the long press offers: hiding the album from the grid, or showing it again. */
+    gridChoice: org.jetbrains.compose.resources.StringResource,
+    onGridChoice: () -> Unit,
+) {
+    val context = LocalPlatformContext.current
+    var menu by remember { mutableStateOf(false) }
+    val choiceLabel = stringResource(gridChoice)
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(ImagoRadii.Small))
+            .combinedClickable(onClick = onClick, onLongClick = { menu = true }, onLongClickLabel = choiceLabel)
+            .padding(bottom = ImagoSpacing.Sm),
+    ) {
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(
+                text = { Text(choiceLabel) },
+                onClick = {
+                    menu = false
+                    onGridChoice()
+                },
+            )
+        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()

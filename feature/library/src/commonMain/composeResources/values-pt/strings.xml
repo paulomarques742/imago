@@ -445,4 +445,15 @@
     <string name="library_all_albums_show_all">Mostrar todos</string>
     <string name="library_all_albums_empty">Ainda não há álbuns neste dispositivo.</string>
     <string name="library_save">Guardar</string>
+    <string name="library_album_hide">Esconder dos álbuns</string>
+    <string name="library_album_unhide">Mostrar nos álbuns</string>
+    <string name="library_album_options">Opções de %1$s</string>
+    <plurals name="library_albums_hidden">
+        <item quantity="one">%1$d escondido</item>
+        <item quantity="other">%1$d escondidos</item>
+    </plurals>
+    <string name="library_albums_choose_body">Os álbuns desmarcados saem da grelha de álbuns. As fotografias continuam na linha do tempo, a pesquisa pelo nome continua a encontrá-los, e «Mostrar todos», no fim da grelha, trá-los de volta por uns momentos.</string>
+    <string name="library_grid_albums_setting">Álbuns na grelha de álbuns</string>
+    <string name="library_grid_albums_setting_body">A escolha de cada biblioteca, neste aparelho. Um toque longo num álbum esconde-o logo na grelha.</string>
+    <string name="library_grid_albums_all">Todos visíveis</string>
 </resources>

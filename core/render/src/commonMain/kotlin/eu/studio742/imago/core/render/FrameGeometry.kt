@@ -14,7 +14,9 @@ package eu.studio742.imago.core.render
  * they cancel out — it is the only way for the two not to diverge silently.
  *
  * Straighten and perspective are one matrix, [frameTransform], and the shader and the Android CPU
- * path receive that same matrix: there is no second reading of the sliders anywhere.
+ * path receive that same matrix: there is no second reading of the sliders anywhere. The lens
+ * distortion is the one step no matrix holds ([LensDistortion]): it sits between the oriented photo and
+ * the matrix, and every path here goes through it.
  */
 data class FrameGeometry(
     val sourceWidth: Int,
@@ -57,6 +59,10 @@ data class FrameGeometry(
     /** The inverse, which is what sampling needs: for each point of the frame, where in the photo. */
     val imageFromView: Homography = viewFromImage.inverse()
 
+    /** The lens distortion's `k`, and the half-diagonal it is measured against, squared. */
+    private val distortion: Double = LensDistortion.coefficient(perspective.distortion)
+    private val distortionRadiusSquared: Double = LensDistortion.radiusSquared(orientedAspect.toDouble())
+
     /**
      * Whether the frame may show what lies beyond the photo — white, by decision. Without it every
      * consumer clamps to the edge, as it always did, and a point a hair outside from rounding never
@@ -82,6 +88,18 @@ data class FrameGeometry(
             out[1] = Float.NaN
             return
         }
+        if (distortion != 0.0) {
+            // LensDistortion.sample, written out: this runs for every pixel.
+            val r2 = (out[0] * out[0] + out[1] * out[1]) / distortionRadiusSquared
+            if (distortion < 0.0 && -3.0 * distortion * r2 >= 1.0) {
+                out[0] = Float.NaN
+                out[1] = Float.NaN
+                return
+            }
+            val factor = (1.0 + distortion * r2).toFloat()
+            out[0] *= factor
+            out[1] *= factor
+        }
         var x = out[0] / orientedAspect + 0.5f
         var y = out[1] + 0.5f
 
@@ -98,19 +116,8 @@ data class FrameGeometry(
 
     /** From the original image to the visible frame. The exact inverse of [imageFromFramed]. */
     fun framedFromImage(u: Float, v: Float, out: FloatArray) {
-        var x: Float
-        var y: Float
-        when (quarterTurns) {
-            1 -> { x = 1f - v; y = u }
-            2 -> { x = 1f - u; y = 1f - v }
-            3 -> { x = v; y = 1f - u }
-            else -> { x = u; y = v }
-        }
-
-        if (mirrorH) x = 1f - x
-        if (mirrorV) y = 1f - y
-
-        if (!viewFromImage.map((x - 0.5f) * orientedAspect, y - 0.5f, out)) {
+        orientedFromImage(u, v, out)
+        if (out[0].isNaN() || !viewFromImage.map(out[0], out[1], out)) {
             out[0] = Float.NaN
             out[1] = Float.NaN
             return
@@ -123,10 +130,26 @@ data class FrameGeometry(
     }
 
     /**
-     * From the original image to the oriented photo, centred and in photo heights: the space
-     * [viewFromImage] starts from, and where the Upright solver measures its guides.
+     * From the original image to the oriented photo, centred and in photo heights, with the lens
+     * distortion taken away: the space [viewFromImage] starts from, and where the Upright solver
+     * measures its guides and lines — straight there, as the person drew them along something straight.
+     * NaN where the distortion leaves the point out.
      */
     fun orientedFromImage(u: Float, v: Float, out: FloatArray) {
+        orientedAsDrawn(u, v, out)
+        if (distortion == 0.0) return
+        val corrected = DoubleArray(2)
+        if (LensDistortion.correct(out[0].toDouble(), out[1].toDouble(), distortion, distortionRadiusSquared, corrected)) {
+            out[0] = corrected[0].toFloat()
+            out[1] = corrected[1].toFloat()
+        } else {
+            out[0] = Float.NaN
+            out[1] = Float.NaN
+        }
+    }
+
+    /** [orientedFromImage] before the distortion is taken away: the photo turned, as the lens drew it. */
+    private fun orientedAsDrawn(u: Float, v: Float, out: FloatArray) {
         var x: Float
         var y: Float
         when (quarterTurns) {
@@ -144,8 +167,11 @@ data class FrameGeometry(
     /**
      * [framedFromImage] as a single matrix, from the original image's pixels to the frame's
      * normalised coordinates: what a canvas needs to draw the photo as the stage frames it.
+     *
+     * A lens distortion is no matrix; with one, the matrix is exact at the image point ([aroundU],
+     * [aroundV]) and very nearly so around it — enough for a loupe, which only shows that much.
      */
-    fun framedFromImagePixels(): Homography {
+    fun framedFromImagePixels(aroundU: Float = 0.5f, aroundV: Float = 0.5f): Homography {
         val toNormalised = Homography.scale(1.0 / sourceWidth.coerceAtLeast(1), 1.0 / sourceHeight.coerceAtLeast(1))
         val turned = when (quarterTurns) {
             1 -> Homography.of(0.0, -1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
@@ -166,7 +192,15 @@ data class FrameGeometry(
             0.0, 1.0 / cropHeight, -cropY.toDouble() / cropHeight,
             0.0, 0.0, 1.0,
         )
-        return cropped * uncentred * viewFromImage * centred * mirrored * turned * toNormalised
+        val corrected = if (distortion == 0.0) {
+            Homography.scale(1.0, 1.0)
+        } else {
+            val around = FloatArray(2)
+            orientedAsDrawn(aroundU, aroundV, around)
+            LensDistortion.localCorrection(around[0].toDouble(), around[1].toDouble(), distortion, distortionRadiusSquared)
+                ?: Homography.scale(1.0, 1.0)
+        }
+        return cropped * uncentred * viewFromImage * corrected * centred * mirrored * turned * toNormalised
     }
 
     /** Whether a point [imageFromFramed] wrote lies beyond the photo. */

@@ -1,5 +1,13 @@
 package eu.studio742.imago.feature.library
 
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Collections
+import androidx.compose.material3.Icon
+import eu.studio742.imago.core.designsystem.i18n.toUiText
+import eu.studio742.imago.core.model.LibrarySource
+import eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,7 +41,6 @@ import eu.studio742.imago.core.data.DeviceLibrary
 import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
-import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.feature.library.resources.*
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
@@ -43,10 +50,13 @@ import org.jetbrains.compose.resources.stringResource
  * The hidden ones after the person confirmed [shown] out of [listed]. An album hidden earlier that is
  * not listed now — emptied, or its card unplugged — stays hidden for when it comes back.
  */
-internal fun hiddenAfterChoosing(hidden: Set<String>, listed: List<ImmichAlbum>, shown: Set<String>): Set<String> {
+internal fun hiddenAfterChoosing(hidden: Set<String>, listed: List<AlbumChoice>, shown: Set<String>): Set<String> {
     val ids = listed.map { it.id }.toSet()
     return (hidden - ids) + (ids - shown)
 }
+
+/** An album as the lists of boxes show it. */
+internal data class AlbumChoice(val id: String, val name: String, val count: Int)
 
 /** Which of this device's albums "All" shows: screenshots and what messaging apps save need not. */
 @Composable
@@ -75,18 +85,41 @@ internal fun AllViewAlbumsSetting(device: DeviceLibrary) {
 
 @Composable
 private fun AllViewAlbumsDialog(device: DeviceLibrary, hidden: Set<String>, onSave: (Set<String>) -> Unit, onDismiss: () -> Unit) {
-    val albums by produceState<List<ImmichAlbum>?>(null, device) {
-        value = runCatching { device.albums() }.getOrDefault(emptyList())
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    val albums by produceState<List<AlbumChoice>?>(null, device) {
+        value = runCatching { device.albums() }.getOrDefault(emptyList()).map { AlbumChoice(it.id, it.name, it.assetCount) }
     }
-    var shown by remember(albums) { mutableStateOf(albums.orEmpty().map { it.id }.toSet() - hidden) }
+    AlbumChoiceDialog(
+        title = stringResource(Res.string.library_all_albums_setting),
+        body = stringResource(Res.string.library_all_albums_body),
+        albums = albums,
+        hidden = hidden,
+        onSave = onSave,
+        onDismiss = onDismiss,
+    )
+}
+
+/**
+ * A box per album, ticked where it shows; null [albums] while they load. [onSave] gets the albums
+ * hidden from then on, and the dialog closes.
+ */
+@Composable
+internal fun AlbumChoiceDialog(
+    title: String,
+    body: String,
+    albums: List<AlbumChoice>?,
+    hidden: Set<String>,
+    onSave: (Set<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sorted = remember(albums) { albums?.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }) }
+    var shown by remember(sorted) { mutableStateOf(sorted.orEmpty().map { it.id }.toSet() - hidden) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.library_all_albums_setting)) },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
-                Text(stringResource(Res.string.library_all_albums_body), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
-                val listed = albums
+                Text(body, style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
+                val listed = sorted
                 when {
                     listed == null -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
                     listed.isEmpty() -> Text(stringResource(Res.string.library_all_albums_empty), style = MaterialTheme.typography.bodyMedium)
@@ -112,7 +145,7 @@ private fun AllViewAlbumsDialog(device: DeviceLibrary, hidden: Set<String>, onSa
                                         modifier = Modifier.weight(1f).padding(start = ImagoSpacing.Md),
                                     )
                                     Text(
-                                        album.assetCount.toString(),
+                                        album.count.toString(),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = ImagoColors.TextSecondary,
                                         modifier = Modifier.padding(start = ImagoSpacing.Sm),
@@ -126,13 +159,67 @@ private fun AllViewAlbumsDialog(device: DeviceLibrary, hidden: Set<String>, onSa
         },
         confirmButton = {
             TextButton(
-                enabled = albums != null,
+                enabled = sorted != null,
                 onClick = {
-                    onSave(hiddenAfterChoosing(hidden, albums.orEmpty(), shown))
+                    onSave(hiddenAfterChoosing(hidden, sorted.orEmpty(), shown))
                     onDismiss()
                 },
             ) { Text(stringResource(Res.string.library_save)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.library_cancel)) } },
     )
+}
+
+/**
+ * Which albums each library's albums grid shows: a row per library — this device, each linked Immich,
+ * the unified one — and the boxes of its albums behind it. The grid itself only hides one at a time.
+ */
+@Composable
+internal fun GridAlbumsSetting(viewModel: LibrarySettingsViewModel, sources: List<LibrarySource>) {
+    val hiddenByLibrary by viewModel.configuration.albumsHiddenFromGrid.collectAsStateWithLifecycle()
+    var choosing by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val unifiedName = stringResource(Res.string.library_unified_name, stringResource(DeviceLibraryName))
+    val libraries = sources.filter { it.isDevice || it.isConnected }.map { it.id to it.displayName() } +
+        listOfNotNull((UNIFIED_LIBRARY_ID to unifiedName).takeIf { viewModel.configuration.unifiedPartnerId != null })
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
+        Icon(Icons.Outlined.Collections, null, tint = ImagoColors.Ivory)
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(Res.string.library_grid_albums_setting), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.library_grid_albums_setting_body), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+        }
+    }
+    libraries.forEach { (id, name) ->
+        val hiddenCount = hiddenByLibrary[id].orEmpty().size
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = ImagoSizes.TouchTarget).clickable(role = Role.Button) { choosing = id to name },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(
+                if (hiddenCount == 0) stringResource(Res.string.library_grid_albums_all)
+                else pluralStringResource(Res.plurals.library_albums_hidden, hiddenCount, hiddenCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = ImagoColors.TextSecondary,
+                modifier = Modifier.padding(start = ImagoSpacing.Sm),
+            )
+            Icon(Icons.Outlined.ChevronRight, null, tint = ImagoColors.TextSecondary)
+        }
+    }
+    choosing?.let { (id, name) ->
+        // A library that cannot be read now — offline, its key revoked — shows no albums rather than an error page.
+        val albums by produceState<List<AlbumChoice>?>(null, id) {
+            value = runCatching { viewModel.library.albumsOf(id) }.getOrDefault(emptyList()).map { AlbumChoice(it.id, it.name, it.assetCount) }
+        }
+        AlbumChoiceDialog(
+            title = name,
+            body = stringResource(Res.string.library_albums_choose_body),
+            albums = albums,
+            hidden = hiddenByLibrary[id].orEmpty(),
+            onSave = { chosen ->
+                runCatching { viewModel.configuration.setAlbumsHiddenFromGrid(id, chosen) }
+                    .onFailure { viewModel.message.value = it.toUiText() }
+            },
+            onDismiss = { choosing = null },
+        )
+    }
 }

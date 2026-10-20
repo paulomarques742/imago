@@ -155,25 +155,33 @@ fun MaskOverlay(
 ) {
     Canvas(modifier = modifier) {
         val projection = MaskProjection(bounds, geometry)
-        val component = mask.components.firstOrNull() ?: return@Canvas
-        when (component.shape) {
-            MaskShape.RADIAL -> component.radial?.let { radial ->
-                // The ellipse is drawn point by point and projected, and not with `drawOval`: under a
-                // crop with fine rotation the frame is no longer aligned with the screen, and an oval
-                // drawn in screen coordinates was crooked compared to what the pipeline applies.
-                drawProjectedEllipse(projection, radial.x, radial.y, radial.radiusX, radial.radiusY, radial.angle)
-            }
-            MaskShape.LINEAR -> component.linear?.let { linear ->
-                val half = linear.width * 0.5f
-                listOf(-half to 0.35f, 0f to 0.9f, half to 0.35f).forEach { (offset, alpha) ->
-                    drawProjectedLine(projection, linear.x, linear.y, linear.angle, offset, alpha)
-                }
-            }
-        }
+        drawMaskOutline(mask, projection)
         maskHandlesOf(mask, projection)?.let { handles ->
             listOfNotNull(handles.radiusX, handles.radiusY, handles.width).forEach { drawHandle(it, filled = false) }
             drawHandle(handles.rotate, filled = false)
             drawHandle(handles.centre, filled = true)
+        }
+    }
+}
+
+/**
+ * The mask's shape without its handles: the editor draws the handles on top, the "Show your edit"
+ * video draws the shape alone while the mask's sliders rise.
+ */
+internal fun DrawScope.drawMaskOutline(mask: LocalMask, projection: MaskProjection, alpha: Float = 1f) {
+    val component = mask.components.firstOrNull() ?: return
+    when (component.shape) {
+        MaskShape.RADIAL -> component.radial?.let { radial ->
+            // The ellipse is drawn point by point and projected, and not with `drawOval`: under a
+            // crop with fine rotation the frame is no longer aligned with the screen, and an oval
+            // drawn in screen coordinates was crooked compared to what the pipeline applies.
+            drawProjectedEllipse(projection, radial.x, radial.y, radial.radiusX, radial.radiusY, radial.angle, alpha)
+        }
+        MaskShape.LINEAR -> component.linear?.let { linear ->
+            val half = linear.width * 0.5f
+            listOf(-half to 0.35f, 0f to 0.9f, half to 0.35f).forEach { (offset, lineAlpha) ->
+                drawProjectedLine(projection, linear.x, linear.y, linear.angle, offset, lineAlpha * alpha)
+            }
         }
     }
 }
@@ -185,6 +193,7 @@ private fun DrawScope.drawProjectedEllipse(
     radiusX: Float,
     radiusY: Float,
     angleDegrees: Float,
+    alpha: Float,
 ) {
     val path = Path()
     for (step in 0..ELLIPSE_STEPS) {
@@ -199,7 +208,7 @@ private fun DrawScope.drawProjectedEllipse(
         if (step == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
     }
     path.close()
-    drawPath(path, color = OUTLINE_COLOR.copy(alpha = 0.9f), style = Stroke(width = OUTLINE_WIDTH.toPx()))
+    drawPath(path, color = OUTLINE_COLOR.copy(alpha = 0.9f * alpha), style = Stroke(width = OUTLINE_WIDTH.toPx()))
 }
 
 private fun DrawScope.drawProjectedLine(

@@ -150,6 +150,24 @@ class GuidedUprightEditingTest {
         assertTrue("lean ${worstLean()}", worstLean() < 2e-3f)
     }
 
+    /** The guides are measured with the distortion taken away: moving it bends them, and they are solved again. */
+    @Test
+    fun `a new distortion keeps the guides straight, in the same step`() {
+        open()
+        viewModel.setUprightMode(UPRIGHT_GUIDED)
+        draw(converging)
+        val before = perspective.uprightPitch
+
+        viewModel.updateAdjustment(Adjustment.PERSPECTIVE_DISTORTION, -80f)
+        viewModel.finishAdjustment()
+
+        assertNotEquals(before, perspective.uprightPitch)
+        assertTrue("lean ${worstLean()}", worstLean() < 2e-3f)
+        viewModel.undo()
+        assertEquals("one step undoes both", before, perspective.uprightPitch)
+        assertEquals(0f, perspective.distortion)
+    }
+
     @Test
     fun `a tap is no guide`() {
         open()

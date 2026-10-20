@@ -198,7 +198,7 @@ class CompositionStaticExporter @Inject constructor(
                 canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
             }
             is CompositionBackground.Photo -> {
-                val bitmap = loadBitmap(background.media, null, sources, bitmaps, max(width, height) * 2)
+                val bitmap = loadBitmap(background.media, background.recipe?.recipe, sources, bitmaps, max(width, height) * 2)
                 val destination = RectF(0f, 0f, width.toFloat(), height.toFloat())
                 if (background.blurRadius > 0f) {
                     // The divisor comes from the radius, and is the same the preview uses. It was fixed

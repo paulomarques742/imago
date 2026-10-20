@@ -40,6 +40,8 @@ kotlin {
             // Skia's native library, which in a Compose app comes with the window; desktop is Windows.
             implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.9.4.2")
             implementation(libs.kotlinx.coroutines.test)
+            // ReelJobsTest reads its jobs, and their recipes, as JSON.
+            implementation(libs.kotlinx.serialization.json)
             // What the panel shows and where, asked through semantics: a category off the screen
             // is a node outside the root.
             @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
@@ -55,6 +57,19 @@ kotlin {
     }
 }
 
+
+// ReelFramesTest leaves the video's key frames here for a person to look at; -Pimago.reel.photo=<file>
+// draws them over a real photo instead of the small sample.
+tasks.withType<Test>().matching { it.name == "desktopTest" }.configureEach {
+    val frames = layout.buildDirectory.dir("reel-frames")
+    doFirst { systemProperty("imago.reel.frames", frames.get().asFile.absolutePath) }
+    providers.gradleProperty("imago.reel.photo").orNull?.let { systemProperty("imago.reel.photo", it) }
+    // With -Pimago.reel.ffmpeg=<executable>, ReelFramesTest also encodes the whole video with it.
+    providers.gradleProperty("imago.reel.ffmpeg").orNull?.let { systemProperty("imago.reel.ffmpeg", it) }
+    // ReelJobsTest: a folder of jobs to turn into videos, and optionally just one of them.
+    providers.gradleProperty("imago.reel.jobs").orNull?.let { systemProperty("imago.reel.jobs", it) }
+    providers.gradleProperty("imago.reel.only").orNull?.let { systemProperty("imago.reel.only", it) }
+}
 
 compose.resources {
     packageOfResClass = "eu.studio742.imago.feature.editor.resources"

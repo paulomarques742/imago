@@ -48,7 +48,7 @@ actual fun libraryViewModel(key: String?): LibraryViewModel {
 @Composable
 actual fun librarySettingsViewModel(): LibrarySettingsViewModel {
     val graph = LocalDesktopDataGraph.current
-    return viewModel { LibrarySettingsViewModel(graph.configuration, graph.folders) }
+    return viewModel { LibrarySettingsViewModel(graph.configuration, graph.folders, graph.library) }
 }
 
 @Composable

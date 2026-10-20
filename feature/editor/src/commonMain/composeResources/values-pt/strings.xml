@@ -95,6 +95,10 @@
     <string name="editor_white_balance_pick">Escolher o equilíbrio de brancos na foto</string>
     <string name="editor_white_balance_pick_hint">Leve a lupa a algo que devia ser cinzento</string>
     <string name="editor_white_balance_unreadable">Demasiado escuro ou claro para ler</string>
+    <string name="editor_white_balance_preset">Predefinição do equilíbrio de brancos</string>
+    <string name="editor_white_balance_as_shot">Como foi tirada</string>
+    <string name="editor_white_balance_auto">Automático</string>
+    <string name="editor_white_balance_custom">Personalizado</string>
     <string name="editor_history_white_balance_picked">Seletor</string>
     <string name="editor_crop_frame">Moldura de corte ajustável</string>
     <string name="editor_aspect_free_state">Proporção livre</string>
@@ -277,6 +281,7 @@
     <string name="editor_unsaved_recipe_body">Se sair sem guardar, as alterações perdem-se.</string>
     <string name="editor_discard">Descartar</string>
     <string name="editor_unsaved_marker">Alterações por guardar</string>
+    <string name="editor_adj_perspective_distortion">Perspetiva · distorção</string>
     <string name="editor_adj_perspective_vertical">Perspetiva · vertical</string>
     <string name="editor_adj_perspective_horizontal">Perspetiva · horizontal</string>
     <string name="editor_adj_perspective_aspect">Perspetiva · aspeto</string>
@@ -284,6 +289,7 @@
     <string name="editor_adj_perspective_offset_x">Perspetiva · deslocamento X</string>
     <string name="editor_adj_perspective_offset_y">Perspetiva · deslocamento Y</string>
     <string name="editor_chip_perspective">Perspetiva</string>
+    <string name="editor_perspective_distortion">Distorção</string>
     <string name="editor_perspective_vertical">Vertical</string>
     <string name="editor_perspective_horizontal">Horizontal</string>
     <string name="editor_perspective_aspect">Aspeto</string>
@@ -325,4 +331,28 @@
     <string name="editor_parts_collapse">Esconder o que %1$s inclui</string>
     <string name="editor_part_geometry">Geometria</string>
     <string name="editor_part_rotate_flip">Rodar e espelhar</string>
+    <!-- "Show your edit": the video that replays an edit. -->
+    <string name="reel_before">Antes</string>
+    <string name="reel_after">Depois</string>
+    <string name="reel_tagline">Revele cada imagem.</string>
+    <string name="reel_open">Mostrar a edição</string>
+    <string name="reel_sheet_title">Mostrar a edição</string>
+    <string name="reel_style">Estilo</string>
+    <string name="reel_style_panel">Painel</string>
+    <string name="reel_style_pill">Pílula</string>
+    <string name="reel_style_list">Lista</string>
+    <string name="reel_order">Ordem</string>
+    <string name="reel_order_history">Como editei</string>
+    <string name="reel_order_recipe">Painel a painel</string>
+    <string name="reel_title_hint">Título (opcional)</string>
+    <string name="reel_export">Exportar vídeo</string>
+    <string name="reel_progress">A fazer o vídeo… %1$s</string>
+    <string name="reel_saved_gallery">Vídeo guardado em Pictures/IMAGO.</string>
+    <string name="reel_saved_file">Vídeo guardado.</string>
+    <string name="reel_share">Partilhar</string>
+    <string name="reel_share_title">Partilhar o vídeo</string>
+    <string name="reel_done">Concluído</string>
+    <string name="reel_failed">Não foi possível fazer o vídeo.</string>
+    <string name="reel_ffmpeg_unavailable">FFmpeg indisponível. Configure IMAGO_FFMPEG com o executável.</string>
+    <string name="reel_preview">Pré-visualização do vídeo</string>
 </resources>

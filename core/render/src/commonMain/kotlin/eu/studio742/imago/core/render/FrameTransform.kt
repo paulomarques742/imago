@@ -23,12 +23,14 @@ data class PerspectiveParameters(
     val uprightRoll: Float = 0f,
     val uprightPitch: Float = 0f,
     val uprightYaw: Float = 0f,
+    /** Barrel and pincushion, −100..100; see [LensDistortion]. */
+    val distortion: Float = 0f,
 ) {
     /** Nothing but the straighten's rotation and its cover zoom: the matrix there was before version 10. */
     val isNeutral: Boolean
         get() = vertical == 0f && horizontal == 0f && aspect == 0f && scale == 0f &&
             offsetX == 0f && offsetY == 0f && constrainCrop &&
-            uprightRoll == 0f && uprightPitch == 0f && uprightYaw == 0f
+            uprightRoll == 0f && uprightPitch == 0f && uprightYaw == 0f && distortion == 0f
 }
 
 /**
@@ -154,12 +156,7 @@ fun frameTransform(aspect: Float, straighten: Float, perspective: PerspectivePar
     var offsetY = perspective.offsetY / 100.0 * OFFSET_RANGE
     val scale: Double
     if (perspective.constrainCrop) {
-        val photo = listOf(
-            shaped.mapDouble(-a / 2, -0.5),
-            shaped.mapDouble(a / 2, -0.5),
-            shaped.mapDouble(a / 2, 0.5),
-            shaped.mapDouble(-a / 2, 0.5),
-        )
+        val photo = correctedOutline(a, LensDistortion.coefficient(perspective.distortion)).map { (x, y) -> shaped.mapDouble(x, y) }
         val sides = photo.indices.map { index -> Side.between(photo[index], photo[(index + 1) % photo.size]) }
         // The offset may not take the frame's centre out of the photo, or no scale would cover it: it
         // stops halfway to the nearest side.
@@ -212,6 +209,34 @@ internal fun cameraAngles(straighten: Float, perspective: PerspectiveParameters)
     -perspective.vertical / 100.0 * MAX_TILT_RADIANS + Math.toRadians(perspective.uprightPitch.toDouble()),
     perspective.horizontal / 100.0 * MAX_TILT_RADIANS + Math.toRadians(perspective.uprightYaw.toDouble()),
 )
+
+/**
+ * The outline of the photo once the lens distortion is taken away, in the space the camera starts
+ * from, going round it.
+ *
+ * Without distortion, or with the barrel taken out (`k` < 0), it is the photo's four corners: the
+ * corrected photo then covers at least the rectangle, and the corners are what cover is measured
+ * against. Taking pincushion out pulls the corners in more than the middle of the sides, and the
+ * outline bows outward between them; it is followed point by point, and since each chord runs inside
+ * the curve, the cover found is never short of it.
+ */
+private fun correctedOutline(aspect: Double, k: Double): List<Pair<Double, Double>> {
+    val corners = listOf(-aspect / 2 to -0.5, aspect / 2 to -0.5, aspect / 2 to 0.5, -aspect / 2 to 0.5)
+    if (k <= 0.0) return corners
+    val radiusSquared = LensDistortion.radiusSquared(aspect)
+    val corrected = DoubleArray(2)
+    return corners.indices.flatMap { side ->
+        val (startX, startY) = corners[side]
+        val (endX, endY) = corners[(side + 1) % corners.size]
+        (0 until OUTLINE_POINTS_PER_SIDE).map { step ->
+            val t = step.toDouble() / OUTLINE_POINTS_PER_SIDE
+            LensDistortion.correct(startX + (endX - startX) * t, startY + (endY - startY) * t, k, radiusSquared, corrected)
+            corrected[0] to corrected[1]
+        }
+    }
+}
+
+private const val OUTLINE_POINTS_PER_SIDE = 24
 
 /** A side of the transformed photo as `normal · p <= distance`, with the normal pointing out. */
 private class Side(val normalX: Double, val normalY: Double, val distance: Double) {

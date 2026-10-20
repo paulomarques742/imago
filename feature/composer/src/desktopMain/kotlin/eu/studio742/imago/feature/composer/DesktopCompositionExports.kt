@@ -186,7 +186,7 @@ class DesktopCompositionExports(
             }
         }
         val background = project.pages[page].backgroundOverride ?: project.background
-        if (background is CompositionBackground.Photo) add(background.media.assetId, background.media)
+        if (background is CompositionBackground.Photo) add(background.media.assetId, background.media, background.recipe?.recipe)
         return prepared
     }
 

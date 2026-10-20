@@ -28,6 +28,8 @@ class DetailInfoTest {
     fun theShutterIsWrittenAsAFractionOrInSeconds() {
         assertEquals("1/125 s", shutter("1/125"))
         assertEquals("1/250 s", shutter("0.004"))
+        // Open Camera writes the decimal the camera reported, not a fraction.
+        assertEquals("1/6 s", shutter("0.16666666666666666"))
         assertEquals("2 s", shutter("2"))
         assertEquals("1.5 s", shutter("1.5s"))
         assertNull(shutter("0"))

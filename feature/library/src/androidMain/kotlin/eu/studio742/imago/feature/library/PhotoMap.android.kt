@@ -1,6 +1,7 @@
 package eu.studio742.imago.feature.library
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -57,10 +58,7 @@ actual fun PhotoMap(
     val currentMarkers by rememberUpdatedState(markers)
     val reportCamera by rememberUpdatedState(onCameraChange)
     val openPlace by rememberUpdatedState(onOpenPlace)
-    val mapView = remember {
-        MapLibre.getInstance(context)
-        MapView(context).apply { onCreate(null) }
-    }
+    val mapView = remember { createdMapView(context) }
     DisposableEffect(lifecycle, mapView) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -159,6 +157,17 @@ actual fun PhotoMap(
     }
 }
 
+/**
+ * A map view past `onCreate`. A function and not an `apply` inside `remember`: lint reads a lambda ending
+ * in a Unit call as a `remember` returning Unit.
+ */
+private fun createdMapView(context: Context): MapView {
+    MapLibre.getInstance(context)
+    val view = MapView(context)
+    view.onCreate(null)
+    return view
+}
+
 private fun MapCamera.toPosition(): CameraPosition = CameraPosition.Builder().target(LatLng(latitude, longitude)).zoom(zoom).build()
 
 private const val SOURCE = "imago-photos"
@@ -185,10 +194,7 @@ actual fun rememberLocationAccess(onGranted: () -> Unit): (() -> Unit)? {
 actual fun PlaceMap(latitude: Double, longitude: Double, modifier: Modifier) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val mapView = remember {
-        MapLibre.getInstance(context)
-        MapView(context).apply { onCreate(null) }
-    }
+    val mapView = remember { createdMapView(context) }
     DisposableEffect(lifecycle, mapView) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {

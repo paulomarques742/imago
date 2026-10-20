@@ -95,6 +95,10 @@
     <string name="editor_white_balance_pick">Pick the white balance on the photo</string>
     <string name="editor_white_balance_pick_hint">Move the loupe to something that should be grey</string>
     <string name="editor_white_balance_unreadable">Too dark or too bright to read</string>
+    <string name="editor_white_balance_preset">White balance preset</string>
+    <string name="editor_white_balance_as_shot">As Shot</string>
+    <string name="editor_white_balance_auto">Auto</string>
+    <string name="editor_white_balance_custom">Custom</string>
     <string name="editor_history_white_balance_picked">Selector</string>
     <string name="editor_crop_frame">Adjustable crop frame</string>
     <string name="editor_aspect_free_state">Free aspect ratio</string>
@@ -277,6 +281,7 @@
     <string name="editor_unsaved_recipe_body">If you leave without saving, the changes are lost.</string>
     <string name="editor_discard">Discard</string>
     <string name="editor_unsaved_marker">Unsaved changes</string>
+    <string name="editor_adj_perspective_distortion">Perspective · distortion</string>
     <string name="editor_adj_perspective_vertical">Perspective · vertical</string>
     <string name="editor_adj_perspective_horizontal">Perspective · horizontal</string>
     <string name="editor_adj_perspective_aspect">Perspective · aspect</string>
@@ -284,6 +289,7 @@
     <string name="editor_adj_perspective_offset_x">Perspective · X offset</string>
     <string name="editor_adj_perspective_offset_y">Perspective · Y offset</string>
     <string name="editor_chip_perspective">Perspective</string>
+    <string name="editor_perspective_distortion">Distortion</string>
     <string name="editor_perspective_vertical">Vertical</string>
     <string name="editor_perspective_horizontal">Horizontal</string>
     <string name="editor_perspective_aspect">Aspect</string>
@@ -325,4 +331,28 @@
     <string name="editor_parts_collapse">Hide what %1$s includes</string>
     <string name="editor_part_geometry">Geometry</string>
     <string name="editor_part_rotate_flip">Rotate and flip</string>
+    <!-- "Show your edit": the video that replays an edit. -->
+    <string name="reel_before">Before</string>
+    <string name="reel_after">After</string>
+    <string name="reel_tagline">Reveal every image.</string>
+    <string name="reel_open">Show your edit</string>
+    <string name="reel_sheet_title">Show your edit</string>
+    <string name="reel_style">Style</string>
+    <string name="reel_style_panel">Panel</string>
+    <string name="reel_style_pill">Pill</string>
+    <string name="reel_style_list">List</string>
+    <string name="reel_order">Order</string>
+    <string name="reel_order_history">As I edited</string>
+    <string name="reel_order_recipe">Panel by panel</string>
+    <string name="reel_title_hint">Title (optional)</string>
+    <string name="reel_export">Export video</string>
+    <string name="reel_progress">Making the video… %1$s</string>
+    <string name="reel_saved_gallery">Video saved to Pictures/IMAGO.</string>
+    <string name="reel_saved_file">Video saved.</string>
+    <string name="reel_share">Share</string>
+    <string name="reel_share_title">Share the video</string>
+    <string name="reel_done">Done</string>
+    <string name="reel_failed">The video could not be made.</string>
+    <string name="reel_ffmpeg_unavailable">FFmpeg unavailable. Set IMAGO_FFMPEG to the executable.</string>
+    <string name="reel_preview">Preview of the video</string>
 </resources>

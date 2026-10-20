@@ -27,7 +27,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.ImmichRoom"
-        android:usesCleartextTraffic="true">
+        android:networkSecurityConfig="@xml/network_security_config">
         <!-- singleTask: an account link opened in the browser comes back to this activity instead of opening another. -->
         <activity
             android:name=".MainActivity"
@@ -36,6 +36,23 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- "Open the gallery app" from other apps (Intent.makeMainSelectorActivity). The selector
+                 is resolved as a default activity, hence DEFAULT. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.APP_GALLERY" />
+            </intent-filter>
+            <!-- A whole collection rather than one photo: a camera with nothing taken yet sends
+                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI, which opens on the library. Only VIEW:
+                 no other gallery takes the review actions for a collection, so taking them would
+                 open IMAGO without asking, and skip the VIEW where the person gets to choose. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="vnd.android.cursor.dir/image" />
+                <data android:mimeType="vnd.android.cursor.dir/video" />
             </intent-filter>
             <!-- Email confirmation and password recovery for the IMAGO account. -->
             <intent-filter>
@@ -59,8 +76,12 @@
                 <data android:mimeType="image/*" />
                 <data android:mimeType="video/*" />
             </intent-filter>
+            <!-- The pre-Android 10 action comes first: Open Camera and others try it before
+                 MediaStore.ACTION_REVIEW, and only fall back when nobody handles it — which never
+                 happens with the stock gallery installed, so without it IMAGO is never offered. -->
             <intent-filter>
                 <action android:name="android.provider.action.REVIEW" />
+                <action android:name="com.android.camera.action.REVIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
                 <data android:mimeType="video/*" />

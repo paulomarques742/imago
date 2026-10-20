@@ -65,6 +65,8 @@ import eu.studio742.imago.core.model.*
 open class LibrarySettingsViewModel(
     val configuration: ConfigurationRepository,
     val device: DeviceLibrary,
+    /** Where the albums of any library are read from, to choose which ones its albums grid shows. */
+    val library: LibraryRepository,
 ) : ViewModel() {
     val message = MutableStateFlow<UiText?>(null)
     val busy = MutableStateFlow(false)
@@ -216,6 +218,7 @@ fun LibrarySettingsRoute(
                     accountSection()
                     LanguageCard()
                     LibrarySettingsCard { OnThisDaySetting(viewModel) }
+                    LibrarySettingsCard { GridAlbumsSetting(viewModel, sources) }
                 }
                 Text(if (editing) { if (editId == null) stringResource(Res.string.library_add_immich_server) else stringResource(Res.string.library_edit_library) } else stringResource(Res.string.library_libraries),
                     style = MaterialTheme.typography.titleLarge, color = ImagoColors.TextPrimary)

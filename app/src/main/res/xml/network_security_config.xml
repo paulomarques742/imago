@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cleartext stays open by default for one reason: Immich servers on the local network are often
+     plain HTTP, at an address the person types and the build cannot know. The services the app itself
+     talks to are named here and refuse it, so an account token or a password never travels in clear. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+    <domain-config cleartextTrafficPermitted="false">
+        <!-- The IMAGO account and sync. -->
+        <domain includeSubdomains="true">supabase.co</domain>
+        <!-- The website: account deletion, privacy policy, forum. -->
+        <domain includeSubdomains="true">742studio.eu</domain>
+        <!-- The map's tiles. -->
+        <domain includeSubdomains="true">openfreemap.org</domain>
+    </domain-config>
+</network-security-config>

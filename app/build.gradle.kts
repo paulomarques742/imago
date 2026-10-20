@@ -151,4 +151,5 @@ dependencies {
     implementation(libs.coil3.network.okhttp)
     ksp(libs.hilt.compiler)
     debugImplementation(libs.compose.ui.tooling)
+    testImplementation(libs.junit4)
 }

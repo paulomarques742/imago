@@ -120,9 +120,11 @@ internal fun WhiteBalancePickerOverlay(
         val loupe = Homography.translate(at.x.toDouble(), at.y.toDouble()) *
             Homography.scale(LOUPE_ZOOM, LOUPE_ZOOM) *
             Homography.translate(-at.x.toDouble(), -at.y.toDouble())
+        // Exact where the loupe looks, should a lens distortion bend the rest.
+        val around = projection.toImage(at)
         val screen = Homography.translate(bounds.left.toDouble(), bounds.top.toDouble()) *
             Homography.scale(bounds.width.toDouble(), bounds.height.toDouble()) *
-            geometry.framedFromImagePixels()
+            geometry.framedFromImagePixels(around.x.takeUnless { it.isNaN() } ?: 0.5f, around.y.takeUnless { it.isNaN() } ?: 0.5f)
         drawCircle(Color.Black, radius, at)
         clipPath(Path().apply { addOval(androidx.compose.ui.geometry.Rect(at, radius)) }) {
             drawIntoCanvas { canvas ->

@@ -35,6 +35,10 @@ dependencies {
     implementation("net.java.dev.jna:jna-platform:5.17.0")
     testImplementation(kotlin("test-junit"))
     testImplementation(libs.kotlinx.coroutines.test)
+    // PhoneScreensCapture renders the real screens off screen and drives them through semantics.
+    @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+    testImplementation(compose.uiTest)
+    testImplementation(libs.jetbrains.lifecycle.runtime.compose)
 }
 
 /**
@@ -66,7 +70,7 @@ compose.desktop {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "IMAGO"
             packageVersion = project.version.toString()
-            description = "IMAGO — Develop every image."
+            description = "IMAGO — Reveal every image."
             vendor = "742 Studio"
             modules("java.sql", "java.naming", "jdk.crypto.ec", "java.management")
             windows {
@@ -77,4 +81,10 @@ compose.desktop {
         }
     }
 }
-tasks.test { testLogging { events("failed", "skipped") } }
+tasks.test {
+    testLogging { events("failed", "skipped") }
+    // PhoneScreensCapture only runs when given where to write, which photos and a throwaway profile.
+    listOf("imago.capture.out", "imago.capture.photos", "imago.capture.profile", "imago.capture.scenes", "imago.capture.device").forEach { name ->
+        providers.gradleProperty(name).orNull?.let { systemProperty(name, it) }
+    }
+}

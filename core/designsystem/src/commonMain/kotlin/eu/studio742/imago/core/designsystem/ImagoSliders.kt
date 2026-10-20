@@ -252,6 +252,19 @@ private fun lerpColor(from: Color, to: Color, amount: Float): Color {
 }
 
 /**
+ * A whole slider at rest — track, fill and ring — across this scope's width, centred on its height.
+ *
+ * For drawing the editor's sliders outside a composition, as the "Show your edit" video does frame
+ * by frame. It is the same drawing the live sliders use, so the video cannot drift from the app.
+ */
+fun DrawScope.drawImagoSlider(valueFraction: Float, neutralFraction: Float, enabled: Boolean = true) {
+    drawImagoTrack(valueFraction, neutralFraction, enabled)
+    val start = ThumbRadius.toPx()
+    val usable = (size.width - 2 * start).coerceAtLeast(0f)
+    drawImagoThumb(Offset(start + usable * valueFraction, size.height / 2), enabled)
+}
+
+/**
  * The track and the ring, drawn the same in both sliders.
  *
  * The ring moves between two limits inset by its radius, not between 0 and the full width; without

@@ -1048,7 +1048,7 @@ private fun HeartBurst(trigger: Int) {
 private fun ExifStrip(exif: AssetExif, isLoading: Boolean, modifier: Modifier = Modifier) {
     val entries = buildList {
         exif.fNumber?.let { add("ƒ/%.1f".format(Locale.getDefault(), it)) }
-        exif.exposureTime?.let { add(if (it.endsWith("s")) it else "${it}s") }
+        exif.exposureTime?.let(::shutter)?.let(::add)
         exif.iso?.let { add("ISO $it") }
         exif.focalLength?.let { add("%.0fmm".format(Locale.getDefault(), it)) }
         listOfNotNull(exif.make, exif.model)

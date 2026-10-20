@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/banner.jpg" alt="IMAGO — Develop every image." width="100%">
+  <img src="docs/images/banner.jpg" alt="IMAGO — Reveal every image." width="100%">
 </p>
 
 <p align="center">

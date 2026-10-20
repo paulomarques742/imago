@@ -1,11 +1,10 @@
 package eu.studio742.imago.feature.library
 
-import eu.studio742.imago.core.model.ImmichAlbum
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class AllViewAlbumsTest {
-    private fun album(id: String) = ImmichAlbum(id, id, "", null, 1, null, null, false)
+    private fun album(id: String) = AlbumChoice(id, id, 1)
 
     @Test
     fun untickingHidesAndTickingShows() {

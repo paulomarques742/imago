@@ -426,9 +426,19 @@ sealed class CompositionBackground {
     @SerialName("gradient")
     data class Gradient(val startArgb: Long, val endArgb: Long, val angleDegrees: Float = 0f) : CompositionBackground()
 
+    /**
+     * [recipe] is the look the photo had when it became the background, as a photo element keeps it.
+     * It is optional because backgrounds saved before it existed carry none, and those keep drawing as
+     * they always did.
+     */
     @Serializable
     @SerialName("photo")
-    data class Photo(val media: MediaReference, val crop: PlacementCrop = PlacementCrop(), val blurRadius: Float = 0f) : CompositionBackground()
+    data class Photo(
+        val media: MediaReference,
+        val crop: PlacementCrop = PlacementCrop(),
+        val blurRadius: Float = 0f,
+        val recipe: PhotoRecipeSnapshot? = null,
+    ) : CompositionBackground()
 }
 
 @Serializable

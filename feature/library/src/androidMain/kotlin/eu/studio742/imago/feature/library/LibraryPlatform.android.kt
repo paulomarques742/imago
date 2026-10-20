@@ -51,7 +51,8 @@ class HiltLibraryViewModel @Inject constructor(
 class HiltLibrarySettingsViewModel @Inject constructor(
     configuration: ConfigurationRepository,
     device: DeviceLibrary,
-) : LibrarySettingsViewModel(configuration, device)
+    library: LibraryRepository,
+) : LibrarySettingsViewModel(configuration, device, library)
 
 @HiltViewModel
 class HiltAlbumPickerViewModel @Inject constructor(library: LibraryRepository, device: DeviceLibrary) :

@@ -5,6 +5,10 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 14 activates `geometry.perspective.distortion`, Lightroom's barrel and pincushion slider. It is
+ * radial and comes before the virtual camera, on the photo as the lens drew it. An older app would draw
+ * a recipe with it as if it were not there, so it has to ask to be updated instead.
+ *
  * 13 makes Temperature and Tint a light: a point on the Planckian locus, moved off it by the tint,
  * that a Bradford adaptation takes to D65 (`WhiteBalanceModel` in the renderer). Before it they were
  * three gains too weak for a tungsten cast. An older recipe keeps the gains until it is edited; then
@@ -39,7 +43,7 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 13
+const val CURRENT_PROCESS_VERSION = 14
 
 @Serializable
 data class EditRecipe(
@@ -62,8 +66,19 @@ data class EditRecipe(
     val masks: List<LocalMask> = emptyList(),
 )
 
+/**
+ * Lightroom's three presets for a JPEG are read from this: As Shot is both sliders at zero, Auto is
+ * [auto], and anything else is Custom.
+ *
+ * [auto] is what the person chose, not how the values were found: [temp] and [tint] already hold what
+ * Auto found on this photo, and render as they are. It matters when the recipe goes to another photo,
+ * where Auto is found again for that photo, as Lightroom does when it syncs an Auto white balance.
+ * Touching either slider or picking with the selector makes it Custom.
+ */
 @Serializable
-data class WhiteBalance(val temp: Float = 0f, val tint: Float = 0f)
+data class WhiteBalance(val temp: Float = 0f, val tint: Float = 0f, val auto: Boolean = false) {
+    val isAsShot: Boolean get() = !auto && temp == 0f && tint == 0f
+}
 
 @Serializable
 data class Tone(
@@ -203,10 +218,16 @@ data class Perspective(
     val uprightYaw: Float = 0f,
     /** The guided mode's lines, in the original image's normalised coordinates, as masks are. */
     val guides: List<UprightGuide> = emptyList(),
+    /**
+     * Lightroom's Distortion, −100..100: positive straightens the lines a barrel distortion bows
+     * outwards, negative those a pincushion bows inwards. Radial about the photo's centre, applied to
+     * the photo as the lens drew it, before the camera turns.
+     */
+    val distortion: Float = 0f,
 ) {
-    /** Whether the camera tilts or the photo stretches: what Immich's own edits cannot express. */
+    /** Whether the camera tilts, the photo stretches or the lens bends: what Immich's own edits cannot express. */
     val isProjective: Boolean
-        get() = vertical != 0f || horizontal != 0f || aspect != 0f ||
+        get() = vertical != 0f || horizontal != 0f || aspect != 0f || distortion != 0f ||
             uprightRoll != 0f || uprightPitch != 0f || uprightYaw != 0f
 }
 

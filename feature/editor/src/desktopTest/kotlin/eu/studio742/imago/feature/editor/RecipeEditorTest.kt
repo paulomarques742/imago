@@ -14,7 +14,10 @@ import eu.studio742.imago.core.model.Geometry
 import eu.studio742.imago.core.model.RecipePart
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.Tone
+import eu.studio742.imago.core.model.WhiteBalance
 import eu.studio742.imago.core.render.NeutralWhiteBalance
+import eu.studio742.imago.core.render.autoWhiteBalanceOf
+import eu.studio742.imago.core.render.toPixelBuffer
 import eu.studio742.imago.core.render.toRenderParameters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -333,6 +336,66 @@ class RecipeEditorTest {
         assertTrue(viewModel.state.value.canUndo)
         viewModel.undo()
         assertEquals("the two picks were one step", before, viewModel.state.value.recipe!!.whiteBalance)
+    }
+
+    /** What Auto finds on the photo open now. */
+    private fun autoOnOpenPhoto(): NeutralWhiteBalance = checkNotNull(autoWhiteBalanceOf(viewModel.state.value.bitmap!!.toPixelBuffer()))
+
+    @Test
+    fun `Auto finds the photo's light, As Shot goes back to zero, and each is a history step`() {
+        openRecipe(RecipeSource.Saved(original))
+        val expected = autoOnOpenPhoto()
+
+        viewModel.selectWhiteBalancePreset(WhiteBalancePreset.AUTO)
+        awaitState { it.recipe!!.whiteBalance.auto }
+        assertEquals(WhiteBalance(expected.temperature, expected.tint, auto = true), viewModel.state.value.recipe!!.whiteBalance)
+        assertEquals(WhiteBalancePreset.AUTO, WhiteBalancePreset.of(viewModel.state.value.recipe!!.whiteBalance))
+
+        viewModel.selectWhiteBalancePreset(WhiteBalancePreset.AS_SHOT)
+        assertEquals(WhiteBalance(), viewModel.state.value.recipe!!.whiteBalance)
+        assertEquals(WhiteBalancePreset.AS_SHOT, WhiteBalancePreset.of(viewModel.state.value.recipe!!.whiteBalance))
+
+        viewModel.undo()
+        assertTrue("undo goes back to Auto", viewModel.state.value.recipe!!.whiteBalance.auto)
+    }
+
+    @Test
+    fun `a hand on a slider or the selector makes Auto Custom`() {
+        openRecipe(RecipeSource.Saved(original))
+        viewModel.selectWhiteBalancePreset(WhiteBalancePreset.AUTO)
+        awaitState { it.recipe!!.whiteBalance.auto }
+
+        viewModel.updateAdjustment(Adjustment.TINT, 20f)
+        viewModel.finishAdjustment()
+        assertEquals(WhiteBalancePreset.CUSTOM, WhiteBalancePreset.of(viewModel.state.value.recipe!!.whiteBalance))
+
+        viewModel.selectWhiteBalancePreset(WhiteBalancePreset.AUTO)
+        awaitState { it.recipe!!.whiteBalance.auto }
+        viewModel.startWhiteBalancePick()
+        viewModel.pickWhiteBalance(NeutralWhiteBalance(temperature = 10f, tint = 2f))
+        viewModel.acceptWhiteBalancePick()
+        assertFalse(viewModel.state.value.recipe!!.whiteBalance.auto)
+
+        viewModel.selectWhiteBalancePreset(WhiteBalancePreset.AUTO)
+        awaitState { it.recipe!!.whiteBalance.auto }
+        viewModel.selectWhiteBalancePreset(WhiteBalancePreset.CUSTOM)
+        val custom = viewModel.state.value.recipe!!.whiteBalance
+        assertFalse("Custom lets go of Auto and keeps its values", custom.auto)
+        assertEquals(WhiteBalancePreset.CUSTOM, WhiteBalancePreset.of(custom))
+    }
+
+    @Test
+    fun `a recipe with Auto finds the light again on every photo it opens on`() {
+        val auto = original.copy(recipe = original.recipe.copy(whiteBalance = WhiteBalance(temp = 99f, tint = -99f, auto = true)))
+        val found = (0 until 2).map { sample ->
+            openRecipe(RecipeSource.Saved(auto), sample)
+            val shown = viewModel.state.value.recipe!!.whiteBalance
+            val expected = autoOnOpenPhoto()
+            assertEquals(WhiteBalance(expected.temperature, expected.tint, auto = true), shown)
+            viewModel.closeRecipe()
+            shown
+        }
+        assertNotEquals("two photos, two lights", found[0], found[1])
     }
 
     @Test

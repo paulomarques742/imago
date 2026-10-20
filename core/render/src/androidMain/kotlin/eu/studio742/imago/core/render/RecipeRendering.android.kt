@@ -43,6 +43,7 @@ fun renderRecipePreview(source: Bitmap, recipe: EditRecipe): Bitmap {
  */
 fun transformedFrame(working: Bitmap, straighten: Float, perspective: PerspectiveParameters): Bitmap? {
     if (straighten == 0f && perspective.isNeutral) return null
+    if (perspective.distortion != 0f) return distortedFrame(working, straighten, perspective)
     // Android's `Matrix` is row-major with the perspective in the last row: the same nine values.
     val matrix = Matrix().apply {
         setValues(frameTransformInPixels(working.width, working.height, straighten, perspective).values())
@@ -51,6 +52,33 @@ fun transformedFrame(working: Bitmap, straighten: Float, perspective: Perspectiv
     Canvas(transformed).drawBitmap(working, matrix, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
     return transformed
 }
+
+/**
+ * [transformedFrame] with a lens distortion, which no `Matrix` holds: every pixel sampled through
+ * [FrameGeometry], as the shader and the desktop do. The result is written in bands of rows, so that a
+ * full-resolution export holds one copy of the photo's pixels and not two.
+ */
+private fun distortedFrame(working: Bitmap, straighten: Float, perspective: PerspectiveParameters): Bitmap {
+    val width = working.width
+    val height = working.height
+    val readable = if (working.config == Bitmap.Config.HARDWARE) working.copy(Bitmap.Config.ARGB_8888, false) else working
+    val source = PixelBuffer(width, height).also { readable.getPixels(it.pixels, 0, width, 0, 0, width, height) }
+    if (readable !== working) readable.recycle()
+    val frame = FrameGeometry(width, height, straighten = straighten, perspective = perspective)
+    val transformed = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val bandRows = (DISTORTION_BAND_PIXELS / width).coerceIn(1, height)
+    val band = IntArray(width * bandRows)
+    var row = 0
+    while (row < height) {
+        val until = minOf(row + bandRows, height)
+        RecipePixels.sampleFrameRows(source, frame, row, until, band)
+        transformed.setPixels(band, 0, width, 0, row, width, until - row)
+        row = until
+    }
+    return transformed
+}
+
+private const val DISTORTION_BAND_PIXELS = 1 shl 20
 
 /**
  * Rotation, flip, straighten and crop, in that order — the same as the export and the same as

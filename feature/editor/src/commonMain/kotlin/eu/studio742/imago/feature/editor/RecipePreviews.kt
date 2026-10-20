@@ -14,12 +14,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.render.BitmapPhotoProcessor
+import eu.studio742.imago.core.render.NeutralWhiteBalance
 import eu.studio742.imago.core.render.PixelBuffer
 import eu.studio742.imago.core.render.RecipePixels
+import eu.studio742.imago.core.render.autoWhiteBalanceOf
 import eu.studio742.imago.core.render.decodePixels
 import eu.studio742.imago.core.render.toImageBitmap
 import eu.studio742.imago.core.render.toPixelBuffer
 import eu.studio742.imago.core.render.toRenderParameters
+import eu.studio742.imago.core.render.withAutoWhiteBalance
 import eu.studio742.imago.feature.editor.resources.Res
 
 /** What the preview thumbnail is reduced to before being processed. */
@@ -45,6 +48,9 @@ object RecipePreviewCache {
 
     private var sourceKey: String? = null
     private var source: PixelBuffer? = null
+
+    /** The source's Auto white balance, found the first time a recipe with Auto asks for it. */
+    private var sourceAuto: Pair<PixelBuffer, NeutralWhiteBalance?>? = null
 
     /** Sets the source photo. Switching photos throws away the old previews. */
     fun setSource(assetId: String, bitmap: coil3.Bitmap) = setSource(assetId, bitmap.toPixelBuffer())
@@ -75,6 +81,12 @@ object RecipePreviewCache {
     @Synchronized
     private fun sourceFor(assetId: String): PixelBuffer? = source.takeIf { sourceKey == assetId }
 
+    @Synchronized
+    private fun autoOf(origin: PixelBuffer): NeutralWhiteBalance? {
+        sourceAuto?.takeIf { it.first === origin }?.let { return it.second }
+        return autoWhiteBalanceOf(origin).also { sourceAuto = origin to it }
+    }
+
     suspend fun preview(assetId: String, recipeId: String, recipe: EditRecipe): ImageBitmap? {
         // The recipe's content is in the key, not only its id: a recipe edited and saved must not keep
         // showing the look it had before.
@@ -82,7 +94,9 @@ object RecipePreviewCache {
         cached(key)?.let { return it }
         val origin = sourceFor(assetId) ?: return null
         val rendered = withContext(Dispatchers.Default) {
-            BitmapPhotoProcessor.renderInPlace(origin.copy(), recipe.toRenderParameters()).toImageBitmap()
+            // A recipe with Auto shows what Auto finds on this photo, which is what applying it does.
+            val shown = if (recipe.whiteBalance.auto) recipe.withAutoWhiteBalance(autoOf(origin)) else recipe
+            BitmapPhotoProcessor.renderInPlace(origin.copy(), shown.toRenderParameters()).toImageBitmap()
         }
         store(key, rendered)
         return rendered

@@ -214,6 +214,10 @@ data class LibraryUiState(
     val memories: List<MemoryUiModel> = emptyList(),
     /** The open library has an archive: a server's, or this device's own. */
     val canArchive: Boolean = false,
+    /** The open library's albums left out of its albums grid, on this device. */
+    val albumsHiddenFromGrid: Set<String> = emptySet(),
+    /** "Show all" was tapped: the hidden albums are in the grid until the section is left. */
+    val revealingHiddenAlbums: Boolean = false,
 )
 
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -290,9 +294,16 @@ open class LibraryViewModel(
                 navigationJob?.cancel()
                 val restored = navigationStates[id]
                 filter.value = restored?.first ?: LibraryFilter.ALL
-                uiState.value = restored?.second ?: LibraryUiState()
+                uiState.value = (restored?.second ?: LibraryUiState()).copy(revealingHiddenAlbums = false)
                 previous = id
-                uiState.update { it.copy(hasPeople = library.hasPeople, hasMap = library.hasMap, canArchive = library.canArchive) }
+                uiState.update {
+                    it.copy(
+                        hasPeople = library.hasPeople,
+                        hasMap = library.hasMap,
+                        canArchive = library.canArchive,
+                        albumsHiddenFromGrid = configuration.albumsHiddenFromGrid.value[id].orEmpty(),
+                    )
+                }
                 loadMemories()
                 if (uiState.value.showingMap) loadMap()
                 if (uiState.value.showingPeople) loadPeople()
@@ -307,6 +318,11 @@ open class LibraryViewModel(
         }
         viewModelScope.launch {
             configuration.showOnThisDay.drop(1).collect { loadMemories() }
+        }
+        viewModelScope.launch {
+            configuration.albumsHiddenFromGrid.collect { byLibrary ->
+                uiState.update { it.copy(albumsHiddenFromGrid = byLibrary[configuration.selectedLibraryId.value].orEmpty()) }
+            }
         }
         viewModelScope.launch {
             device.accessRevision.collect {
@@ -867,6 +883,7 @@ open class LibraryViewModel(
             // not carry from one to the other.
             it.copy(
                 section = section,
+                revealingHiddenAlbums = false,
                 selectedAlbum = null,
                 navigationError = null,
                 isSearching = if (section == it.section) it.isSearching else false,
@@ -926,6 +943,15 @@ open class LibraryViewModel(
     }
 
     fun closeAlbum() = uiState.update { it.copy(selectedAlbum = null) }
+
+    /** Puts the hidden albums in the grid for now; leaving the albums takes them out again. */
+    fun revealHiddenAlbums() = uiState.update { it.copy(revealingHiddenAlbums = true) }
+
+    /** Which of the open library's albums its albums grid leaves out, from now on. */
+    fun hideAlbumsFromGrid(albumIds: Set<String>) {
+        runCatching { configuration.setAlbumsHiddenFromGrid(configuration.selectedLibraryId.value, albumIds) }
+            .onFailure { error -> uiState.update { it.copy(actionError = error.toUiText()) } }
+    }
 
     fun refreshNavigation() {
         if (uiState.value.isLoadingNavigation) return

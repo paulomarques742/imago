@@ -107,6 +107,17 @@ internal fun albumsMatching(albums: List<AlbumUiModel>, query: String): List<Alb
     return albums.filter { album -> album.name.folded().let { name -> words.all(name::contains) } }
 }
 
+/**
+ * The albums the grid shows: the ones not hidden from it, unless [revealed] asked for every one. A
+ * search looks through every one — finding an album by its name reaches a hidden one too.
+ */
+internal fun albumsInGrid(albums: List<AlbumUiModel>, hidden: Set<String>, query: String, revealed: Boolean = false): List<AlbumUiModel> =
+    when {
+        query.isNotBlank() -> albumsMatching(albums, query)
+        revealed -> albums
+        else -> albums.filterNot { it.id in hidden }
+    }
+
 internal fun peopleMatching(people: List<PersonUiModel>, query: String): List<PersonUiModel> {
     val words = query.folded().split(Regex("""\s+""")).filter(String::isNotEmpty)
     if (words.isEmpty()) return people

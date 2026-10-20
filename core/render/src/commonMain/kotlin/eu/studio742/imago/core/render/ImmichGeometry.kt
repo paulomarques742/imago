@@ -24,7 +24,7 @@ import kotlin.math.sin
  * upright rectangle with the same proportions and centre that fits inside it, so the server's
  * thumbnail never shows what the crop left out.
  *
- * With the perspective tilting or stretching the photo there is nothing Immich can apply, and the
+ * With the perspective tilting, stretching or bending the photo there is nothing Immich can apply, and the
  * list is empty — which removes whatever edits the server held.
  */
 fun EditRecipe.immichEdits(imageSize: ImageSize): List<ImmichEdit> {
@@ -33,6 +33,7 @@ fun EditRecipe.immichEdits(imageSize: ImageSize): List<ImmichEdit> {
     // the original, and the original keeps no edits that would frame it in a third way.
     val perspective = parameters.perspective
     val projective = perspective.vertical != 0f || perspective.horizontal != 0f || perspective.aspect != 0f ||
+        perspective.distortion != 0f ||
         perspective.uprightRoll != 0f || perspective.uprightPitch != 0f || perspective.uprightYaw != 0f
     if (projective) return emptyList()
     val geometry = parameters.frameGeometry(imageSize.width, imageSize.height)

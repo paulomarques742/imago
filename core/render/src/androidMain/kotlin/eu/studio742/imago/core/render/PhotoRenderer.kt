@@ -487,6 +487,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         val orientedHeight = if (swapsDimensions) imageWidth else imageHeight
         val imageAspect = orientedWidth.toFloat() / orientedHeight.coerceAtLeast(1)
         program.mat3("uImageFromView", frameTransform(imageAspect, active.straighten, active.perspective).inverse().values())
+        program.float("uDistortion", LensDistortion.coefficient(active.perspective.distortion).toFloat())
+        program.float("uDistortionRadius2", LensDistortion.radiusSquared(imageAspect.toDouble()).toFloat())
         program.boolean("uShowOutside", !active.perspective.constrainCrop)
         program.float("uImageAspect", imageAspect)
         // Grain is measured in image pixels, and what is drawn here is the cropped frame: this is the

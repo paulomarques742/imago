@@ -113,9 +113,11 @@ internal fun UprightGuidesOverlay(
         drawCircle(Color.Black, radius, centre)
         clipPath(circle) {
             if (photo != null) {
+                // Exact under the finger, should a lens distortion bend the rest.
+                val around = projection.toImage(touch)
                 val screen = Homography.translate(bounds.left.toDouble(), bounds.top.toDouble()) *
                     Homography.scale(bounds.width.toDouble(), bounds.height.toDouble()) *
-                    geometry.framedFromImagePixels()
+                    geometry.framedFromImagePixels(around.x.takeUnless { it.isNaN() } ?: 0.5f, around.y.takeUnless { it.isNaN() } ?: 0.5f)
                 drawIntoCanvas { canvas ->
                     canvas.save()
                     canvas.concat((loupe * screen).toComposeMatrix())

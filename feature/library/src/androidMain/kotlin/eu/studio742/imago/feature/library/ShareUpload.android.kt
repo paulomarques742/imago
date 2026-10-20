@@ -130,10 +130,12 @@ class ShareUploadViewModel @Inject constructor(
                 stage = ShareUploadStage.Preparing(0, media.size),
             )
             val copied = mutableListOf<SharedUploadItem>()
+            val locationGranted =
+                context.checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION) == PackageManager.PERMISSION_GRANTED
             media.forEachIndexed { index, item ->
                 val copy = File(target, index.toString())
                 try {
-                    copy(resolver, item.uri, copy)
+                    copy(resolver, item.uri, copy, original = SharedMediaLocation.readsOriginal(item.uri.authority, locationGranted))
                     copied += SharedUploadItem(copy.name, item.fileName, item.mimeType, item.createdAt)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -254,9 +256,16 @@ private fun Cursor.stringOrNull(column: String): String? =
 private fun Cursor.longOrNull(column: String): Long? =
     getColumnIndex(column).takeIf { it >= 0 && !isNull(it) }?.let(::getLong)
 
-/** Copies in chunks, so it can give up halfway through a large video when the person cancels. */
-private suspend fun copy(resolver: ContentResolver, uri: Uri, destination: File) {
-    val input = resolver.openInputStream(uri) ?: throw FileNotFoundException(uri.toString())
+/**
+ * Copies in chunks, so it can give up halfway through a large video when the person cancels.
+ *
+ * [original]: the media store serves the file with its GPS. Some of its URIs refuse that — the photo
+ * picker's among them — and those are copied as they come rather than not at all.
+ */
+private suspend fun copy(resolver: ContentResolver, uri: Uri, destination: File, original: Boolean) {
+    val input = (if (original) openOriginal(resolver, uri) else null)
+        ?: resolver.openInputStream(uri)
+        ?: throw FileNotFoundException(uri.toString())
     input.use { source ->
         destination.outputStream().use { sink ->
             val buffer = ByteArray(COPY_BUFFER_BYTES)
@@ -268,6 +277,16 @@ private suspend fun copy(resolver: ContentResolver, uri: Uri, destination: File)
             }
         }
     }
+}
+
+private fun openOriginal(resolver: ContentResolver, uri: Uri) = try {
+    resolver.openInputStream(MediaStore.setRequireOriginal(uri))
+} catch (refused: SecurityException) {
+    null
+} catch (unsupported: UnsupportedOperationException) {
+    null
+} catch (notFound: FileNotFoundException) {
+    null
 }
 
 private const val COPY_BUFFER_BYTES = 256 * 1024

@@ -13,6 +13,7 @@ import coil3.request.ImageRequest
 import coil3.size.Precision
 import coil3.size.Scale
 import kotlinx.coroutines.yield
+import eu.studio742.imago.core.composition.CompositionBackground
 import eu.studio742.imago.core.composition.CompositionElement
 import eu.studio742.imago.core.composition.CompositionProject
 import eu.studio742.imago.core.model.EditRecipe
@@ -65,13 +66,16 @@ internal data class ComposerPhotoRequests(
  * they share the cache entry, and rebuilding the request because of the difference between them would
  * change nothing that is seen.
  */
-private fun EditRecipe.renderIdentity() = "$assetId:$processVersion:$updatedAt"
+private fun EditRecipe?.renderIdentity() = this?.let { "$assetId:$processVersion:$updatedAt" } ?: "original"
 
-/** The requests for a stage photo, rebuilt only when its recipe changes. */
+/**
+ * The requests for a stage photo, rebuilt only when its recipe changes. A null [recipe] is a photo
+ * shown as it is — a background saved before backgrounds kept one.
+ */
 @Composable
 internal fun rememberComposerPhotoRequests(
     assetId: String,
-    recipe: EditRecipe,
+    recipe: EditRecipe?,
     previewUrl: (String) -> String,
     thumbnailUrl: (String) -> String,
     apiKey: (String) -> String,
@@ -86,13 +90,13 @@ internal fun rememberComposerPhotoRequests(
 private fun composerPhotoRequests(
     context: PlatformContext,
     assetId: String,
-    recipe: EditRecipe,
+    recipe: EditRecipe?,
     previewUrl: (String) -> String,
     thumbnailUrl: (String) -> String,
     apiKey: (String) -> String,
 ): ComposerPhotoRequests {
     val key = apiKey(assetId).takeIf(String::isNotBlank)
-    val edited = recipe.takeIf(EditRecipe::changesTheImage)
+    val edited = recipe?.takeIf(EditRecipe::changesTheImage)
     fun request(url: String, edge: Int, fade: Boolean = false) = ImageRequest.Builder(context)
         .data(url)
         .libraryAuth(key)
@@ -136,8 +140,12 @@ internal fun WarmComposerPhotos(
     apiKey: (String) -> String,
 ) {
     val context = LocalPlatformContext.current
-    val photos = project.elements.filterIsInstance<CompositionElement.Photo>()
-        .map { it.media.assetId to it.recipe.recipe }
+    // The backgrounds too: a page-sized photo is the one whose recipe takes longest.
+    val backgrounds = (listOf(project.background) + project.pages.map { it.backgroundOverride })
+        .filterIsInstance<CompositionBackground.Photo>()
+        .map { it.media.assetId to it.recipe?.recipe }
+    val photos = (project.elements.filterIsInstance<CompositionElement.Photo>()
+        .map { it.media.assetId to it.recipe.recipe } + backgrounds).distinct()
     // The key is what tells one warm-up from the next: moving or resizing an element changes no image,
     // and re-reading the whole list on every frame of a drag would be absurd.
     val identities = photos.map { (assetId, recipe) -> "$assetId|${recipe.renderIdentity()}" }

@@ -572,6 +572,10 @@ internal object PhotoShaders {
         // CPU and uploaded as it is. The shader does not read the sliders, so it cannot read them
         // differently from the export.
         uniform mat3 uImageFromView;
+        // The lens distortion's `k` and the half-diagonal squared, from `LensDistortion`: the one step
+        // of the geometry that no matrix holds.
+        uniform float uDistortion;
+        uniform float uDistortionRadius2;
         uniform int uShowOutside;
         uniform float uImageAspect;
         uniform int uRotation;
@@ -602,7 +606,14 @@ internal object PhotoShaders {
             vec3 image = uImageFromView * view;
             // Beyond the virtual camera's horizon: no point of the photo lands here.
             if (image.z <= 0.0) return vec2(-1.0);
-            vec2 transformed = vec2(image.x / image.z / uImageAspect + 0.5, image.y / image.z + 0.5);
+            vec2 centred = image.xy / image.z;
+            if (uDistortion != 0.0) {
+                float r2 = dot(centred, centred) / uDistortionRadius2;
+                // Past where the map folds back no point of the photo lands.
+                if (uDistortion < 0.0 && -3.0 * uDistortion * r2 >= 1.0) return vec2(-1.0);
+                centred *= 1.0 + uDistortion * r2;
+            }
+            vec2 transformed = vec2(centred.x / uImageAspect + 0.5, centred.y + 0.5);
             if (uMirrorH == 1) transformed.x = 1.0 - transformed.x;
             if (uMirrorV == 1) transformed.y = 1.0 - transformed.y;
             if (uRotation == 1) return vec2(transformed.y, 1.0 - transformed.x);

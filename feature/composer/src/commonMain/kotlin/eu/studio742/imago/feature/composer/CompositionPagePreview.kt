@@ -68,6 +68,8 @@ internal fun CompositionPageCanvas(
     Box(Modifier.size(width, height)) {
         Background(
             page.backgroundOverride ?: project.background,
+            // A miniature has no use for the large version: both layers come from the thumbnail.
+            thumbnailUrl,
             thumbnailUrl,
             apiKey,
             Modifier.fillMaxSize(),

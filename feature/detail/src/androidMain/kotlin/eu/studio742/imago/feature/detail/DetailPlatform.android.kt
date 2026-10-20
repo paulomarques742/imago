@@ -191,6 +191,9 @@ private class ExoVideoPlayback(val player: ExoPlayer) : VideoPlayback {
 
     override fun pause() = player.pause()
 
+    // `SeekParameters` is still unstable in media3, with no stable way to choose between an exact seek
+    // and the nearest keyframe.
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun seekTo(positionMs: Long, precise: Boolean) {
         player.setSeekParameters(if (precise) SeekParameters.EXACT else SeekParameters.CLOSEST_SYNC)
         player.seekTo(positionMs)

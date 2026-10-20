@@ -451,9 +451,20 @@ open class ComposerEditorViewModel(
      */
     fun setPhotoBackground(media: ComposerMedia, currentPageOnly: Boolean) {
         if (media.isVideo) return notice(uiText(Res.string.composer_background_must_be_photo))
-        val previousBlur = (currentBackground() as? CompositionBackground.Photo)?.blurRadius ?: 0f
-        applyBackground(CompositionBackground.Photo(media.toReference(), blurRadius = previousBlur), currentPageOnly)
-        selectBackground()
+        viewModelScope.launch {
+            // The photo comes with the look the library shows it with, as a photo element does.
+            val recipe = listOf(media).toInsertable(recipes).single().recipe
+            val previousBlur = (currentBackground() as? CompositionBackground.Photo)?.blurRadius ?: 0f
+            applyBackground(
+                CompositionBackground.Photo(
+                    media.toReference(),
+                    blurRadius = previousBlur,
+                    recipe = recipe?.let(::PhotoRecipeSnapshot),
+                ),
+                currentPageOnly,
+            )
+            selectBackground()
+        }
     }
 
     fun setBackgroundBlur(radius: Float) = mutateCurrentBackground { background ->
@@ -560,7 +571,7 @@ open class ComposerEditorViewModel(
         val project = requireProject()
         val photo = project.elements.firstOrNull { it.id == state.value.selectedElementId } as? CompositionElement.Photo
             ?: return notice(uiText(Res.string.composer_select_photo_for_background))
-        val background = CompositionBackground.Photo(photo.media, photo.crop, blurRadius = if (blurred) 24f else 0f)
+        val background = CompositionBackground.Photo(photo.media, photo.crop, blurRadius = if (blurred) 24f else 0f, recipe = photo.recipe)
         if (forCurrentPage) {
             val index = state.value.currentPage
             commit { project.copy(pages = project.pages.map { if (it.index == index) it.copy(backgroundOverride = background) else it }) }

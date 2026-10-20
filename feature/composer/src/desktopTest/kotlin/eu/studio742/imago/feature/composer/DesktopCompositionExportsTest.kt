@@ -74,4 +74,46 @@ class DesktopCompositionExportsTest {
             photo.delete()
         }
     }
+
+    @Test
+    fun `a background photo is exported with the recipe it kept`() = runBlocking {
+        val photo = File.createTempFile("imago-background-", ".png")
+        ImageIO.write(BufferedImage(64, 64, BufferedImage.TYPE_INT_RGB).also { image ->
+            for (y in 0 until 64) for (x in 0 until 64) image.setRGB(x, y, 0x606060)
+        }, "png", photo)
+        val now = Instant.now().toString()
+        val media = MediaReference("imago:library:asset", "", photo.name, width = 64, height = 64)
+        val brighter = PhotoRecipeSnapshot(
+            EditRecipe(
+                assetId = media.assetId,
+                originalChecksum = "",
+                createdAt = now,
+                updatedAt = now,
+                tone = eu.studio742.imago.core.model.Tone(exposure = 1.5f),
+            ),
+        )
+        fun project(recipe: PhotoRecipeSnapshot?) = CompositionProject(
+            id = "backdrop", name = "Backdrop", format = PageFormatPreset.SQUARE_1_1.format,
+            pages = listOf(CompositionPage("page", 0)), createdAt = now, updatedAt = now,
+            background = CompositionBackground.Photo(media, recipe = recipe),
+        )
+        val pictures = Files.createTempDirectory("imago-pictures")
+        fun centreLuma(location: String): Int {
+            val page = ImageIO.read(File(location))
+            val rgb = page.getRGB(page.width / 2, page.height / 2)
+            return ((rgb shr 16 and 0xFF) + (rgb shr 8 and 0xFF) + (rgb and 0xFF)) / 3
+        }
+        try {
+            val plain = DesktopCompositionExports(FileMedia(photo), picturesFolder = pictures)
+                .export(project(null), StaticExportFormat.PNG, pageIndex = null, targetLibraryId = null) { _, _ -> }
+            val edited = DesktopCompositionExports(FileMedia(photo), picturesFolder = pictures)
+                .export(project(brighter), StaticExportFormat.PNG, pageIndex = null, targetLibraryId = null) { _, _ -> }
+            val before = centreLuma(plain.locations.single())
+            val after = centreLuma(edited.locations.single())
+            assertTrue("the original background stays at its grey, got $before", before in 0x58..0x68)
+            assertTrue("the exposure has to brighten the background: $before became $after", after > before + 40)
+        } finally {
+            photo.delete()
+        }
+    }
 }

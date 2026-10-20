@@ -178,13 +178,15 @@ actual fun rememberShareExports(): (List<String>, List<String>) -> Unit {
 @Composable
 actual fun ProxyVideoPlayer(path: String, modifier: Modifier) {
     val context = LocalContext.current
+    // The player is the lambda's last expression, not the receiver of an `apply` ending in an
+    // assignment: lint reads that as a `remember` returning Unit.
     val player = remember(path) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(Uri.fromFile(File(path))))
-            repeatMode = Player.REPEAT_MODE_ONE
-            prepare()
-            playWhenReady = true
-        }
+        val created = ExoPlayer.Builder(context).build()
+        created.setMediaItem(MediaItem.fromUri(Uri.fromFile(File(path))))
+        created.repeatMode = Player.REPEAT_MODE_ONE
+        created.prepare()
+        created.playWhenReady = true
+        created
     }
     DisposableEffect(player) { onDispose(player::release) }
     AndroidView(

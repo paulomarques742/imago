@@ -56,10 +56,11 @@ class SourceLibraryRepository @Inject constructor(
         return provider(id).assets(filter, month, albumId?.let { AssetReference.parse(it).localId }, query)
             .map { page -> page.map { it.copy(id = AssetReference(id, it.id).encode()) } }
     }
-    override suspend fun albums(): List<ImmichAlbum> {
-        val id = configuration.selectedLibraryId.value
-        if (id == UNIFIED_LIBRARY_ID) return unified().albums()
-        return provider(id).albums().map { it.encodedFor(id) }
+    override suspend fun albums(): List<ImmichAlbum> = albumsOf(configuration.selectedLibraryId.value)
+
+    override suspend fun albumsOf(libraryId: String): List<ImmichAlbum> {
+        if (libraryId == UNIFIED_LIBRARY_ID) return unified().albums()
+        return provider(libraryId).albums().map { it.encodedFor(libraryId) }
     }
     /** In the unified library a new album with photos of the server is the server's. */
     override suspend fun createAlbum(name: String, assetIds: List<String>): ImmichAlbum {

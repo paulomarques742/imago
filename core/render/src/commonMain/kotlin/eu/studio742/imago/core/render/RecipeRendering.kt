@@ -71,7 +71,11 @@ fun EditRecipe.toRenderParameters() = RenderParameters(
     rotation = if (processVersion >= 4) geometry.rotation else 0,
     mirrorH = processVersion >= 4 && geometry.mirrorH,
     mirrorV = processVersion >= 4 && geometry.mirrorV,
-    perspective = if (processVersion >= 10) geometry.perspective.toRenderPerspective() else PerspectiveParameters(),
+    perspective = when {
+        processVersion >= 14 -> geometry.perspective.toRenderPerspective()
+        processVersion >= 10 -> geometry.perspective.toRenderPerspective().copy(distortion = 0f)
+        else -> PerspectiveParameters()
+    },
     masks = if (processVersion >= 8) masks.toRenderSpecs() else emptyList(),
 )
 
@@ -87,6 +91,7 @@ fun eu.studio742.imago.core.model.Perspective.toRenderPerspective() = Perspectiv
     uprightRoll = if (upright == UPRIGHT_OFF) 0f else uprightRoll.coerceIn(-45f, 45f),
     uprightPitch = if (upright == UPRIGHT_OFF) 0f else uprightPitch.coerceIn(-45f, 45f),
     uprightYaw = if (upright == UPRIGHT_OFF) 0f else uprightYaw.coerceIn(-45f, 45f),
+    distortion = distortion.coerceIn(-100f, 100f),
 )
 
 /** The four wheels of step 12, with the hue already converted to chroma. See [ColorGradeRange]. */

@@ -5,6 +5,7 @@ package eu.studio742.imago.feature.editor
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Colorize
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.ui.text.style.TextAlign
 import eu.studio742.imago.core.designsystem.i18n.uiText
 import eu.studio742.imago.core.designsystem.i18n.UiText
@@ -109,6 +110,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -142,6 +144,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -369,6 +372,8 @@ fun EditorRoute(
         onExportPermissionDenied = {
             viewModel.reportExportError(uiText(Res.string.editor_gallery_permission_needed))
         },
+        reelStyle = { viewModel.reelStyle },
+        onReelStyle = viewModel::rememberReelStyle,
         maskActions = remember(viewModel) {
             MaskActions(
                 onAdd = viewModel::addMask,
@@ -392,6 +397,7 @@ fun EditorRoute(
                 onPick = viewModel::pickWhiteBalance,
                 onAccept = viewModel::acceptWhiteBalancePick,
                 onCancel = viewModel::cancelWhiteBalancePick,
+                onPreset = viewModel::selectWhiteBalancePreset,
             )
         },
         perspectiveActions = remember(viewModel) {
@@ -560,6 +566,9 @@ private fun EditorScreen(
     onExportImmich: (String) -> Unit,
     onConsumeExportResult: () -> Unit,
     onExportPermissionDenied: () -> Unit,
+    /** Read when the sheet opens: the last style may have changed since this screen was composed. */
+    reelStyle: () -> ReelStyle,
+    onReelStyle: (ReelStyle) -> Unit,
     maskActions: MaskActions,
     colorGradeActions: ColorGradeActions,
     perspectiveActions: PerspectiveActions,
@@ -572,6 +581,7 @@ private fun EditorScreen(
     // `editingSavedRecipe` and `deletingSavedRecipe` stay out: they keep a whole `SavedRecipe` and not
     // a boolean — persisting them would require a `Saver` this step does not need to have.
     var showExportDialog by rememberSaveable { mutableStateOf(false) }
+    var showReel by rememberSaveable { mutableStateOf(false) }
     var showContextMenu by remember { mutableStateOf(false) }
     var showSaveRecipeDialog by rememberSaveable { mutableStateOf(false) }
     var showRecipeLibrary by rememberSaveable { mutableStateOf(false) }
@@ -2058,11 +2068,27 @@ private fun EditorScreen(
                         enabled = exportDestination != null,
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text(stringResource(Res.string.editor_send_to_immich)) }
+                    OutlinedButton(
+                        onClick = {
+                            showExportDialog = false
+                            showReel = true
+                        },
+                        enabled = state.recipe != null,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(Res.string.reel_open)) }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showExportDialog = false }) { Text(stringResource(Res.string.editor_cancel)) }
             },
+        )
+    }
+    if (!compositionMode && showReel) {
+        EditReelSheet(
+            state = state,
+            initialStyle = reelStyle,
+            onStyle = onReelStyle,
+            onDismiss = { showReel = false },
         )
     }
     if (state.isExporting) {
@@ -2423,6 +2449,42 @@ private fun EditorPanel.adjustmentGroups(): List<AdjustmentGroup> = when (this) 
 @Composable
 private fun List<Adjustment>.withLabels(): List<Pair<Adjustment, String>> = map { it to it.label() }
 
+/**
+ * Lightroom's white balance menu beside the selector: the preset in use, and the others to choose.
+ * Custom is never chosen to change anything — it is what the sliders and the selector make — but it is
+ * listed, as Lightroom lists it, and choosing it lets go of Auto.
+ */
+@Composable
+private fun WhiteBalancePresetMenu(current: WhiteBalancePreset, onSelect: (WhiteBalancePreset) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val description = stringResource(Res.string.editor_white_balance_preset)
+    Box {
+        TextButton(
+            onClick = { open = true },
+            modifier = Modifier.semantics { contentDescription = description },
+        ) {
+            Text(stringResource(current.labelRes), style = MaterialTheme.typography.labelLarge, color = ImagoColors.TextSecondary)
+            Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = ImagoColors.TextSecondary)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            WhiteBalancePreset.entries.forEach { preset ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(preset.labelRes),
+                            color = if (preset == current) ImagoColors.Gold else ImagoColors.TextPrimary,
+                        )
+                    },
+                    onClick = {
+                        open = false
+                        onSelect(preset)
+                    },
+                )
+            }
+        }
+    }
+}
+
 /** The White Balance group's header while the selector is on: the way back, what to do, and keep. */
 @Composable
 private fun WhiteBalancePickBar(unreadable: Boolean, onCancel: () -> Unit, onAccept: () -> Unit) {
@@ -2491,6 +2553,9 @@ private fun SliderPanel(
                                 .padding(top = ImagoSpacing.Sm, bottom = ImagoSpacing.Xs),
                         )
                         if (picker != null) {
+                            state.recipe?.let { recipe ->
+                                WhiteBalancePresetMenu(WhiteBalancePreset.of(recipe.whiteBalance), picker.onPreset)
+                            }
                             IconButton(onClick = picker.onStart) {
                                 Icon(
                                     Icons.Outlined.Colorize,
@@ -2772,7 +2837,7 @@ private fun CurveChannelRow(selected: CurveChannel, onSelect: (CurveChannel) -> 
 }
 
 /** The channel's colour, for its disc and for its line over the photo. */
-private fun CurveChannel.curveColor() = when (this) {
+internal fun CurveChannel.curveColor() = when (this) {
     CurveChannel.RGB -> ImagoColors.BrandWhite
     CurveChannel.RED -> Color(0xFFE14B4B)
     CurveChannel.GREEN -> Color(0xFF52A86A)
@@ -2852,36 +2917,54 @@ private fun CurveOverlay(
                     }
                 },
         ) {
-            val plot = curvePlot(size.width, size.height)
-            val gridLine = Color.White.copy(alpha = 0.32f)
-            repeat(5) { index ->
-                val x = plot.left + index * plot.width / 4f
-                val y = plot.top + index * plot.height / 4f
-                drawLine(gridLine, Offset(x, plot.top), Offset(x, plot.bottom), strokeWidth = 1.dp.toPx())
-                drawLine(gridLine, Offset(plot.left, y), Offset(plot.right, y), strokeWidth = 1.dp.toPx())
-            }
-            val curve = Path().apply {
-                lut.forEachIndexed { sample, value ->
-                    val x = plot.left + sample / 255f * plot.width
-                    val y = plot.bottom - value.coerceIn(0f, 1f) * plot.height
-                    if (sample == 0) moveTo(x, y) else lineTo(x, y)
-                }
-            }
-            drawPath(curve, Color.Black.copy(alpha = 0.45f), style = Stroke(width = 4.dp.toPx()))
-            drawPath(curve, color, style = Stroke(width = 2.dp.toPx()))
-            points.forEachIndexed { index, point ->
-                val center = plot.toScreen(point)
-                val active = activePoint == index
-                val radius = if (active) 10.dp.toPx() else 8.dp.toPx()
-                drawCircle(Color.Black.copy(alpha = 0.45f), radius = radius + 1.5.dp.toPx(), center = center)
-                drawCircle(color, radius = radius, center = center)
-            }
+            drawCurveGraph(curvePlot(size.width, size.height), lut, color, points, activePoint)
         }
     }
 }
 
+/**
+ * The curve's drawing: the grid, the line with a dark edge so it reads over light areas, and the
+ * points. The editor draws it under the finger; the "Show your edit" video draws it taking shape
+ * over the photo, which is why the grid can be left out for a second channel and everything fades.
+ */
+internal fun DrawScope.drawCurveGraph(
+    plot: CurvePlot,
+    lut: List<Float>,
+    color: Color,
+    points: List<eu.studio742.imago.core.model.CurvePoint>,
+    activePoint: Int? = null,
+    alpha: Float = 1f,
+    grid: Boolean = true,
+) {
+    if (grid) {
+        val gridLine = Color.White.copy(alpha = 0.32f * alpha)
+        repeat(5) { index ->
+            val x = plot.left + index * plot.width / 4f
+            val y = plot.top + index * plot.height / 4f
+            drawLine(gridLine, Offset(x, plot.top), Offset(x, plot.bottom), strokeWidth = 1.dp.toPx())
+            drawLine(gridLine, Offset(plot.left, y), Offset(plot.right, y), strokeWidth = 1.dp.toPx())
+        }
+    }
+    val curve = Path().apply {
+        lut.forEachIndexed { sample, value ->
+            val x = plot.left + sample / 255f * plot.width
+            val y = plot.bottom - value.coerceIn(0f, 1f) * plot.height
+            if (sample == 0) moveTo(x, y) else lineTo(x, y)
+        }
+    }
+    drawPath(curve, Color.Black.copy(alpha = 0.45f * alpha), style = Stroke(width = 4.dp.toPx()))
+    drawPath(curve, color.copy(alpha = color.alpha * alpha), style = Stroke(width = 2.dp.toPx()))
+    points.forEachIndexed { index, point ->
+        val center = plot.toScreen(point)
+        val active = activePoint == index
+        val radius = if (active) 10.dp.toPx() else 8.dp.toPx()
+        drawCircle(Color.Black.copy(alpha = 0.45f * alpha), radius = radius + 1.5.dp.toPx(), center = center)
+        drawCircle(color.copy(alpha = color.alpha * alpha), radius = radius, center = center)
+    }
+}
+
 /** The curve's plot inside its box, and the conversions between curve values and the screen. */
-private class CurvePlot(
+internal class CurvePlot(
     val left: Float,
     val top: Float,
     val right: Float,
@@ -2907,7 +2990,7 @@ private class CurvePlot(
             ?.first
 }
 
-private fun Density.curvePlot(width: Float, height: Float): CurvePlot {
+internal fun Density.curvePlot(width: Float, height: Float): CurvePlot {
     val inset = CURVE_TOUCH_INSET.toPx()
     return CurvePlot(inset, inset, width - inset, height - inset, reach = CURVE_POINT_HIT_RADIUS.toPx())
 }
@@ -3136,6 +3219,7 @@ data class WhiteBalancePickActions(
     val onPick: (eu.studio742.imago.core.render.NeutralWhiteBalance?) -> Unit,
     val onAccept: () -> Unit,
     val onCancel: () -> Unit,
+    val onPreset: (WhiteBalancePreset) -> Unit,
 )
 
 /** What the perspective sheet asks of the screen besides the sliders, which go the way of all others. */
@@ -3200,6 +3284,7 @@ private fun PerspectivePanel(
                 AdjustmentGroup(
                     title = null,
                     entries = listOf(
+                        Adjustment.PERSPECTIVE_DISTORTION to stringResource(Res.string.editor_perspective_distortion),
                         Adjustment.PERSPECTIVE_VERTICAL to stringResource(Res.string.editor_perspective_vertical),
                         Adjustment.PERSPECTIVE_HORIZONTAL to stringResource(Res.string.editor_perspective_horizontal),
                         Adjustment.PERSPECTIVE_ASPECT to stringResource(Res.string.editor_perspective_aspect),
