@@ -8,19 +8,25 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import eu.studio742.imago.core.model.AUTOMATIC_UPRIGHT_MODES
 import eu.studio742.imago.core.model.EditRecipe
+import eu.studio742.imago.core.model.LocalAdjustments
+import eu.studio742.imago.core.model.MASK_AMOUNT_NEUTRAL
+import eu.studio742.imago.core.render.BrushRasters
 import eu.studio742.imago.core.render.PixelBuffer
 import eu.studio742.imago.core.render.RecipePixels
 import eu.studio742.imago.core.render.decodePixels
 import eu.studio742.imago.core.render.detectLineSegments
 import eu.studio742.imago.core.render.frameGeometry
 import eu.studio742.imago.core.render.solveAutoUpright
+import eu.studio742.imago.core.render.toImageBitmap
 import eu.studio742.imago.core.render.toRenderParameters
 import java.io.File
 import java.util.Locale
+import kotlin.math.roundToInt
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.skia.EncodedImageFormat
@@ -44,7 +50,8 @@ import org.junit.Test
  *
  * The photo path is relative to the job. The recipe is an [EditRecipe] whose bookkeeping fields may be
  * left out. Next to each job come `<job>.mp4` and its key frames as PNG, to look at before posting.
- * Needs `-Pimago.reel.ffmpeg` too. `-Pimago.reel.only=<job>` makes a single one.
+ * Needs `-Pimago.reel.ffmpeg` too. `-Pimago.reel.only=<job>` makes a single one. A job with
+ * `"maskLayers": true` also gets each of its masks alone, as `<job>-mask-<n>.png`.
  */
 class ReelJobsTest {
     private lateinit var previousLocale: Locale
@@ -63,6 +70,11 @@ class ReelJobsTest {
 
         /** The side the editor reduces a photo to before looking for its lines. */
         const val UPRIGHT_DETECTION_SIDE = 1000
+
+        /** A dark flat grey and a strong exposure: room for many levels between no mask and full. */
+        const val PROBE_GREY = 0xFF303030.toInt()
+        const val PROBE_EV = 4f
+        const val PROBE_STEPS = 400
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -108,6 +120,7 @@ class ReelJobsTest {
             photos.render(recipeOf(JsonObject(emptyMap()), photo.name)).save(job.resolveSibling("$name-photo-before.png"))
             photos.render(recipe).save(job.resolveSibling("$name-photo-after.png"))
         }
+        if (spec["maskLayers"]?.jsonPrimitive?.booleanOrNull == true) saveMaskLayers(source, recipe, job)
 
         val video = DesktopReelPlatform(ffmpeg).encode(painter.width, painter.height, renderer.fps, renderer.frameCount, renderer::frame) {}
         try {
@@ -148,6 +161,46 @@ class ReelJobsTest {
                 perspective = geometry.perspective.copy(uprightRoll = angles.roll, uprightPitch = angles.pitch, uprightYaw = angles.yaw),
             ),
         )
+    }
+
+    /**
+     * Each mask on its own, white where it applies: read back through the renderer rather than drawn
+     * again, so it is the mask the edit used. The mask goes alone over a flat grey with one strong
+     * exposure for adjustments, and each grey that comes out is matched to the weight that gives it,
+     * from the same exposure applied globally in steps. Brushes are painted over the real photo, so
+     * Auto Mask still follows its edges.
+     */
+    private fun saveMaskLayers(source: PixelBuffer, recipe: EditRecipe, job: File) {
+        val photo = RecipePixels.reduce(source, APPROVAL_SIDE)
+        val blank = recipeOf(JsonObject(emptyMap()), recipe.assetId)
+        fun grey(width: Int, height: Int) = PixelBuffer(width, height).apply { pixels.fill(PROBE_GREY) }
+        val ramp = IntArray(PROBE_STEPS + 1) { step ->
+            val probe = blank.copy(tone = blank.tone.copy(exposure = PROBE_EV * step / PROBE_STEPS))
+            RecipePixels.render(grey(4, 4), probe).pixels[0] and 255
+        }
+        recipe.masks.forEachIndexed { index, mask ->
+            val alone = blank.copy(
+                masks = listOf(mask.copy(enabled = true, adjustments = LocalAdjustments(exposure = PROBE_EV), amount = MASK_AMOUNT_NEUTRAL)),
+            ).toRenderParameters()
+            val layer = RecipePixels.render(grey(photo.width, photo.height), alone, 1f, BrushRasters.of(alone, photo))
+            for (i in layer.pixels.indices) {
+                val level = (weightOf(layer.pixels[i] and 255, ramp) * 255f).roundToInt()
+                layer.pixels[i] = (0xFF shl 24) or (level shl 16) or (level shl 8) or level
+            }
+            layer.toImageBitmap().save(job.resolveSibling("${job.nameWithoutExtension}-mask-${index + 1}.png"))
+            println("${job.nameWithoutExtension}: mask ${index + 1}, ${mask.name}")
+        }
+    }
+
+    /** Where [level] falls on [ramp], the greys the exposure gives in steps, as a weight from 0 to 1. */
+    private fun weightOf(level: Int, ramp: IntArray): Float {
+        val above = ramp.indexOfFirst { it >= level }
+        if (above < 0) return 1f
+        if (above == 0) return 0f
+        val low = ramp[above - 1]
+        val high = ramp[above]
+        val within = if (high == low) 0f else (level - low).toFloat() / (high - low)
+        return ((above - 1 + within) / PROBE_STEPS).coerceIn(0f, 1f)
     }
 
     private fun ImageBitmap.save(file: File) {

@@ -507,6 +507,101 @@ class PhoneScreensCapture {
                 }
                 File(out, "77-pages.txt").writeText(pages.locations.joinToString("\n"))
             }
+            // Reel 08, masks and how they combine: a linear sky that also darkens the lighthouse, a
+            // brush subtracted from it to give the lighthouse back, an inverted radial that darkens
+            // the edges, a brush that lifts the bushes.
+            if (wants("masks")) {
+                onNodeWithContentDescription("Open DSCF9039.jpg").performClick()
+                settle(3_000)
+                onNodeWithText("Edit").performClick()
+                settle(4_000)
+                onAllNodesWithText("Adjust")[0].performClick()
+                settle(1_500)
+                onNodeWithContentDescription("Masks").performClick()
+                settle(1_500)
+                shot("88-start")
+                val masks = Gestures(this)
+                masks.pause(10)
+                // The sky: a linear mask, turned to the top, its middle on the lighthouse, darker.
+                // Turned and not inverted: inverting the mask would invert what is subtracted from it
+                // too, and the brush below would darken the lighthouse instead of sparing it.
+                masks.step { onAllNodesWithText("Linear")[0].performClick() }
+                masks.pause(20)
+                masks.dragArc(Offset(540f, 867f), radius = 105f, fromDegrees = 0f, toDegrees = -180f, frames = 24)
+                masks.pause(10)
+                masks.dragBetween(Offset(540f, 647f), Offset(540f, 723f), frames = 16)
+                masks.pause(12)
+                masks.drag("Exposure", dx = -130f, frames = 18)
+                masks.pause(30)
+                // The lighthouse went dark with it: a brush, subtracted, gives it back.
+                masks.tap(contentDescription = "Back to the mask list")
+                masks.pause(14)
+                masks.tap(contentDescription = "Subtract a shape from the mask Linear 1")
+                masks.pause(14)
+                masks.step { onAllNodesWithText("Brush").let { it[it.fetchSemanticsNodes().size - 1] }.performClick() }
+                masks.pause(14)
+                masks.tap(contentDescription = "Auto Mask")
+                masks.pause(10)
+                // Strokes stay on the tower: Auto Mask takes the colour under the brush, so a stroke
+                // that runs on into the sky takes a column of sky out of the mask too.
+                for ((x, top) in listOf(545f to 1005f, 570f to 1005f, 557f to 965f)) {
+                    masks.dragBetween(Offset(x, 1230f), Offset(x, top), frames = 18)
+                    masks.pause(4)
+                }
+                masks.pause(30)
+                // The edges: a radial around the lighthouse, inverted and darker, so the eye goes to it.
+                // Lifting the lighthouse itself with a radial lights the sky around it as a halo.
+                masks.tap(contentDescription = "Back to the mask list")
+                masks.pause(14)
+                masks.step { onAllNodesWithText("Radial")[0].performClick() }
+                masks.pause(20)
+                // It starts in the middle of the photo, on the sky: made larger, so its edge stays
+                // soft, and brought down.
+                masks.dragBetween(Offset(802f, 865f), Offset(1060f, 865f), frames = 14)
+                masks.pause(4)
+                masks.dragBetween(Offset(540f, 1131f), Offset(540f, 1250f), frames = 12)
+                masks.pause(4)
+                masks.dragBetween(Offset(540f, 865f), Offset(557f, 1080f), frames = 16)
+                masks.pause(8)
+                masks.tap(contentDescription = "Invert the mask")
+                masks.pause(10)
+                masks.drag("Exposure", dx = -65f, frames = 14)
+                masks.pause(16)
+                // The bushes: a brush of their own, lifted. They are mostly under the panel, so the
+                // brush is set first (Auto Mask off, larger, brighter) and the panel then closed to
+                // paint over all of them, the light coming up under the finger.
+                masks.tap(contentDescription = "Back to the mask list")
+                masks.pause(12)
+                masks.step { onAllNodesWithText("Brush")[0].performClick() }
+                masks.pause(14)
+                masks.tap(contentDescription = "Auto Mask")
+                masks.pause(8)
+                masks.drag("Size", dx = 140f, frames = 12)
+                masks.pause(8)
+                // The brush's own settings come first: the light is further down the panel.
+                masks.scrollPanel(dy = -800f, frames = 16, from = "Feather")
+                masks.pause(8)
+                masks.drag("Exposure", dx = 90f, frames = 12)
+                masks.pause(10)
+                // A new mask keeps its red on, which would hide the bushes coming up; off, it only
+                // lights up while the finger paints.
+                masks.tap(contentDescription = "Stop showing the mask")
+                masks.pause(8)
+                masks.dragBetween(Offset(540f, 1322f), Offset(540f, 2000f), frames = 14)
+                masks.pause(20)
+                masks.dragBetween(Offset(780f, 1295f), Offset(1040f, 1290f), frames = 12)
+                // Rows close enough to overlap, or the light comes up in stripes. On the left the sky
+                // comes further down: the first row stops short of it.
+                for ((row, y) in listOf(1400f, 1480f, 1560f, 1640f, 1720f).withIndex()) {
+                    val left = if (row == 0) 200f else 40f
+                    val (from, to) = if (row % 2 == 0) 1040f to left else left to 1040f
+                    masks.dragBetween(Offset(from, y), Offset(to, y), frames = 16)
+                }
+                masks.pause(45)
+                clip("89-masks", frames = masks.frames) { masks.run(it) }
+                shot("90-list")
+                tree("90-list")
+            }
             // The tablet: the same photo, before and after the phone edited it (run with
             // -Pimago.capture.device=tablet on the profile the phone's run used).
             for (moment in listOf("before", "after")) {
@@ -633,6 +728,24 @@ class PhoneScreensCapture {
                         0 -> root.performTouchInput { down(from) }
                         frames - 1 -> root.performTouchInput { moveTo(to); up() }
                         else -> root.performTouchInput { moveTo(at) }
+                    }
+                }
+            }
+        }
+
+        /** A finger around [centre] from [fromDegrees] to [toDegrees]: a rotation handle turned. */
+        fun dragArc(centre: Offset, radius: Float, fromDegrees: Float, toDegrees: Float, frames: Int) {
+            fun at(t: Float): Offset {
+                val radians = Math.toRadians((fromDegrees + (toDegrees - fromDegrees) * t).toDouble())
+                return centre + Offset((radius * kotlin.math.cos(radians)).toFloat(), (radius * kotlin.math.sin(radians)).toFloat())
+            }
+            for (frame in 0 until frames) {
+                steps += {
+                    val root = test.onAllNodes(isRoot())[0]
+                    when (frame) {
+                        0 -> root.performTouchInput { down(at(0f)) }
+                        frames - 1 -> root.performTouchInput { moveTo(at(1f)); up() }
+                        else -> root.performTouchInput { moveTo(at(ease(frame / (frames - 1f)))) }
                     }
                 }
             }
