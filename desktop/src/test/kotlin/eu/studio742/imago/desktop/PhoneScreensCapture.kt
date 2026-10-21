@@ -17,6 +17,8 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.filter
 import androidx.compose.ui.semantics.getOrNull
@@ -57,6 +59,7 @@ import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
@@ -388,6 +391,52 @@ class PhoneScreensCapture {
                 clip("52-dehaze", frames = dehaze.frames) { dehaze.run(it) }
                 tree("52-dehaze")
             }
+            // Reel 07: a continuous carousel made in the composer, and its pages exported by the app.
+            if (wants("carousel")) {
+                onNodeWithText("Compose").performClick()
+                settle(2_000)
+                onNodeWithText("New").performClick()
+                settle(2_000)
+                onAllNodesWithText("Panorama · 2 pages")[0].performClick()
+                settle(3_000)
+                val build = Gestures(this)
+                build.pause(12)
+                build.step { onAllNodesWithContentDescription("Media slot")[0].performClick() }
+                build.pause(24)
+                build.step { onNodeWithContentDescription("Select DSCF7951.jpg").performClick() }
+                build.pause(12)
+                build.step { addButton().performClick() }
+                build.pause(36)
+                // Out, until both pages are on the screen.
+                repeat(3) {
+                    build.tapText("−")
+                    build.pause(14)
+                }
+                build.pause(12)
+                // A title, typed a letter at a time, on the first page.
+                build.step { onNodeWithContentDescription("Text").performClick() }
+                build.pause(18)
+                build.step { onNodeWithContentDescription("Edit").performClick() }
+                build.pause(14)
+                val title = "Into the dunes"
+                for (length in 1..title.length) {
+                    build.step { onNode(hasSetTextAction()).performTextReplacement(title.take(length)) }
+                    build.pause(1)
+                }
+                build.pause(10)
+                build.step { onNodeWithText("Apply").performClick() }
+                build.pause(36)
+                clip("64-carousel", frames = build.frames) { build.run(it) }
+                shot("65-carousel")
+                tree("65-carousel")
+
+                val project = runBlocking { graph.compositions.observeAll().first().maxBy { it.updatedAt } }
+                val pages = runBlocking {
+                    eu.studio742.imago.feature.composer.DesktopCompositionExports(graph.compositionMedia, picturesFolder = File(out, "67-pages").toPath())
+                        .export(project, eu.studio742.imago.feature.composer.StaticExportFormat.JPEG, pageIndex = null, targetLibraryId = null) { _, _ -> }
+                }
+                File(out, "67-pages.txt").writeText(pages.locations.joinToString("\n"))
+            }
             // The tablet: the same photo, before and after the phone edited it (run with
             // -Pimago.capture.device=tablet on the profile the phone's run used).
             for (moment in listOf("before", "after")) {
@@ -519,6 +568,11 @@ class PhoneScreensCapture {
             }
         }
 
+        /** Anything else a frame has to do, against the test. */
+        fun step(action: ComposeUiTest.() -> Unit) {
+            steps += { test.action() }
+        }
+
         fun tapText(text: String) {
             // The first match: a family's tab comes before a layout that may share its name.
             steps += { test.onAllNodesWithText(text)[0].performClick() }
@@ -532,6 +586,13 @@ class PhoneScreensCapture {
 
         private fun ease(t: Float) = t * t * (3 - 2 * t)
     }
+
+    /** The picker's "Add" button, whose text says how many are chosen ("Add", "Add 3"…). */
+    private fun ComposeUiTest.addButton() =
+        onAllNodes(hasClickAction() and hasText("Add", substring = true))
+            .filter(SemanticsMatcher("not the title") { node ->
+                node.config.getOrNull(SemanticsProperties.Text).orEmpty().none { it.text == "Add media" }
+            })[0]
 
     /** The middle of the slider under the label [label], in the window's pixels. */
     private fun ComposeUiTest.sliderUnder(label: String): Offset {
