@@ -37,6 +37,14 @@ import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.unit.Density
 import androidx.compose.foundation.layout.fillMaxSize
+import eu.studio742.imago.core.composition.CompositionBackground
+import eu.studio742.imago.core.composition.CompositionElement
+import eu.studio742.imago.core.composition.CompositionFonts
+import eu.studio742.imago.core.composition.CompositionPage
+import eu.studio742.imago.core.composition.CompositionProject
+import eu.studio742.imago.core.composition.ElementTransform
+import eu.studio742.imago.core.composition.FrameStyle
+import eu.studio742.imago.core.composition.NormalizedRect
 import eu.studio742.imago.core.data.DesktopDataGraph
 import eu.studio742.imago.core.data.LocalDesktopDataGraph
 import eu.studio742.imago.core.designsystem.ImagoColors
@@ -89,6 +97,9 @@ class PhoneScreensCapture {
     private val scenes = System.getProperty("imago.capture.scenes")?.split(",")?.map(String::trim)
 
     private fun wants(scene: String) = scenes == null || scene in scenes
+
+    /** Where the buoy is dragged from and to, read from the screen when the drag starts. */
+    private var arrangeDrag = Offset.Zero to Offset.Zero
 
     /** `phone` (the default) or `tablet`: the window's size and density. */
     private val device = Device.valueOf((System.getProperty("imago.capture.device") ?: "phone").uppercase())
@@ -437,6 +448,65 @@ class PhoneScreensCapture {
                 }
                 File(out, "67-pages.txt").writeText(pages.locations.joinToString("\n"))
             }
+            // Reel 07, the montage: seven photos added through the app's picker, then laid out as a
+            // three-page carousel the way a collage app shows off (framed prints, photos crossing
+            // from one page into the next, titles) and opened again in the composer, where the last
+            // photo is dragged into place by a finger. The pages are exported by the app's exporter.
+            if (wants("montage")) {
+                onNodeWithText("Compose").performClick()
+                settle(2_000)
+                onNodeWithText("New").performClick()
+                settle(2_000)
+                onAllNodesWithText("Feed 4:5")[0].performClick()
+                settle(800)
+                onAllNodesWithText("Blank")[0].performClick()
+                settle(3_000)
+                onNodeWithContentDescription("Media").performClick()
+                settle(2_500)
+                for (photo in MONTAGE.keys) {
+                    onNodeWithContentDescription("Select $photo").performScrollTo().performClick()
+                    settle(300)
+                }
+                addButton().performClick()
+                settle(3_000)
+                onNodeWithContentDescription("Back").performClick()
+                settle(2_000)
+
+                val added = runBlocking { graph.compositions.observeAll().first().maxBy { it.updatedAt } }
+                runBlocking { graph.compositions.save(montage(added)) }
+                settle(1_500)
+                onAllNodesWithText("Summer, slowly.", substring = true)[0].performClick()
+                settle(4_000)
+                shot("74-montage")
+                tree("74-montage")
+
+                val arrange = Gestures(this)
+                arrange.pause(14)
+                repeat(4) {
+                    arrange.tapText("−")
+                    arrange.pause(12)
+                }
+                arrange.pause(16)
+                // The buoy, left a little out of place, goes where it belongs: up by its place's
+                // difference, in pages measured off its own size on the screen.
+                arrange.step {
+                    val buoy = onNodeWithContentDescription("Photo 2020_0711_12194800.jpg").fetchSemanticsNode().boundsInRoot
+                    val pageWidth = buoy.width / BUOY_START.w
+                    val pageHeight = pageWidth * 1350f / 1080f
+                    arrangeDrag = buoy.center to (buoy.center + Offset((BUOY.x - BUOY_START.x) * pageWidth, (BUOY.y - BUOY_START.y) * pageHeight))
+                }
+                arrange.dragFrom({ arrangeDrag.first }, { arrangeDrag.second }, frames = 30)
+                arrange.pause(40)
+                clip("75-arrange", frames = arrange.frames) { arrange.run(it) }
+                shot("76-arranged")
+
+                val project = runBlocking { graph.compositions.observeAll().first().maxBy { it.updatedAt } }
+                val pages = runBlocking {
+                    eu.studio742.imago.feature.composer.DesktopCompositionExports(graph.compositionMedia, picturesFolder = File(out, "77-pages").toPath())
+                        .export(project, eu.studio742.imago.feature.composer.StaticExportFormat.JPEG, pageIndex = null, targetLibraryId = null) { _, _ -> }
+                }
+                File(out, "77-pages.txt").writeText(pages.locations.joinToString("\n"))
+            }
             // The tablet: the same photo, before and after the phone edited it (run with
             // -Pimago.capture.device=tablet on the profile the phone's run used).
             for (moment in listOf("before", "after")) {
@@ -568,6 +638,22 @@ class PhoneScreensCapture {
             }
         }
 
+        /** A drag whose ends are only known when it starts: read from the screen by an earlier step. */
+        fun dragFrom(from: () -> Offset, to: () -> Offset, frames: Int) {
+            for (frame in 0 until frames) {
+                steps += {
+                    val root = test.onAllNodes(isRoot())[0]
+                    val start = from()
+                    val end = to()
+                    when (frame) {
+                        0 -> root.performTouchInput { down(start) }
+                        frames - 1 -> root.performTouchInput { moveTo(end); up() }
+                        else -> root.performTouchInput { moveTo(start + (end - start) * ease(frame / (frames - 1f))) }
+                    }
+                }
+            }
+        }
+
         /** Anything else a frame has to do, against the test. */
         fun step(action: ComposeUiTest.() -> Unit) {
             steps += { test.action() }
@@ -638,8 +724,71 @@ class PhoneScreensCapture {
         }
     }
 
+    /**
+     * The montage over the photos the picker added: three 4:5 pages on warm paper, each photo placed
+     * by name. Bounds are in pages across (0 to 3) and in page heights down; a photo's box keeps its
+     * shape, the width in page widths and the height in page heights.
+     */
+    private fun montage(added: CompositionProject): CompositionProject {
+        val now = java.time.Instant.now().toString()
+        val print = FrameStyle(borderWidth = 22f, borderArgb = 0xFFFAF8F3, shadowRadius = 18f)
+        val photos = added.elements.filterIsInstance<CompositionElement.Photo>().mapNotNull { photo ->
+            val place = MONTAGE[photo.media.fileName] ?: return@mapNotNull null
+            photo.copy(
+                transform = ElementTransform(NormalizedRect(place.x, place.y, place.w, place.h), rotationDegrees = place.rotation),
+                zIndex = place.z,
+                frame = if (place.framed) print else FrameStyle(shadowRadius = 18f),
+            )
+        }
+        fun text(id: String, value: String, x: Float, y: Float, w: Float, h: Float, font: String, size: Float, weight: Int = 400) =
+            CompositionElement.Text(
+                id = id,
+                transform = ElementTransform(NormalizedRect(x, y, w, h)),
+                zIndex = 20,
+                text = value,
+                fontFamily = font,
+                fontSize = size,
+                fontWeight = weight,
+                colorArgb = 0xFF1A1A1D,
+            )
+        val serif = CompositionFonts.PlayfairDisplay.id
+        val script = CompositionFonts.DancingScript.id
+        return added.copy(
+            name = "Summer, slowly.",
+            pages = (0 until 3).map { CompositionPage(id = java.util.UUID.randomUUID().toString(), index = it) },
+            background = CompositionBackground.Solid(0xFFEFE9DF),
+            elements = photos + listOf(
+                text("title", "Summer,\nslowly.", 0.07f, 0.05f, 0.8f, 0.26f, serif, 118f, 500),
+                text("algarve", "Algarve, July", 1.08f, 0.06f, 0.5f, 0.1f, script, 64f),
+                text("notes", "notes from\nPortugal", 2.52f, 0.66f, 0.44f, 0.22f, serif, 72f, 500),
+            ),
+            revision = added.revision + 1,
+            updatedAt = now,
+        )
+    }
+
+    private data class Place(val x: Float, val y: Float, val w: Float, val h: Float, val rotation: Float, val z: Int, val framed: Boolean)
+
     private companion object {
         const val FRAME_MS = 1000L / 30
+
+        /** Where the buoy belongs, and where it starts so the reel can drag it in. */
+        val BUOY = Place(1.10f, 0.19f, 0.36f, 0.36f, 3f, 4, true)
+        val BUOY_START = BUOY.copy(x = 1.22f, y = 0.50f)
+
+        /**
+         * The photos and where they go. On a 1080 by 1350 page, w * 1080 over h * 1350 is the photo's
+         * own ratio. The buoy starts out of place: the reel drags it in.
+         */
+        val MONTAGE = linkedMapOf(
+            "DSCF9039.jpg" to Place(0.07f, 0.40f, 0.47f, 0.47f, -3f, 2, true),
+            "white-village.jpg" to Place(0.57f, 0.07f, 0.37f, 0.44f, 4f, 1, true),
+            "DSCF7951.jpg" to Place(0.60f, 0.50f, 0.90f, 0.48f, 0f, 3, false),
+            "2020_0711_12194800.jpg" to BUOY_START,
+            "dusk-harbour.jpg" to Place(1.55f, 0.06f, 0.85f, 0.453f, 0f, 5, false),
+            "street-musician.jpg" to Place(2.50f, 0.08f, 0.42f, 0.504f, -2f, 6, true),
+            "night-tram.jpg" to Place(2.06f, 0.52f, 0.36f, 0.432f, 2f, 7, true),
+        )
     }
 
     /**
