@@ -111,7 +111,8 @@ class TranslationFilesTest {
 
     @Test fun interfaceCodeHasNoHandWrittenSentences() {
         val sources = listOf("feature", "core/designsystem", "desktop", "app").map { File(root, it) }
-            .flatMap { dir -> dir.walkTopDown().onEnter { it.name != "build" && !it.name.endsWith("Test") }.filter { it.extension == "kt" }.toList() }
+            // Tests find the interface by its English text, so the JVM modules' src/test is skipped like desktopTest.
+            .flatMap { dir -> dir.walkTopDown().onEnter { it.name != "build" && it.name != "test" && !it.name.endsWith("Test") }.filter { it.extension == "kt" }.toList() }
             .filter { file -> "${File.separator}src${File.separator}" in file.path && !file.path.contains("Test${File.separator}") }
         val problems = mutableListOf<String>()
         sources.forEach { file ->
