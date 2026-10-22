@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import eu.studio742.imago.core.render.PhotoBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -14,6 +15,8 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
 import eu.studio742.imago.core.model.LocalMask
 import eu.studio742.imago.core.model.MaskComponent
@@ -22,6 +25,12 @@ import eu.studio742.imago.core.render.FrameGeometry
 
 /** The radius, in dp, within which a touch counts as having grabbed a handle. */
 val MASK_HANDLE_HIT_RADIUS: Dp = 28.dp
+
+/**
+ * How far the rotation handle stands off the shape. It clears [MASK_HANDLE_HIT_RADIUS], so on a linear
+ * — where it sits on the centre line — a touch on the centre still moves and does not rotate.
+ */
+val MASK_ROTATE_HANDLE_GAP: Dp = 40.dp
 
 enum class MaskHandle { MOVE, RADIUS_X, RADIUS_Y, WIDTH, ROTATE }
 
@@ -78,6 +87,27 @@ class MaskProjection(
         geometry.imageFromFramed(u, v, scratch)
         return Offset(scratch[0], scratch[1])
     }
+
+    /**
+     * Where a new shape goes when [viewport] — screen pixels — is the part of the stage that is not
+     * under the chrome: the middle of the photo seen there, sized by its shorter side.
+     *
+     * What is seen is the frame after crop, zoom and pan, so a shape sized by it keeps its handles on
+     * screen however hard the photo was cropped or zoomed.
+     */
+    fun newShapePlacement(viewport: Rect): MaskPlacement {
+        var seen = Rect(
+            left = max(viewport.left, bounds.left),
+            top = max(viewport.top, bounds.top),
+            right = min(viewport.right, bounds.right),
+            bottom = min(viewport.bottom, bounds.bottom),
+        )
+        // Only with the photo panned entirely under the chrome; the whole frame is the next best thing.
+        if (seen.width <= 0f || seen.height <= 0f) seen = Rect(bounds.left, bounds.top, bounds.right, bounds.bottom)
+        val centre = seen.center
+        val image = toImage(centre)
+        return MaskPlacement(image.x, image.y, imageRadius(centre, min(seen.width, seen.height)))
+    }
 }
 
 /**
@@ -100,12 +130,18 @@ private fun MaskProjection.handleAt(
     return toScreen(centreX + dx / imageAspect, centreY + dy)
 }
 
-/** Where the handles of one of the mask's components are, or null if it has no such component. */
-fun maskHandlesOf(mask: LocalMask, projection: MaskProjection, component: Int = 0): MaskHandles? =
-    mask.components.getOrNull(component)?.let { maskHandlesOf(it, projection) }
+/**
+ * Where the handles of one of the mask's components are, or null if it has no such component.
+ * [rotateGap] is how far, in screen pixels, the rotation handle stands off the shape.
+ */
+fun maskHandlesOf(mask: LocalMask, projection: MaskProjection, component: Int, rotateGap: Float): MaskHandles? =
+    mask.components.getOrNull(component)?.let { maskHandlesOf(it, projection, rotateGap) }
 
 /** Where a component's handles are, or null if it carries no shape. */
-fun maskHandlesOf(component: MaskComponent, projection: MaskProjection): MaskHandles? {
+fun maskHandlesOf(component: MaskComponent, projection: MaskProjection, rotateGap: Float): MaskHandles? {
+    // The gap is measured on screen and not on the photo: in image heights, a crop of a fifth of the
+    // photo or a zoom put the rotation handle off screen while the shape itself still fitted.
+    fun gapAt(x: Float, y: Float) = projection.imageRadius(projection.toScreen(x, y), rotateGap)
     return when (component.shape) {
         MaskShape.RADIAL -> component.radial?.let { radial ->
             MaskHandles(
@@ -117,7 +153,7 @@ fun maskHandlesOf(component: MaskComponent, projection: MaskProjection): MaskHan
                     radial.x,
                     radial.y,
                     radial.angle,
-                    -(radial.radiusX + ROTATE_HANDLE_GAP),
+                    -(radial.radiusX + gapAt(radial.x, radial.y)),
                     0f,
                 ),
             )
@@ -128,7 +164,7 @@ fun maskHandlesOf(component: MaskComponent, projection: MaskProjection): MaskHan
                 radiusX = null,
                 radiusY = null,
                 width = projection.handleAt(linear.x, linear.y, linear.angle, 0f, linear.width * 0.5f),
-                rotate = projection.handleAt(linear.x, linear.y, linear.angle, ROTATE_HANDLE_GAP, 0f),
+                rotate = projection.handleAt(linear.x, linear.y, linear.angle, gapAt(linear.x, linear.y), 0f),
             )
         }
         // A brush has no handles: it is painted, not dragged.
@@ -141,7 +177,7 @@ fun maskHandlesOf(component: MaskComponent, projection: MaskProjection): MaskHan
  * where Lightroom puts it. Null for a brush with nothing painted.
  */
 fun componentPin(component: MaskComponent, projection: MaskProjection): Offset? =
-    maskHandlesOf(component, projection)?.centre
+    maskHandlesOf(component, projection, rotateGap = 0f)?.centre
         ?: component.brush?.strokes?.firstOrNull()?.points?.takeIf { it.size >= 2 }?.let { projection.toScreen(it[0], it[1]) }
 
 /**
@@ -195,7 +231,7 @@ fun MaskOverlay(
         }
         mask.components.getOrNull(selectedComponent)?.let { selected ->
             drawComponentOutline(selected, projection)
-            val handles = maskHandlesOf(selected, projection)
+            val handles = maskHandlesOf(selected, projection, MASK_ROTATE_HANDLE_GAP.toPx())
             if (handles != null) {
                 listOfNotNull(handles.radiusX, handles.radiusY, handles.width).forEach { drawHandle(it, filled = false) }
                 drawHandle(handles.rotate, filled = false)
@@ -401,8 +437,6 @@ private val OUTLINE_WIDTH = 1.5.dp
 /** The shapes of the mask that are not being edited: present, but behind the one that is. */
 private const val OTHER_COMPONENT_ALPHA = 0.45f
 
-/** The rotation handle's offset, in units of image height. */
-private const val ROTATE_HANDLE_GAP = 0.11f
 private val OUTLINE_COLOR = Color(0xFFF2F2F0)
 
 /** A component's centre in normalised image coordinates, or null if it has no shape. */

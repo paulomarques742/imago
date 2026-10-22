@@ -708,6 +708,7 @@ private fun EditorScreen(
     val railNow by rememberUpdatedState(rail)
     val currentGeometry by rememberUpdatedState(state.recipe?.geometry)
     val maskHitRadius = with(chromeDensity) { MASK_HANDLE_HIT_RADIUS.toPx() }
+    val maskRotateGap = with(chromeDensity) { MASK_ROTATE_HANDLE_GAP.toPx() }
     // The bridge between what the mask stores — image coordinates — and what is on screen.
     // The guided Upright is on while its sheet is open: elsewhere a finger on the photo is the photo's.
     val guidingNow by rememberUpdatedState(
@@ -748,6 +749,32 @@ private fun EditorScreen(
     // reopened the pager with the photo shrunk.
     var cropTransform by remember(assetId) { mutableStateOf(PhotoTransform()) }
     var stageSize by remember { mutableStateOf(IntSize.Zero) }
+    // Outside crop the stage is the whole screen, and the top bar and the drawer sit over it.
+    val stageCoveredPx by rememberUpdatedState(
+        with(chromeDensity) { stageInsets.top.toPx() to stageInsets.bottom.toPx() },
+    )
+    // A new shape is centred on, and sized to, the photo that is seen — not the whole image, which
+    // after a hard crop or a zoom put its handles off screen.
+    val placedMaskActions = remember(maskActions) {
+        maskActions.copy(
+            newShapePlacement = placement@{
+                val geometry = maskFrameGeometry ?: return@placement MaskPlacement.WholeImage
+                val surface = stageSize.takeIf { it != IntSize.Zero } ?: return@placement MaskPlacement.WholeImage
+                val bounds = photoBounds(
+                    surfaceWidth = surface.width,
+                    surfaceHeight = surface.height,
+                    imageWidth = imageSize.first,
+                    imageHeight = imageSize.second,
+                    transform = transform,
+                    quarterTurns = quarterTurns,
+                )
+                val (coveredTop, coveredBottom) = stageCoveredPx
+                MaskProjection(bounds, geometry).newShapePlacement(
+                    Rect(0f, coveredTop, surface.width.toFloat(), surface.height - coveredBottom),
+                )
+            },
+        )
+    }
     // Incremented by whoever wants the view to readjust to the frame. An explicit request and not a
     // reaction to the crop changing, because dragging the photo also changes the crop — and there
     // reframing would undo the choice just made.
@@ -1177,7 +1204,7 @@ private fun EditorScreen(
                                             var lastBrushPoint = down.position
                                             if (activeMask != null && maskGeometry != null) {
                                                 val projection = MaskProjection(bounds(current), maskGeometry)
-                                                maskHandle = maskHandlesOf(activeMask, projection, activeComponent)?.let {
+                                                maskHandle = maskHandlesOf(activeMask, projection, activeComponent, maskRotateGap)?.let {
                                                     hitMaskHandle(it, down.position, maskHitRadius)
                                                 }
                                                 // Another shape's pin takes the handles to it, and the
@@ -1765,7 +1792,7 @@ private fun EditorScreen(
                         onToggleMirrorHorizontal = onToggleMirrorHorizontal,
                         onToggleMirrorVertical = onToggleMirrorVertical,
                         onResetGeometry = onResetGeometry,
-                        maskActions = maskActions,
+                        maskActions = placedMaskActions,
                         colorGradeActions = colorGradeActions,
                         perspectiveActions = perspectiveActions,
                         whiteBalanceActions = whiteBalanceActions,

@@ -2057,11 +2057,12 @@ open class EditorViewModel(
     /**
      * Creates a mask and opens it right away on the adjustments: a mask without adjustments does
      * nothing, and leaving the user on the list after creating it meant asking one more tap to get there.
+     * [placement] is the part of the photo on screen, which the new shape is centred on and sized to.
      */
-    fun addMask(shape: MaskShape) {
+    fun addMask(shape: MaskShape, placement: MaskPlacement = MaskPlacement.WholeImage) {
         val current = state.value.recipe ?: return
         val name = defaultMaskName(shape, current.masks)
-        val (updated, id) = current.withNewMask(shape, name)
+        val (updated, id) = current.withNewMask(shape, name, placement)
         if (id == null) {
             mutableState.update {
                 it.copy(maskNotice = uiText(Res.string.editor_masks_max, MAX_LOCAL_MASKS))
@@ -2083,9 +2084,14 @@ open class EditorViewModel(
      * Lightroom's Add, Subtract and Intersect: a new shape in the mask, opened right away on its
      * handles, with the red on — a subtraction cannot be placed without seeing what it takes away.
      */
-    fun addMaskComponent(maskId: String, shape: MaskShape, op: MaskOp) {
+    fun addMaskComponent(
+        maskId: String,
+        shape: MaskShape,
+        op: MaskOp,
+        placement: MaskPlacement = MaskPlacement.WholeImage,
+    ) {
         val current = state.value.recipe ?: return
-        val (updated, index) = current.withNewMaskComponent(maskId, shape, op)
+        val (updated, index) = current.withNewMaskComponent(maskId, shape, op, placement)
         if (index == null) {
             if (current.mask(maskId) != null) {
                 mutableState.update { it.copy(maskNotice = uiText(Res.string.editor_mask_components_max, MAX_MASK_COMPONENTS)) }

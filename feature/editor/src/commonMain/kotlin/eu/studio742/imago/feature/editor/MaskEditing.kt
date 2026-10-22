@@ -141,23 +141,72 @@ val EditRecipe.brushComponentCount: Int
 fun EditRecipe.canAddMaskComponent(shape: MaskShape): Boolean =
     canAddMaskComponent && (shape != MaskShape.BRUSH || brushComponentCount < MAX_BRUSH_COMPONENTS)
 
-/** A component of [shape], centred, with the shape's defaults; a brush starts with nothing painted. */
-internal fun newMaskComponent(shape: MaskShape, op: MaskOp = MaskOp.ADD): MaskComponent = when (shape) {
-    MaskShape.LINEAR -> MaskComponent(shape = MaskShape.LINEAR, op = op, linear = LinearMask())
-    MaskShape.RADIAL -> MaskComponent(shape = MaskShape.RADIAL, op = op, radial = RadialMask())
-    MaskShape.BRUSH -> MaskComponent(shape = MaskShape.BRUSH, op = op, brush = BrushMask())
+/**
+ * Where a new shape goes: the centre of the part of the photo that is on screen, and that part's
+ * shorter side, both measured on the original image — [span] in units of its height, as radii are.
+ *
+ * Sizing a new shape by the whole image put its handles off screen as soon as the photo was cropped
+ * hard or zoomed in: a radial of 0.3 image heights is wider than a crop of a fifth of the photo.
+ */
+data class MaskPlacement(val x: Float, val y: Float, val span: Float) {
+    companion object {
+        /** The whole image, uncropped and at fit: the placement new shapes always had. */
+        val WholeImage = MaskPlacement(0.5f, 0.5f, 1f)
+    }
 }
 
+/** A component of [shape], with the shape's defaults scaled to [placement]; a brush starts with nothing painted. */
+internal fun newMaskComponent(
+    shape: MaskShape,
+    op: MaskOp = MaskOp.ADD,
+    placement: MaskPlacement = MaskPlacement.WholeImage,
+): MaskComponent {
+    // A placement from a projection can carry NaN — a point beyond the virtual camera's horizon under
+    // perspective — and a shape with a NaN centre would draw nothing and could never be grabbed.
+    val safe = placement.takeIf { it.x.isFinite() && it.y.isFinite() && it.span.isFinite() && it.span > 0f }
+        ?: MaskPlacement.WholeImage
+    val x = roundedBrushCoordinate(safe.x.coerceIn(MIN_MASK_CENTRE, MAX_MASK_CENTRE))
+    val y = roundedBrushCoordinate(safe.y.coerceIn(MIN_MASK_CENTRE, MAX_MASK_CENTRE))
+    return when (shape) {
+        MaskShape.LINEAR -> MaskComponent(
+            shape = MaskShape.LINEAR,
+            op = op,
+            linear = LinearMask(
+                x = x,
+                y = y,
+                width = roundedMaskSize(LinearMask().width * safe.span, MIN_MASK_WIDTH, MAX_MASK_WIDTH),
+            ),
+        )
+        MaskShape.RADIAL -> {
+            val radius = roundedMaskSize(RadialMask().radiusX * safe.span, MIN_MASK_RADIUS, MAX_MASK_RADIUS)
+            MaskComponent(
+                shape = MaskShape.RADIAL,
+                op = op,
+                radial = RadialMask(x = x, y = y, radiusX = radius, radiusY = radius),
+            )
+        }
+        MaskShape.BRUSH -> MaskComponent(shape = MaskShape.BRUSH, op = op, brush = BrushMask())
+    }
+}
+
+/** A size within the limits the handles respect, rounded so the recipe's JSON stays short. */
+private fun roundedMaskSize(value: Float, min: Float, max: Float): Float =
+    roundedBrushCoordinate(value.coerceIn(min, max))
+
 /**
- * Adds a new mask, centred and still without adjustments.
+ * Adds a new mask, in the middle of [placement] and still without adjustments.
  *
  * It returns the recipe intact when the ceiling has already been reached — eight is the number of
  * channels of the two weight fields, and not a preference the interface can negotiate.
  */
-fun EditRecipe.withNewMask(shape: MaskShape, name: String): Pair<EditRecipe, String?> {
+fun EditRecipe.withNewMask(
+    shape: MaskShape,
+    name: String,
+    placement: MaskPlacement = MaskPlacement.WholeImage,
+): Pair<EditRecipe, String?> {
     if (masks.size >= MAX_LOCAL_MASKS || !canAddMaskComponent(shape)) return this to null
     val id = UUID.randomUUID().toString()
-    val mask = LocalMask(id = id, name = name, components = listOf(newMaskComponent(shape)))
+    val mask = LocalMask(id = id, name = name, components = listOf(newMaskComponent(shape, placement = placement)))
     return copy(masks = masks + mask) to id
 }
 
@@ -168,10 +217,15 @@ fun EditRecipe.withNewMask(shape: MaskShape, name: String): Pair<EditRecipe, Str
  * takes away from what comes before it. Null when the mask does not exist or the components are at
  * their ceiling.
  */
-fun EditRecipe.withNewMaskComponent(maskId: String, shape: MaskShape, op: MaskOp): Pair<EditRecipe, Int?> {
+fun EditRecipe.withNewMaskComponent(
+    maskId: String,
+    shape: MaskShape,
+    op: MaskOp,
+    placement: MaskPlacement = MaskPlacement.WholeImage,
+): Pair<EditRecipe, Int?> {
     val mask = mask(maskId) ?: return this to null
     if (!canAddMaskComponent(shape)) return this to null
-    return withMask(maskId) { it.copy(components = it.components + newMaskComponent(shape, op)) } to
+    return withMask(maskId) { it.copy(components = it.components + newMaskComponent(shape, op, placement)) } to
         mask.components.size
 }
 

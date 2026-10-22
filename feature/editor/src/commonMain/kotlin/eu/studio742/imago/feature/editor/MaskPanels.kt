@@ -75,13 +75,13 @@ import eu.studio742.imago.core.model.MaskShape
  * composable not knowing the ViewModel, and a bundle of lambdas preserves that just like loose ones.
  */
 data class MaskActions(
-    val onAdd: (MaskShape) -> Unit,
+    val onAdd: (MaskShape, MaskPlacement) -> Unit,
     val onSelect: (String?) -> Unit,
     /** Opens a mask on one of its shapes, from the list. */
     val onSelectComponent: (String, Int) -> Unit,
     /** Moves the handles to another shape of the open mask, from its pin on the photo. */
     val onFocusComponent: (Int) -> Unit,
-    val onAddComponent: (String, MaskShape, MaskOp) -> Unit,
+    val onAddComponent: (String, MaskShape, MaskOp, MaskPlacement) -> Unit,
     val onDeleteComponent: (String, Int) -> Unit,
     val onSetComponentInverted: (String, Int, Boolean) -> Unit,
     /** Duplicate, or with true, Duplicate and Invert. */
@@ -107,6 +107,11 @@ data class MaskActions(
     val onBrushAutoMask: (Boolean) -> Unit,
     val onBrushSetting: (BrushSetting, Float) -> Unit,
     val onBrushSettingFinished: () -> Unit,
+    /**
+     * The part of the photo on screen when a shape is created: only the stage knows it, and it changes
+     * with every pinch, so it is asked for at the tap and not kept.
+     */
+    val newShapePlacement: () -> MaskPlacement = { MaskPlacement.WholeImage },
 )
 
 /**
@@ -138,21 +143,21 @@ internal fun MaskListPanel(
                 label = stringResource(Res.string.editor_mask_linear),
                 icon = Icons.Outlined.Gradient,
                 enabled = masks.size < MAX_LOCAL_MASKS && canAddComponent,
-                onClick = { actions.onAdd(MaskShape.LINEAR) },
+                onClick = { actions.onAdd(MaskShape.LINEAR, actions.newShapePlacement()) },
                 modifier = Modifier.weight(1f),
             )
             MaskCreateButton(
                 label = stringResource(Res.string.editor_mask_radial),
                 icon = Icons.Outlined.Adjust,
                 enabled = masks.size < MAX_LOCAL_MASKS && canAddComponent,
-                onClick = { actions.onAdd(MaskShape.RADIAL) },
+                onClick = { actions.onAdd(MaskShape.RADIAL, actions.newShapePlacement()) },
                 modifier = Modifier.weight(1f),
             )
             MaskCreateButton(
                 label = stringResource(Res.string.editor_mask_brush),
                 icon = Icons.Outlined.Brush,
                 enabled = masks.size < MAX_LOCAL_MASKS && canAddBrush,
-                onClick = { actions.onAdd(MaskShape.BRUSH) },
+                onClick = { actions.onAdd(MaskShape.BRUSH, actions.newShapePlacement()) },
                 modifier = Modifier.weight(1f),
             )
         }
@@ -374,7 +379,7 @@ private fun MaskCombineRow(mask: LocalMask, enabled: Boolean, canAddBrush: Boole
                 description = stringResource(description, mask.name),
                 enabled = enabled,
                 canAddBrush = canAddBrush,
-                onPick = { shape -> actions.onAddComponent(mask.id, shape, op) },
+                onPick = { shape -> actions.onAddComponent(mask.id, shape, op, actions.newShapePlacement()) },
                 modifier = Modifier.weight(1f),
             )
         }
