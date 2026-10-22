@@ -6,17 +6,23 @@ import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
 import kotlin.math.*
 
-/** One renderer for preview, still export and every video frame. Media are resolved before drawing. */
+/**
+ * One renderer for preview, still export and every video frame. Media are resolved before drawing.
+ *
+ * A video is drawn when [render] gets a frame for it, and only then: when each clip is on screen is
+ * decided by the page's `PageVideoPlan`, the same one the phone encodes from.
+ */
 class CompositionRenderer {
+    /** [size], when given, is the exact output — a video's, which has to be even on both sides. */
     fun render(project: CompositionProject, pageIndex: Int, media: Map<String, ByteArray>,
-        maxSide: Int = Int.MAX_VALUE, timeMs: Long = 0): ByteArray {
+        maxSide: Int = Int.MAX_VALUE, size: Pair<Int, Int>? = null): ByteArray {
         require(pageIndex in project.pages.indices)
         val scale = min(1f, maxSide.toFloat() / max(project.format.pixelWidth, project.format.pixelHeight))
-        val width = (project.format.pixelWidth * scale).roundToInt().coerceAtLeast(1)
-        val height = (project.format.pixelHeight * scale).roundToInt().coerceAtLeast(1)
+        val width = size?.first ?: (project.format.pixelWidth * scale).roundToInt().coerceAtLeast(1)
+        val height = size?.second ?: (project.format.pixelHeight * scale).roundToInt().coerceAtLeast(1)
         return Surface.makeRasterN32Premul(width, height).use { surface ->
             val canvas = surface.canvas
-            canvas.scale(scale, scale)
+            canvas.scale(width.toFloat() / project.format.pixelWidth, height.toFloat() / project.format.pixelHeight)
             val w = project.format.pixelWidth.toFloat(); val h = project.format.pixelHeight.toFloat()
             val bounds = Rect.makeWH(w, h)
             background(canvas, project.pages[pageIndex].backgroundOverride ?: project.background, bounds, media)
@@ -39,11 +45,8 @@ class CompositionRenderer {
                     paint.alpha = (element.transform.opacity.coerceIn(0f, 1f) * 255).roundToInt()
                     when (element) {
                         is CompositionElement.Photo -> photo(canvas, media[element.id] ?: media[element.media.assetId], local, element.crop, element.frame, paint)
-                        is CompositionElement.Video -> {
-                            val elapsed = timeMs - element.timing.startOffsetMs
-                            val duration = element.timing.trimEndMs - element.timing.trimStartMs
-                            if (elapsed >= 0 && (element.timing.loop || elapsed < duration))
-                                photo(canvas, media[element.id] ?: media[element.media.assetId], local, element.crop, element.frame, paint)
+                        is CompositionElement.Video -> media[element.id]?.let { frame ->
+                            photo(canvas, frame, local, element.crop, element.frame, paint)
                         }
                         is CompositionElement.MediaPlaceholder -> { paint.color = 0xFF333333.toInt(); canvas.drawRect(local, paint) }
                         is CompositionElement.Shape -> {

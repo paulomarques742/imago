@@ -16,6 +16,7 @@ import eu.studio742.imago.core.composition.CompositionBackground
 import eu.studio742.imago.core.composition.CompositionElement
 import eu.studio742.imago.core.composition.CompositionProject
 import eu.studio742.imago.core.composition.MediaReference
+import eu.studio742.imago.core.composition.PageVideoPlan
 import eu.studio742.imago.core.composition.intersectionWithPage
 import eu.studio742.imago.core.data.CompositionMediaRepository
 import eu.studio742.imago.core.immich.IMMICH_API_KEY_HEADER
@@ -26,7 +27,6 @@ import eu.studio742.imago.core.render.toSkiaBitmap
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -49,6 +49,7 @@ class DesktopCompositionExports(
         format: StaticExportFormat,
         pageIndex: Int?,
         targetLibraryId: String?,
+        videoQuality: VideoExportQuality,
         onProgress: (Int, Int) -> Unit,
     ): CompositionExportOutcome = withContext(Dispatchers.IO) {
         val pages = pageIndex?.let { listOf(it.coerceIn(project.pages.indices)) } ?: project.pages.indices.toList()
@@ -60,12 +61,12 @@ class DesktopCompositionExports(
         var uploadFailures = 0
         pages.forEachIndexed { position, page ->
             coroutineContext.ensureActive()
-            val hasVideo = project.elements.any { it is CompositionElement.Video && it.visible && it.pageIndex == page }
+            val hasVideo = project.pageHasVideo(page)
             val name = "${project.name.ifBlank { untitled }}-${page + 1}"
             val file = if (hasVideo) {
-                renderVideoPage(project, page, folder.resolve("$name.mp4")).toFile()
+                renderVideoPage(project, page, folder.resolve("$name.mp4"), videoExportSize(project.format, videoQuality), videoQuality.crf).toFile()
             } else {
-                val bytes = renderer.render(project, page, prepare(project, page, Int.MAX_VALUE, 0, strict = true))
+                val bytes = renderer.render(project, page, prepare(project, page, Int.MAX_VALUE, strict = true))
                 val target = folder.resolve("$name.${format.extension}")
                 Files.write(target, if (format == StaticExportFormat.PNG) bytes else toJpeg(bytes))
                 target.toFile()
@@ -86,42 +87,63 @@ class DesktopCompositionExports(
     override suspend fun previewPage(project: CompositionProject, pageIndex: Int): File = withContext(Dispatchers.IO) {
         val target = Files.createTempFile("imago-proxy-", ".mp4")
         Files.deleteIfExists(target)
-        renderVideoPage(project, pageIndex, target, side = PROXY_SIDE).toFile()
+        renderVideoPage(project, pageIndex, target, videoExportSize(project.format, PROXY_SIDE), PROXY_CRF, preset = "veryfast").toFile()
     }
 
-    /** A page with video: 30 frames per second drawn, and the audio mixed on top. */
-    private suspend fun renderVideoPage(project: CompositionProject, page: Int, target: Path, side: Int = Int.MAX_VALUE): Path {
+    /**
+     * A page with video: [VIDEO_EXPORT_FPS] frames per second drawn at [size], and the audio of the
+     * clips that are heard mixed on top. When each clip shows and what it plays comes from the page's
+     * plan, the same one the phone encodes from.
+     */
+    private suspend fun renderVideoPage(
+        project: CompositionProject,
+        page: Int,
+        target: Path,
+        size: Pair<Int, Int>,
+        crf: Int,
+        preset: String = "medium",
+    ): Path {
+        val plan = PageVideoPlan.of(project, page)
         val staging = Files.createTempDirectory("imago-frames-")
         try {
-            val duration = project.pages[page].durationMs
-            val frames = ((duration * FPS + 999) / 1000).toInt().coerceAtLeast(1)
-            for (frame in 0 until frames) {
+            val (width, height) = size
+            // The still media once for the whole page, already at the video's size: decoding the
+            // originals again for every frame was most of the time a page took.
+            val stills = prepare(project, page, maxOf(width, height), strict = true)
+            val clips = plan.clips.mapIndexedNotNull { index, clip ->
+                val sources = clip.segments.filterIsInstance<PageVideoPlan.Segment.Source>()
+                if (sources.isEmpty()) return@mapIndexedNotNull null
+                val from = sources.minOf { it.fromMs }
+                val folder = Files.createDirectory(staging.resolve("clip-$index"))
+                val frames = ffmpeg.frames(originalOf(clip.video.media), from, sources.maxOf { it.toMs }, VIDEO_EXPORT_FPS, width, height, folder)
+                if (frames.isEmpty()) throw LocalizedException(uiText(Res.string.composer_read_failed, clip.video.media.fileName))
+                ClipFrames(clip, from, frames)
+            }
+            val output = Files.createDirectory(staging.resolve("page"))
+            val count = ((plan.durationMs * VIDEO_EXPORT_FPS + 999) / 1000).toInt().coerceAtLeast(1)
+            for (frame in 0 until count) {
                 coroutineContext.ensureActive()
-                val time = frame * 1000L / FPS
-                val bytes = renderer.render(project, page, prepare(project, page, side, time, strict = true), side, time)
-                Files.write(staging.resolve("%05d.png".format(frame)), bytes)
+                val time = frame * 1000L / VIDEO_EXPORT_FPS
+                val media = stills.toMutableMap()
+                clips.forEach { clip -> clip.at(time)?.let { media[clip.clip.video.id] = it } }
+                Files.write(output.resolve("%05d.png".format(frame)), renderer.render(project, page, media, size = size))
             }
-            val videos = project.elements.filterIsInstance<CompositionElement.Video>().filter { it.visible && it.pageIndex == page }
-            val audible = videos.filter { !it.timing.muted && it.timing.volume > 0 && (videos.none { other -> other.timing.solo } || it.timing.solo) }
-            val arguments = mutableListOf("-nostdin", "-v", "error", "-framerate", "$FPS", "-i", staging.resolve("%05d.png").toString())
-            val filters = mutableListOf<String>()
-            audible.forEachIndexed { index, video ->
-                val source = originalOf(video.media)
-                if (video.timing.loop) arguments += listOf("-stream_loop", "-1")
-                arguments += listOf(
-                    "-ss", (video.timing.trimStartMs / 1000.0).toString(),
-                    "-t", ((video.timing.trimEndMs - video.timing.trimStartMs) / 1000.0).toString(),
-                    "-i", source.toString(),
-                )
-                filters += "[${index + 1}:a]asetpts=PTS-STARTPTS,volume=${video.timing.volume},adelay=${video.timing.startOffsetMs}:all=1[a$index]"
+            val arguments = mutableListOf("-nostdin", "-v", "error", "-framerate", "$VIDEO_EXPORT_FPS", "-i", output.resolve("%05d.png").toString())
+            val chains = mutableListOf<String>()
+            plan.clips.filter { it.audible && it.firstShownMs != null }.forEach { clip ->
+                val source = originalOf(clip.video.media)
+                if (!ffmpeg.hasAudio(source)) return@forEach
+                arguments += listOf("-i", source.toString())
+                chains += audioChain(clip, input = chains.size + 1, label = "a${chains.size}")
             }
-            if (audible.isNotEmpty()) {
-                filters += audible.indices.joinToString("") { "[a$it]" } + "amix=inputs=${audible.size}:normalize=0[mix]"
-                arguments += listOf("-filter_complex", filters.joinToString(";"), "-map", "0:v", "-map", "[mix]", "-c:a", "aac")
+            if (chains.isNotEmpty()) {
+                val mix = if (chains.size == 1) "[a0]anull[mix]" else chains.indices.joinToString("") { "[a$it]" } + "amix=inputs=${chains.size}:normalize=0[mix]"
+                arguments += listOf("-filter_complex", (chains + mix).joinToString(";"), "-map", "0:v", "-map", "[mix]", "-c:a", "aac", "-b:a", "192k")
             }
             arguments += listOf(
-                "-t", (project.pages[page].durationMs / 1000.0).toString(),
-                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", target.toString(),
+                "-t", (plan.durationMs / 1000.0).toString(),
+                "-c:v", "libx264", "-preset", preset, "-crf", "$crf", "-pix_fmt", "yuv420p", "-r", "$VIDEO_EXPORT_FPS",
+                "-movflags", "+faststart", "-y", target.toString(),
             )
             ffmpeg.run(arguments)
             return target
@@ -130,26 +152,63 @@ class DesktopCompositionExports(
         }
     }
 
+    /** A clip's frames on disk, and which one is on screen at each moment of the page. */
+    private class ClipFrames(val clip: PageVideoPlan.Layer.Clip, private val fromMs: Long, private val frames: List<Path>) {
+        private var lastIndex = -1
+        private var lastBytes: ByteArray? = null
+
+        fun at(pageMs: Long): ByteArray? {
+            var cursor = 0L
+            for (segment in clip.segments) {
+                if (pageMs < cursor + segment.durationMs) {
+                    if (segment !is PageVideoPlan.Segment.Source) return null
+                    val sourceMs = segment.fromMs + (pageMs - cursor)
+                    val index = ((sourceMs - fromMs) * VIDEO_EXPORT_FPS / 1000).toInt().coerceIn(0, frames.lastIndex)
+                    if (index != lastIndex) {
+                        lastIndex = index
+                        lastBytes = Files.readAllBytes(frames[index])
+                    }
+                    return lastBytes
+                }
+                cursor += segment.durationMs
+            }
+            return null
+        }
+    }
+
     /**
-     * The images the page needs, with the recipes already applied.
+     * One clip's sound, in page time: the trimmed part, looped as many times as the picture is, at its
+     * volume, starting when the clip first shows.
+     */
+    private fun audioChain(clip: PageVideoPlan.Layer.Clip, input: Int, label: String): String {
+        val first = clip.segments.filterIsInstance<PageVideoPlan.Segment.Source>().first()
+        val loops = clip.segments.count { it is PageVideoPlan.Segment.Source } > 1
+        return buildString {
+            append("[$input:a]atrim=start=${first.fromMs / 1000.0}:end=${first.toMs / 1000.0},asetpts=PTS-STARTPTS,aresample=$AUDIO_RATE")
+            if (loops) append(",aloop=loop=-1:size=${first.durationMs * AUDIO_RATE / 1000}")
+            append(",atrim=end=${clip.shownMs / 1000.0},asetpts=PTS-STARTPTS")
+            append(",volume=${clip.video.timing.volume}")
+            append(",adelay=${clip.firstShownMs}:all=1[$label]")
+        }
+    }
+
+    /**
+     * The still images the page needs — photos and the background — with the recipes already applied.
+     * The clips' frames come from [renderVideoPage].
      *
      * The preview makes do with the reduced version the server serves; the export always goes to the
      * original.
      */
-    private suspend fun prepare(project: CompositionProject, page: Int, side: Int, timeMs: Long, strict: Boolean): Map<String, ByteArray> {
+    private suspend fun prepare(project: CompositionProject, page: Int, side: Int, strict: Boolean): Map<String, ByteArray> {
         val prepared = mutableMapOf<String, ByteArray>()
         // The texts' fonts, ready before drawing like the media: the renderer does not suspend.
         project.elements.filterIsInstance<CompositionElement.Text>()
             .distinctBy { it.fontFamily to it.fontWeight }
             .forEach { SkiaCompositionFonts.typeface(it.fontFamily, it.fontWeight) }
 
-        suspend fun add(key: String, reference: MediaReference, recipe: EditRecipe? = null, frame: Long? = null) {
+        suspend fun add(key: String, reference: MediaReference, recipe: EditRecipe? = null) {
             try {
-                val source = if (frame != null) {
-                    val video = originalOf(reference)
-                    val still = Files.createTempFile("imago-frame-", ".png")
-                    try { ffmpeg.frame(video, frame, still); Files.readAllBytes(still) } finally { Files.deleteIfExists(still) }
-                } else if (strict || side > PREVIEW_SIDE) {
+                val source = if (strict || side > PREVIEW_SIDE) {
                     Files.readAllBytes(originalOf(reference))
                 } else {
                     download(media.previewUrl(reference.assetId), media.apiKey(reference.assetId))
@@ -173,17 +232,7 @@ class DesktopCompositionExports(
         }
 
         for (element in project.elements.filter { it.visible && (it.transform.bounds.intersectionWithPage(page) != null || page in it.repeatOnPages) }) {
-            when (element) {
-                is CompositionElement.Photo -> add(element.id, element.media, element.recipe.recipe)
-                is CompositionElement.Video -> {
-                    val elapsed = timeMs - element.timing.startOffsetMs
-                    val duration = element.timing.trimEndMs - element.timing.trimStartMs
-                    if (element.pageIndex == page && elapsed >= 0 && (element.timing.loop || elapsed < duration)) {
-                        add(element.id, element.media, frame = element.timing.trimStartMs + if (element.timing.loop) elapsed % duration else elapsed)
-                    }
-                }
-                else -> Unit
-            }
+            if (element is CompositionElement.Photo) add(element.id, element.media, element.recipe.recipe)
         }
         val background = project.pages[page].backgroundOverride ?: project.background
         if (background is CompositionBackground.Photo) add(background.media.assetId, background.media, background.recipe?.recipe)
@@ -222,8 +271,9 @@ class DesktopCompositionExports(
     }
 
     private companion object {
-        const val FPS = 30
         const val PREVIEW_SIDE = 1440
         const val PROXY_SIDE = 720
+        const val PROXY_CRF = 28
+        const val AUDIO_RATE = 48_000
     }
 }

@@ -39,6 +39,8 @@ class CompositionExportWorker(
         }.getOrElse { return Result.failure(errorData(it.toUiText(Res.string.composer_export_failed).resolveNow())) }
             ?: return Result.failure(errorData(appString(Res.string.composer_project_missing)))
         val page = inputData.getInt(KEY_PAGE_INDEX, -1).takeIf { it >= 0 }
+        val videoQuality = VideoExportQuality.entries.firstOrNull { it.name == inputData.getString(KEY_VIDEO_QUALITY) }
+            ?: VideoExportQuality.Default
         val total = if (page == null) project.pages.size else 1
         // The notification updates outside coroutines; the texts are resolved here, once.
         texts = NotificationTexts(
@@ -54,6 +56,7 @@ class CompositionExportWorker(
                 staticFormat = format,
                 pageIndex = page,
                 targetLibraryId = inputData.getString(KEY_TARGET_LIBRARY),
+                videoQuality = videoQuality,
             ) { completed, total ->
                 setProgressAsync(workDataOf(KEY_COMPLETED to completed, KEY_TOTAL to total))
                 setForegroundAsync(foregroundInfo(completed, total))
@@ -107,6 +110,7 @@ class CompositionExportWorker(
         const val KEY_FORMAT = "format"
         const val KEY_PAGE_INDEX = "page_index"
         const val KEY_TARGET_LIBRARY = "target_library"
+        const val KEY_VIDEO_QUALITY = "video_quality"
         const val KEY_COMPLETED = "completed"
         const val KEY_TOTAL = "total"
         const val KEY_URIS = "uris"

@@ -15,7 +15,6 @@ import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import eu.studio742.imago.core.composition.CompositionElement
 import eu.studio742.imago.core.composition.CompositionProject
 import eu.studio742.imago.core.data.CompositionMediaRepository
 
@@ -31,6 +30,7 @@ class CompositionProjectExporter @Inject constructor(
         staticFormat: StaticExportFormat,
         pageIndex: Int? = null,
         targetLibraryId: String? = null,
+        videoQuality: VideoExportQuality = VideoExportQuality.Default,
         onProgress: (Int, Int) -> Unit = { _, _ -> },
     ): CompositionExportResult = withContext(Dispatchers.IO) {
         val targets = pageIndex?.let { listOf(it.coerceIn(project.pages.indices)) } ?: project.pages.indices.toList()
@@ -38,8 +38,8 @@ class CompositionProjectExporter @Inject constructor(
         try {
             targets.forEachIndexed { position, index ->
                 ensureActive()
-                val hasVideo = project.elements.any { it is CompositionElement.Video && it.visible && it.pageIndex == index }
-                val file = if (hasVideo) media3.exportPage(project, index) else staticExporter.renderPageToCache(project, index, staticFormat)
+                val hasVideo = project.pageHasVideo(index)
+                val file = if (hasVideo) media3.exportPage(project, index, videoQuality) else staticExporter.renderPageToCache(project, index, staticFormat)
                 files += PreparedPage(index, file, if (hasVideo) "video/mp4" else staticFormat.mimeType)
                 onProgress(position + 1, targets.size)
             }

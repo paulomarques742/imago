@@ -15,6 +15,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -116,6 +117,8 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
@@ -202,7 +205,6 @@ import eu.studio742.imago.core.composition.CompositionPage
 import eu.studio742.imago.core.composition.CompositionProject
 import eu.studio742.imago.core.composition.FrameStyle
 import eu.studio742.imago.core.composition.MAX_BACKGROUND_BLUR
-import eu.studio742.imago.core.composition.MAX_PAGE_DURATION_MS
 import eu.studio742.imago.core.composition.NormalizedRect
 import eu.studio742.imago.core.composition.backgroundBlurDivisor
 import eu.studio742.imago.core.composition.PlacementCrop
@@ -726,11 +728,13 @@ private fun ComposerEditorScreen(
         onDismiss = { templateDialog = false },
         onSave = { name, include -> actions.saveAsTemplate(name, include); templateDialog = false },
     )
-    if (exportDialog) ExportDialog(
+    if (exportDialog && project != null) ExportDialog(
+        project = project,
+        currentPage = state.currentPage,
         onDismiss = { exportDialog = false },
-        onExport = { format, currentOnly, sendToImmich ->
+        onExport = { format, currentOnly, sendToImmich, quality ->
             exportDialog = false
-            actions.export(format, currentOnly, sendToImmich)
+            actions.export(format, currentOnly, sendToImmich, quality)
         },
     )
     if (state.isExporting) AlertDialog(
@@ -922,31 +926,129 @@ private fun BrandKitDialog(
     )
 }
 
+/**
+ * Exporting: which pages, and how each kind comes out.
+ *
+ * A page with video always comes out as MP4, so for it the choice is the quality, with the size it
+ * will have; JPEG and PNG only appear when the export has pages without video, and say that they are
+ * for those. Before, the dialog offered only JPEG and PNG whatever was on the pages.
+ */
 @Composable
-private fun ExportDialog(
+internal fun ExportDialog(
+    project: CompositionProject,
+    currentPage: Int,
     onDismiss: () -> Unit,
-    onExport: (StaticExportFormat, Boolean, String?) -> Unit,
+    onExport: (StaticExportFormat, Boolean, String?, VideoExportQuality) -> Unit,
 ) {
     var sendToImmich by remember { mutableStateOf(false) }
     var targetLibraryId by remember { mutableStateOf<String?>(null) }
+    var currentOnly by remember { mutableStateOf(false) }
+    var quality by remember { mutableStateOf(VideoExportQuality.Default) }
+    var format by remember { mutableStateOf(StaticExportFormat.JPEG) }
+    val pages = if (currentOnly) listOf(currentPage) else project.pages.indices.toList()
+    val withVideo = pages.count(project::pageHasVideo)
+    val withoutVideo = pages.size - withVideo
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.composer_export)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.composer_export_hint))
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (project.pages.size > 1) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !currentOnly,
+                            onClick = { currentOnly = false },
+                            label = { Text(stringResource(Res.string.composer_export_scope_all)) },
+                        )
+                        FilterChip(
+                            selected = currentOnly,
+                            onClick = { currentOnly = true },
+                            label = { Text(stringResource(Res.string.composer_export_scope_current)) },
+                        )
+                    }
+                }
+                if (withVideo > 0) {
+                    ExportSectionTitle(stringResource(Res.string.composer_export_video_quality))
+                    VideoExportQuality.entries.forEach { option ->
+                        val (width, height) = videoExportSize(project.format, option)
+                        // On a page no larger than 1080p, the top two have the same size and differ in
+                        // how much the encoder compresses — which is what the line then says.
+                        val sameSizeAsBelow = option.ordinal > 0 &&
+                            videoExportSize(project.format, VideoExportQuality.entries[option.ordinal - 1]) == width to height
+                        ExportOption(
+                            label = stringResource(option.label()),
+                            detail = stringResource(
+                                if (sameSizeAsBelow) Res.string.composer_video_quality_detail_finer else Res.string.composer_video_quality_detail,
+                                width,
+                                height,
+                            ),
+                            selected = quality == option,
+                        ) { quality = option }
+                    }
+                }
+                if (withoutVideo > 0) {
+                    if (withVideo > 0) ExportSectionTitle(stringResource(Res.string.composer_export_image_format))
+                    ExportOption(
+                        label = stringResource(Res.string.composer_image_format_jpeg),
+                        detail = stringResource(Res.string.composer_image_format_jpeg_detail),
+                        selected = format == StaticExportFormat.JPEG,
+                    ) { format = StaticExportFormat.JPEG }
+                    ExportOption(
+                        label = stringResource(Res.string.composer_image_format_png),
+                        detail = stringResource(Res.string.composer_image_format_png_detail),
+                        selected = format == StaticExportFormat.PNG,
+                    ) { format = StaticExportFormat.PNG }
+                }
                 TextButton(onClick = { sendToImmich = !sendToImmich }, modifier = Modifier.fillMaxWidth()) {
                     Text(if (sendToImmich) stringResource(Res.string.composer_send_to_immich_on) else stringResource(Res.string.composer_send_to_immich))
                 }
                 if (sendToImmich) eu.studio742.imago.feature.library.ExportLibrarySelector(onSelected = { targetLibraryId = it })
-                Button(enabled = !sendToImmich || targetLibraryId != null, onClick = { onExport(StaticExportFormat.JPEG, false, targetLibraryId.takeIf { sendToImmich }) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.composer_export_all_jpeg)) }
-                Button(enabled = !sendToImmich || targetLibraryId != null, onClick = { onExport(StaticExportFormat.PNG, false, targetLibraryId.takeIf { sendToImmich }) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.composer_export_all_png)) }
-                TextButton(enabled = !sendToImmich || targetLibraryId != null, onClick = { onExport(StaticExportFormat.JPEG, true, targetLibraryId.takeIf { sendToImmich }) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.composer_export_current_page)) }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            Button(enabled = !sendToImmich || targetLibraryId != null, onClick = {
+                onExport(format, currentOnly, targetLibraryId.takeIf { sendToImmich }, quality)
+            }) { Text(stringResource(Res.string.composer_export)) }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.composer_cancel)) } },
     )
+}
+
+@Composable
+private fun ExportSectionTitle(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = ImagoColors.TextSecondary,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+@Composable
+private fun ExportOption(label: String, detail: String, selected: Boolean, onSelect: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(ImagoRadii.Small))
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Column(Modifier.padding(start = 4.dp)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
+            Text(detail, style = MaterialTheme.typography.labelSmall, color = ImagoColors.TextTertiary)
+        }
+    }
+}
+
+private fun VideoExportQuality.label() = when (this) {
+    VideoExportQuality.STANDARD -> Res.string.composer_video_quality_standard
+    VideoExportQuality.HIGH -> Res.string.composer_video_quality_high
+    VideoExportQuality.MAXIMUM -> Res.string.composer_video_quality_maximum
 }
 
 /**
@@ -2351,6 +2453,11 @@ private fun SelectedInspector(
                 onDeleted(label)
             }
         }
+        // Right under the tools and outside the drawer: with a video in hand, when it plays is what one
+        // came for. Every video on the page is there, so the selected one is lined up against the rest.
+        if (chosen <= 1 && selected is CompositionElement.Video) {
+            PageVideoTimeline(state.project, selected.pageIndex, selected.id, actions, Modifier.alpha(chrome))
+        }
         if (positioning) {
             Text(
                 stringResource(Res.string.composer_mask_hint),
@@ -2406,7 +2513,7 @@ private fun SelectedInspector(
                     InspectorSlider(stringResource(Res.string.composer_thickness), selected.strokeWidth, MIN_SHAPE_STROKE..MAX_SHAPE_STROKE, 2f, actions, actions::setShapeStrokeWidth)
                 }
                 if (selected is CompositionElement.Video) {
-                    VideoTimeline(selected, state.project.pages[selected.pageIndex].durationMs, actions)
+                    VideoSoundControls(selected, actions)
                 }
             }
         }
@@ -2453,44 +2560,11 @@ private fun ElementContextMenu(
     }
 }
 
+/** A clip's sound, in the drawer: the timeline already has where it plays and whether it is heard. */
 @Composable
-private fun VideoTimeline(video: CompositionElement.Video, pageDurationMs: Long, actions: ComposerEditorViewModel) {
+private fun VideoSoundControls(video: CompositionElement.Video, actions: ComposerEditorViewModel) {
     val timing = video.timing
-    val clipLength = minOf(video.media.durationMs ?: MAX_PAGE_DURATION_MS, MAX_PAGE_DURATION_MS)
     Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)) {
-        Text(
-            stringResource(
-                Res.string.composer_clip_summary,
-                (timing.trimStartMs / 1000f).formatOne(),
-                (timing.trimEndMs / 1000f).formatOne(),
-                (timing.startOffsetMs / 1000f).formatOne(),
-                (pageDurationMs / 1000f).formatOne(),
-            ),
-            style = MaterialTheme.typography.labelSmall,
-            color = ImagoColors.TextSecondary,
-        )
-        // Both trim handles move on the same ruler, because it is a window over the same clip. With
-        // half-second buttons, trimming two seconds cost eight taps and what was being left out could
-        // not be seen.
-        TimelineRangeRow(
-            label = stringResource(Res.string.composer_trim),
-            start = timing.trimStartMs,
-            end = timing.trimEndMs,
-            limit = clipLength,
-            actions = actions,
-            onStart = { actions.adjustVideoTrimStart(it - timing.trimStartMs) },
-            onEnd = { actions.adjustVideoTrimEnd(it - timing.trimEndMs) },
-        )
-        InspectorSlider(
-            stringResource(Res.string.composer_start),
-            timing.startOffsetMs.toFloat(),
-            0f..MAX_PAGE_DURATION_MS.toFloat(),
-            0f,
-            actions,
-        ) { actions.adjustVideoOffset(it.toLong() - timing.startOffsetMs) }
-        InspectorSlider(stringResource(Res.string.composer_page), pageDurationMs.toFloat(), 1_000f..MAX_PAGE_DURATION_MS.toFloat(), 5_000f, actions) {
-            actions.adjustPageDuration(it.toLong() - pageDurationMs)
-        }
         InspectorSlider(stringResource(Res.string.composer_volume), timing.volume, 0f..1f, 1f, actions) { actions.adjustVideoVolume(it - timing.volume) }
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -2506,27 +2580,6 @@ private fun VideoTimeline(video: CompositionElement.Video, pageDurationMs: Long,
             ToolButton(stringResource(Res.string.composer_loop), Icons.Outlined.Repeat, active = timing.loop, onClick = actions::toggleVideoLoop)
         }
     }
-}
-
-/**
- * The two trim handles, one per row but on the same scale.
- *
- * A `RangeSlider` would be the right gesture, but the two handles share one `onValueChange` and the
- * ViewModel clamps each end against the other — the still handle jumped when the other passed the
- * limit. Two rulers with the same domain say the same thing without that dispute.
- */
-@Composable
-private fun TimelineRangeRow(
-    label: String,
-    start: Long,
-    end: Long,
-    limit: Long,
-    actions: ComposerEditorViewModel,
-    onStart: (Long) -> Unit,
-    onEnd: (Long) -> Unit,
-) {
-    InspectorSlider("$label ⟨", start.toFloat(), 0f..limit.toFloat(), 0f, actions) { onStart(it.toLong()) }
-    InspectorSlider("$label ⟩", end.toFloat(), 0f..limit.toFloat(), limit.toFloat(), actions) { onEnd(it.toLong()) }
 }
 
 private fun Float.formatOne(): String = String.format(java.util.Locale.getDefault(), "%.1f", this)

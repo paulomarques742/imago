@@ -64,6 +64,7 @@ class WorkManagerCompositionExports @Inject constructor(
         format: StaticExportFormat,
         pageIndex: Int?,
         targetLibraryId: String?,
+        videoQuality: VideoExportQuality,
         onProgress: (Int, Int) -> Unit,
     ): CompositionExportOutcome {
         val total = if (pageIndex != null) 1 else project.pages.size
@@ -75,6 +76,7 @@ class WorkManagerCompositionExports @Inject constructor(
                 CompositionExportWorker.KEY_FORMAT to format.name,
                 CompositionExportWorker.KEY_PAGE_INDEX to (pageIndex ?: -1),
                 CompositionExportWorker.KEY_TARGET_LIBRARY to targetLibraryId,
+                CompositionExportWorker.KEY_VIDEO_QUALITY to videoQuality.name,
             ),
         ).build()
         workManager.enqueueUniqueWork(CompositionExportWorker.uniqueName(project.id), ExistingWorkPolicy.REPLACE, request)

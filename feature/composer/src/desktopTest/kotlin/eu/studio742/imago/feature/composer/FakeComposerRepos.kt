@@ -64,6 +64,7 @@ object FakeComposerRepos {
             format: StaticExportFormat,
             pageIndex: Int?,
             targetLibraryId: String?,
+            videoQuality: VideoExportQuality,
             onProgress: (completed: Int, total: Int) -> Unit,
         ): CompositionExportOutcome = error("not used")
         override fun cancel(projectId: String) = Unit

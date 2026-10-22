@@ -27,7 +27,6 @@ import eu.studio742.imago.core.composition.CompositionTemplate
 import eu.studio742.imago.core.composition.ElementTransform
 import eu.studio742.imago.core.composition.FrameStyle
 import eu.studio742.imago.core.composition.MAX_COMPOSITION_PAGES
-import eu.studio742.imago.core.composition.MAX_PAGE_DURATION_MS
 import eu.studio742.imago.core.composition.MAX_VIDEOS_PER_PAGE
 import eu.studio742.imago.core.composition.MediaReference
 import eu.studio742.imago.core.composition.boundingBox
@@ -52,6 +51,7 @@ import eu.studio742.imago.core.composition.scaledAboutCentre
 import eu.studio742.imago.core.composition.snapCoordinate
 import eu.studio742.imago.core.composition.snapRotation
 import eu.studio742.imago.core.composition.VideoTiming
+import eu.studio742.imago.core.composition.VideoTimelineEdits
 import eu.studio742.imago.core.composition.withMedia
 import eu.studio742.imago.core.composition.canReorderPage
 import eu.studio742.imago.core.composition.crossedBoundaries
@@ -956,20 +956,50 @@ open class ComposerEditorViewModel(
         commit { project.copy(elements = project.elements.map { replacements[it.id] ?: it }) }
     }
 
-    fun adjustVideoTrimStart(deltaMs: Long) = updateSelectedVideoTiming { _, timing ->
-        // The top of the range has to stay above the bottom even in a short clip, or `coerceIn` gets the
-        // minimum above the maximum and throws.
-        timing.copy(trimStartMs = (timing.trimStartMs + deltaMs).coerceIn(0, (timing.trimEndMs - 100).coerceAtLeast(0)))
+    /**
+     * The timeline's edits. They name the clip, and not the selection, because the timeline shows every
+     * video on the page and any of them can be dragged; the one dragged becomes the selection.
+     *
+     * Values are in page time, already snapped by the timeline. The page does not grow with the clip:
+     * how long the page lasts is its own handle on the timeline, and a clip that runs past it is cut
+     * there, as in the export.
+     */
+    fun moveVideoClip(id: String, startOffsetMs: Long) =
+        updateVideoTiming(id) { _, timing -> VideoTimelineEdits.move(timing, startOffsetMs) }
+
+    fun trimVideoClipStart(id: String, pageMs: Long) =
+        updateVideoTiming(id) { _, timing -> VideoTimelineEdits.trimStart(timing, pageMs) }
+
+    fun trimVideoClipEnd(id: String, pageMs: Long) =
+        updateVideoTiming(id) { video, timing -> VideoTimelineEdits.trimEnd(timing, pageMs, video.media.durationMs) }
+
+    /** Whether a clip is heard. Turning one on takes away a solo that would keep it silent. */
+    fun setVideoAudible(id: String, audible: Boolean) {
+        val project = requireProject()
+        val video = project.elements.firstOrNull { it.id == id } as? CompositionElement.Video ?: return
+        val soloElsewhere = project.elements.any {
+            it is CompositionElement.Video && it.id != id && it.pageIndex == video.pageIndex && it.timing.solo
+        }
+        commit {
+            project.copy(elements = project.elements.map { element ->
+                when {
+                    element !is CompositionElement.Video || element.pageIndex != video.pageIndex -> element
+                    element.id == id -> element.copy(timing = element.timing.copy(
+                        muted = !audible,
+                        volume = if (audible && element.timing.volume == 0f) 1f else element.timing.volume,
+                    ))
+                    audible && soloElsewhere -> element.copy(timing = element.timing.copy(solo = false))
+                    else -> element
+                }
+            })
+        }
     }
 
-    fun adjustVideoTrimEnd(deltaMs: Long) = updateSelectedVideoTiming { video, timing ->
-        val duration = minOf(video.media.durationMs ?: MAX_PAGE_DURATION_MS, MAX_PAGE_DURATION_MS)
-        val floor = timing.trimStartMs + 100
-        timing.copy(trimEndMs = (timing.trimEndMs + deltaMs).coerceIn(floor, duration.coerceAtLeast(floor)))
-    }
-
-    fun adjustVideoOffset(deltaMs: Long) = updateSelectedVideoTiming { _, timing ->
-        timing.copy(startOffsetMs = (timing.startOffsetMs + deltaMs).coerceIn(0, MAX_PAGE_DURATION_MS))
+    fun setPageDuration(pageIndex: Int, durationMs: Long) {
+        val project = requireProject()
+        if (pageIndex !in project.pages.indices) return
+        val duration = VideoTimelineEdits.pageDuration(durationMs)
+        commit { project.copy(pages = project.pages.map { if (it.index == pageIndex) it.copy(durationMs = duration) else it }) }
     }
 
     fun adjustVideoVolume(delta: Float) = updateSelectedVideoTiming { _, timing ->
@@ -979,14 +1009,6 @@ open class ComposerEditorViewModel(
     fun toggleVideoMute() = updateSelectedVideoTiming { _, timing -> timing.copy(muted = !timing.muted) }
     fun toggleVideoSolo() = updateSelectedVideoTiming { _, timing -> timing.copy(solo = !timing.solo) }
     fun toggleVideoLoop() = updateSelectedVideoTiming { _, timing -> timing.copy(loop = !timing.loop) }
-
-    fun adjustPageDuration(deltaMs: Long) {
-        val project = requireProject()
-        val pageIndex = state.value.currentPage
-        val page = project.pages[pageIndex]
-        val duration = (page.durationMs + deltaMs).coerceIn(1_000, MAX_PAGE_DURATION_MS)
-        commit { project.copy(pages = project.pages.map { if (it.index == pageIndex) it.copy(durationMs = duration) else it }) }
-    }
 
     fun toggleLocked() = mutateSelected { it.withLocked(!it.locked) }
     fun toggleVisible() = mutateSelected { it.withVisible(!it.visible) }
@@ -1127,7 +1149,12 @@ open class ComposerEditorViewModel(
         notice(uiText(Res.string.composer_template_saved))
     }
 
-    fun export(format: StaticExportFormat, currentPageOnly: Boolean, targetLibraryId: String? = null) {
+    fun export(
+        format: StaticExportFormat,
+        currentPageOnly: Boolean,
+        targetLibraryId: String? = null,
+        videoQuality: VideoExportQuality = VideoExportQuality.Default,
+    ) {
         if (exportJob?.isActive == true) return
         val project = requireProject()
         val pageIndex = state.value.currentPage.takeIf { currentPageOnly }
@@ -1149,7 +1176,7 @@ open class ComposerEditorViewModel(
                 // Before rendering: a key without the upload permission would otherwise only show up after
                 // every page was made, as a count of failed uploads.
                 targetLibraryId?.let { mediaRepository.checkCanUpload(it) }
-                exports.export(project, format, pageIndex, targetLibraryId) { completed, total ->
+                exports.export(project, format, pageIndex, targetLibraryId, videoQuality) { completed, total ->
                     mutableState.update { it.copy(exportCompleted = completed, exportTotal = total) }
                 }
             }.onSuccess { result ->
@@ -1223,18 +1250,15 @@ open class ComposerEditorViewModel(
         mutateSelected { if (it.locked) it else it.withTransform(block(it, it.transform)) }
 
     private fun updateSelectedVideoTiming(block: (CompositionElement.Video, VideoTiming) -> VideoTiming) {
+        updateVideoTiming(state.value.selectedElementId ?: return, block)
+    }
+
+    private fun updateVideoTiming(id: String, block: (CompositionElement.Video, VideoTiming) -> VideoTiming) {
         val project = requireProject()
-        val id = state.value.selectedElementId ?: return
         val video = project.elements.firstOrNull { it.id == id } as? CompositionElement.Video ?: return
         val updated = block(video, video.timing)
-        val clipEnd = updated.startOffsetMs + (updated.trimEndMs - updated.trimStartMs)
-        val pages = project.pages.map { page ->
-            if (page.index == video.pageIndex && clipEnd > page.durationMs) page.copy(durationMs = clipEnd.coerceAtMost(MAX_PAGE_DURATION_MS)) else page
-        }
-        commit { project.copy(
-            pages = pages,
-            elements = project.elements.map { if (it.id == id) video.copy(timing = updated) else it },
-        ) }
+        if (updated == video.timing) return
+        commit { project.copy(elements = project.elements.map { if (it.id == id) video.copy(timing = updated) else it }) }
     }
 
     /**

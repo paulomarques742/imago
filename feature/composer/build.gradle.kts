@@ -53,6 +53,9 @@ kotlin {
             // Skia's native library, which in a Compose app comes with the window; desktop is Windows.
             implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.9.4.2")
             implementation(libs.kotlinx.coroutines.test)
+            // The timeline's drags and the export dialog, played as a finger would.
+            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+            implementation(compose.uiTest)
         }
         getByName("desktopMain").dependencies {
             implementation(project(":core:immich"))
