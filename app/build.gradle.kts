@@ -75,6 +75,7 @@ android {
             buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${buildSetting("SUPABASE_RELEASE_PUBLISHABLE_KEY")}\"")
             signingConfig = signingConfigs.getByName("release").takeIf { it.storeFile != null }
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
