@@ -402,6 +402,12 @@ fun EditorRoute(
                 onBrushAutoMask = viewModel::setBrushAutoMask,
                 onBrushSetting = viewModel::setBrushSetting,
                 onBrushSettingFinished = viewModel::finishBrushSetting,
+                onRangeSample = viewModel::sampleRange,
+                onRangeAddSamples = viewModel::setRangeAddsSamples,
+                onColorSampleRemove = viewModel::removeColorSample,
+                onLuminanceRange = viewModel::setLuminanceRange,
+                onRangeSetting = viewModel::setRangeSetting,
+                onRangeSettingFinished = viewModel::finishAdjustment,
             )
         },
         whiteBalanceActions = remember(viewModel) {
@@ -732,6 +738,9 @@ private fun EditorScreen(
     val paintingNow by rememberUpdatedState(state.isPainting)
     val brushRadiusPx by rememberUpdatedState(with(chromeDensity) { brushRadiusDp(state.brushTool.active.size).dp.toPx() })
     var brushFinger by remember(assetId) { mutableStateOf<Offset?>(null) }
+    // A range selected: one finger samples it — a tap a point, a drag an area, drawn while it is dragged.
+    val samplingNow by rememberUpdatedState(state.isSamplingRange)
+    var samplingArea by remember(assetId) { mutableStateOf<Pair<Offset, Offset>?>(null) }
     // The mouse over the photo, so the desktop shows where the brush would land before the click.
     var brushHover by remember(assetId) { mutableStateOf<Offset?>(null) }
     // The red lights up on touch and goes off on its own shortly after: fixed, it hid the result one is
@@ -1083,6 +1092,7 @@ private fun EditorScreen(
                                     } else {
                                         null
                                     },
+                                    samplingArea = samplingArea,
                                 )
                             }
                             if (cropMode && state.recipe != null) {
@@ -1202,6 +1212,10 @@ private fun EditorScreen(
                                             // hide the interface.
                                             var brushing = false
                                             var lastBrushPoint = down.position
+                                            // Sampling a range owns the gesture the same way: the lift
+                                            // is the sample, a point or the area dragged.
+                                            var sampling = false
+                                            val samplingStart = down.position
                                             if (activeMask != null && maskGeometry != null) {
                                                 val projection = MaskProjection(bounds(current), maskGeometry)
                                                 maskHandle = maskHandlesOf(activeMask, projection, activeComponent, maskRotateGap)?.let {
@@ -1235,6 +1249,11 @@ private fun EditorScreen(
                                                     lastBrushPoint = down.position
                                                     brushFinger = down.position
                                                     maskTouchCount++
+                                                    down.consume()
+                                                }
+                                                if (maskHandle == null && samplingNow) {
+                                                    sampling = true
+                                                    samplingArea = null
                                                     down.consume()
                                                 }
                                                 if (maskHandle != null) {
@@ -1294,6 +1313,20 @@ private fun EditorScreen(
                                                     maskActions.onBrushCancel()
                                                     brushing = false
                                                     brushFinger = null
+                                                }
+                                                if (sampling) event.changes.forEach { it.consume() }
+                                                if (pressed.size >= 2 && sampling) {
+                                                    // Two fingers move the photo: the sample they
+                                                    // interrupted is not taken.
+                                                    sampling = false
+                                                    samplingArea = null
+                                                }
+                                                if (sampling) {
+                                                    val change = event.changes.firstOrNull() ?: continue
+                                                    if ((change.position - samplingStart).getDistance() > viewConfiguration.touchSlop) {
+                                                        samplingArea = samplingStart to change.position
+                                                    }
+                                                    continue
                                                 }
                                                 if (brushing && activeMask != null && maskGeometry != null) {
                                                     val change = event.changes.firstOrNull() ?: continue
@@ -1492,6 +1525,37 @@ private fun EditorScreen(
                                             if (brushing) {
                                                 brushFinger = null
                                                 onAdjustmentFinished()
+                                            }
+                                            if (sampling && activeMask != null && maskGeometry != null) {
+                                                val projection = MaskProjection(bounds(current), maskGeometry)
+                                                val area = samplingArea
+                                                if (area == null) {
+                                                    val point = projection.toImage(samplingStart)
+                                                    if (point.x in 0f..1f && point.y in 0f..1f) {
+                                                        maskActions.onRangeSample(activeMask.id, point.x, point.y, 0f, 0f)
+                                                        maskTouchCount++
+                                                    }
+                                                } else {
+                                                    // The corners on the photo; under a rotation the area
+                                                    // read is the rectangle that holds them both.
+                                                    val first = projection.toImage(area.first)
+                                                    val second = projection.toImage(area.second)
+                                                    val left = kotlin.math.min(first.x, second.x).coerceIn(0f, 1f)
+                                                    val right = kotlin.math.max(first.x, second.x).coerceIn(0f, 1f)
+                                                    val top = kotlin.math.min(first.y, second.y).coerceIn(0f, 1f)
+                                                    val bottom = kotlin.math.max(first.y, second.y).coerceIn(0f, 1f)
+                                                    if (right > left && bottom > top) {
+                                                        maskActions.onRangeSample(
+                                                            activeMask.id,
+                                                            (left + right) / 2f,
+                                                            (top + bottom) / 2f,
+                                                            right - left,
+                                                            bottom - top,
+                                                        )
+                                                        maskTouchCount++
+                                                    }
+                                                }
+                                                samplingArea = null
                                             }
                                             if (guiding) {
                                                 guideFinger = null
@@ -2481,6 +2545,17 @@ private fun AdjustmentPanel(
                                 if (state.isPainting) {
                                     BrushToolPanel(
                                         tool = state.brushTool,
+                                        editingKey = editingKey,
+                                        onEditing = onEditing,
+                                        actions = maskActions,
+                                    )
+                                }
+                                val range = mask.components.getOrNull(state.selectedComponent)
+                                if (state.isSamplingRange && range != null) {
+                                    RangeToolPanel(
+                                        maskId = mask.id,
+                                        component = range,
+                                        addSamples = state.rangeAddsSamples,
                                         editingKey = editingKey,
                                         onEditing = onEditing,
                                         actions = maskActions,

@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -25,11 +26,13 @@ import androidx.compose.material.icons.outlined.Adjust
 import androidx.compose.material.icons.outlined.AutoFixOff
 import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Contrast
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Gradient
 import androidx.compose.material.icons.outlined.InvertColors
 import androidx.compose.material.icons.outlined.JoinInner
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -37,6 +40,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RangeSlider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -49,6 +54,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -60,12 +67,14 @@ import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.model.LocalMask
+import eu.studio742.imago.core.model.MAX_COLOR_SAMPLES
 import eu.studio742.imago.core.model.MAX_BRUSH_COMPONENTS
 import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
 import eu.studio742.imago.core.model.MAX_MASK_COMPONENTS
 import eu.studio742.imago.core.model.MaskComponent
 import eu.studio742.imago.core.model.MaskOp
 import eu.studio742.imago.core.model.MaskShape
+import eu.studio742.imago.core.render.RangeMasks
 
 /**
  * The mask actions, in a single bundle.
@@ -108,6 +117,17 @@ data class MaskActions(
     val onBrushSetting: (BrushSetting, Float) -> Unit,
     val onBrushSettingFinished: () -> Unit,
     /**
+     * A range sampled on the photo, in normalised image coordinates: a point when the last two — the
+     * area's width and height — are zero.
+     */
+    val onRangeSample: (String, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
+    /** Lightroom's Shift: samples taken from here on join the others instead of replacing them. */
+    val onRangeAddSamples: (Boolean) -> Unit = {},
+    val onColorSampleRemove: (String, Int) -> Unit = { _, _ -> },
+    val onLuminanceRange: (String, Float, Float) -> Unit = { _, _, _ -> },
+    val onRangeSetting: (String, RangeSetting, Float) -> Unit = { _, _, _ -> },
+    val onRangeSettingFinished: () -> Unit = {},
+    /**
      * The part of the photo on screen when a shape is created: only the stage knows it, and it changes
      * with every pinch, so it is asked for at the tap and not kept.
      */
@@ -126,8 +146,9 @@ internal fun MaskListPanel(
     modifier: Modifier = Modifier,
 ) {
     val canAddComponent = masks.sumOf { it.components.size } < MAX_MASK_COMPONENTS
+    // A brush and a range each take a layer of the brush texture: they share its limit.
     val canAddBrush = canAddComponent &&
-        masks.sumOf { mask -> mask.components.count { it.shape == MaskShape.BRUSH } } < MAX_BRUSH_COMPONENTS
+        masks.sumOf { mask -> mask.components.count { it.shape.usesRasterLayer } } < MAX_BRUSH_COMPONENTS
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -160,6 +181,21 @@ internal fun MaskListPanel(
                 onClick = { actions.onAdd(MaskShape.BRUSH, actions.newShapePlacement()) },
                 modifier = Modifier.weight(1f),
             )
+        }
+        // Lightroom's Range masks, on a row of their own: they select by what the photo holds.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+        ) {
+            listOf(MaskShape.LUMINANCE, MaskShape.COLOR).forEach { shape ->
+                MaskCreateButton(
+                    label = shape.label(),
+                    icon = shape.icon(),
+                    enabled = masks.size < MAX_LOCAL_MASKS && canAddBrush,
+                    onClick = { actions.onAdd(shape, actions.newShapePlacement()) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
 
         notice?.let { text ->
@@ -424,7 +460,7 @@ private fun MaskCombineButton(
                 DropdownMenuItem(
                     text = { Text(shape.label()) },
                     leadingIcon = { Icon(shape.icon(), contentDescription = null) },
-                    enabled = shape != MaskShape.BRUSH || canAddBrush,
+                    enabled = !shape.usesRasterLayer || canAddBrush,
                     onClick = {
                         open = false
                         onPick(shape)
@@ -503,12 +539,16 @@ private fun MaskShape.label(): String = when (this) {
     MaskShape.LINEAR -> stringResource(Res.string.editor_mask_linear)
     MaskShape.RADIAL -> stringResource(Res.string.editor_mask_radial)
     MaskShape.BRUSH -> stringResource(Res.string.editor_mask_brush)
+    MaskShape.LUMINANCE -> stringResource(Res.string.editor_mask_luminance)
+    MaskShape.COLOR -> stringResource(Res.string.editor_mask_color)
 }
 
 private fun MaskShape.icon(): ImageVector = when (this) {
     MaskShape.LINEAR -> Icons.Outlined.Gradient
     MaskShape.RADIAL -> Icons.Outlined.Adjust
     MaskShape.BRUSH -> Icons.Outlined.Brush
+    MaskShape.LUMINANCE -> Icons.Outlined.Contrast
+    MaskShape.COLOR -> Icons.Outlined.Palette
 }
 
 /**
@@ -589,6 +629,171 @@ internal fun BrushToolPanel(
             },
         )
     }
+}
+
+/**
+ * The selected range, on top of the mask's sliders as the brush is: how to sample it on the photo, and
+ * its settings — the samples and Refine of a Color Range, the range and Smoothness of a Luminance Range.
+ */
+@Composable
+internal fun RangeToolPanel(
+    maskId: String,
+    component: MaskComponent,
+    addSamples: Boolean,
+    editingKey: Any?,
+    onEditing: (Any?) -> Unit,
+    actions: MaskActions,
+) {
+    val headerAlpha = if (editingKey == null) 1f else 0f
+    Text(
+        text = stringResource(
+            if (component.shape == MaskShape.COLOR) Res.string.editor_range_color_hint else Res.string.editor_range_luminance_hint,
+        ),
+        style = MaterialTheme.typography.bodySmall,
+        color = ImagoColors.TextTertiary,
+        modifier = Modifier.fillMaxWidth().alpha(headerAlpha).padding(top = ImagoSpacing.Xs),
+    )
+    when (component.shape) {
+        MaskShape.COLOR -> {
+            val range = component.color ?: return
+            Row(
+                modifier = Modifier.fillMaxWidth().alpha(headerAlpha),
+                horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                range.samples.forEachIndexed { index, sample ->
+                    val description = stringResource(Res.string.editor_range_sample_remove, (index + 1).toString())
+                    // A swatch of the colour read; a tap takes it away, Lightroom's Alt-click.
+                    Box(
+                        modifier = Modifier
+                            .size(ImagoSizes.TouchTarget)
+                            .clip(RoundedCornerShape(ImagoRadii.Small))
+                            .clickable { actions.onColorSampleRemove(maskId, index) }
+                            .semantics { contentDescription = description },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(ImagoRadii.Small))
+                                .background(Color(RangeMasks.sampleArgb(sample)))
+                                .border(1.dp, ImagoColors.BorderSubtle, RoundedCornerShape(ImagoRadii.Small)),
+                        )
+                    }
+                }
+                Box(Modifier.weight(1f))
+                Text(
+                    text = stringResource(Res.string.editor_range_samples_count, range.samples.size.toString(), MAX_COLOR_SAMPLES.toString()),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ImagoColors.TextTertiary,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().alpha(headerAlpha),
+                horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val addLabel = stringResource(Res.string.editor_range_add_samples)
+                Text(
+                    text = addLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ImagoColors.TextSecondary,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = addSamples,
+                    onCheckedChange = actions.onRangeAddSamples,
+                    colors = SwitchDefaults.colors(checkedTrackColor = ImagoColors.Gold),
+                    modifier = Modifier.semantics { contentDescription = addLabel },
+                )
+            }
+            RangeSettingSlider(
+                maskId = maskId,
+                setting = RangeSetting.REFINE,
+                label = stringResource(Res.string.editor_range_refine),
+                value = range.refine,
+                editingKey = editingKey,
+                onEditing = onEditing,
+                actions = actions,
+            )
+        }
+        MaskShape.LUMINANCE -> {
+            val range = component.luminance ?: return
+            Column(modifier = Modifier.fillMaxWidth().alpha(headerAlpha)) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(Res.string.editor_range_luminance),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = ImagoColors.TextSecondary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "%.0f – %.0f".format(range.low, range.high),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = ImagoColors.TextSecondary,
+                    )
+                }
+                RangeSlider(
+                    value = range.low..range.high,
+                    onValueChange = { actions.onLuminanceRange(maskId, it.start, it.endInclusive) },
+                    onValueChangeFinished = actions.onRangeSettingFinished,
+                    valueRange = 0f..100f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = ImagoColors.Gold,
+                        activeTrackColor = ImagoColors.Gold,
+                        inactiveTrackColor = ImagoColors.BorderSubtle,
+                    ),
+                )
+                // Black to white under the slider, so the two ends read as brightnesses.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = ImagoSpacing.Sm)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Brush.horizontalGradient(listOf(Color.Black, Color.White))),
+                )
+            }
+            RangeSettingSlider(
+                maskId = maskId,
+                setting = RangeSetting.SMOOTHNESS,
+                label = stringResource(Res.string.editor_range_smoothness),
+                value = range.smoothness,
+                editingKey = editingKey,
+                onEditing = onEditing,
+                actions = actions,
+            )
+        }
+        MaskShape.LINEAR, MaskShape.RADIAL, MaskShape.BRUSH -> Unit
+    }
+}
+
+@Composable
+private fun RangeSettingSlider(
+    maskId: String,
+    setting: RangeSetting,
+    label: String,
+    value: Float,
+    editingKey: Any?,
+    onEditing: (Any?) -> Unit,
+    actions: MaskActions,
+) {
+    ImagoParameterSlider(
+        label = label,
+        value = value,
+        neutral = setting.neutral,
+        range = setting.range,
+        pointerKey = setting,
+        editingKey = editingKey,
+        onEditing = onEditing,
+        valueText = { "%.0f".format(it) },
+        onValueChange = { actions.onRangeSetting(maskId, setting, it) },
+        onValueChangeFinished = actions.onRangeSettingFinished,
+        onReset = {
+            actions.onRangeSetting(maskId, setting, setting.neutral)
+            actions.onRangeSettingFinished()
+        },
+    )
 }
 
 @Composable

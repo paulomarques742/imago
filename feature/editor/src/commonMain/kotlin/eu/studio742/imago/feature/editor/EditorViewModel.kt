@@ -65,6 +65,9 @@ import eu.studio742.imago.core.model.UPRIGHT_LEVEL
 import eu.studio742.imago.core.model.UPRIGHT_VERTICAL
 import eu.studio742.imago.core.render.LineSegment
 import eu.studio742.imago.core.render.RecipePixels
+import eu.studio742.imago.core.render.BrushReference
+import eu.studio742.imago.core.render.RangeMasks
+import eu.studio742.imago.core.model.RANGE_REFINE_DEFAULT
 import eu.studio742.imago.core.render.detectLineSegments
 import eu.studio742.imago.core.render.solveAutoUpright
 import eu.studio742.imago.core.render.toPixelBuffer
@@ -469,6 +472,8 @@ data class EditorUiState(
     val maskOverlayPinned: Boolean = false,
     /** The mask brush in the hand: Brush or Eraser, and both their settings. Remembered on the device. */
     val brushTool: BrushTool = BrushTool(),
+    /** Lightroom's Shift on a Color Range: a new sample joins the others instead of replacing them. */
+    val rangeAddsSamples: Boolean = false,
     val maskNotice: UiText? = null,
     /** An automatic Upright mode is looking for the photo's lines. */
     val isDetectingUpright: Boolean = false,
@@ -515,6 +520,10 @@ data class EditorUiState(
      */
     val renderParameters: RenderParameters
         get() = recipe?.toRenderParameters(showMask = selectedMaskId.takeIf { isMaskEditing }) ?: RenderParameters()
+
+    /** The open mask's selected shape is a range: one finger on the photo samples it. */
+    val isSamplingRange: Boolean
+        get() = isMaskEditing && selectedMask?.components?.getOrNull(selectedComponent)?.shape?.isRange == true
 
     /** The open mask's selected shape is a brush: one finger on the photo paints. */
     val isPainting: Boolean
@@ -598,6 +607,9 @@ open class EditorViewModel(
 
     /** The open photo's Auto white balance, found once: choosing Auto and applying recipes share it. */
     private var autoWhiteBalance: Pair<Bitmap, NeutralWhiteBalance?>? = null
+
+    /** The photo's colours as the range masks read them, built once per photo. */
+    private var rangeReference: Pair<Bitmap, BrushReference>? = null
     private var mirrorJob: Job? = null
     /** The recipe whose geometry is waiting to go to Immich, so leaving the photo does not lose it. */
     private var pendingMirror: EditRecipe? = null
@@ -2274,6 +2286,80 @@ open class EditorViewModel(
         editMaskGeometry(maskId, uiText(Res.string.editor_history_mask_painted)) {
             it.withBrushStrokeExtended(maskId, component, x, y)
         }
+    }
+
+    // --- ranges ---------------------------------------------------------------------------------
+
+    fun setRangeAddsSamples(on: Boolean) = mutableState.update { it.copy(rangeAddsSamples = on) }
+
+    /**
+     * A tap or a drag on the photo with a range selected: a point when [width] and [height] are zero,
+     * else the area they span around [x], [y] — all in normalised image coordinates.
+     *
+     * The colours are read from the same reference the engine paints the range from, so that what is
+     * sampled is exactly what the mask then looks for. Each sample is one history entry.
+     */
+    fun sampleRange(maskId: String, x: Float, y: Float, width: Float, height: Float) {
+        val snapshot = state.value
+        val component = snapshot.selectedComponent
+        val target = snapshot.recipe?.rangeComponent(maskId, component) ?: return
+        val bitmap = snapshot.bitmap ?: return
+        viewModelScope.launch {
+            val reference = rangeReferenceFor(bitmap)
+            if (state.value.bitmap !== bitmap) return@launch
+            val current = state.value.recipe ?: return@launch
+            val updated = if (target.shape == MaskShape.COLOR) {
+                current.withColorSample(
+                    maskId,
+                    component,
+                    RangeMasks.sampleColor(reference, x, y, width, height),
+                    add = state.value.rangeAddsSamples,
+                )
+            } else {
+                val picked = RangeMasks.sampleLuminance(
+                    reference,
+                    x,
+                    y,
+                    width,
+                    height,
+                    smoothness = target.luminance?.smoothness ?: RANGE_REFINE_DEFAULT,
+                )
+                current.withLuminanceRange(maskId, component, picked.low, picked.high)
+            }
+            commitMask(updated, uiText(Res.string.editor_history_mask_sampled), current.mask(maskId)?.name?.asUiText())
+        }
+    }
+
+    fun removeColorSample(maskId: String, index: Int) {
+        val current = state.value.recipe ?: return
+        commitMask(
+            current.withoutColorSample(maskId, state.value.selectedComponent, index),
+            uiText(Res.string.editor_history_mask_sample_removed),
+            current.mask(maskId)?.name?.asUiText(),
+        )
+    }
+
+    /** The Luminance Range's slider, dragged: one history entry per drag, closed by [finishAdjustment]. */
+    fun setLuminanceRange(maskId: String, low: Float, high: Float) {
+        val component = state.value.selectedComponent
+        editMaskGeometry(maskId, uiText(Res.string.editor_history_mask_range_changed)) {
+            it.withLuminanceRange(maskId, component, low, high)
+        }
+    }
+
+    /** Refine or Smoothness, dragged: one history entry per drag, closed by [finishAdjustment]. */
+    fun setRangeSetting(maskId: String, setting: RangeSetting, value: Float) {
+        val component = state.value.selectedComponent
+        editMaskGeometry(maskId, uiText(Res.string.editor_history_mask_range_changed)) {
+            it.withRangeSetting(maskId, component, setting, value)
+        }
+    }
+
+    private suspend fun rangeReferenceFor(bitmap: Bitmap): BrushReference {
+        rangeReference?.takeIf { it.first === bitmap }?.let { return it.second }
+        val reference = withContext(Dispatchers.Default) { BrushReference.of(bitmap.toPixelBuffer()) }
+        rangeReference = bitmap to reference
+        return reference
     }
 
     /** A second finger turns the stroke into a pinch: what it had painted goes away, as if it never started. */

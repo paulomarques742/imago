@@ -6,6 +6,8 @@ import kotlin.math.sin
 import kotlin.math.sign
 import eu.studio742.imago.core.model.LocalAdjustments
 import eu.studio742.imago.core.model.BrushStroke
+import eu.studio742.imago.core.model.ColorRange
+import eu.studio742.imago.core.model.LuminanceRange
 import eu.studio742.imago.core.model.MaskOp
 import eu.studio742.imago.core.model.MaskShape
 
@@ -111,7 +113,10 @@ data class RenderParameters(
     val needsMaskField: Boolean
         get() = masks.isNotEmpty()
 
-    /** True when a mask has a painted brush: the field is then built finer, so its edges stay sharp. */
+    /**
+     * True when a mask has a raster — a painted brush or a range: the field is then built finer, so
+     * that edges which follow the photo stay sharp.
+     */
     val hasBrushes: Boolean
         get() = masks.any { mask -> mask.components.any { it.brushIndex >= 0 } }
 
@@ -197,19 +202,38 @@ data class MaskRenderComponent(
     val feather: Float = 50f,
     val roundness: Float = 0f,
     /**
-     * A brush's layer among the render's brush rasters, or −1 for a brush with nothing painted yet —
-     * which weighs zero everywhere, and so still means something under Intersect.
+     * The layer of a brush or a range among the render's rasters, or −1 for one with nothing in it yet
+     * — a brush not painted, a Color Range not sampled — which weighs zero everywhere, and so still
+     * means something under Intersect.
      */
     val brushIndex: Int = -1,
     /** A brush's strokes, for whoever paints the raster. The field only reads [brushIndex]. */
     val strokes: List<BrushStroke> = emptyList(),
+    /** A Luminance Range's settings, for whoever paints its raster. */
+    val luminance: LuminanceRange? = null,
+    /** A Color Range's samples and Refine, for whoever paints its raster. */
+    val colorRange: ColorRange? = null,
 ) {
+    /** A brush or a range: the field reads it from a raster layer, not from maths of its own. */
+    val usesRaster: Boolean
+        get() = shape == MaskShape.BRUSH || shape.isRange
+
+    /** True when there is something to paint in its raster, and so it deserves a layer. */
+    val hasRasterContent: Boolean
+        get() = when (shape) {
+            MaskShape.BRUSH -> strokes.isNotEmpty()
+            MaskShape.LUMINANCE -> luminance != null
+            MaskShape.COLOR -> colorRange?.samples?.isNotEmpty() == true
+            MaskShape.LINEAR, MaskShape.RADIAL -> false
+        }
+
     /**
      * Shape, operation and inversion in one integer, as the field shader's `uComponentKind` reads
-     * them: shape in bits 0-1, operation in 2-3, inversion in 4.
+     * them: shape in bits 0-1, operation in 2-3, inversion in 4. Every raster travels as a brush (2):
+     * to the shader a range is one more layer to sample, so it needs no code of its own there.
      */
     val packedKind: Int
-        get() = shape.ordinal or (op.ordinal shl 2) or ((if (inverted) 1 else 0) shl 4)
+        get() = (if (usesRaster) MaskShape.BRUSH.ordinal else shape.ordinal) or (op.ordinal shl 2) or ((if (inverted) 1 else 0) shl 4)
 }
 
 /** Minimum zoom that keeps the canvas fully covered during a fine rotation. */

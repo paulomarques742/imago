@@ -119,6 +119,25 @@ class BrushReference internal constructor(val width: Int, val height: Int, priva
         out[2] = rgb[index * 3 + 2]
     }
 
+    /**
+     * The colours in Oklab — L, a and b per texel — that the range masks read. Converted once per photo
+     * and only when a range asks: three cube roots per texel are not free on a phone.
+     */
+    internal val lab: FloatArray by lazy {
+        val out = FloatArray(width * height * 3)
+        java.util.stream.IntStream.range(0, height).parallel().forEach { row ->
+            val colour = FloatArray(3)
+            for (column in 0 until width) {
+                val texel = row * width + column
+                Oklab.fromSrgb(rgb[texel * 3], rgb[texel * 3 + 1], rgb[texel * 3 + 2], colour)
+                out[texel * 3] = colour[0]
+                out[texel * 3 + 1] = colour[1]
+                out[texel * 3 + 2] = colour[2]
+            }
+        }
+        out
+    }
+
     /** The colour at a point given in texels, bilinear — what is under the brush's centre. */
     internal fun colourAt(px: Float, py: Float, out: FloatArray) {
         val sx = (px - 0.5f).coerceIn(0f, (width - 1).toFloat())
@@ -308,7 +327,10 @@ internal object BrushRasterizer {
     private val SQRT_THREE = sqrt(3f)
 }
 
-/** The rasters of a render's brush components, by the index [MaskRenderComponent.brushIndex] gives them. */
+/**
+ * The rasters of a render's brush and range components, by the index [MaskRenderComponent.brushIndex]
+ * gives them.
+ */
 class BrushRasters internal constructor(private val rasters: List<BrushRaster?>) {
     operator fun get(index: Int): BrushRaster? = rasters.getOrNull(index)
 
@@ -318,8 +340,9 @@ class BrushRasters internal constructor(private val rasters: List<BrushRaster?>)
         val NONE = BrushRasters(emptyList())
 
         /**
-         * The rasters of [parameters]' brushes, painted from scratch. [source] is the photo in image
-         * space, before crop and rotation; it is only read when a stroke has the Auto Mask on.
+         * The rasters of [parameters]' brushes and ranges, painted from scratch. [source] is the photo in
+         * image space, before crop and rotation; it is only read when a stroke has the Auto Mask on or a
+         * mask has a range.
          */
         fun of(parameters: RenderParameters, source: PixelSurface): BrushRasters {
             if (!parameters.hasBrushes) return NONE
@@ -329,15 +352,21 @@ class BrushRasters internal constructor(private val rasters: List<BrushRaster?>)
 }
 
 /**
- * Brush rasters kept between frames, painting only what changed.
+ * Brush and range rasters kept between frames, painting only what changed.
  *
  * While a stroke is being drawn every frame brings the same strokes with a few more points at the end
  * of the last one, and repainting the whole brush for that would be thousands of dabs for the five
  * that are new. Anything other than strokes added or the last one extended — an undo, a different
- * photo — paints the raster again from nothing.
+ * photo — paints the raster again from nothing. A range is painted again only when its settings change.
  */
 class BrushRasterCache {
-    private class Entry(val raster: BrushRaster, var strokes: List<BrushStroke>, var lastStrokeDabs: Int)
+    private class Entry(
+        val raster: BrushRaster,
+        var strokes: List<BrushStroke>,
+        var lastStrokeDabs: Int,
+        /** The range painted in this raster, or null when it holds strokes. */
+        var range: Any? = null,
+    )
 
     private val entries = HashMap<Int, Entry>()
     private var source: Any? = null
@@ -363,14 +392,22 @@ class BrushRasterCache {
         val brushes = parameters.masks.flatMap { it.components }.filter { it.brushIndex >= 0 }
         if (brushes.isEmpty()) return BrushRasters.NONE
         val (width, height) = brushRasterSize(imageAspect)
-        val needsReference = brushes.any { component -> component.strokes.any { it.autoMask } }
+        val needsReference = brushes.any { component -> component.shape.isRange || component.strokes.any { it.autoMask } }
         val colours = if (needsReference) reference ?: referenceOf().also { reference = it } else null
         val rasters = arrayOfNulls<BrushRaster>(brushes.maxOf { it.brushIndex } + 1)
         for (component in brushes) {
             val entry = entries[component.brushIndex]
                 ?.takeIf { it.raster.width == width && it.raster.height == height }
                 ?: Entry(BrushRaster(width, height), emptyList(), 0).also { entries[component.brushIndex] = it }
-            update(entry, component.strokes, colours)
+            if (component.shape.isRange) {
+                updateRange(entry, component, colours!!)
+            } else {
+                if (entry.range != null) {
+                    entry.range = null
+                    entry.strokes = emptyList()
+                }
+                update(entry, component.strokes, colours)
+            }
             rasters[component.brushIndex] = entry.raster
         }
         entries.keys.retainAll(brushes.map { it.brushIndex }.toSet())
@@ -395,6 +432,15 @@ class BrushRasterCache {
             for (stroke in strokes) entry.lastStrokeDabs = BrushRasterizer.paint(entry.raster, stroke, 0, reference)
         }
         entry.strokes = strokes
+    }
+
+    private fun updateRange(entry: Entry, component: MaskRenderComponent, reference: BrushReference) {
+        val range: Any? = component.luminance ?: component.colorRange
+        if (range == entry.range) return
+        RangeMasks.paint(entry.raster, component, reference)
+        entry.range = range
+        entry.strokes = emptyList()
+        entry.lastStrokeDabs = 0
     }
 
     /** The same brush, with the same points at the start: only its newest dabs are missing. */

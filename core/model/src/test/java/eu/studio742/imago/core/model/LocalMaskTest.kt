@@ -51,6 +51,36 @@ class LocalMaskTest {
     }
 
     @Test
+    fun aRecipeWithRangesRoundTrips() {
+        val original = recipe(
+            listOf(
+                LocalMask(
+                    id = "m1",
+                    components = listOf(
+                        MaskComponent(shape = MaskShape.LINEAR, linear = LinearMask(y = 0.3f)),
+                        MaskComponent(
+                            shape = MaskShape.COLOR,
+                            op = MaskOp.INTERSECT,
+                            color = ColorRange(
+                                samples = listOf(
+                                    ColorSample(x = 0.4f, y = 0.2f, l = 0.7f, a = -0.02f, b = -0.1f),
+                                    ColorSample(x = 0.6f, y = 0.1f, width = 0.1f, height = 0.05f, l = 0.8f, a = -0.01f, b = -0.08f, spread = 0.03f),
+                                ),
+                                refine = 35f,
+                            ),
+                        ),
+                        MaskComponent(shape = MaskShape.LUMINANCE, op = MaskOp.SUBTRACT, luminance = LuminanceRange(low = 80f, high = 100f, smoothness = 20f)),
+                    ),
+                    adjustments = LocalAdjustments(exposure = -0.7f),
+                ),
+            ),
+        )
+
+        assertEquals(original, json.decodeFromString<EditRecipe>(json.encodeToString(original)))
+        assertTrue(MaskShape.LUMINANCE.isRange && MaskShape.COLOR.isRange && !MaskShape.BRUSH.isRange)
+    }
+
+    @Test
     fun aRecipeWithoutMasksIsStillNeutral() {
         val decoded = json.decodeFromString<EditRecipe>(json.encodeToString(recipe()))
 

@@ -35,7 +35,7 @@ fun maxLocalMasks(processVersion: Int): Int =
 const val MAX_MASK_COMPONENTS = 32
 
 /**
- * How many brush components fit across all masks.
+ * How many brush and range components fit across all masks: they share the limit.
  *
  * Each one is a 2048-pixel weight image — a layer of a texture array on the GPU and a raster in memory
  * on export — and not a handful of uniforms like a gradient.
@@ -44,6 +44,15 @@ const val MAX_BRUSH_COMPONENTS = 8
 
 /** The process from which a mask component can be a [MaskShape.BRUSH]. */
 const val BRUSH_MASKS_PROCESS_VERSION = 16
+
+/** The process from which a mask component can be a [MaskShape.LUMINANCE] or a [MaskShape.COLOR]. */
+const val RANGE_MASKS_PROCESS_VERSION = 17
+
+/** Lightroom's limit on a Color Range: five samples, added with Shift. */
+const val MAX_COLOR_SAMPLES = 5
+
+/** The default of a Color Range's Refine, and of a Luminance Range's Smoothness. */
+const val RANGE_REFINE_DEFAULT = 50f
 
 /** The neutral [LocalMask.amount]: the adjustments as they were set. */
 const val MASK_AMOUNT_NEUTRAL = 100f
@@ -58,7 +67,21 @@ const val MASK_AMOUNT_MAX = 200f
  * it asks to be updated.
  */
 @Serializable
-enum class MaskShape { LINEAR, RADIAL, BRUSH }
+enum class MaskShape {
+    LINEAR,
+    RADIAL,
+    BRUSH,
+
+    /** Lightroom's Luminance Range: the pixels whose brightness falls in a range. */
+    LUMINANCE,
+
+    /** Lightroom's Color Range: the pixels close to the colours sampled on the photo. */
+    COLOR,
+    ;
+
+    /** A range selects by what the photo holds, not by where: it has no outline on the stage. */
+    val isRange: Boolean get() = this == LUMINANCE || this == COLOR
+}
 
 /** How a component combines with the ones before it in the same mask. */
 @Serializable
@@ -112,6 +135,8 @@ data class MaskComponent(
     val linear: LinearMask? = null,
     val radial: RadialMask? = null,
     val brush: BrushMask? = null,
+    val luminance: LuminanceRange? = null,
+    val color: ColorRange? = null,
 )
 
 /**
@@ -177,6 +202,56 @@ data class BrushStroke(
     val density: Float = 100f,
     val erase: Boolean = false,
     val autoMask: Boolean = false,
+)
+
+/**
+ * The pixels whose brightness falls between [low] and [high], from 0 (black) to 100 (white).
+ *
+ * The brightness is the perceptual lightness of the **original** photo, as the Auto Mask reads it: a
+ * selection that moved every time an exposure did would be a mask that moved under the person's feet.
+ * [smoothness] is Lightroom's: how gradual the falloff is at either end of the range, from a hard edge
+ * at 0 to the widest at 100.
+ */
+@Serializable
+data class LuminanceRange(
+    val low: Float = 0f,
+    val high: Float = 100f,
+    val smoothness: Float = RANGE_REFINE_DEFAULT,
+)
+
+/**
+ * The pixels close to the colours sampled on the photo, up to [MAX_COLOR_SAMPLES] of them.
+ *
+ * [refine] is Lightroom's Refine, from 0 to 100: how far from a sample a colour can be and still be
+ * selected.
+ */
+@Serializable
+data class ColorRange(
+    val samples: List<ColorSample> = emptyList(),
+    val refine: Float = RANGE_REFINE_DEFAULT,
+)
+
+/**
+ * One sample of a Color Range: a point tapped, or an area dragged, on the original photo.
+ *
+ * [x] and [y] are its centre and [width] and [height] its size, in normalised coordinates of the
+ * original image like every mask — zero for a point. They are kept so the stage can show where it was
+ * taken; what the render reads is the colour, stored here and not looked up again, so that the preview,
+ * which samples a reduced photo, and the export draw the same selection.
+ *
+ * [l], [a] and [b] are the sample's mean colour in Oklab, and [spread] how far the colours of an area
+ * stray from that mean — zero for a point. An area of a blue sky is a range of blues, not one.
+ */
+@Serializable
+data class ColorSample(
+    val x: Float,
+    val y: Float,
+    val width: Float = 0f,
+    val height: Float = 0f,
+    val l: Float,
+    val a: Float,
+    val b: Float,
+    val spread: Float = 0f,
 )
 
 /**

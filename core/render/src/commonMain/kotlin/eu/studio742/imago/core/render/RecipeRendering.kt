@@ -8,6 +8,8 @@ import eu.studio742.imago.core.model.LocalMask
 import eu.studio742.imago.core.model.BRUSH_MASKS_PROCESS_VERSION
 import eu.studio742.imago.core.model.COMBINED_MASKS_PROCESS_VERSION
 import eu.studio742.imago.core.model.MAX_BRUSH_COMPONENTS
+import eu.studio742.imago.core.model.MAX_COLOR_SAMPLES
+import eu.studio742.imago.core.model.RANGE_MASKS_PROCESS_VERSION
 import eu.studio742.imago.core.model.MAX_MASK_COMPONENTS
 import eu.studio742.imago.core.model.maxLocalMasks
 import eu.studio742.imago.core.model.MaskComponent
@@ -147,7 +149,7 @@ private fun List<LocalMask>.toRenderSpecs(processVersion: Int, showMask: String?
                 .take(budget)
                 .mapNotNull { component ->
                     when {
-                        component.shape != MaskShape.BRUSH || component.strokes.isEmpty() -> component
+                        !component.hasRasterContent -> component
                         brushes < MAX_BRUSH_COMPONENTS -> component.copy(brushIndex = brushes++)
                         else -> null
                     }
@@ -165,10 +167,21 @@ private fun List<LocalMask>.toRenderSpecs(processVersion: Int, showMask: String?
 }
 
 /**
- * A component without its shape's payload describes no region and is discarded, and so is a brush in
- * a recipe from before brushes existed.
+ * A component without its shape's payload describes no region and is discarded, and so is a brush or a
+ * range in a recipe from before they existed.
  */
 private fun MaskComponent.toRenderComponent(processVersion: Int): MaskRenderComponent? = when (shape) {
+    MaskShape.LUMINANCE -> luminance?.takeIf { processVersion >= RANGE_MASKS_PROCESS_VERSION }?.let {
+        MaskRenderComponent(shape = MaskShape.LUMINANCE, op = op, inverted = inverted, luminance = it)
+    }
+    MaskShape.COLOR -> color?.takeIf { processVersion >= RANGE_MASKS_PROCESS_VERSION }?.let {
+        MaskRenderComponent(
+            shape = MaskShape.COLOR,
+            op = op,
+            inverted = inverted,
+            colorRange = it.copy(samples = it.samples.take(MAX_COLOR_SAMPLES)),
+        )
+    }
     MaskShape.BRUSH -> brush?.takeIf { processVersion >= BRUSH_MASKS_PROCESS_VERSION }?.let {
         MaskRenderComponent(
             shape = MaskShape.BRUSH,

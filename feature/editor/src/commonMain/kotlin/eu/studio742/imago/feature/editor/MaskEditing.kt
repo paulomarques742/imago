@@ -3,11 +3,13 @@ package eu.studio742.imago.feature.editor
 import java.util.UUID
 import eu.studio742.imago.core.model.BrushMask
 import eu.studio742.imago.core.model.BrushStroke
+import eu.studio742.imago.core.model.ColorRange
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.MAX_BRUSH_COMPONENTS
 import eu.studio742.imago.core.model.LinearMask
 import eu.studio742.imago.core.model.LocalAdjustments
 import eu.studio742.imago.core.model.LocalMask
+import eu.studio742.imago.core.model.LuminanceRange
 import eu.studio742.imago.core.model.MASK_AMOUNT_MAX
 import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
 import eu.studio742.imago.core.model.MAX_MASK_COMPONENTS
@@ -133,13 +135,20 @@ val EditRecipe.maskComponentCount: Int
 val EditRecipe.canAddMaskComponent: Boolean
     get() = maskComponentCount < MAX_MASK_COMPONENTS
 
-/** How many brushes the recipe's masks hold, against the layers of the brush texture. */
+/**
+ * How many brushes and ranges the recipe's masks hold, against the layers of the brush texture: a range
+ * is painted into a layer of its own, as a brush is.
+ */
 val EditRecipe.brushComponentCount: Int
-    get() = masks.sumOf { mask -> mask.components.count { it.shape == MaskShape.BRUSH } }
+    get() = masks.sumOf { mask -> mask.components.count { it.shape.usesRasterLayer } }
 
-/** Whether one more component of [shape] fits: a brush also needs a layer of its own. */
+/** Whether one more component of [shape] fits: a brush or a range also needs a layer of its own. */
 fun EditRecipe.canAddMaskComponent(shape: MaskShape): Boolean =
-    canAddMaskComponent && (shape != MaskShape.BRUSH || brushComponentCount < MAX_BRUSH_COMPONENTS)
+    canAddMaskComponent && (!shape.usesRasterLayer || brushComponentCount < MAX_BRUSH_COMPONENTS)
+
+/** A brush or a range: what takes a layer of the brush texture. */
+val MaskShape.usesRasterLayer: Boolean
+    get() = this == MaskShape.BRUSH || isRange
 
 /**
  * Where a new shape goes: the centre of the part of the photo that is on screen, and that part's
@@ -186,6 +195,10 @@ internal fun newMaskComponent(
             )
         }
         MaskShape.BRUSH -> MaskComponent(shape = MaskShape.BRUSH, op = op, brush = BrushMask())
+        // A Luminance Range starts with every brightness, as Lightroom's does until the eyedropper picks;
+        // a Color Range with no sample, which selects nothing until the first tap.
+        MaskShape.LUMINANCE -> MaskComponent(shape = MaskShape.LUMINANCE, op = op, luminance = LuminanceRange())
+        MaskShape.COLOR -> MaskComponent(shape = MaskShape.COLOR, op = op, color = ColorRange())
     }
 }
 
@@ -267,7 +280,7 @@ fun EditRecipe.withDuplicatedMask(maskId: String, invert: Boolean): Pair<EditRec
     if (index < 0 || masks.size >= MAX_LOCAL_MASKS) return this to null
     val original = masks[index]
     if (maskComponentCount + original.components.size > MAX_MASK_COMPONENTS) return this to null
-    val originalBrushes = original.components.count { it.shape == MaskShape.BRUSH }
+    val originalBrushes = original.components.count { it.shape.usesRasterLayer }
     if (brushComponentCount + originalBrushes > MAX_BRUSH_COMPONENTS) return this to null
     val shape = original.components.firstOrNull()?.shape ?: MaskShape.RADIAL
     val duplicate = original.copy(
@@ -304,8 +317,9 @@ fun EditRecipe.withMaskMoved(maskId: String, deltaX: Float, deltaY: Float, compo
                     ),
                 )
             } ?: shape
-            // A painted stroke is where it was painted; moving it would be a different stroke.
-            MaskShape.BRUSH -> shape
+            // A painted stroke is where it was painted; moving it would be a different stroke. A range
+            // selects by what the photo holds, and has nowhere to move.
+            MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR -> shape
         }
     }
 
@@ -381,7 +395,7 @@ fun EditRecipe.withMaskRotation(maskId: String, degrees: Float, component: Int =
         when (shape.shape) {
             MaskShape.LINEAR -> shape.linear?.let { shape.copy(linear = it.copy(angle = normalised)) } ?: shape
             MaskShape.RADIAL -> shape.radial?.let { shape.copy(radial = it.copy(angle = normalised)) } ?: shape
-            MaskShape.BRUSH -> shape
+            MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR -> shape
         }
     }
 
@@ -433,6 +447,8 @@ fun defaultMaskName(shape: MaskShape, existing: List<LocalMask>): String {
         MaskShape.LINEAR -> "Linear"
         MaskShape.RADIAL -> "Radial"
         MaskShape.BRUSH -> "Brush"
+        MaskShape.LUMINANCE -> "Luminance"
+        MaskShape.COLOR -> "Color"
     }
     val used = existing.count { it.name.startsWith(prefix) }
     return "$prefix ${used + 1}"

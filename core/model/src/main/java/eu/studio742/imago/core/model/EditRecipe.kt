@@ -5,6 +5,10 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 17 activates range mask components (`MaskShape.LUMINANCE` and `MaskShape.COLOR`). No earlier app
+ * knows the two shapes, so none can decode such a recipe and sync skips it; the version is raised anyway,
+ * as for every new shape, so that the gate in `RecipeRendering` is checked and not assumed.
+ *
  * 16 activates brush mask components (`MaskShape.BRUSH`). An app at 15 would decode the recipe and draw
  * the brush as nothing; one at 14 or earlier cannot decode the new shape and skips the recipe in sync.
  *
@@ -50,7 +54,7 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 16
+const val CURRENT_PROCESS_VERSION = 17
 
 @Serializable
 data class EditRecipe(

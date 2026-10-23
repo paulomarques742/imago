@@ -227,8 +227,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
             for (component in mask.components) {
                 if (componentIndex >= MAX_MASK_COMPONENTS) break
                 val slot = componentIndex * 4
-                // A brush only needs its layer; the rest of its vectors are never read.
-                maskComponentA[slot] = if (component.shape == MaskShape.BRUSH) component.brushIndex.toFloat() else component.centreX
+                // A brush or a range only needs its layer; the rest of its vectors are never read.
+                maskComponentA[slot] = if (component.usesRaster) component.brushIndex.toFloat() else component.centreX
                 maskComponentA[slot + 1] = component.centreY
                 maskComponentA[slot + 2] = component.cosAngle
                 maskComponentA[slot + 3] = component.sinAngle

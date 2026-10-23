@@ -167,18 +167,20 @@ fun maskHandlesOf(component: MaskComponent, projection: MaskProjection, rotateGa
                 rotate = projection.handleAt(linear.x, linear.y, linear.angle, gapAt(linear.x, linear.y), 0f),
             )
         }
-        // A brush has no handles: it is painted, not dragged.
-        MaskShape.BRUSH -> null
+        // A brush has no handles: it is painted, not dragged. A range has none either: it is sampled.
+        MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR -> null
     }
 }
 
 /**
- * Where a component's pin goes: a gradient's centre, or the start of a brush's first stroke, which is
- * where Lightroom puts it. Null for a brush with nothing painted.
+ * Where a component's pin goes: a gradient's centre, the start of a brush's first stroke, or a Color
+ * Range's first sample, which is where Lightroom puts them. Null for a brush with nothing painted, a
+ * Color Range not sampled yet, and a Luminance Range, which keeps no place on the photo.
  */
 fun componentPin(component: MaskComponent, projection: MaskProjection): Offset? =
     maskHandlesOf(component, projection, rotateGap = 0f)?.centre
         ?: component.brush?.strokes?.firstOrNull()?.points?.takeIf { it.size >= 2 }?.let { projection.toScreen(it[0], it[1]) }
+        ?: component.color?.samples?.firstOrNull()?.let { projection.toScreen(it.x, it.y) }
 
 /**
  * The brush's circle on the photo: where the finger or the pointer is, how far the brush reaches and
@@ -221,6 +223,8 @@ fun MaskOverlay(
     geometry: FrameGeometry,
     modifier: Modifier = Modifier,
     brushCursor: BrushCursor? = null,
+    /** The two corners, in screen pixels, of the area a range is being sampled from, while it is dragged. */
+    samplingArea: Pair<Offset, Offset>? = null,
 ) {
     Canvas(modifier = modifier) {
         val projection = MaskProjection(bounds, geometry)
@@ -241,6 +245,47 @@ fun MaskOverlay(
             }
         }
         brushCursor?.let { drawBrushCursor(it) }
+        samplingArea?.let { (from, to) -> drawSamplingArea(from, to) }
+    }
+}
+
+/** The rectangle being dragged on the photo, the way Lightroom draws its sampling area. */
+private fun DrawScope.drawSamplingArea(from: Offset, to: Offset) {
+    val stroke = OUTLINE_WIDTH.toPx()
+    val topLeft = Offset(min(from.x, to.x), min(from.y, to.y))
+    val size = androidx.compose.ui.geometry.Size(kotlin.math.abs(to.x - from.x), kotlin.math.abs(to.y - from.y))
+    drawRect(Color.Black.copy(alpha = 0.5f), topLeft = topLeft - Offset(stroke, stroke), size = size.copy(width = size.width + stroke * 2, height = size.height + stroke * 2), style = Stroke(width = stroke))
+    drawRect(OUTLINE_COLOR, topLeft = topLeft, size = size, style = Stroke(width = stroke))
+}
+
+/**
+ * Where each sample of a Color Range was taken: a point's marker, or an area's rectangle, projected so
+ * that it stays on the colour it read under any crop or rotation.
+ */
+private fun DrawScope.drawColorSamples(component: MaskComponent, projection: MaskProjection, alpha: Float) {
+    val samples = component.color?.samples ?: return
+    val stroke = HANDLE_STROKE.toPx()
+    samples.forEach { sample ->
+        if (sample.width > 0f && sample.height > 0f) {
+            val halfW = sample.width / 2f
+            val halfH = sample.height / 2f
+            val corners = listOf(
+                projection.toScreen(sample.x - halfW, sample.y - halfH),
+                projection.toScreen(sample.x + halfW, sample.y - halfH),
+                projection.toScreen(sample.x + halfW, sample.y + halfH),
+                projection.toScreen(sample.x - halfW, sample.y + halfH),
+            )
+            val path = Path().apply {
+                moveTo(corners[0].x, corners[0].y)
+                corners.drop(1).forEach { lineTo(it.x, it.y) }
+                close()
+            }
+            drawPath(path, color = OUTLINE_COLOR.copy(alpha = 0.9f * alpha), style = Stroke(width = OUTLINE_WIDTH.toPx()))
+        }
+        val centre = projection.toScreen(sample.x, sample.y)
+        val radius = SAMPLE_RADIUS.toPx()
+        drawCircle(color = Color.Black.copy(alpha = 0.5f * alpha), radius = radius + stroke, center = centre)
+        drawCircle(color = OUTLINE_COLOR.copy(alpha = alpha), radius = radius, center = centre, style = Stroke(width = stroke))
     }
 }
 
@@ -298,8 +343,10 @@ private fun DrawScope.drawComponentOutline(component: MaskComponent, projection:
                 drawProjectedLine(projection, linear.x, linear.y, linear.angle, offset, lineAlpha * alpha)
             }
         }
-        // What a brush covers is shown by the red, which comes from the pipeline itself.
-        MaskShape.BRUSH -> Unit
+        // What a brush or a Luminance Range covers is shown by the red, which comes from the pipeline
+        // itself; a Color Range also shows where its samples were taken.
+        MaskShape.BRUSH, MaskShape.LUMINANCE -> Unit
+        MaskShape.COLOR -> drawColorSamples(component, projection, alpha)
     }
 }
 
@@ -414,7 +461,7 @@ fun maskAngleFrom(
 fun MaskShape.rotateHandleOffset(): Float = when (this) {
     MaskShape.RADIAL -> 180f
     MaskShape.LINEAR -> 0f
-    MaskShape.BRUSH -> 0f
+    MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR -> 0f
 }
 
 private const val ELLIPSE_STEPS = 64
@@ -432,6 +479,7 @@ private val HANDLE_RADIUS = 10.dp
 private val HANDLE_RADIUS_SECONDARY = 9.dp
 private val HANDLE_STROKE = 2.dp
 private val PIN_RADIUS = 6.dp
+private val SAMPLE_RADIUS = 7.dp
 private val OUTLINE_WIDTH = 1.5.dp
 
 /** The shapes of the mask that are not being edited: present, but behind the one that is. */
