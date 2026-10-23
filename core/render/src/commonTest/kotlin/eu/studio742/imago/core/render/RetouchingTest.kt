@@ -140,6 +140,95 @@ class RetouchingTest {
         assertTrue("dx should clear the area: $dx", abs(dx) > .06f)
     }
 
+    private fun removal(source: PixelBuffer, area: BrushStroke, seed: Long = 0L): Retouch {
+        val fill = Retouching.solveRemove(BrushReference.of(source), listOf(area), seed)
+        assertNotNull("the area should have a fill", fill)
+        return Retouch(id = "r", mode = RetouchMode.REMOVE, strokes = listOf(area), fill = fill)
+    }
+
+    /** Vertical stripes, with a bright disc on top when [blob]. */
+    private fun stripes(width: Int, height: Int, blob: Boolean) = image(width, height) { u, v, _, _ ->
+        val du = (u - .5f) * width / height
+        val dv = v - .5f
+        when {
+            blob && du * du + dv * dv < .06f * .06f -> grey(255f)
+            ((u * 24f).toInt() % 2) == 0 -> grey(30f)
+            else -> grey(170f)
+        }
+    }
+
+    @Test
+    fun `a remove fills the area with the pattern around it`() {
+        val source = stripes(600, 400, blob = true)
+        val truth = stripes(600, 400, blob = false)
+        val removed = Retouching.apply(source, listOf(removal(source, spot(.5f, .5f, .09f))))
+        var error = 0f
+        var count = 0
+        var bright = 0
+        for (y in 0 until 400) for (x in 0 until 600) {
+            val du = ((x + .5f) / 600 - .5f) * 1.5f
+            val dv = (y + .5f) / 400 - .5f
+            if (du * du + dv * dv > .06f * .06f) continue
+            error += abs(red(removed.pixels[y * 600 + x]) - red(truth.pixels[y * 600 + x]))
+            if (red(removed.pixels[y * 600 + x]) > 230) bright++
+            count++
+        }
+        // Telling the stripes apart costs 140 levels; a blurred guess would be off by about 70 everywhere.
+        assertTrue("mean error ${error / count}", error / count < 25f)
+        assertEquals("nothing of the disc should be left", 0, bright)
+    }
+
+    @Test
+    fun `a remove on a smooth photo leaves it as it was`() {
+        val source = image(600, 400) { u, v, _, _ -> grey(30f + 150f * u + 40f * v) }
+        val removed = Retouching.apply(source, listOf(removal(source, spot(.6f, .5f, .08f))))
+        var worst = 0
+        for (i in source.pixels.indices) worst = maxOf(worst, abs(red(source.pixels[i]) - red(removed.pixels[i])))
+        assertTrue("largest change $worst", worst <= 3)
+    }
+
+    @Test
+    fun `the same area and seed give the same fill, and the fill is compact`() {
+        val source = stripes(600, 400, blob = true)
+        val reference = BrushReference.of(source)
+        val area = listOf(spot(.5f, .5f, .09f))
+        val first = Retouching.solveRemove(reference, area)
+        assertEquals(first, Retouching.solveRemove(reference, area))
+        val fill = first!!
+        val cells = fill.columns * fill.rows
+        assertTrue("${fill.runs.size / 3} runs for $cells cells", fill.runs.size / 3 < cells / 2)
+        assertNotNull(fill.offsets())
+    }
+
+    @Test
+    fun `the same remove comes out the same on a preview and on the full photo`() {
+        // Soft stripes: hard ones would differ between the two sizes before any correction, by aliasing.
+        fun photo(width: Int, height: Int) = image(width, height) { u, v, _, _ ->
+            val du = (u - .5f) * width / height
+            val dv = v - .5f
+            if (du * du + dv * dv < .06f * .06f) grey(255f) else grey(100f + 70f * kotlin.math.sin(u * 75f))
+        }
+        fun downsampledDifference(small: PixelBuffer, large: PixelBuffer): Float {
+            var total = 0f
+            for (y in 0 until 200) for (x in 0 until 300) {
+                val mean = (red(large.pixels[(2 * y) * 600 + 2 * x]) + red(large.pixels[(2 * y) * 600 + 2 * x + 1]) +
+                    red(large.pixels[(2 * y + 1) * 600 + 2 * x]) + red(large.pixels[(2 * y + 1) * 600 + 2 * x + 1])) / 4f
+                total += abs(mean - red(small.pixels[y * 300 + x]))
+            }
+            return total / (300 * 200)
+        }
+        val retouch = removal(photo(300, 200), spot(.5f, .5f, .09f))
+        val before = downsampledDifference(photo(300, 200), photo(600, 400))
+        val after = downsampledDifference(Retouching.apply(photo(300, 200), listOf(retouch)), Retouching.apply(photo(600, 400), listOf(retouch)))
+        assertTrue("mean difference $after, before the remove $before", after - before < 0.5f)
+    }
+
+    @Test
+    fun `a remove without a fill draws nothing`() {
+        val source = stripes(300, 200, blob = true)
+        assertSame(source, Retouching.apply(source, listOf(Retouch(id = "r", mode = RetouchMode.REMOVE, strokes = listOf(spot(.5f, .5f, .09f))))))
+    }
+
     @Test
     fun `laplace joins two known edges with a straight line`() {
         val width = 33

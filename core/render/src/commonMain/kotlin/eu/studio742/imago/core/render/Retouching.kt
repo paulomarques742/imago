@@ -1,6 +1,7 @@
 package eu.studio742.imago.core.render
 
 import eu.studio742.imago.core.model.BrushStroke
+import eu.studio742.imago.core.model.RemoveFill
 import eu.studio742.imago.core.model.Retouch
 import eu.studio742.imago.core.model.RetouchMode
 import java.util.concurrent.CancellationException
@@ -42,7 +43,7 @@ object Retouching {
 
     /** [source] with [retouches] applied in order; [source] itself when there is nothing to apply. */
     fun apply(source: PixelBuffer, retouches: List<Retouch>): PixelBuffer {
-        val active = retouches.filter { it.opacity > 0f && it.strokes.isNotEmpty() && it.mode != RetouchMode.REMOVE }
+        val active = retouches.filter { it.opacity > 0f && it.strokes.isNotEmpty() && (it.mode != RetouchMode.REMOVE || it.fill != null) }
         if (active.isEmpty()) return source
         val image = source.copy()
         for (retouch in active) {
@@ -134,6 +135,18 @@ object Retouching {
         return bx.toFloat() / width to by.toFloat() / height
     }
 
+    /**
+     * What a new Remove fills its area with, worked out once when its stroke ends: where in the photo
+     * each part of the area takes its content from. Null when the photo has nothing to take it from —
+     * an area that covers almost all of it. A different [seed] gives a different fill of the same area.
+     *
+     * [reference] is the photo at the raster's size, as for [proposeSource].
+     */
+    fun solveRemove(reference: BrushReference, strokes: List<BrushStroke>, seed: Long = 0L): RemoveFill? {
+        val zone = Zone.of(strokes, reference.width, reference.height) ?: return null
+        return ContentFill.solve(reference, zone, seed)
+    }
+
     private fun applyOne(image: PixelBuffer, retouch: Retouch) {
         val (rasterWidth, rasterHeight) = brushRasterSize(image.width.toFloat() / image.height)
         val zone = Zone.of(retouch.strokes, rasterWidth, rasterHeight) ?: return
@@ -148,15 +161,26 @@ object Retouching {
         val x1 = right.coerceAtMost(image.width)
         val y1 = bottom.coerceAtMost(image.height)
         if (x0 >= x1 || y0 >= y1) return
-        val shiftX = retouch.sourceX * image.width
-        val shiftY = retouch.sourceY * image.height
-        // The source is read from a copy: when it overlaps the area, it must not read what this
-        // correction is already writing. The copy reaches as far as the Heal's ring, which is
-        // [MARGIN] texels past the area — several pixels each on a photo bigger than the raster.
         val ringX = ceil(MARGIN.toFloat() / rasterWidth * image.width).toInt()
         val ringY = ceil(MARGIN.toFloat() / rasterHeight * image.height).toInt()
-        val origin = Snapshot.of(image, left - ringX + shiftX, top - ringY + shiftY, right + ringX + shiftX, bottom + ringY + shiftY)
-        val membrane = if (retouch.mode == RetouchMode.HEAL) Membrane.solve(image, origin, zone, shiftX, shiftY) else null
+        val source = when (retouch.mode) {
+            RetouchMode.REMOVE -> {
+                val fill = retouch.fill ?: return
+                FilledSource.of(image, fill, rasterWidth, rasterHeight, left - ringX, top - ringY, right + ringX, bottom + ringY) ?: return
+            }
+            else -> ShiftedSource(
+                image = image,
+                shiftX = retouch.sourceX * image.width,
+                shiftY = retouch.sourceY * image.height,
+                left = left - ringX,
+                top = top - ringY,
+                right = right + ringX,
+                bottom = bottom + ringY,
+            )
+        }
+        // A Remove is blended into its surroundings like a Heal: the synthesis matches texture, not the
+        // exact light at the edge.
+        val membrane = if (retouch.mode != RetouchMode.CLONE) Membrane.solve(image, source, zone) else null
 
         IntStream.range(y0, y1).parallel().forEach { y ->
             val sample = FloatArray(4)
@@ -165,7 +189,7 @@ object Retouching {
                 val u = (x + 0.5f) / image.width
                 val weight = zone.raster.sample(u, v) * opacity
                 if (weight <= 0f) continue
-                origin.bilinear(x + 0.5f + shiftX, y + 0.5f + shiftY, sample)
+                source.at(x + 0.5f, y + 0.5f, sample)
                 if (membrane != null) membrane.add(u, v, sample)
                 val index = y * image.width + x
                 val dst = image.pixels[index]
@@ -186,7 +210,7 @@ object Retouching {
      * An area's weights on the brush raster and the texels they reach. [left] to [right] and [top] to
      * [bottom] bound every texel above zero, exclusive on the right and bottom.
      */
-    private class Zone(val raster: BrushRaster, val left: Int, val top: Int, val right: Int, val bottom: Int) {
+    internal class Zone(val raster: BrushRaster, val left: Int, val top: Int, val right: Int, val bottom: Int) {
         fun inside(x: Int, y: Int): Boolean =
             x in left until right && y in top until bottom && raster.valueAt(y * raster.width + x) > 0f
 
@@ -247,6 +271,98 @@ object Retouching {
                 }
                 if (left >= right) return null
                 return Zone(raster, left, top, right, bottom)
+            }
+        }
+    }
+
+    /**
+     * What a correction puts at each pixel of its area, before blending: RGB at a point given in the
+     * photo's pixel coordinates.
+     *
+     * It reads from a copy of the photo taken before the correction is applied: when the source overlaps
+     * the area, it must not read what this correction is already writing. The copy reaches as far as the
+     * Heal's ring, [MARGIN] texels past the area — several pixels each on a photo bigger than the raster.
+     */
+    private interface Source {
+        fun at(px: Float, py: Float, out: FloatArray)
+    }
+
+    /** Heal and Clone: the photo moved by one offset. */
+    private class ShiftedSource(
+        image: PixelBuffer,
+        private val shiftX: Float,
+        private val shiftY: Float,
+        left: Int,
+        top: Int,
+        right: Int,
+        bottom: Int,
+    ) : Source {
+        private val origin = Snapshot.of(image, left + shiftX, top + shiftY, right + shiftX, bottom + shiftY)
+
+        override fun at(px: Float, py: Float, out: FloatArray) = origin.bilinear(px + shiftX, py + shiftY, out)
+    }
+
+    /**
+     * Remove: each pixel reads the photo at the offset of its cell. Near the border with a neighbouring
+     * cell it mixes in the neighbour's, so the borders between regions copied from different places
+     * blend instead of cutting.
+     */
+    private class FilledSource(
+        private val imageWidth: Int,
+        private val imageHeight: Int,
+        private val rasterWidth: Int,
+        private val rasterHeight: Int,
+        private val fill: RemoveFill,
+        private val offsets: IntArray,
+        private val origin: Snapshot,
+    ) : Source {
+        override fun at(px: Float, py: Float, out: FloatArray) {
+            // In texels, with each cell's centre at its middle.
+            val cx = ((px / imageWidth * rasterWidth - fill.left) / fill.cell - 0.5f).coerceIn(0f, (fill.columns - 1).toFloat())
+            val cy = ((py / imageHeight * rasterHeight - fill.top) / fill.cell - 0.5f).coerceIn(0f, (fill.rows - 1).toFloat())
+            val c0 = floor(cx).toInt()
+            val r0 = floor(cy).toInt()
+            val c1 = min(c0 + 1, fill.columns - 1)
+            val r1 = min(r0 + 1, fill.rows - 1)
+            val fx = seam(cx - c0)
+            val fy = seam(cy - r0)
+            out[0] = 0f; out[1] = 0f; out[2] = 0f
+            val sample = FloatArray(3)
+            fun add(column: Int, row: Int, weight: Float) {
+                if (weight <= 0f) return
+                val cell = row * fill.columns + column
+                val dx = offsets[cell * 2].toFloat() / rasterWidth * imageWidth
+                val dy = offsets[cell * 2 + 1].toFloat() / rasterHeight * imageHeight
+                origin.bilinear(px + dx, py + dy, sample)
+                out[0] += sample[0] * weight; out[1] += sample[1] * weight; out[2] += sample[2] * weight
+            }
+            add(c0, r0, (1 - fx) * (1 - fy))
+            add(c1, r0, fx * (1 - fy))
+            add(c0, r1, (1 - fx) * fy)
+            add(c1, r1, fx * fy)
+        }
+
+        companion object {
+            /**
+             * How much of a cell the passage to its neighbour takes. Mixing two cells across the whole of
+             * them averages two textures into a blur; a narrow passage keeps each texture whole and only
+             * softens the seam.
+             */
+            private const val SEAM = 0.3f
+
+            private fun seam(t: Float): Float = ((t - 0.5f) / SEAM + 0.5f).coerceIn(0f, 1f)
+
+            fun of(image: PixelBuffer, fill: RemoveFill, rasterWidth: Int, rasterHeight: Int, left: Int, top: Int, right: Int, bottom: Int): FilledSource? {
+                val offsets = fill.offsets() ?: return null
+                var minX = 0; var maxX = 0; var minY = 0; var maxY = 0
+                for (cell in 0 until fill.columns * fill.rows) {
+                    minX = min(minX, offsets[cell * 2]); maxX = max(maxX, offsets[cell * 2])
+                    minY = min(minY, offsets[cell * 2 + 1]); maxY = max(maxY, offsets[cell * 2 + 1])
+                }
+                val scaleX = image.width.toFloat() / rasterWidth
+                val scaleY = image.height.toFloat() / rasterHeight
+                val origin = Snapshot.of(image, left + minX * scaleX, top + minY * scaleY, right + maxX * scaleX, bottom + maxY * scaleY)
+                return FilledSource(image.width, image.height, rasterWidth, rasterHeight, fill, offsets, origin)
             }
         }
     }
@@ -339,7 +455,7 @@ object Retouching {
         }
 
         companion object {
-            fun solve(image: PixelBuffer, origin: Snapshot, zone: Zone, shiftX: Float, shiftY: Float): Membrane {
+            fun solve(image: PixelBuffer, source: Source, zone: Zone): Membrane {
                 val raster = zone.raster
                 val left = max(0, zone.left - MARGIN)
                 val top = max(0, zone.top - MARGIN)
@@ -357,7 +473,7 @@ object Retouching {
                     val ty = gy + top
                     if (zone.inside(tx, ty)) continue
                     known[gy * width + gx] = true
-                    texelMean(image, origin, tx, ty, raster.width, raster.height, shiftX, shiftY, dst, src, sample)
+                    texelMean(image, source, tx, ty, raster.width, raster.height, dst, src, sample)
                     for (channel in 0 until 3) values[(gy * width + gx) * 3 + channel] = dst[channel] - src[channel]
                 }
                 Laplace.fill(width, height, known, values)
@@ -371,13 +487,11 @@ object Retouching {
              */
             private fun texelMean(
                 image: PixelBuffer,
-                origin: Snapshot,
+                source: Source,
                 tx: Int,
                 ty: Int,
                 rasterWidth: Int,
                 rasterHeight: Int,
-                shiftX: Float,
-                shiftY: Float,
                 dst: FloatArray,
                 src: FloatArray,
                 sample: FloatArray,
@@ -393,7 +507,7 @@ object Retouching {
                     val px = (tx + 0.5f) / rasterWidth * image.width
                     val py = (ty + 0.5f) / rasterHeight * image.height
                     pixelBilinear(image, px, py, dst)
-                    origin.bilinear(px + shiftX, py + shiftY, src)
+                    source.at(px, py, src)
                     return
                 }
                 var count = 0
@@ -402,7 +516,7 @@ object Retouching {
                     dst[0] += ((argb ushr 16) and 0xFF).toFloat()
                     dst[1] += ((argb ushr 8) and 0xFF).toFloat()
                     dst[2] += (argb and 0xFF).toFloat()
-                    origin.bilinear(x + 0.5f + shiftX, y + 0.5f + shiftY, sample)
+                    source.at(x + 0.5f, y + 0.5f, sample)
                     for (channel in 0 until 3) src[channel] += sample[channel]
                     count++
                 }
