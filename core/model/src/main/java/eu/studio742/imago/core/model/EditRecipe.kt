@@ -75,6 +75,7 @@ data class EditRecipe(
     val effects: Effects = Effects(),
     val geometry: Geometry = Geometry(),
     val masks: List<LocalMask> = emptyList(),
+    val retouches: List<Retouch> = emptyList(),
 )
 
 /**
