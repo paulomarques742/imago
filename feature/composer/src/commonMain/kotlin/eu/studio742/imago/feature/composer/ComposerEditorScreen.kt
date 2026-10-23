@@ -1523,8 +1523,12 @@ internal fun ComposerCanvas(
                 // `composerElementGestures` and the overlay — guarantees, and not just makes likely,
                 // that tapping inside an element or on a handle never gets here.
                 .pointerInput(drawing, positioningBackground) {
+                    // The mode check sits outside `awaitEachGesture`. Inside, the block returned without
+                    // suspending, and once the finger was up `awaitEachGesture` looped straight back
+                    // into it with nothing to wait for: a busy loop on the main thread, and the app
+                    // froze the moment the pen or the background framing touched the stage.
+                    if (drawing || positioningBackground) return@pointerInput
                     awaitEachGesture {
-                        if (drawing || positioningBackground) return@awaitEachGesture
                         awaitFirstDown(requireUnconsumed = true)
                         if (waitForUpOrCancellation() != null) actions.selectBackground()
                     }
