@@ -387,6 +387,9 @@ open class ComposerEditorViewModel(
             StrokePoint(
                 x = ((point.x - minX) / width).coerceIn(0f, 1f),
                 y = ((point.y - minY) / height).coerceIn(0f, 1f),
+                // Without it every stored stroke was back at full pressure: the stylus width showed
+                // while drawing and was lost the moment the pen lifted.
+                pressure = point.pressure,
             )
         }
         val id = UUID.randomUUID().toString()
