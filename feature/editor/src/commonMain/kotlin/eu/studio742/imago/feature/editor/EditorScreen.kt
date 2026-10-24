@@ -882,13 +882,15 @@ private fun EditorScreen(
     BackHandler(enabled = !rail && drawer != DrawerDetent.CLOSED && !chromeHidden) {
         drawer = DrawerDetent.CLOSED
     }
+    // With the interface hidden, back brings it back before it does anything else.
+    BackHandler(enabled = !rail && chromeHidden) { chromeHidden = false }
     // Declared after, so it runs first: back leaves the selector, as its cancel does, before anything else.
     BackHandler(enabled = state.isPickingWhiteBalance) { whiteBalanceActions.onCancel() }
     // The source of the recipe previews is the same bitmap as the preview, reduced once. Switching
     // photos throws away the previous ones, which no longer describe anything.
     LaunchedEffect(assetId, state.bitmap) {
         val bitmap = state.bitmap ?: return@LaunchedEffect
-        RecipePreviewCache.setSource(assetId ?: return@LaunchedEffect, bitmap)
+        RecipePreviewCache.setSource(assetId ?: return@LaunchedEffect, bitmap, state.highPrecisionSource)
     }
     // Undo, redo and compare are what is done most often while developing a photo, and on a tablet
     // with a keyboard there is no reason to fetch them from the bar every time. Backslash is the compare
@@ -1018,6 +1020,7 @@ private fun EditorScreen(
                         ) {
                             PhotoCanvas(
                                 bitmap = state.bitmap,
+                                highPrecisionSource = state.highPrecisionSource,
                                 parameters = renderParameters,
                                 showOriginal = if (cropMode) false else state.showOriginal,
                                 transform = if (cropMode) cropTransform else transform,
@@ -1218,6 +1221,14 @@ private fun EditorScreen(
                                             val samplingStart = down.position
                                             if (activeMask != null && maskGeometry != null) {
                                                 val projection = MaskProjection(bounds(current), maskGeometry)
+                                                // A touch beside the photo is not a dab or a sample, and so
+                                                // it is not claimed: it stays a plain tap, the one that
+                                                // brings the hidden interface back. Claiming every touch
+                                                // left no way to show the panel again once it was hidden.
+                                                val onPhoto = bounds(current).let { photo ->
+                                                    down.position.x in photo.left..photo.right &&
+                                                        down.position.y in photo.top..photo.bottom
+                                                }
                                                 maskHandle = maskHandlesOf(activeMask, projection, activeComponent, maskRotateGap)?.let {
                                                     hitMaskHandle(it, down.position, maskHitRadius)
                                                 }
@@ -1237,7 +1248,7 @@ private fun EditorScreen(
                                                         maskHandle = MaskHandle.MOVE
                                                     }
                                                 }
-                                                if (maskHandle == null && paintingNow) {
+                                                if (maskHandle == null && paintingNow && onPhoto) {
                                                     val start = projection.toImage(down.position)
                                                     maskActions.onBrushStart(
                                                         activeMask.id,
@@ -1251,7 +1262,7 @@ private fun EditorScreen(
                                                     maskTouchCount++
                                                     down.consume()
                                                 }
-                                                if (maskHandle == null && samplingNow) {
+                                                if (maskHandle == null && samplingNow && onPhoto) {
                                                     sampling = true
                                                     samplingArea = null
                                                     down.consume()
@@ -1874,7 +1885,11 @@ private fun EditorScreen(
                                 ToolTap.OpenLibrary -> showRecipeLibrary = true
                                 ToolTap.Close -> drawer = DrawerDetent.CLOSED
                                 is ToolTap.Open -> {
-                                    onSelectSheet(tap.sheet)
+                                    // The drawer was lowered to see the photo, and its tool is still the
+                                    // one open: raising it again must land where it was — the mask being
+                                    // adjusted, the curve — and not on the tool's first sheet.
+                                    val reopening = !rail && drawer == DrawerDetent.CLOSED && tool == openTool
+                                    if (!reopening) onSelectSheet(tap.sheet)
                                     if (drawer == DrawerDetent.CLOSED) drawer = DrawerDetent.NORMAL
                                 }
                             }
