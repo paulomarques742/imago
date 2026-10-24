@@ -231,12 +231,18 @@ class CompositionStaticExporter @Inject constructor(
         val opacity = (transform.opacity.coerceIn(0f, 1f) * 255).roundToInt()
         when (element) {
             is CompositionElement.Photo -> {
-                drawFrameShadow(canvas, rect, element.frame, opacity)
                 val radius = element.frame.cornerRadius.coerceAtLeast(0f) * min(rect.width(), rect.height())
+                // Outline and shadow are measured on a REFERENCE_PAGE_WIDTH page, like the stage.
+                val unit = canvas.width / REFERENCE_PAGE_WIDTH
+                drawFrameShadow(canvas, rect, element.frame, radius, unit, opacity)
+                // The clip is only for the photo: the outline goes around it, outside, and a clip left on
+                // would cut it.
+                val photoClip = canvas.save()
                 canvas.clipPath(Path().apply { addRoundRect(rect, radius, radius, Path.Direction.CW) })
                 val bitmap = loadBitmap(element.media, element.recipe.recipe, sources, bitmaps, decodeEdge)
                 drawCover(canvas, bitmap, rect, element.crop, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = opacity })
-                drawFrameBorder(canvas, rect, element.frame, opacity)
+                canvas.restoreToCount(photoClip)
+                drawFrameBorder(canvas, rect, element.frame, radius, unit, opacity)
             }
             is CompositionElement.Text -> {
                 // The same painter as the stage, with the same scale: a model pixel is worth a fraction
@@ -263,9 +269,12 @@ class CompositionStaticExporter @Inject constructor(
             strokeWidth = element.strokeWidth * canvas.width / REFERENCE_PAGE_WIDTH
             strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
         }
+        // The outline goes outside the shape and is gone at zero, as on the stage.
+        val outline = RectF(rect).apply { inset(-stroke.strokeWidth / 2f, -stroke.strokeWidth / 2f) }
+        val outlined = stroke.strokeWidth > 0f
         when (element.kind) {
-            ShapeKind.RECTANGLE -> { canvas.drawRect(rect, fill); canvas.drawRect(rect, stroke) }
-            ShapeKind.ELLIPSE -> { canvas.drawOval(rect, fill); canvas.drawOval(rect, stroke) }
+            ShapeKind.RECTANGLE -> { canvas.drawRect(rect, fill); if (outlined) canvas.drawRect(outline, stroke) }
+            ShapeKind.ELLIPSE -> { canvas.drawOval(rect, fill); if (outlined) canvas.drawOval(outline, stroke) }
             ShapeKind.LINE -> canvas.drawLine(rect.left, rect.centerY(), rect.right, rect.centerY(), stroke)
             ShapeKind.ARROW -> {
                 canvas.drawLine(rect.left, rect.centerY(), rect.right, rect.centerY(), stroke)
@@ -280,14 +289,15 @@ class CompositionStaticExporter @Inject constructor(
         if (element.points.size < 2 || element.kind == StrokeKind.ERASER) return
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = element.colorArgb.toInt(); alpha = if (element.kind == StrokeKind.MARKER) opacity / 2 else opacity
-            style = Paint.Style.STROKE; strokeWidth = element.strokeWidth; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
+            style = Paint.Style.STROKE; strokeWidth = element.strokeWidth * canvas.width / REFERENCE_PAGE_WIDTH; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
         }
         // The same criterion as the stage, and for the same reason: a constant-pressure stroke is drawn
         // with a single `Path`. Both sides share `hasVariablePressure` and `strokeWidthAt` on purpose —
         // it is what keeps the exported file from coming out different from what was seen.
         if (element.points.hasVariablePressure()) {
             element.points.zipWithNext { from, to ->
-                paint.strokeWidth = strokeWidthAt(element.strokeWidth, (from.pressure + to.pressure) / 2f)
+                if (to.startsStroke) return@zipWithNext
+                paint.strokeWidth = strokeWidthAt(element.strokeWidth * canvas.width / REFERENCE_PAGE_WIDTH, (from.pressure + to.pressure) / 2f)
                 canvas.drawLine(
                     rect.left + from.x * rect.width(), rect.top + from.y * rect.height(),
                     rect.left + to.x * rect.width(), rect.top + to.y * rect.height(),
@@ -298,23 +308,31 @@ class CompositionStaticExporter @Inject constructor(
         }
         val path = Path().apply {
             moveTo(rect.left + element.points.first().x * rect.width(), rect.top + element.points.first().y * rect.height())
-            element.points.drop(1).forEach { lineTo(rect.left + it.x * rect.width(), rect.top + it.y * rect.height()) }
+            element.points.drop(1).forEach { if (it.startsStroke) moveTo(rect.left + it.x * rect.width(), rect.top + it.y * rect.height()) else lineTo(rect.left + it.x * rect.width(), rect.top + it.y * rect.height()) }
         }
         canvas.drawPath(path, paint)
     }
 
-    private fun drawFrameShadow(canvas: Canvas, rect: RectF, frame: FrameStyle, opacity: Int) {
+    private fun drawFrameShadow(canvas: Canvas, rect: RectF, frame: FrameStyle, radius: Float, unit: Float, opacity: Int) {
         if (frame.shadowRadius <= 0f) return
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK; alpha = opacity / 2; maskFilter = BlurMaskFilter(frame.shadowRadius, BlurMaskFilter.Blur.NORMAL)
+            color = Color.BLACK; alpha = opacity / 2; maskFilter = BlurMaskFilter(frame.shadowRadius * unit, BlurMaskFilter.Blur.NORMAL)
         }
-        canvas.drawRoundRect(rect, frame.cornerRadius, frame.cornerRadius, paint)
+        canvas.drawRoundRect(rect, radius, radius, paint)
     }
 
-    private fun drawFrameBorder(canvas: Canvas, rect: RectF, frame: FrameStyle, opacity: Int) {
+    /** The outline is a ring around the element: from its edge outwards, never over the photo. */
+    private fun drawFrameBorder(canvas: Canvas, rect: RectF, frame: FrameStyle, radius: Float, unit: Float, opacity: Int) {
         if (frame.borderWidth <= 0f) return
-        canvas.drawRoundRect(rect, frame.cornerRadius, frame.cornerRadius, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = frame.borderArgb.toInt(); alpha = opacity; style = Paint.Style.STROKE; strokeWidth = frame.borderWidth
+        val width = frame.borderWidth * unit
+        val outer = RectF(rect.left - width, rect.top - width, rect.right + width, rect.bottom + width)
+        val ring = Path().apply {
+            fillType = Path.FillType.EVEN_ODD
+            addRoundRect(outer, radius + width, radius + width, Path.Direction.CW)
+            addRoundRect(rect, radius, radius, Path.Direction.CW)
+        }
+        canvas.drawPath(ring, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = frame.borderArgb.toInt(); alpha = opacity; style = Paint.Style.FILL
         })
     }
 

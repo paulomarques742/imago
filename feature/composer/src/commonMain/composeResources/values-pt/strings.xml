@@ -42,6 +42,9 @@
     <string name="composer_reorder_logo">Reordenar logótipo</string>
     <string name="composer_add_logos">Adicionar logótipos</string>
     <string name="composer_hex">Hexadecimal</string>
+    <string name="composer_eyedropper">Escolher uma cor da página</string>
+    <string name="composer_eyedropper_hint">Toque na página para escolher uma cor</string>
+    <string name="composer_composition_colors">Cores desta composição</string>
     <string name="composer_hue">Matiz</string>
     <string name="composer_saturation">Saturação</string>
     <string name="composer_brightness">Brilho</string>
@@ -162,6 +165,7 @@
     <string name="composer_corners">Cantos</string>
     <string name="composer_shadow">Sombra</string>
     <string name="composer_thickness">Espessura</string>
+    <string name="composer_shape_hint">Toque na página, ou arraste para desenhar a forma</string>
     <string name="composer_volume">Volume</string>
     <string name="composer_muted">Sem som</string>
     <string name="composer_sound">Som</string>
@@ -272,6 +276,7 @@
     <string name="composer_format">Formato</string>
     <string name="composer_initial_layout">Layout inicial</string>
     <string name="composer_custom">Personalizado</string>
+    <string name="composer_same_as_file">Mesmo do ficheiro</string>
     <string name="composer_width">Largura</string>
     <string name="composer_height">Altura</string>
     <string name="composer_custom_size_hint">Entre %1$s e %2$s px de lado · página actual %3$s × %4$s</string>

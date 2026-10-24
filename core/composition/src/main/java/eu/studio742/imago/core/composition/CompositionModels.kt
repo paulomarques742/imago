@@ -254,7 +254,12 @@ enum class StrokeKind { PEN, MARKER, ERASER }
  * both draw exactly as they always did.
  */
 @Serializable
-data class StrokePoint(val x: Float, val y: Float, val pressure: Float = 1f)
+data class StrokePoint(
+    val x: Float,
+    val y: Float,
+    val pressure: Float = 1f,
+    val startsStroke: Boolean = false,
+)
 
 /**
  * How much pressure can narrow a stroke.

@@ -44,17 +44,25 @@ class CompositionRenderer {
                     paint.isAntiAlias = true
                     paint.alpha = (element.transform.opacity.coerceIn(0f, 1f) * 255).roundToInt()
                     when (element) {
-                        is CompositionElement.Photo -> photo(canvas, media[element.id] ?: media[element.media.assetId], local, element.crop, element.frame, paint)
+                        is CompositionElement.Photo -> photo(canvas, media[element.id] ?: media[element.media.assetId], local, element.crop, element.frame, paint, w / REFERENCE_PAGE_WIDTH)
                         is CompositionElement.Video -> media[element.id]?.let { frame ->
-                            photo(canvas, frame, local, element.crop, element.frame, paint)
+                            photo(canvas, frame, local, element.crop, element.frame, paint, w / REFERENCE_PAGE_WIDTH)
                         }
                         is CompositionElement.MediaPlaceholder -> { paint.color = 0xFF333333.toInt(); canvas.drawRect(local, paint) }
                         is CompositionElement.Shape -> {
                             paint.color = element.fillArgb.toInt(); paint.alpha = (element.transform.opacity * ((element.fillArgb ushr 24) and 255)).toInt()
                             drawShape(canvas, element.kind, local, paint)
                             if (element.strokeWidth > 0) {
-                                paint.color = element.strokeArgb.toInt(); paint.mode = PaintMode.STROKE; paint.strokeWidth = element.strokeWidth
-                                drawShape(canvas, element.kind, local, paint)
+                                // Measured on a REFERENCE_PAGE_WIDTH page, like the stage and Android.
+                                val width = element.strokeWidth * w / REFERENCE_PAGE_WIDTH
+                                paint.color = element.strokeArgb.toInt(); paint.mode = PaintMode.STROKE; paint.strokeWidth = width
+                                // Outside the shape: the rectangle and the ellipse grow by half the stroke.
+                                val outside = if (element.kind == ShapeKind.RECTANGLE || element.kind == ShapeKind.ELLIPSE) {
+                                    Rect.makeLTRB(local.left - width / 2, local.top - width / 2, local.right + width / 2, local.bottom + width / 2)
+                                } else {
+                                    local
+                                }
+                                drawShape(canvas, element.kind, outside, paint)
                             }
                         }
                         is CompositionElement.Text -> drawText(canvas, element, local, w, paint)
@@ -63,7 +71,8 @@ class CompositionRenderer {
                             if (element.kind == StrokeKind.ERASER) paint.blendMode = BlendMode.CLEAR
                             if (element.kind == StrokeKind.MARKER) paint.alpha = (paint.alpha * .45f).toInt()
                             element.points.zipWithNext().forEach { (a, b) ->
-                                paint.strokeWidth = strokeWidthAt(element.strokeWidth, (a.pressure + b.pressure) / 2)
+                                if (b.startsStroke) return@forEach
+                                paint.strokeWidth = strokeWidthAt(element.strokeWidth * w / REFERENCE_PAGE_WIDTH, (a.pressure + b.pressure) / 2)
                                 canvas.drawLine(a.x * local.width, a.y * local.height, b.x * local.width, b.y * local.height, paint)
                             }
                         }
@@ -92,16 +101,17 @@ class CompositionRenderer {
             }
         } }
     }
-    private fun photo(canvas: Canvas, bytes: ByteArray?, rect: Rect, crop: PlacementCrop, frame: FrameStyle, paint: Paint) {
+    private fun photo(canvas: Canvas, bytes: ByteArray?, rect: Rect, crop: PlacementCrop, frame: FrameStyle, paint: Paint, unit: Float = 1f) {
         if (bytes == null) {
             // Only a preview gets here without the media: exports are strict and fail earlier. The
             // place stays marked, without text — the stage is what says what is missing.
             paint.color = 0xFF3B3633.toInt(); canvas.drawRect(rect, paint)
             return
         }
+        val radius = frame.cornerRadius.coerceAtLeast(0f) * min(rect.width, rect.height)
         Image.makeFromEncoded(bytes).use { image ->
             canvas.save()
-            canvas.clipRRect(RRect.makeXYWH(rect.left, rect.top, rect.width, rect.height, frame.cornerRadius))
+            canvas.clipRRect(RRect.makeXYWH(rect.left, rect.top, rect.width, rect.height, radius))
             val cover = max(rect.width / image.width, rect.height / image.height) * crop.scale.coerceAtLeast(1f)
             val width = image.width * cover; val height = image.height * cover
             val left = (rect.width - width) / 2 + crop.offsetX * rect.width
@@ -109,9 +119,11 @@ class CompositionRenderer {
             canvas.drawImageRect(image, Rect.makeXYWH(left, top, width, height), paint)
             canvas.restore()
         }
+        // A ring around the photo, outside it: a stroke centred half a width out from the edge.
         if (frame.borderWidth > 0) Paint().use { border ->
-            border.color = frame.borderArgb.toInt(); border.mode = PaintMode.STROKE; border.strokeWidth = frame.borderWidth
-            canvas.drawRRect(RRect.makeXYWH(rect.left, rect.top, rect.width, rect.height, frame.cornerRadius), border)
+            val width = frame.borderWidth * unit
+            border.color = frame.borderArgb.toInt(); border.mode = PaintMode.STROKE; border.strokeWidth = width
+            canvas.drawRRect(RRect.makeXYWH(rect.left - width / 2, rect.top - width / 2, rect.width + width, rect.height + width, radius + width / 2), border)
         }
     }
     private fun drawShape(canvas: Canvas, kind: ShapeKind, rect: Rect, paint: Paint) {

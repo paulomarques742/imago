@@ -100,9 +100,38 @@ fun NormalizedRect.confinedToPage(pageIndex: Int, minSize: Float = MIN_ELEMENT_S
     )
 }
 
-/** Fits the element by its type: a video lives on one page, everything else on the whole canvas. */
-fun CompositionElement.clampedBounds(bounds: NormalizedRect, pageCount: Int): NormalizedRect =
-    if (this is CompositionElement.Video) bounds.confinedToPage(pageIndex) else bounds.clampedToCanvas(pageCount)
+/** How much of a shape has to stay on the canvas when it is pushed off the edge, per dimension. */
+const val MIN_VISIBLE_SHAPE_FRACTION = .25f
+
+/**
+ * The same fit, but the rectangle may hang off the canvas — a shape cropped by the page's edge is a
+ * design choice. A quarter of each dimension stays on it, so the element is never lost past the
+ * edge with nothing left to grab. The size is limited first, like in [clampedToCanvas].
+ */
+fun NormalizedRect.clampedWithBleed(pageCount: Int, minSize: Float = MIN_ELEMENT_SIZE): NormalizedRect {
+    val pages = pageCount.coerceAtLeast(1).toFloat()
+    val safeMin = minSize.coerceIn(.001f, 1f)
+    val clampedWidth = width.orFallback(safeMin).coerceIn(safeMin, pages)
+    val clampedHeight = height.orFallback(safeMin).coerceIn(safeMin, 1f)
+    val keepX = clampedWidth * MIN_VISIBLE_SHAPE_FRACTION
+    val keepY = clampedHeight * MIN_VISIBLE_SHAPE_FRACTION
+    return NormalizedRect(
+        x = x.orFallback(0f).coerceIn(keepX - clampedWidth, pages - keepX),
+        y = y.orFallback(0f).coerceIn(keepY - clampedHeight, 1f - keepY),
+        width = clampedWidth,
+        height = clampedHeight,
+    )
+}
+
+/**
+ * Fits the element by its type: a video lives on one page, a shape may hang off the canvas, and
+ * everything else stays on it.
+ */
+fun CompositionElement.clampedBounds(bounds: NormalizedRect, pageCount: Int): NormalizedRect = when (this) {
+    is CompositionElement.Video -> bounds.confinedToPage(pageIndex)
+    is CompositionElement.Shape -> bounds.clampedWithBleed(pageCount)
+    else -> bounds.clampedToCanvas(pageCount)
+}
 
 enum class ResizeCorner { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
 

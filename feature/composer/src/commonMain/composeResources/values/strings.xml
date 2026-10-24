@@ -42,6 +42,9 @@
     <string name="composer_reorder_logo">Reorder logo</string>
     <string name="composer_add_logos">Add logos</string>
     <string name="composer_hex">Hex</string>
+    <string name="composer_eyedropper">Pick a color from the page</string>
+    <string name="composer_eyedropper_hint">Tap the page to pick a color</string>
+    <string name="composer_composition_colors">Colors in this composition</string>
     <string name="composer_hue">Hue</string>
     <string name="composer_saturation">Saturation</string>
     <string name="composer_brightness">Brightness</string>
@@ -162,6 +165,7 @@
     <string name="composer_corners">Corners</string>
     <string name="composer_shadow">Shadow</string>
     <string name="composer_thickness">Thickness</string>
+    <string name="composer_shape_hint">Tap the page, or drag to draw the shape</string>
     <string name="composer_volume">Volume</string>
     <string name="composer_muted">Muted</string>
     <string name="composer_sound">Sound</string>
@@ -272,6 +276,7 @@
     <string name="composer_format">Format</string>
     <string name="composer_initial_layout">Initial layout</string>
     <string name="composer_custom">Custom</string>
+    <string name="composer_same_as_file">Same as file</string>
     <string name="composer_width">Width</string>
     <string name="composer_height">Height</string>
     <string name="composer_custom_size_hint">Between %1$s and %2$s px per side · current page %3$s × %4$s</string>

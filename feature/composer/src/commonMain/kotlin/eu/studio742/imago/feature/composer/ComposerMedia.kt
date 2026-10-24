@@ -1,6 +1,8 @@
 package eu.studio742.imago.feature.composer
 
 import eu.studio742.imago.core.composition.InsertableMedia
+import eu.studio742.imago.core.composition.MAX_PAGE_SIDE
+import eu.studio742.imago.core.composition.PageFormat
 import eu.studio742.imago.core.composition.MediaReference
 import eu.studio742.imago.core.data.RecipeRepository
 import eu.studio742.imago.feature.library.AssetUiModel
@@ -21,6 +23,20 @@ data class ComposerMedia(
     val durationMs: Long? = null,
     val isVideo: Boolean = false,
 )
+
+/**
+ * The page that is the size of this photo, when the library knows it. A photo bigger than a page can
+ * be is scaled down to the largest one, keeping its proportions, and a tiny one is not enlarged
+ * past the smallest — the aspect ratio is what matters to the composition.
+ */
+fun ComposerMedia.fileFormat(): PageFormat? {
+    if (isVideo) return null
+    val w = width?.takeIf { it > 0 } ?: return null
+    val h = height?.takeIf { it > 0 } ?: return null
+    val largest = maxOf(w, h).toDouble()
+    val shrink = if (largest > MAX_PAGE_SIDE) MAX_PAGE_SIDE / largest else 1.0
+    return PageFormat.custom((w * shrink).toInt(), (h * shrink).toInt())
+}
 
 /** What the library shows, in the format the composition receives. */
 fun AssetUiModel.toComposerMedia() = ComposerMedia(

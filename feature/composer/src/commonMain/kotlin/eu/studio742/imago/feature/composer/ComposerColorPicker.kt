@@ -19,7 +19,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Colorize
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +58,12 @@ import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 
+/**
+ * Asks the stage for a colour: the callback gets the sampled colour, or null if it was cancelled.
+ * Null where there is no stage to sample, which hides the picker's eyedropper button.
+ */
+internal val LocalEyedropper = staticCompositionLocalOf<(((Long?) -> Unit) -> Unit)?> { null }
+
 /** The colours that always appear, beyond the brand kit's. */
 private val DefaultSwatches = listOf(
     0xFFFFFFFF, 0xFFE6E6E3, 0xFF9A9A96, 0xFF3A3A3E, 0xFF111111, 0xFF000000,
@@ -79,12 +90,17 @@ internal fun ColorPickerDialog(
     palette: List<Long>,
     onDismiss: () -> Unit,
     onConfirm: (Long) -> Unit,
+    /** The colours already on the page, offered in a row of their own. */
+    compositionColors: List<Long> = emptyList(),
 ) {
     // The hue is kept in HSV between edits, and not re-read from ARGB every time, because a black or a
     // grey has no defined hue — the conversion returns 0°. Without this memory, dragging the value to
     // the bottom and back silently swapped the chosen colour for red.
     var hsva by remember(initialArgb) { mutableStateOf(initialArgb.toHsva()) }
     var hex by remember(initialArgb) { mutableStateOf(initialArgb.toColorHex()) }
+    val eyedropper = LocalEyedropper.current
+    // The dialog stays composed — with what was typed in it — while it is out of the way for the pick.
+    var sampling by remember { mutableStateOf(false) }
     val argb = hsva.toArgb()
     val opaque = Color(hsva.copy(alpha = 1f).toArgb())
 
@@ -94,7 +110,7 @@ internal fun ColorPickerDialog(
         hex = clamped.toArgb().toColorHex()
     }
 
-    AlertDialog(
+    if (!sampling) AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
@@ -117,6 +133,17 @@ internal fun ColorPickerDialog(
                         singleLine = true,
                         modifier = Modifier.weight(1f).padding(start = ImagoSpacing.Sm),
                     )
+                    if (eyedropper != null) {
+                        IconButton(onClick = {
+                            sampling = true
+                            eyedropper { sampled ->
+                                sampling = false
+                                if (sampled != null) update(sampled.withColorAlpha(hsva.alpha).toHsva())
+                            }
+                        }) {
+                            Icon(Icons.Outlined.Colorize, stringResource(Res.string.composer_eyedropper))
+                        }
+                    }
                 }
                 ChannelSlider(
                     label = stringResource(Res.string.composer_hue),
@@ -143,28 +170,41 @@ internal fun ColorPickerDialog(
                     fraction = hsva.alpha,
                     brush = Brush.horizontalGradient(listOf(Color.Transparent, opaque)),
                 ) { update(hsva.copy(alpha = it)) }
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    (palette + DefaultSwatches).distinct().forEach { swatch ->
-                        ColorSwatch(
-                            argb = swatch,
-                            corner = ImagoRadii.Small,
-                            modifier = Modifier.size(32.dp).clickable {
-                                // The opacity one already had survives choosing a swatch: the swatches
-                                // are colours, not opacities.
-                                update(swatch.withColorAlpha(hsva.alpha).toHsva())
-                            },
-                            label = stringResource(Res.string.composer_color_n, swatch.toColorHex()),
-                        )
-                    }
+                if (compositionColors.isNotEmpty()) {
+                    Text(
+                        stringResource(Res.string.composer_composition_colors),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ImagoColors.TextSecondary,
+                    )
+                    SwatchRow(compositionColors) { swatch -> update(swatch.withColorAlpha(hsva.alpha).toHsva()) }
+                }
+                SwatchRow((palette + DefaultSwatches).distinct()) { swatch ->
+                    // The opacity one already had survives choosing a swatch: the swatches are
+                    // colours, not opacities.
+                    update(swatch.withColorAlpha(hsva.alpha).toHsva())
                 }
             }
         },
         confirmButton = { TextButton(onClick = { onConfirm(argb); onDismiss() }) { Text(stringResource(Res.string.composer_apply)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.composer_cancel)) } },
     )
+}
+
+@Composable
+private fun SwatchRow(colors: List<Long>, onPick: (Long) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        colors.forEach { swatch ->
+            ColorSwatch(
+                argb = swatch,
+                corner = ImagoRadii.Small,
+                modifier = Modifier.size(32.dp).clickable { onPick(swatch) },
+                label = stringResource(Res.string.composer_color_n, swatch.toColorHex()),
+            )
+        }
+    }
 }
 
 /**

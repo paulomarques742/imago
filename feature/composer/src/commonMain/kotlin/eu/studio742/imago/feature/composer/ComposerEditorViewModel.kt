@@ -85,7 +85,16 @@ const val MAX_FRAME_SHADOW = 48f
 const val MIN_TEXT_SIZE = 8f
 const val MAX_TEXT_SIZE = 240f
 const val DEFAULT_TEXT_SIZE = 48f
-const val MIN_SHAPE_STROKE = .5f
+/** A rectangle's or ellipse's outline can be switched off by taking it to zero. */
+const val MIN_SHAPE_STROKE = 0f
+
+/** A line or arrow *is* its stroke: at zero it would vanish. */
+const val MIN_LINE_STROKE = .5f
+
+fun ShapeKind.minStroke(): Float = if (this == ShapeKind.LINE || this == ShapeKind.ARROW) MIN_LINE_STROKE else MIN_SHAPE_STROKE
+
+/** How far the eraser reaches around the finger, as a fraction of the page's width. */
+const val ERASER_REACH = .03f
 const val MAX_SHAPE_STROKE = 40f
 /**
  * The zoom of an element's framing. It starts at 1× — below that the image stopped covering the box
@@ -364,27 +373,76 @@ open class ComposerEditorViewModel(
         selectElement(id)
     }
 
-    fun addShape(kind: ShapeKind) {
+    /**
+     * Adds a shape where the finger put it. Without [bounds] it lands in the middle of the current
+     * page, which is what the old menu items did; with them, the shape is exactly the box that was
+     * dragged out on the stage. Colours are optional so the model's defaults stay in one place.
+     */
+    fun addShape(
+        kind: ShapeKind,
+        bounds: NormalizedRect? = null,
+        rotationDegrees: Float = 0f,
+        fillArgb: Long? = null,
+        strokeArgb: Long? = null,
+        strokeWidth: Float? = null,
+    ) {
         val project = requireProject()
         val id = UUID.randomUUID().toString()
         val page = state.value.currentPage.toFloat()
-        commit { project.copy(elements = project.elements + CompositionElement.Shape(
-            id, ElementTransform(NormalizedRect(page + .25f, .3f, .5f, .35f)), nextZ(project), kind,
-        )) }
+        val placed = bounds ?: NormalizedRect(page + .25f, .3f, .5f, .35f)
+        val base = CompositionElement.Shape(
+            id, ElementTransform(placed, rotationDegrees), nextZ(project), kind,
+        )
+        val shape = base.copy(
+            fillArgb = fillArgb ?: base.fillArgb,
+            strokeArgb = strokeArgb ?: base.strokeArgb,
+            strokeWidth = strokeWidth?.coerceIn(kind.minStroke(), MAX_SHAPE_STROKE) ?: base.strokeWidth,
+        )
+        commit { project.copy(elements = project.elements + shape) }
         selectElement(id)
     }
 
-    fun addDrawing(points: List<StrokePoint>, kind: StrokeKind = StrokeKind.PEN) {
+    private var pendingDrawingId: String? = null
+    private var drawingTimeout: Job? = null
+
+    fun finishDrawingSession() {
+        drawingTimeout?.cancel()
+        drawingTimeout = null
+        pendingDrawingId = null
+    }
+
+    fun beginDrawingStroke() {
+        // A pause is measured from lifting the pen, never while a long stroke is still being drawn.
+        drawingTimeout?.cancel()
+        drawingTimeout = null
+    }
+
+    fun addDrawing(
+        points: List<StrokePoint>,
+        kind: StrokeKind = StrokeKind.PEN,
+        colorArgb: Long = 0xFFFFFFFF,
+        strokeWidth: Float = if (kind == StrokeKind.MARKER) 16f else 6f,
+    ) {
         if (points.size < 2) return
         val project = requireProject()
-        val minX = points.minOf { it.x }.coerceIn(0f, project.pages.size.toFloat())
-        val maxX = points.maxOf { it.x }.coerceIn(minX, project.pages.size.toFloat())
-        val minY = points.minOf { it.y }.coerceIn(0f, 1f)
-        val maxY = points.maxOf { it.y }.coerceIn(minY, 1f)
+        val previous = project.elements.filterIsInstance<CompositionElement.Drawing>().find {
+            it.id == pendingDrawingId && it.kind == kind && it.colorArgb == colorArgb && it.strokeWidth == strokeWidth
+        }
+        val oldPoints = previous?.let { drawing ->
+            val b = drawing.transform.bounds
+            drawing.points.map { it.copy(x = b.x + it.x * b.width, y = b.y + it.y * b.height) }
+        }.orEmpty()
+        val combined = oldPoints + points.mapIndexed { index, point ->
+            point.copy(startsStroke = index == 0)
+        }
+        val minX = combined.minOf { it.x }.coerceIn(0f, project.pages.size.toFloat())
+        val maxX = combined.maxOf { it.x }.coerceIn(minX, project.pages.size.toFloat())
+        val minY = combined.minOf { it.y }.coerceIn(0f, 1f)
+        val maxY = combined.maxOf { it.y }.coerceIn(minY, 1f)
         val width = (maxX - minX).coerceAtLeast(.001f)
         val height = (maxY - minY).coerceAtLeast(.001f)
-        val localPoints = points.map { point ->
-            StrokePoint(
+        val localPoints = combined.map { point ->
+            point.copy(
                 x = ((point.x - minX) / width).coerceIn(0f, 1f),
                 y = ((point.y - minY) / height).coerceIn(0f, 1f),
                 // Without it every stored stroke was back at full pressure: the stylus width showed
@@ -392,23 +450,30 @@ open class ComposerEditorViewModel(
                 pressure = point.pressure,
             )
         }
-        val id = UUID.randomUUID().toString()
-        commit { project.copy(elements = project.elements + CompositionElement.Drawing(
+        val id = previous?.id ?: UUID.randomUUID().toString()
+        commit { project.copy(elements = project.elements.filterNot { it.id == id } + CompositionElement.Drawing(
             id = id,
             transform = ElementTransform(NormalizedRect(minX, minY, width, height)),
-            zIndex = nextZ(project),
+            zIndex = previous?.zIndex ?: nextZ(project),
             kind = kind,
             points = localPoints,
-            colorArgb = 0xFFFFFFFF,
-            strokeWidth = if (kind == StrokeKind.MARKER) 16f else 6f,
+            colorArgb = colorArgb,
+            strokeWidth = strokeWidth,
         )) }
         selectElement(id)
+        pendingDrawingId = id
+        drawingTimeout?.cancel()
+        drawingTimeout = viewModelScope.launch {
+            delay(2_000)
+            pendingDrawingId = null
+            drawingTimeout = null
+        }
     }
 
     fun eraseDrawing(points: List<StrokePoint>) {
         if (points.isEmpty()) return
         val project = requireProject()
-        val hitRadiusSquared = .03f * .03f
+        val hitRadiusSquared = ERASER_REACH * ERASER_REACH
         val remaining = project.elements.filterNot { element ->
             element is CompositionElement.Drawing && element.points.any { point ->
                 val globalX = element.transform.bounds.x + point.x * element.transform.bounds.width
@@ -878,7 +943,7 @@ open class ComposerEditorViewModel(
 
     fun setShapeStrokeWidth(value: Float) = mutateSelected { element ->
         if (element is CompositionElement.Shape) {
-            element.copy(strokeWidth = value.coerceIn(MIN_SHAPE_STROKE, MAX_SHAPE_STROKE))
+            element.copy(strokeWidth = value.coerceIn(element.kind.minStroke(), MAX_SHAPE_STROKE))
         } else element
     }
 

@@ -29,7 +29,7 @@ import org.junit.Test
 class ComposerStageInsetsTest {
     // A real phone window: with one too small, the page hits the 220dp minimum and that minimum — and
     // not the insets — starts deciding where it ends.
-    private val width = 840
+    private val width = 1000
     private val height = 1600
     private val density = 2f
     private val pageArgb = 0xFF2B3A55
@@ -45,15 +45,20 @@ class ComposerStageInsetsTest {
     )
 
     /** The rows where the page appears, and how many of its pixels show. */
-    private fun pageRows(insets: ComposerStageInsets): Triple<Int, Int, Int> {
+    private fun pageRows(insets: ComposerStageInsets, shown: CompositionProject = project): Triple<Int, Int, Int> {
+        val (rows, _) = pageExtent(insets, shown)
+        return rows
+    }
+
+    /** Rows and columns: first, last, pixels. */
+    private fun pageExtent(insets: ComposerStageInsets, shown: CompositionProject): Pair<Triple<Int, Int, Int>, Pair<Int, Int>> {
         val scene = ImageComposeScene(width = width, height = height, density = Density(density)) {
             Box(Modifier.fillMaxSize().background(Color.Black)) {
                 ComposerCanvas(
-                    project = project,
-                    state = ComposerEditorUiState(project = project, isLoading = false),
+                    project = shown,
+                    state = ComposerEditorUiState(project = shown, isLoading = false),
                     drawing = false,
                     drawingKind = StrokeKind.PEN,
-                    onCancelDrawing = {},
                     multiSelect = false,
                     positioningBackground = false,
                     positioningMedia = false,
@@ -78,14 +83,18 @@ class ComposerStageInsetsTest {
         var first = height
         var last = -1
         var count = 0
+        var left = width
+        var right = -1
         for (y in 0 until height) for (x in 0 until width) {
             if ((bitmap.getColor(x, y) and 0xFFFFFF) == (pageArgb and 0xFFFFFF).toInt()) {
                 if (y < first) first = y
                 if (y > last) last = y
+                if (x < left) left = x
+                if (x > right) right = x
                 count++
             }
         }
-        return Triple(first, last, count)
+        return Triple(first, last, count) to (left to right)
     }
 
     @Test
@@ -109,5 +118,15 @@ class ComposerStageInsetsTest {
         // And it grows both ways: it comes to take almost the whole height of the window.
         assertTrue("it should start near the top, it starts at $first", first < 40)
         assertTrue("it should end near the bottom, it ends at $last", last > height - 40)
+    }
+
+    @Test
+    fun `a page wider than the screen opens whole, fitted to its width`() {
+        val landscape = project.copy(format = eu.studio742.imago.core.composition.PageFormat.custom(1920, 1080))
+        val (_, columns) = pageExtent(ComposerStageInsets(top = 64.dp, bottom = 200.dp), landscape)
+        val (left, right) = columns
+        // 500 dp wide window, 18 dp of margin each side: the page fills what is between them.
+        assertTrue("the page starts too far in: $left", left <= 40)
+        assertTrue("the page was cut by the screen's edge: it ends at $right", right >= width - 40 && right < width)
     }
 }

@@ -25,7 +25,7 @@ class CompositionRoundTripTest {
                 CompositionElement.Shape("shape", ElementTransform(NormalizedRect(.8f, .2f, .4f, .3f)), 1, ShapeKind.ARROW),
                 CompositionElement.Drawing(
                     "stroke", ElementTransform(NormalizedRect(0f, 0f, 2f, 1f)), 2, StrokeKind.PEN,
-                    listOf(StrokePoint(0f, 0f), StrokePoint(1f, 1f)), 0xFFFFFFFF, 4f,
+                    listOf(StrokePoint(0f, 0f), StrokePoint(.2f, .2f), StrokePoint(.8f, .8f, startsStroke = true), StrokePoint(1f, 1f)), 0xFFFFFFFF, 4f,
                 ),
             ),
             createdAt = now,

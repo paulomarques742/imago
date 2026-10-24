@@ -74,9 +74,15 @@ import eu.studio742.imago.core.designsystem.ImagoSpacing
 internal fun NewCompositionDialog(
     onDismiss: () -> Unit,
     onCreate: (PageFormat, BuiltInLayout) -> Unit,
+    /**
+     * The size of the one photo being put in, when there is exactly one. It adds the "same as the
+     * file" choice, and opens on it: a composition made from a photo most often wants its page.
+     */
+    fileFormat: PageFormat? = null,
 ) {
-    var format by remember { mutableStateOf(PageFormat.Default) }
-    var tab by remember { mutableStateOf(FormatTab.SOCIAL) }
+    var format by remember { mutableStateOf(fileFormat ?: PageFormat.Default) }
+    var tab by remember { mutableStateOf(if (fileFormat != null) FormatTab.FILE else FormatTab.SOCIAL) }
+    val tabs = remember(fileFormat) { FormatTab.entries.filter { it != FormatTab.FILE || fileFormat != null } }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             color = ImagoColors.Surface,
@@ -106,17 +112,25 @@ internal fun NewCompositionDialog(
                 // next — and "Custom" is a family like the others, so the custom size is not hidden at
                 // the end of the list.
                 ImagoChipRow(
-                    options = FormatTab.entries,
+                    options = tabs,
                     selected = tab,
                     label = { stringResource(it.label) },
                     onSelect = { chosen ->
                         tab = chosen
                         chosen.category?.let { format = PageFormatPreset.of(it).first().format }
+                        if (chosen == FormatTab.FILE && fileFormat != null) format = fileFormat
                     },
                     contentPadding = ImagoSpacing.Xl,
                 )
                 val category = tab.category
-                if (category != null) {
+                if (tab == FormatTab.FILE) {
+                    Text(
+                        text = "${format.pixelWidth} × ${format.pixelHeight} px",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ImagoColors.TextTertiary,
+                        modifier = Modifier.padding(horizontal = ImagoSpacing.Xl, vertical = ImagoSpacing.Sm),
+                    )
+                } else if (category != null) {
                     ImagoChipRow(
                         options = PageFormatPreset.of(category),
                         selected = PageFormatPreset.matching(format) ?: PageFormatPreset.of(category).first(),
@@ -184,6 +198,7 @@ internal fun NewCompositionDialog(
  * arranges the presets, and "Custom" is not a preset — it is the absence of one.
  */
 private enum class FormatTab(val label: StringResource, val category: PageFormatCategory?) {
+    FILE(Res.string.composer_same_as_file, null),
     SOCIAL(PageFormatCategory.SOCIAL.labelRes(), PageFormatCategory.SOCIAL),
     PHOTO(PageFormatCategory.PHOTO.labelRes(), PageFormatCategory.PHOTO),
     EDITORIAL(PageFormatCategory.EDITORIAL.labelRes(), PageFormatCategory.EDITORIAL),

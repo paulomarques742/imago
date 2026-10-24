@@ -133,6 +133,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.Slider
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -148,6 +151,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -155,6 +159,14 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
@@ -174,6 +186,7 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import coil3.compose.LocalPlatformContext
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -209,6 +222,7 @@ import eu.studio742.imago.core.composition.NormalizedRect
 import eu.studio742.imago.core.composition.backgroundBlurDivisor
 import eu.studio742.imago.core.composition.PlacementCrop
 import eu.studio742.imago.core.composition.ShapeKind
+import eu.studio742.imago.core.composition.usedColors
 import eu.studio742.imago.core.composition.StrokeKind
 import eu.studio742.imago.core.composition.StrokePoint
 import eu.studio742.imago.core.composition.hasVariablePressure
@@ -285,15 +299,42 @@ fun ComposerEditorRoute(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Owns the eyedropper request and hands it to every colour picker below through [LocalEyedropper]:
+ * the pickers sit in dialogs and inspectors all over the screen, and none of them can reach the
+ * stage by itself.
+ */
 @Composable
-private fun ComposerEditorScreen(
+internal fun ComposerEditorScreen(
     state: ComposerEditorUiState,
     snackbar: SnackbarHostState,
     onBack: () -> Unit,
     actions: ComposerEditorViewModel,
     editingPhotoId: String?,
     onEditPhotoId: (String?) -> Unit,
+) {
+    var request by remember { mutableStateOf<((Long?) -> Unit)?>(null) }
+    val requestEyedropper: (((Long?) -> Unit)) -> Unit = remember { { callback -> request = callback } }
+    CompositionLocalProvider(LocalEyedropper provides requestEyedropper) {
+        ComposerEditorScreenBody(
+            state, snackbar, onBack, actions, editingPhotoId, onEditPhotoId,
+            eyedropperActive = request != null,
+            onEyedropperResult = { color -> request?.invoke(color); request = null },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ComposerEditorScreenBody(
+    state: ComposerEditorUiState,
+    snackbar: SnackbarHostState,
+    onBack: () -> Unit,
+    actions: ComposerEditorViewModel,
+    editingPhotoId: String?,
+    onEditPhotoId: (String?) -> Unit,
+    eyedropperActive: Boolean,
+    onEyedropperResult: (Long?) -> Unit,
 ) {
     // With room, the composer stops stacking everything at the bottom of the screen: the structure
     // goes to the left, the properties to the right and the stage keeps the middle. It is the only
@@ -308,6 +349,46 @@ private fun ComposerEditorScreen(
     // hand the finger back to a canvas that changed under it.
     var drawing by remember { mutableStateOf(false) }
     var drawingKind by remember { mutableStateOf(StrokeKind.PEN) }
+    var drawingColor by rememberSaveable { mutableLongStateOf(0xFFFFFFFF) }
+    var drawingWidth by rememberSaveable { mutableStateOf(6f) }
+    var choosingDrawingColor by remember { mutableStateOf(false) }
+    // Shapes work like drawing: choosing one arms the stage, and the shape is born where the finger
+    // taps or drags. It is a mode of its own, in `remember` for the same reason as `drawing`.
+    var shapeKind by remember { mutableStateOf<ShapeKind?>(null) }
+    var shapeFill by rememberSaveable { mutableLongStateOf(0xFFFFFFFF) }
+    var shapeStroke by rememberSaveable { mutableLongStateOf(0xFFFFFFFF) }
+    // A rectangle's outline starts off; a line's thickness is the line, and starts visible.
+    var shapeOutlineWidth by rememberSaveable { mutableStateOf(0f) }
+    var shapeLineWidth by rememberSaveable { mutableStateOf(4f) }
+    // Which of the two colours the picker is choosing: null for none, true for the fill.
+    var choosingShapeFill by remember { mutableStateOf<Boolean?>(null) }
+    var shapeOptionsOpen by remember { mutableStateOf(false) }
+    // The mode bubble can be dragged, to draw where it would otherwise sit.
+    var bubbleOffset by remember { mutableStateOf(Offset.Zero) }
+    var bubbleSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var stageBoxSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    LaunchedEffect(drawing, drawingKind, drawingColor, drawingWidth, state.currentPage, state.project?.id) { actions.finishDrawingSession() }
+    DisposableEffect(actions) { onDispose { actions.finishDrawingSession() } }
+    choosingShapeFill?.let { forFill ->
+        ColorPickerDialog(
+            title = stringResource(if (forFill) Res.string.composer_shape_fill else Res.string.composer_shape_outline),
+            initialArgb = if (forFill) shapeFill else shapeStroke,
+            palette = state.brandKit?.paletteArgb.orEmpty(),
+            compositionColors = state.project?.usedColors().orEmpty(),
+            onDismiss = { choosingShapeFill = null },
+            onConfirm = { if (forFill) shapeFill = it else shapeStroke = it; choosingShapeFill = null },
+        )
+    }
+    if (choosingDrawingColor) {
+        ColorPickerDialog(
+            title = stringResource(Res.string.composer_stroke_color),
+            initialArgb = drawingColor,
+            palette = state.brandKit?.paletteArgb.orEmpty(),
+            compositionColors = state.project?.usedColors().orEmpty(),
+            onDismiss = { choosingDrawingColor = false },
+            onConfirm = { drawingColor = it; choosingDrawingColor = false },
+        )
+    }
     var positioningBackground by remember { mutableStateOf(false) }
     // The twin of the one above, on the elements' side: framing the photo inside the mask its sizing
     // gave it.
@@ -359,9 +440,22 @@ private fun ComposerEditorScreen(
     )
     // Entering drawing mode is always the same pair of states; written by hand on each button, it was
     // a line where missing `positioningBackground = false` left two gestures armed.
+    val stopDrawing = {
+        actions.finishDrawingSession()
+        drawing = false
+        shapeKind = null
+    }
     val startDrawing: (StrokeKind) -> Unit = { kind ->
         drawingKind = kind
         drawing = true
+        shapeKind = null
+        positioningBackground = false
+        positioningMedia = false
+    }
+    val startShape: (ShapeKind) -> Unit = { kind ->
+        actions.finishDrawingSession()
+        drawing = false
+        shapeKind = kind
         positioningBackground = false
         positioningMedia = false
     }
@@ -369,11 +463,11 @@ private fun ComposerEditorScreen(
     // and both want the same finger on the same stage.
     val toggleBackgroundPositioning = {
         positioningBackground = !positioningBackground
-        if (positioningBackground) { drawing = false; positioningMedia = false }
+        if (positioningBackground) { drawing = false; shapeKind = null; positioningMedia = false }
     }
     val toggleMediaPositioning = {
         positioningMedia = !positioningMedia
-        if (positioningMedia) { drawing = false; positioningBackground = false }
+        if (positioningMedia) { drawing = false; shapeKind = null; positioningBackground = false }
     }
     var templateDialog by rememberSaveable { mutableStateOf(false) }
     var textDialog by rememberSaveable { mutableStateOf(false) }
@@ -459,13 +553,14 @@ private fun ComposerEditorScreen(
                 //
                 // It fades, and does not shrink: taking it out of place would change the stage's
                 // height mid-gesture, and the page would run away from the finger dragging it.
-                TopAppBar(
-                    modifier = Modifier.alpha(chromeAlpha).onSizeChanged { measured ->
+                Column(Modifier.alpha(chromeAlpha).onSizeChanged { measured ->
                         val height = with(chromeDensity) { measured.height.toDp() }
                         if (height > 0.dp && height != measuredChrome.top) {
                             measuredChrome = measuredChrome.copy(top = height)
                         }
                     },
+                ) {
+                TopAppBar(
                     windowInsets = WindowInsets.statusBars,
                     title = {
                         Text(
@@ -491,7 +586,7 @@ private fun ComposerEditorScreen(
                         IconButton(onClick = actions::redo, enabled = state.canRedo) {
                             Icon(Icons.AutoMirrored.Outlined.Redo, stringResource(Res.string.composer_redo))
                         }
-                        IconButton(onClick = { templateDialog = true }) {
+                        IconButton(onClick = { stopDrawing(); templateDialog = true }) {
                             Icon(Icons.Outlined.Save, stringResource(Res.string.composer_save_as_template))
                         }
                     },
@@ -502,6 +597,7 @@ private fun ComposerEditorScreen(
                         actionIconContentColor = ImagoColors.TextPrimary,
                     ),
                 )
+                }
             },
             bottomBar = {
                 ComposerPanelSurface(
@@ -513,7 +609,7 @@ private fun ComposerEditorScreen(
             ) {
                     // With the column mounted, the inspector lives there; here it would say the same
                     // thing twice and steal height from the stage.
-                    if (!inspectorRail) {
+                    if (!inspectorRail && !drawing && shapeKind == null) {
                         ComposerInspector(
                             state = state,
                             actions = actions,
@@ -550,18 +646,19 @@ private fun ComposerEditorScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         ToolButton(stringResource(Res.string.composer_media), Icons.Outlined.Image) {
+                            stopDrawing()
                             mediaPicker = MediaPickerTarget.Element(
                                 project?.elements?.firstOrNull { it.id == state.selectedElementId }
                                     ?.takeIf { it is CompositionElement.Photo || it is CompositionElement.Video || it is CompositionElement.MediaPlaceholder }
                                     ?.id,
                             )
                         }
-                        ToolButton(stringResource(Res.string.composer_text), Icons.Outlined.TextFields, onClick = { actions.addText(textPlaceholder) })
-                        ToolMenuButton(stringResource(Res.string.composer_shape), Icons.Outlined.Rectangle) { dismiss ->
-                            ToolMenuItem(stringResource(Res.string.composer_rectangle), Icons.Outlined.Rectangle, dismiss) { actions.addShape(ShapeKind.RECTANGLE) }
-                            ToolMenuItem(stringResource(Res.string.composer_circle), Icons.Outlined.Circle, dismiss) { actions.addShape(ShapeKind.ELLIPSE) }
-                            ToolMenuItem(stringResource(Res.string.composer_arrow), Icons.AutoMirrored.Outlined.ArrowForward, dismiss) { actions.addShape(ShapeKind.ARROW) }
-                            ToolMenuItem(stringResource(Res.string.composer_line), Icons.Outlined.Remove, dismiss) { actions.addShape(ShapeKind.LINE) }
+                        ToolButton(stringResource(Res.string.composer_text), Icons.Outlined.TextFields, onClick = { stopDrawing(); actions.addText(textPlaceholder) })
+                        ToolMenuButton(stringResource(Res.string.composer_shape), Icons.Outlined.Rectangle, onOpen = stopDrawing) { dismiss ->
+                            ToolMenuItem(stringResource(Res.string.composer_rectangle), Icons.Outlined.Rectangle, dismiss) { startShape(ShapeKind.RECTANGLE) }
+                            ToolMenuItem(stringResource(Res.string.composer_circle), Icons.Outlined.Circle, dismiss) { startShape(ShapeKind.ELLIPSE) }
+                            ToolMenuItem(stringResource(Res.string.composer_arrow), Icons.AutoMirrored.Outlined.ArrowForward, dismiss) { startShape(ShapeKind.ARROW) }
+                            ToolMenuItem(stringResource(Res.string.composer_line), Icons.Outlined.Remove, dismiss) { startShape(ShapeKind.LINE) }
                         }
                         ToolMenuButton(stringResource(Res.string.composer_drawing), Icons.Outlined.Brush) { dismiss ->
                             ToolMenuItem(stringResource(Res.string.composer_pen), Icons.Outlined.Brush, dismiss) { startDrawing(StrokeKind.PEN) }
@@ -570,16 +667,16 @@ private fun ComposerEditorScreen(
                         }
                         ToolGroupDivider()
                         // Only when the layers are not in view in a column of their own.
-                        if (!layersRail) ToolButton(stringResource(Res.string.composer_layers), Icons.Outlined.Layers) { layersSheet = true }
-                        ToolButton(stringResource(Res.string.composer_pages), Icons.Outlined.GridView, active = pageTools) { pageTools = !pageTools }
-                        ToolButton(stringResource(Res.string.composer_background), Icons.Outlined.Wallpaper, active = state.backgroundSelected, onClick = actions::selectBackground)
-                        ToolButton(stringResource(Res.string.composer_brand), Icons.Outlined.Palette) { brandKitDialog = true }
+                        if (!layersRail) ToolButton(stringResource(Res.string.composer_layers), Icons.Outlined.Layers) { stopDrawing(); layersSheet = true }
+                        ToolButton(stringResource(Res.string.composer_pages), Icons.Outlined.GridView, active = pageTools) { stopDrawing(); pageTools = !pageTools }
+                        ToolButton(stringResource(Res.string.composer_background), Icons.Outlined.Wallpaper, active = state.backgroundSelected, onClick = { stopDrawing(); actions.selectBackground() })
+                        ToolButton(stringResource(Res.string.composer_brand), Icons.Outlined.Palette) { stopDrawing(); brandKitDialog = true }
                         // Since Android 10 saving to the gallery through MediaStore asks for no
                         // permission, and `minSdk` is 31 — the WRITE_EXTERNAL_STORAGE request that was
                         // here was always skipped.
-                        ToolButton(stringResource(Res.string.composer_export), Icons.Outlined.Download) { exportDialog = true }
+                        ToolButton(stringResource(Res.string.composer_export), Icons.Outlined.Download) { stopDrawing(); exportDialog = true }
                         if (project?.elements?.any { it is CompositionElement.Video && it.visible && it.pageIndex == state.currentPage } == true) {
-                            ToolButton(stringResource(Res.string.composer_preview), Icons.Outlined.PlayArrow, onClick = actions::previewCurrentPage)
+                            ToolButton(stringResource(Res.string.composer_preview), Icons.Outlined.PlayArrow, onClick = { stopDrawing(); actions.previewCurrentPage() })
                         }
                     }
                     if (pageTools && project != null) {
@@ -593,7 +690,7 @@ private fun ComposerEditorScreen(
                 }
             },
         ) { padding ->
-            Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().onSizeChanged { stageBoxSize = it }) {
             when {
                 state.isLoading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 project == null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text(stringResource(Res.string.composer_unavailable)) }
@@ -626,7 +723,23 @@ private fun ComposerEditorScreen(
                         state = state,
                         drawing = drawing,
                         drawingKind = drawingKind,
-                        onCancelDrawing = { drawing = false },
+                        drawingColor = drawingColor,
+                        drawingWidth = drawingWidth,
+                        eyedropper = eyedropperActive,
+                        onSample = onEyedropperResult,
+                        shapeKind = shapeKind,
+                        shapeFill = shapeFill,
+                        shapeStroke = shapeStroke,
+                        shapeStrokeWidth = if (shapeKind == ShapeKind.LINE || shapeKind == ShapeKind.ARROW) shapeLineWidth else shapeOutlineWidth,
+                        onShape = { kind, bounds, rotation ->
+                            actions.addShape(
+                                kind, bounds, rotation, shapeFill, shapeStroke,
+                                if (kind == ShapeKind.LINE || kind == ShapeKind.ARROW) shapeLineWidth else shapeOutlineWidth,
+                            )
+                            // One shape per choice: it is selected next, ready for the inspector's size
+                            // and colour, and the stage goes back to selecting.
+                            shapeKind = null
+                        },
                         multiSelect = multiSelect,
                         positioningBackground = positioningBackground,
                         positioningMedia = positioningMedia,
@@ -636,8 +749,7 @@ private fun ComposerEditorScreen(
                         apiKey = actions::apiKey,
                         actions = actions,
                         onDrawing = {
-                            if (drawingKind == StrokeKind.ERASER) actions.eraseDrawing(it) else actions.addDrawing(it, drawingKind)
-                            drawing = false
+                            if (drawingKind == StrokeKind.ERASER) actions.eraseDrawing(it) else actions.addDrawing(it, drawingKind, drawingColor, drawingWidth)
                         },
                         onPickMediaFor = { mediaPicker = MediaPickerTarget.Element(it) },
                         onFrameMedia = { if (!positioningMedia) toggleMediaPositioning() },
@@ -682,6 +794,81 @@ private fun ComposerEditorScreen(
                     }
                 }
             }
+            AnimatedVisibility(
+                visible = (drawing || shapeKind != null) && project != null,
+                modifier = Modifier.align(Alignment.TopCenter)
+                    .padding(top = measuredChrome.top + 8.dp, start = 12.dp, end = 12.dp)
+                    .offset { androidx.compose.ui.unit.IntOffset(bubbleOffset.x.roundToInt(), bubbleOffset.y.roundToInt()) }
+                    .alpha(chromeAlpha),
+                enter = fadeIn(imagoTween(ImagoMotion.Instant)),
+                exit = fadeOut(imagoTween(ImagoMotion.Instant)),
+            ) {
+                ComposerModeBubble(
+                    onSize = { bubbleSize = it },
+                    onDrag = { drag -> bubbleOffset = clampBubble(bubbleOffset + drag, stageBoxSize, bubbleSize) },
+                ) {
+                    val activeShape = shapeKind
+                    if (activeShape != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ToolMenuButton(activeShape.label(), activeShape.icon()) { dismiss ->
+                                ShapeKind.entries.forEach { kind ->
+                                    ToolMenuItem(kind.label(), kind.icon(), dismiss) { shapeKind = kind }
+                                }
+                            }
+                            val isLine = activeShape == ShapeKind.LINE || activeShape == ShapeKind.ARROW
+                            // A line has a single colour, its own; the others have a fill and an outline.
+                            if (!isLine) ColorDot(shapeFill, stringResource(Res.string.composer_shape_fill)) { choosingShapeFill = true }
+                            ColorDot(shapeStroke, stringResource(Res.string.composer_shape_outline)) { choosingShapeFill = false }
+                            ToolButton(stringResource(Res.string.composer_outline), Icons.Outlined.Tune, active = shapeOptionsOpen) {
+                                shapeOptionsOpen = !shapeOptionsOpen
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            ToolButton(stringResource(Res.string.composer_exit_drawing), Icons.Outlined.Check) { stopDrawing() }
+                        }
+                        if (shapeOptionsOpen) {
+                            if (activeShape == ShapeKind.LINE || activeShape == ShapeKind.ARROW) {
+                                BubbleThickness(shapeLineWidth, activeShape.minStroke()) { shapeLineWidth = it }
+                            } else {
+                                BubbleThickness(shapeOutlineWidth, activeShape.minStroke(), stringResource(Res.string.composer_outline)) { shapeOutlineWidth = it }
+                            }
+                        }
+                        Text(
+                            stringResource(Res.string.composer_shape_hint),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ImagoColors.TextSecondary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ToolMenuButton(drawingKind.label(), Icons.Outlined.Brush) { dismiss ->
+                                ToolMenuItem(stringResource(Res.string.composer_pen), Icons.Outlined.Brush, dismiss) { drawingKind = StrokeKind.PEN }
+                                ToolMenuItem(stringResource(Res.string.composer_marker), Icons.Outlined.Brush, dismiss) { drawingKind = StrokeKind.MARKER }
+                                ToolMenuItem(stringResource(Res.string.composer_eraser), Icons.Outlined.Remove, dismiss) { drawingKind = StrokeKind.ERASER }
+                            }
+                            if (drawingKind != StrokeKind.ERASER) {
+                                ColorDot(drawingColor) { choosingDrawingColor = true }
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            ToolButton(stringResource(Res.string.composer_exit_drawing), Icons.Outlined.Check) { stopDrawing() }
+                        }
+                        if (drawingKind != StrokeKind.ERASER) BubbleThickness(drawingWidth, MIN_LINE_STROKE) { drawingWidth = it }
+                    }
+                }
+            }
+            if (eyedropperActive) {
+                Surface(
+                    color = ImagoColors.Glass,
+                    shape = RoundedCornerShape(ImagoRadii.Panel),
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                        .padding(bottom = measuredChrome.bottom + 12.dp, start = 12.dp, end = 12.dp)
+                        .border(1.dp, ImagoColors.BorderSubtle, RoundedCornerShape(ImagoRadii.Panel)),
+                ) {
+                    Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(Res.string.composer_eyedropper_hint), style = MaterialTheme.typography.labelLarge)
+                        TextButton(onClick = { onEyedropperResult(null) }) { Text(stringResource(Res.string.composer_cancel)) }
+                    }
+                }
+            }
             // With a value under the finger only this stays over the page — the adjustment's name, the
             // value and the scale. The same ruler as the photo editor, for the same reason.
             AnimatedVisibility(
@@ -722,7 +909,10 @@ private fun ComposerEditorScreen(
     if (layersSheet && !layersRail && project != null) {
         LayersSheet(project, state, actions) { layersSheet = false }
     }
-    if (brandKitDialog) BrandKitDialog(state, actions, onEditBrand = { brandEditor = true }) { brandKitDialog = false }
+    // The brand kit covers the stage, so its pickers cannot sample it.
+    CompositionLocalProvider(LocalEyedropper provides null) {
+        if (brandKitDialog) BrandKitDialog(state, actions, onEditBrand = { brandEditor = true }) { brandKitDialog = false }
+    }
     if (brandEditor) BrandKitOverlay(onClose = { brandEditor = false })
     if (templateDialog) TemplateDialog(
         onDismiss = { templateDialog = false },
@@ -1091,6 +1281,7 @@ private fun BackgroundInspector(
             title = pending.title.resolve(),
             initialArgb = pending.initial,
             palette = state.brandKit?.paletteArgb.orEmpty(),
+            compositionColors = state.project?.usedColors().orEmpty(),
             onDismiss = { pendingColor = null },
             onConfirm = pending.onPick,
         )
@@ -1349,7 +1540,6 @@ internal fun ComposerCanvas(
     state: ComposerEditorUiState,
     drawing: Boolean,
     drawingKind: StrokeKind,
-    onCancelDrawing: () -> Unit,
     multiSelect: Boolean,
     positioningBackground: Boolean,
     /** The chosen element is being framed: the finger slides the image instead of moving the box. */
@@ -1373,7 +1563,21 @@ internal fun ComposerCanvas(
      */
     stageInsets: ComposerStageInsets,
     modifier: Modifier = Modifier,
+    drawingColor: Long = 0xFFFFFFFF,
+    drawingWidth: Float = 6f,
+    /** A shape was chosen and waits for the finger: a tap or a drag on the stage places it. */
+    shapeKind: ShapeKind? = null,
+    shapeFill: Long = 0xFFFFFFFF,
+    shapeStroke: Long = 0xFFFFFFFF,
+    shapeStrokeWidth: Float = 0f,
+    onShape: (ShapeKind, NormalizedRect, Float) -> Unit = { _, _, _ -> },
+    /** A colour picker asked for a colour from the page: a touch samples it instead of acting. */
+    eyedropper: Boolean = false,
+    onSample: (Long?) -> Unit = {},
 ) {
+    // Drawing and placing a shape both own the stage's finger: scrolling, selecting and the elements'
+    // own gestures stand aside for either.
+    val armed = drawing || shapeKind != null || eyedropper
     // Before any element asks for anything: photos with a recipe are processed in the background, so
     // the stage finds them ready instead of having them made one by one in front of whoever is looking.
     WarmComposerPhotos(project, previewUrl, thumbnailUrl, apiKey)
@@ -1401,15 +1605,97 @@ internal fun ComposerCanvas(
     }
     val horizontal = rememberScrollState()
     val vertical = rememberScrollState()
-    var zoom by remember(project.id) { mutableStateOf(1f) }
+    // The zoom is relative to a page that fills the stage's height. It starts at "the whole page in
+    // view" (`fitZoom`, worked out from the stage once it has a size) until a hand changes it.
+    var userZoom by remember(project.id) { mutableStateOf<Float?>(null) }
+    var fitZoom by remember(project.id) { mutableStateOf(1f) }
+    fun currentZoom() = userZoom ?: fitZoom
     val selectedElementId = state.selectedElementId
     // The element whose context menu is open. It lives here, and not inside each element, because the
     // menu has to position itself in stage coordinates.
     var contextMenuFor by remember(project.id) { mutableStateOf<String?>(null) }
-    BoxWithConstraints(modifier.background(ImagoColors.Background), contentAlignment = Alignment.CenterStart) {
-        val pageHeight = (maxHeight - 32.dp - stageInsets.top - stageInsets.bottom).coerceAtLeast(220.dp) * zoom
+    // Two fingers zoom the stage. They are read before the children see them, so a stroke or an
+    // element does not move under a pinch; with an element chosen the pinch is its own (it scales),
+    // unless a drawing or shape mode owns the stage.
+    val canPinchZoom = armed || selectedElementId == null
+    val pinchDensity = LocalDensity.current
+    val pinchScope = rememberCoroutineScope()
+    val pinchStartPx = with(pinchDensity) { StageHorizontalPadding.toPx() }
+    val pinchTopPx = with(pinchDensity) { (stageInsets.top + 16.dp).toPx() }
+    // True while two fingers are down: the effect that brings the current page to the middle of the
+    // stage must not undo where the pinch is taking the view.
+    val pinchActive = remember { booleanArrayOf(false) }
+    BoxWithConstraints(
+        modifier.background(ImagoColors.Background).pointerInput(canPinchZoom) {
+            if (!canPinchZoom) return@pointerInput
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                var previous = 0f
+                var previousCentre = Offset.Zero
+                // Where the scroll is meant to be. The scroll range only grows after the next layout, so
+                // the clamped real value lags behind while zooming in; the wanted one is kept here.
+                var wantedX = horizontal.value.toFloat()
+                var wantedY = vertical.value.toFloat()
+                var twoFingers = false
+                do {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val pressed = event.changes.filter { it.pressed }
+                    if (pressed.size >= 2) {
+                        val distance = (pressed[0].position - pressed[1].position).getDistance()
+                        val centre = (pressed[0].position + pressed[1].position) / 2f
+                        if (!twoFingers) {
+                            twoFingers = true
+                            pinchActive[0] = true
+                            wantedX = horizontal.value.toFloat()
+                            wantedY = vertical.value.toFloat()
+                        }
+                        if (previous > 0f && distance > 0f) {
+                            val before = currentZoom()
+                            val after = (before * distance / previous).coerceIn(minOf(.5f, fitZoom * .5f), 2.5f)
+                            val ratio = after / before
+                            userZoom = after
+                            // The point of the page that was under the fingers stays under them, and
+                            // follows them if they move: zooming happens around the fingers, and
+                            // dragging with both is how the page is navigated.
+                            wantedX = pinchStartPx + (wantedX + previousCentre.x - pinchStartPx) * ratio - centre.x
+                            wantedY = pinchTopPx + (wantedY + previousCentre.y - pinchTopPx) * ratio - centre.y
+                            pinchScope.launch {
+                                horizontal.scrollTo(wantedX.roundToInt().coerceAtLeast(0))
+                                vertical.scrollTo(wantedY.roundToInt().coerceAtLeast(0))
+                            }
+                        }
+                        previous = distance
+                        previousCentre = centre
+                        event.changes.forEach { it.consume() }
+                    } else {
+                        previous = 0f
+                    }
+                } while (event.changes.any { it.pressed })
+                if (twoFingers) {
+                    // Once more after the layout has made room for the new size.
+                    pinchScope.launch {
+                        androidx.compose.runtime.withFrameNanos { }
+                        androidx.compose.runtime.withFrameNanos { }
+                        horizontal.scrollTo(wantedX.roundToInt().coerceAtLeast(0))
+                        vertical.scrollTo(wantedY.roundToInt().coerceAtLeast(0))
+                        pinchActive[0] = false
+                    }
+                }
+            }
+        },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        val heightAtFullZoom = (maxHeight - 32.dp - stageInsets.top - stageInsets.bottom).coerceAtLeast(220.dp)
+        // Width-limited pages (a landscape page, any page on a narrow screen) open smaller than the
+        // height would allow, so the first look is the whole page and not a part of it.
+        val fit = ((maxWidth - StageHorizontalPadding * 2) /
+            (heightAtFullZoom * project.format.pixelWidth / project.format.pixelHeight)).coerceIn(.05f, 1f)
+        SideEffect { fitZoom = fit }
+        val zoom = userZoom ?: fit
+        val pageHeight = heightAtFullZoom * zoom
         val pageWidth = pageHeight * project.format.pixelWidth / project.format.pixelHeight
         val density = LocalDensity.current
+        val touchSlopPx = androidx.compose.ui.platform.LocalViewConfiguration.current.touchSlop
         val pageWidthPx = with(density) { pageWidth.toPx() }
         val pageHeightPx = with(density) { pageHeight.toPx() }
         val strokes = remember(drawing, project.id) { mutableStateListOf<StrokePoint>() }
@@ -1417,6 +1703,19 @@ internal fun ComposerCanvas(
         // `isNotEmpty()` guard ran in the composition and `first()` in the draw phase, already after
         // `onDragEnd` had cleared the list — hence the `NoSuchElementException`.
         val liveStroke = strokes.toList()
+        val currentOnDrawing by rememberUpdatedState(onDrawing)
+        val currentOnShape by rememberUpdatedState(onShape)
+        val currentOnSample by rememberUpdatedState(onSample)
+        // What the stage shows, kept as a picture only while the eyedropper is on — recording every
+        // frame for nothing would cost a layer's worth of memory.
+        val captureLayer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+        val sampleScope = rememberCoroutineScope()
+        var eyedropperAt by remember { mutableStateOf<Offset?>(null) }
+        // The stage as a picture, taken when the finger lands: the page stands still while a colour is
+        // being chosen, and the loupe and the final sample both read from it.
+        var eyedropperPicture by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+        // The finger's first and current position while a shape is being dragged out, in stage pixels.
+        var shapeDrag by remember(project.id) { mutableStateOf<Pair<Offset, Offset>?>(null) }
         val visible = visiblePages(project, state.currentPage)
         val stagePaddingPx = with(density) { StageHorizontalPadding.toPx() }
         // The background in force on this page, so the position mode's drag knows how much slack it has.
@@ -1444,7 +1743,7 @@ internal fun ComposerCanvas(
             val centred = stagePaddingPx + state.currentPage * pageWidthPx + pageWidthPx / 2f - horizontal.viewportSize / 2f
             // Half a page of tolerance: when it was the scroll that chose the page, it is already in
             // view and there is nothing to do. Only a jump coming from the buttons goes through here.
-            if (abs(centred - horizontal.value) > pageWidthPx / 2f) {
+            if (!pinchActive[0] && abs(centred - horizontal.value) > pageWidthPx / 2f) {
                 followingSelection = true
                 try {
                     horizontal.animateScrollTo(centred.roundToInt().coerceIn(0, horizontal.maxValue))
@@ -1457,8 +1756,8 @@ internal fun ComposerCanvas(
             Modifier
                 // Scrolling is off while drawing or positioning the background: being earlier in the
                 // chain, it consumed the drag and the stroke came out broken or not at all.
-                .horizontalScroll(horizontal, enabled = !drawing && !positioningBackground)
-                .verticalScroll(vertical, enabled = !drawing && !positioningBackground)
+                .horizontalScroll(horizontal, enabled = !armed && !positioningBackground)
+                .verticalScroll(vertical, enabled = !armed && !positioningBackground)
                 .padding(
                     start = StageHorizontalPadding,
                     end = StageHorizontalPadding,
@@ -1466,38 +1765,169 @@ internal fun ComposerCanvas(
                     bottom = stageInsets.bottom + 16.dp,
                 )
                 .width(pageWidth * project.pages.size).height(pageHeight)
-                .pointerInput(drawing, project.pages.size) {
-                    if (drawing) detectDragGestures(
-                        onDragStart = { point ->
-                            actions.beginGesture()
-                            strokes.clear()
-                            strokes += StrokePoint(point.x / pageWidthPx, point.y / pageHeightPx)
-                        },
-                        onDragEnd = { actions.endGesture(); onDrawing(strokes.toList()); strokes.clear() },
-                        onDragCancel = { actions.endGesture(); strokes.clear() },
-                    ) { change, _ ->
-                        change.consume()
-                        // Only the stylus has pressure worth following. A finger reports whatever the
-                        // contact area gives, and that made the stroke thicken on its own in the middle of
-                        // a curve; it stays at full force, which is how it always drew.
-                        val pressure = if (change.type == PointerType.Stylus) change.pressure else 1f
-                        // `onDragStart` receives a position and not an event, so the first point is born
-                        // with no pressure to read. This is where it gets it — otherwise the stroke
-                        // always started at full width and thinned afterwards.
-                        if (strokes.size == 1) strokes[0] = strokes[0].copy(pressure = pressure)
-                        strokes += StrokePoint(
-                            x = change.position.x / pageWidthPx,
-                            y = change.position.y / pageHeightPx,
-                            pressure = pressure,
+                .then(
+                    if (eyedropper) {
+                        Modifier.drawWithContent {
+                            captureLayer.record { this@drawWithContent.drawContent() }
+                            drawLayer(captureLayer)
+                            // After the layer, so the ring is never part of what is sampled.
+                            val at = eyedropperAt
+                            val picture = eyedropperPicture
+                            if (at != null && picture != null) {
+                                // A loupe above the finger (below it near the top): the pixels under the
+                                // finger, magnified, in a ring that is the colour that would be picked.
+                                val diameter = 120.dp.toPx()
+                                val radius = diameter / 2f
+                                val grid = 11
+                                val sx = at.x.roundToInt().coerceIn(0, picture.width - 1)
+                                val sy = at.y.roundToInt().coerceIn(0, picture.height - 1)
+                                val gap = 56.dp.toPx()
+                                val above = at.y - radius - gap >= 0f
+                                val centre = Offset(
+                                    at.x.coerceIn(radius, (size.width - radius).coerceAtLeast(radius)),
+                                    if (above) at.y - radius - gap else at.y + radius + gap,
+                                )
+                                val picked = picture.toPixelMap(sx, sy, 1, 1)[0, 0]
+                                val disc = Path().apply { addOval(androidx.compose.ui.geometry.Rect(centre, radius)) }
+                                clipPath(disc) {
+                                    drawRect(Color.Black, centre - Offset(radius, radius), androidx.compose.ui.geometry.Size(diameter, diameter))
+                                    drawImage(
+                                        picture,
+                                        srcOffset = androidx.compose.ui.unit.IntOffset(
+                                            (sx - grid / 2).coerceIn(0, (picture.width - grid).coerceAtLeast(0)),
+                                            (sy - grid / 2).coerceIn(0, (picture.height - grid).coerceAtLeast(0)),
+                                        ),
+                                        srcSize = androidx.compose.ui.unit.IntSize(grid.coerceAtMost(picture.width), grid.coerceAtMost(picture.height)),
+                                        dstOffset = androidx.compose.ui.unit.IntOffset((centre.x - radius).roundToInt(), (centre.y - radius).roundToInt()),
+                                        dstSize = androidx.compose.ui.unit.IntSize(diameter.roundToInt(), diameter.roundToInt()),
+                                        filterQuality = FilterQuality.None,
+                                    )
+                                }
+                                // The pixel under the finger, outlined at the loupe's centre.
+                                val cell = diameter / grid
+                                drawRect(Color.Black, centre - Offset(cell / 2f, cell / 2f), androidx.compose.ui.geometry.Size(cell, cell), style = Stroke(3f))
+                                drawRect(Color.White, centre - Offset(cell / 2f, cell / 2f), androidx.compose.ui.geometry.Size(cell, cell), style = Stroke(1.5f))
+                                drawCircle(Color(picked.red, picked.green, picked.blue), radius, centre, style = Stroke(10.dp.toPx()))
+                                drawCircle(Color.White, radius + 5.dp.toPx(), centre, style = Stroke(1.5f))
+                                // And the touch point itself, small, where the finger is.
+                                drawCircle(Color.Black, 12f, at, style = Stroke(4f))
+                                drawCircle(Color.White, 12f, at, style = Stroke(2f))
+                            } else if (at != null) {
+                                drawCircle(Color.Black, 22f, at, style = Stroke(5f))
+                                drawCircle(Color.White, 22f, at, style = Stroke(2.5f))
+                            }
+                        }
+                    } else {
+                        Modifier
+                    },
+                )
+                .pointerInput(eyedropper) {
+                    if (!eyedropper) return@pointerInput
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        down.consume()
+                        var last = down.position
+                        var lifted = false
+                        eyedropperAt = last
+                        val capture = sampleScope.async { captureLayer.toImageBitmap() }
+                        sampleScope.launch { eyedropperPicture = runCatching { capture.await() }.getOrNull() }
+                        try {
+                            do {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (event.changes.count { it.pressed } > 1) break
+                                event.changes.forEach { it.consume() }
+                                last = change.position
+                                eyedropperAt = last
+                                lifted = !change.pressed
+                            } while (!lifted)
+                            if (lifted) {
+                                val at = last
+                                sampleScope.launch {
+                                    val picture = capture.await()
+                                    val x = at.x.roundToInt().coerceIn(0, picture.width - 1)
+                                    val y = at.y.roundToInt().coerceIn(0, picture.height - 1)
+                                    val pixel = picture.toPixelMap(x, y, 1, 1)[0, 0]
+                                    if (pixel.alpha > 0f) {
+                                        currentOnSample(0xFF000000L or (pixel.toArgb().toLong() and 0xFFFFFFL))
+                                    }
+                                }
+                            }
+                        } finally {
+                            eyedropperAt = null
+                            eyedropperPicture = null
+                        }
+                    }
+                }
+                .pointerInput(drawing, eyedropper, project.pages.size, pageWidthPx, pageHeightPx) {
+                    if (drawing && !eyedropper) awaitEachGesture {
+                        // Claim the stage before the photo or selection gestures see the same down.
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        down.consume()
+                        actions.beginDrawingStroke()
+                        actions.beginGesture()
+                        strokes.clear()
+                        fun sample(change: androidx.compose.ui.input.pointer.PointerInputChange) = StrokePoint(
+                            change.position.x / pageWidthPx,
+                            change.position.y / pageHeightPx,
+                            if (change.type == PointerType.Stylus) change.pressure else 1f,
                         )
+                        strokes += sample(down)
+                        var completed = false
+                        try {
+                            do {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                // A second finger is a pinch, not part of the stroke.
+                                if (event.changes.count { it.pressed } > 1) break
+                                event.changes.forEach { it.consume() }
+                                if (change.pressed) strokes += sample(change)
+                            } while (change.pressed)
+                            if (strokes.size == 1) strokes += strokes.first()
+                            currentOnDrawing(strokes.toList())
+                            completed = true
+                        } finally {
+                            if (!completed) actions.finishDrawingSession()
+                            strokes.clear()
+                            actions.endGesture()
+                        }
+                    }
+                }
+                .pointerInput(shapeKind, eyedropper, project.pages.size, pageWidthPx, pageHeightPx) {
+                    // Outside `awaitEachGesture`, for the reason given on the background tap below.
+                    val kind = shapeKind ?: return@pointerInput
+                    if (eyedropper) return@pointerInput
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        down.consume()
+                        var last = down.position
+                        var lifted = false
+                        shapeDrag = down.position to last
+                        try {
+                            do {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (event.changes.count { it.pressed } > 1) break
+                                event.changes.forEach { it.consume() }
+                                last = change.position
+                                shapeDrag = down.position to last
+                                lifted = !change.pressed
+                            } while (!lifted)
+                            if (lifted) {
+                                val placement = shapePlacement(kind, down.position, last, pageWidthPx, pageHeightPx, project.pages.size, viewConfiguration.touchSlop)
+                                currentOnShape(kind, placement.bounds, placement.rotationDegrees)
+                            }
+                        } finally {
+                            shapeDrag = null
+                        }
                     }
                 }
                 // A second `pointerInput`, and not an `if` inside the one above: the two keys
                 // (`drawing`, `positioningBackground`) can no longer both be true at the same time —
                 // whoever turns one on turns the other off — but keeping them separate avoids turning
                 // one on restarting the other's gesture halfway.
-                .pointerInput(positioningBackground, project.pages.size) {
-                    if (positioningBackground) detectDragGestures(
+                .pointerInput(positioningBackground, eyedropper, project.pages.size) {
+                    if (positioningBackground && !eyedropper) detectDragGestures(
                         onDragStart = { actions.beginGesture() },
                         onDragEnd = { actions.endGesture() },
                         onDragCancel = { actions.endGesture() },
@@ -1522,12 +1952,12 @@ internal fun ComposerCanvas(
                 // `awaitFirstDown(requireUnconsumed = true)` — the same guard that already protects
                 // `composerElementGestures` and the overlay — guarantees, and not just makes likely,
                 // that tapping inside an element or on a handle never gets here.
-                .pointerInput(drawing, positioningBackground) {
+                .pointerInput(armed, positioningBackground) {
                     // The mode check sits outside `awaitEachGesture`. Inside, the block returned without
                     // suspending, and once the finger was up `awaitEachGesture` looped straight back
                     // into it with nothing to wait for: a busy loop on the main thread, and the app
                     // froze the moment the pen or the background framing touched the stage.
-                    if (drawing || positioningBackground) return@pointerInput
+                    if (armed || positioningBackground) return@pointerInput
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = true)
                         if (waitForUpOrCancellation() != null) actions.selectBackground()
@@ -1562,6 +1992,8 @@ internal fun ComposerCanvas(
                     Text("${page.index + 1}", color = Color.White.copy(alpha = .5f), fontSize = 10.sp, modifier = Modifier.padding(4.dp))
                 }
             }
+            // Clipped to the stage: a shape dragged past the page's edge is cut there, as it is on export.
+            Box(Modifier.fillMaxSize().clipToBounds()) {
             project.elements.filter(CompositionElement::visible).sortedBy(CompositionElement::zIndex).forEach { element ->
                 val pageTargets = element.repeatOnPages.takeIf { it.isNotEmpty() }
                     ?: setOf(element.transform.bounds.x.toInt().coerceIn(project.pages.indices))
@@ -1586,7 +2018,7 @@ internal fun ComposerCanvas(
                             element is CompositionElement.MediaPlaceholder &&
                             !element.locked &&
                             !multiSelect &&
-                            !drawing &&
+                            !armed &&
                             !positioningBackground
                         ) {
                             { onPickMediaFor(element.id) }
@@ -1598,6 +2030,7 @@ internal fun ComposerCanvas(
                         actions = actions,
                     )
                 }
+            }
             }
             // In a multiple selection the secondaries only get an outline: the handles belong to the
             // primary, which is what the gestures move and resize.
@@ -1619,7 +2052,7 @@ internal fun ComposerCanvas(
             val block = project.elements
                 .filter { it.id in state.selectedElementIds && it.visible }
                 .takeIf { it.size > 1 }
-            if (selected != null && selected.visible && !drawing) {
+            if (selected != null && selected.visible && !armed) {
                 // With several chosen the frame wraps the set, and not the last one tapped: it is the
                 // set the handles resize, and a frame around a single one promised something else.
                 // Without rotation, because the block has no angle of its own.
@@ -1668,17 +2101,28 @@ internal fun ComposerCanvas(
                     }
                 }
             }
-            if (liveStroke.size > 1) {
+            if (liveStroke.size > 1 && drawingKind == StrokeKind.ERASER) {
+                // The eraser leaves no ink: a pale band the width of what it reaches shows where it
+                // has been, and the strokes it touched go when the finger lifts.
+                Canvas(Modifier.fillMaxSize()) {
+                    val path = Path().apply {
+                        moveTo(liveStroke.first().x * pageWidthPx, liveStroke.first().y * pageHeightPx)
+                        liveStroke.drop(1).forEach { lineTo(it.x * pageWidthPx, it.y * pageHeightPx) }
+                    }
+                    drawPath(path, Color.White, alpha = .28f, style = Stroke(ERASER_REACH * 2f * pageWidthPx, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                }
+            } else if (liveStroke.size > 1) {
                 Canvas(Modifier.fillMaxSize()) {
                     // The stroke being born already shows the thickness it will keep: seeing the
                     // pressure only after letting go of the stylus took away half its usefulness.
                     if (liveStroke.hasVariablePressure()) {
                         liveStroke.zipWithNext { from, to ->
                             drawLine(
-                                color = Color.White,
+                                color = Color(drawingColor),
+                                alpha = if (drawingKind == StrokeKind.MARKER) .45f else 1f,
                                 start = Offset(from.x * pageWidthPx, from.y * pageHeightPx),
                                 end = Offset(to.x * pageWidthPx, to.y * pageHeightPx),
-                                strokeWidth = strokeWidthAt(LIVE_STROKE_WIDTH, (from.pressure + to.pressure) / 2f),
+                                strokeWidth = strokeWidthAt(drawingWidth * pageWidthPx / REFERENCE_PAGE_WIDTH, (from.pressure + to.pressure) / 2f),
                                 cap = StrokeCap.Round,
                             )
                         }
@@ -1687,31 +2131,45 @@ internal fun ComposerCanvas(
                             moveTo(liveStroke.first().x * pageWidthPx, liveStroke.first().y * pageHeightPx)
                             liveStroke.drop(1).forEach { lineTo(it.x * pageWidthPx, it.y * pageHeightPx) }
                         }
-                        drawPath(path, Color.White, style = Stroke(LIVE_STROKE_WIDTH))
+                        drawPath(path, Color(drawingColor), alpha = if (drawingKind == StrokeKind.MARKER) .45f else 1f, style = Stroke(drawingWidth * pageWidthPx / REFERENCE_PAGE_WIDTH, cap = StrokeCap.Round, join = StrokeJoin.Round))
                     }
                 }
             }
-            if (drawing) {
-                // The notice is also the way out. Before, the mode could only be left by drawing a
-                // stroke: whoever tapped the pen by mistake had no way back without dirtying the page.
-                Surface(
-                    color = Color.Black.copy(alpha = .7f),
-                    shape = CircleShape,
-                    modifier = Modifier.align(Alignment.TopCenter)
-                        .padding(top = stageInsets.top + 8.dp, start = 8.dp, end = 8.dp, bottom = 8.dp)
-                        .clip(CircleShape)
-                        .clickable(role = Role.Button, onClick = onCancelDrawing),
-                ) {
-                    Row(
-                        Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(stringResource(Res.string.composer_drawing_hint, drawingKind.label()), fontSize = 12.sp)
-                        Icon(
-                            Icons.Outlined.Close,
-                            stringResource(Res.string.composer_exit_drawing),
-                            Modifier.padding(start = 6.dp).size(14.dp),
-                        )
+            val drag = shapeDrag
+            val previewKind = shapeKind
+            if (drag != null && previewKind != null && (drag.second - drag.first).getDistance() > touchSlopPx) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val colour = Color(shapeFill)
+                    val lineColour = Color(shapeStroke)
+                    val widthPx = shapeStrokeWidth * pageWidthPx / REFERENCE_PAGE_WIDTH
+                    val placed = shapePlacement(previewKind, drag.first, drag.second, pageWidthPx, pageHeightPx, project.pages.size, 0f)
+                    val box = placed.bounds
+                    val topLeft = Offset(box.x * pageWidthPx, box.y * pageHeightPx)
+                    val boxSize = androidx.compose.ui.geometry.Size(box.width * pageWidthPx, box.height * pageHeightPx)
+                    when (previewKind) {
+                        ShapeKind.RECTANGLE -> {
+                            drawRect(colour, topLeft, boxSize, alpha = .6f)
+                            if (widthPx > 0f) drawRect(lineColour, topLeft - Offset(widthPx / 2f, widthPx / 2f), androidx.compose.ui.geometry.Size(boxSize.width + widthPx, boxSize.height + widthPx), alpha = .6f, style = Stroke(widthPx))
+                        }
+                        ShapeKind.ELLIPSE -> {
+                            drawOval(colour, topLeft, boxSize, alpha = .6f)
+                            if (widthPx > 0f) drawOval(lineColour, topLeft - Offset(widthPx / 2f, widthPx / 2f), androidx.compose.ui.geometry.Size(boxSize.width + widthPx, boxSize.height + widthPx), alpha = .6f, style = Stroke(widthPx))
+                        }
+                        ShapeKind.LINE, ShapeKind.ARROW -> {
+                            drawLine(lineColour, drag.first, drag.second, widthPx, StrokeCap.Round)
+                            if (previewKind == ShapeKind.ARROW) {
+                                // The head is a fraction of the box's shorter side, like the placed arrow.
+                                val head = kotlin.math.min(boxSize.width, boxSize.height) * .22f
+                                val angle = Math.toRadians(placed.rotationDegrees.toDouble())
+                                for (side in listOf(-1f, 1f)) {
+                                    val back = Offset(
+                                        drag.second.x - head * kotlin.math.cos(angle).toFloat() - side * head * kotlin.math.sin(angle).toFloat(),
+                                        drag.second.y - head * kotlin.math.sin(angle).toFloat() + side * head * kotlin.math.cos(angle).toFloat(),
+                                    )
+                                    drawLine(lineColour, drag.second, back, widthPx, StrokeCap.Round)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1719,13 +2177,24 @@ internal fun ComposerCanvas(
         Surface(
             color = Color.Black.copy(alpha = .72f),
             shape = RoundedCornerShape(18.dp),
-            modifier = Modifier.align(Alignment.TopEnd)
-                .padding(top = stageInsets.top + 8.dp, start = 8.dp, end = 8.dp, bottom = 8.dp),
+            // Out of the way of the mode bubble, which floats at the top while drawing or placing a shape.
+            modifier = (if (armed) Modifier.align(Alignment.BottomEnd) else Modifier.align(Alignment.TopEnd))
+                .padding(
+                    top = if (armed) 8.dp else stageInsets.top + 8.dp,
+                    start = 8.dp,
+                    end = 8.dp,
+                    bottom = if (armed) stageInsets.bottom + 8.dp else 8.dp,
+                ),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { zoom = (zoom - .2f).coerceAtLeast(.5f) }) { Text("−") }
-                Text("${(zoom * 100).roundToInt()}%", fontSize = 12.sp)
-                TextButton(onClick = { zoom = (zoom + .2f).coerceAtMost(2.5f) }) { Text("+") }
+                TextButton(onClick = { userZoom = (zoom / 1.25f).coerceAtLeast(minOf(.5f, fit * .5f)) }) { Text("−") }
+                // 100% is the whole page; tapping the number comes back to it.
+                Text(
+                    "${(zoom / fit * 100).roundToInt()}%",
+                    fontSize = 12.sp,
+                    modifier = Modifier.clickable { userZoom = null },
+                )
+                TextButton(onClick = { userZoom = (zoom * 1.25f).coerceAtMost(2.5f) }) { Text("+") }
             }
         }
     }
@@ -1913,13 +2382,13 @@ private fun CompositionElementView(
         }
     when (element) {
         is CompositionElement.MediaPlaceholder -> Box(
-            common.frameDecoration(element.frame).background(Color.White.copy(alpha = .08f))
+            common.frameDecoration(element.frame, pageWidthPx / REFERENCE_PAGE_WIDTH).background(Color.White.copy(alpha = .08f))
                 .border(1.dp, Color.White.copy(alpha = .35f), RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Outlined.Add, stringResource(Res.string.composer_add_media), tint = Color.White.copy(alpha = .7f)) }
         // The element's recipe comes in here for the same reason it comes in on export: the stage has
         // to show the photo with the look the final file will have.
-        is CompositionElement.Photo -> Box(common.frameDecoration(element.frame)) {
+        is CompositionElement.Photo -> Box(common.frameDecoration(element.frame, pageWidthPx / REFERENCE_PAGE_WIDTH)) {
             var unavailable by remember(element.media.assetId) { mutableStateOf(false) }
             // The requests live in `remember` and have a fixed size. Building them loose here made Coil
             // restart loading on every frame of a gesture, and requesting them at the element's size
@@ -1964,7 +2433,7 @@ private fun CompositionElementView(
                 )
             }
         }
-        is CompositionElement.Video -> Box(common.frameDecoration(element.frame)) {
+        is CompositionElement.Video -> Box(common.frameDecoration(element.frame, pageWidthPx / REFERENCE_PAGE_WIDTH)) {
             if (selected) {
                 ElementVideoPlayer(element, videoPlaybackUrl(element.media.assetId), apiKey(element.media.assetId), Modifier.fillMaxSize())
             } else {
@@ -1999,9 +2468,20 @@ private fun CompositionElementView(
             val strokePx = element.strokeWidth * pageWidthPx / REFERENCE_PAGE_WIDTH
             val strokeStyle = Stroke(width = strokePx, cap = StrokeCap.Round, join = StrokeJoin.Round)
             val head = kotlin.math.min(size.width, size.height) * .22f
+            // The outline sits outside the shape, so it never eats into the fill: a stroke centred on
+            // the edge, pushed out by half its own width. At zero there is none (a zero-width stroke
+            // would still draw a hairline).
+            val outlineTopLeft = Offset(-strokePx / 2f, -strokePx / 2f)
+            val outlineSize = androidx.compose.ui.geometry.Size(size.width + strokePx, size.height + strokePx)
             when (element.kind) {
-                ShapeKind.RECTANGLE -> { drawRect(fill); drawRect(stroke, style = strokeStyle) }
-                ShapeKind.ELLIPSE -> { drawOval(fill); drawOval(stroke, style = strokeStyle) }
+                ShapeKind.RECTANGLE -> {
+                    drawRect(fill)
+                    if (strokePx > 0f) drawRect(stroke, outlineTopLeft, outlineSize, style = strokeStyle)
+                }
+                ShapeKind.ELLIPSE -> {
+                    drawOval(fill)
+                    if (strokePx > 0f) drawOval(stroke, outlineTopLeft, outlineSize, style = strokeStyle)
+                }
                 ShapeKind.LINE -> drawLine(
                     stroke, Offset(0f, size.height / 2), Offset(size.width, size.height / 2),
                     strokePx, StrokeCap.Round,
@@ -2024,11 +2504,11 @@ private fun CompositionElementView(
                     // Only stylus strokes go through here — the others stay in a single `Path`, which
                     // is cheaper and gives exactly the same result.
                     element.points.zipWithNext { from, to ->
-                        drawLine(
+                        if (!to.startsStroke) drawLine(
                             color = strokeColor,
                             start = Offset(from.x * size.width, from.y * size.height),
                             end = Offset(to.x * size.width, to.y * size.height),
-                            strokeWidth = strokeWidthAt(element.strokeWidth, (from.pressure + to.pressure) / 2f),
+                            strokeWidth = strokeWidthAt(element.strokeWidth * pageWidthPx / REFERENCE_PAGE_WIDTH, (from.pressure + to.pressure) / 2f),
                             cap = StrokeCap.Round,
                             alpha = strokeAlpha,
                         )
@@ -2036,7 +2516,7 @@ private fun CompositionElementView(
                 } else {
                     val path = Path().apply {
                         moveTo(element.points.first().x * size.width, element.points.first().y * size.height)
-                        element.points.drop(1).forEach { lineTo(it.x * size.width, it.y * size.height) }
+                        element.points.drop(1).forEach { if (it.startsStroke) moveTo(it.x * size.width, it.y * size.height) else lineTo(it.x * size.width, it.y * size.height) }
                     }
                     drawPath(
                         path,
@@ -2045,7 +2525,7 @@ private fun CompositionElementView(
                         // Round caps and joins, as the exporter always drew them. Here they were square
                         // by default, and a curved stroke came out faceted on screen and smooth in the
                         // file — the same composition with two looks.
-                        style = Stroke(element.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                        style = Stroke(element.strokeWidth * pageWidthPx / REFERENCE_PAGE_WIDTH, cap = StrokeCap.Round, join = StrokeJoin.Round),
                     )
                 }
             }
@@ -2060,18 +2540,31 @@ private fun CompositionElementView(
  * visible, and the final file came out with a decoration nobody had seen.
  */
 @Composable
-private fun Modifier.frameDecoration(frame: FrameStyle): Modifier {
+private fun Modifier.frameDecoration(frame: FrameStyle, unit: Float): Modifier {
+    // `unit` is one reference-page unit in pixels: the outline and the shadow are measured on a page
+    // REFERENCE_PAGE_WIDTH wide, as the shapes' outline is, and so come out in the file as they look here.
+    val density = LocalDensity.current
     val shape = RoundedCornerShape((frame.cornerRadius * 100).coerceIn(0f, 50f).toInt())
     return this
-        .then(if (frame.shadowRadius > 0f) Modifier.shadow(frame.shadowRadius.dp, shape, clip = false) else Modifier)
-        .clip(shape)
+        .then(if (frame.shadowRadius > 0f) Modifier.shadow(with(density) { (frame.shadowRadius * unit).toDp() }, shape, clip = false) else Modifier)
         .then(
             if (frame.borderWidth > 0f) {
-                Modifier.border(frame.borderWidth.dp, Color(frame.borderArgb), shape)
+                // A ring around the element, drawn before the clip: the border does not cut into the photo.
+                Modifier.drawBehind {
+                    val width = frame.borderWidth * unit
+                    val radius = (frame.cornerRadius.coerceIn(0f, .5f) * kotlin.math.min(size.width, size.height))
+                    val ring = Path().apply {
+                        fillType = androidx.compose.ui.graphics.PathFillType.EvenOdd
+                        addRoundRect(androidx.compose.ui.geometry.RoundRect(-width, -width, size.width + width, size.height + width, androidx.compose.ui.geometry.CornerRadius(radius + width)))
+                        addRoundRect(androidx.compose.ui.geometry.RoundRect(0f, 0f, size.width, size.height, androidx.compose.ui.geometry.CornerRadius(radius)))
+                    }
+                    drawPath(ring, Color(frame.borderArgb))
+                }
             } else {
                 Modifier
             },
         )
+        .clip(shape)
 }
 
 /** How much time separates two taps for them to count as a double tap. The same threshold as the system. */
@@ -2300,6 +2793,7 @@ private fun SelectedInspector(
             title = pending.title.resolve(),
             initialArgb = pending.initial,
             palette = state.brandKit?.paletteArgb.orEmpty(),
+            compositionColors = state.project?.usedColors().orEmpty(),
             onDismiss = { pendingColor = null },
             onConfirm = pending.onPick,
         )
@@ -2514,7 +3008,10 @@ private fun SelectedInspector(
                     TextStyleControls(selected, actions, rail, onPickColor = { pendingColor = it })
                 }
                 if (selected is CompositionElement.Shape) {
-                    InspectorSlider(stringResource(Res.string.composer_thickness), selected.strokeWidth, MIN_SHAPE_STROKE..MAX_SHAPE_STROKE, 2f, actions, actions::setShapeStrokeWidth)
+                    InspectorSlider(
+                        stringResource(if (selected.kind.minStroke() == 0f) Res.string.composer_outline else Res.string.composer_thickness),
+                        selected.strokeWidth, selected.kind.minStroke()..MAX_SHAPE_STROKE, 2f, actions, actions::setShapeStrokeWidth,
+                    )
                 }
                 if (selected is CompositionElement.Video) {
                     VideoSoundControls(selected, actions)
@@ -2838,7 +3335,7 @@ private fun LayerThumbnail(element: CompositionElement, thumbnailUrl: (String) -
                 if (element.points.size > 1) {
                     val path = Path().apply {
                         moveTo(element.points.first().x * size.width, element.points.first().y * size.height)
-                        element.points.drop(1).forEach { lineTo(it.x * size.width, it.y * size.height) }
+                        element.points.drop(1).forEach { if (it.startsStroke) moveTo(it.x * size.width, it.y * size.height) else lineTo(it.x * size.width, it.y * size.height) }
                     }
                     drawPath(path, Color(element.colorArgb), style = Stroke(2.dp.toPx()))
                 }
@@ -3122,11 +3619,12 @@ internal fun ToolButton(
 private fun ToolMenuButton(
     label: String,
     icon: ImageVector,
+    onOpen: () -> Unit = {},
     content: @Composable (dismiss: () -> Unit) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        ToolButton(label, icon, active = open) { open = true }
+        ToolButton(label, icon, active = open) { onOpen(); open = true }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             content { open = false }
         }
@@ -3175,6 +3673,108 @@ private fun CompositionElement.accessibilityLabel(): String = when (this) {
         },
     )
     is CompositionElement.Drawing -> stringResource(Res.string.composer_freehand)
+}
+
+@Composable
+private fun ShapeKind.label(): String = stringResource(
+    when (this) {
+        ShapeKind.RECTANGLE -> Res.string.composer_rectangle
+        ShapeKind.ELLIPSE -> Res.string.composer_circle
+        ShapeKind.LINE -> Res.string.composer_line
+        ShapeKind.ARROW -> Res.string.composer_arrow
+    },
+)
+
+private fun ShapeKind.icon(): ImageVector = when (this) {
+    ShapeKind.RECTANGLE -> Icons.Outlined.Rectangle
+    ShapeKind.ELLIPSE -> Icons.Outlined.Circle
+    ShapeKind.LINE -> Icons.Outlined.Remove
+    ShapeKind.ARROW -> Icons.AutoMirrored.Outlined.ArrowForward
+}
+
+/**
+ * The floating pill of a stage mode (drawing, shapes): the editor's glass, over the page, with the
+ * mode's settings. It floats instead of being a bar of the top app bar so it takes no height from the
+ * stage — the page stays where it is when the mode starts.
+ */
+@Composable
+private fun ComposerModeBubble(
+    modifier: Modifier = Modifier,
+    onSize: (androidx.compose.ui.unit.IntSize) -> Unit,
+    onDrag: (Offset) -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(ImagoRadii.Panel)
+    val currentOnDrag by rememberUpdatedState(onDrag)
+    Box(modifier.onSizeChanged(onSize)) {
+        Box(Modifier.matchParentSize().clip(shape).imagoGlassBlur().background(Color.Transparent))
+        Surface(
+            color = ImagoColors.Glass,
+            shape = shape,
+            modifier = Modifier.border(1.dp, ImagoColors.BorderSubtle, shape),
+        ) {
+            Column(Modifier.padding(horizontal = ImagoSpacing.Sm, vertical = 4.dp)) {
+                // The grip: the only part of the bubble that moves it, so sliders and buttons keep their own drags.
+                Box(
+                    Modifier.fillMaxWidth().height(20.dp).pointerInput(Unit) {
+                        detectDragGestures { change, drag ->
+                            change.consume()
+                            currentOnDrag(drag)
+                        }
+                    },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.width(36.dp).height(4.dp).clip(CircleShape).background(ImagoColors.BorderStrong))
+                }
+                content()
+            }
+        }
+    }
+}
+
+/** Keeps the bubble on the stage, wherever it was dragged to: its top-centre rest position is the origin. */
+private fun clampBubble(
+    offset: Offset,
+    stage: androidx.compose.ui.unit.IntSize,
+    bubble: androidx.compose.ui.unit.IntSize,
+): Offset {
+    if (stage == androidx.compose.ui.unit.IntSize.Zero) return offset
+    val halfRoom = ((stage.width - bubble.width) / 2f).coerceAtLeast(0f)
+    return Offset(
+        offset.x.coerceIn(-halfRoom, halfRoom),
+        offset.y.coerceIn(-(stage.height * .1f), (stage.height - bubble.height).toFloat().coerceAtLeast(0f)),
+    )
+}
+
+/** The colour in use, as a circle; tapping it opens the picker. */
+@Composable
+private fun ColorDot(argb: Long, label: String = stringResource(Res.string.composer_color), onClick: () -> Unit) {
+    Box(
+        Modifier.padding(horizontal = 6.dp).size(28.dp).clip(CircleShape)
+            .background(Color(argb)).border(1.5.dp, ImagoColors.BorderStrong, CircleShape)
+            .semantics { contentDescription = label }
+            .clickable(role = Role.Button, onClick = onClick),
+    )
+}
+
+/** The thickness row shared by both bubbles. */
+@Composable
+private fun BubbleThickness(
+    value: Float,
+    min: Float,
+    label: String = stringResource(Res.string.composer_thickness),
+    onValueChange: (Float) -> Unit,
+) {
+    Row(Modifier.width(300.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = min..MAX_SHAPE_STROKE,
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics { contentDescription = label },
+        )
+        Text(value.formatOne(), style = MaterialTheme.typography.labelMedium)
+    }
 }
 
 /** What the stroke is called in the stage's notice. */

@@ -142,6 +142,7 @@ fun AddToCompositionSheet(
 
     if (creating) {
         NewCompositionDialog(
+            fileFormat = media.singleOrNull()?.fileFormat(),
             onDismiss = { creating = false },
             onCreate = { format, layout ->
                 creating = false
