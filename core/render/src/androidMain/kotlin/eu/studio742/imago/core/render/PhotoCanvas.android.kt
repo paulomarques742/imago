@@ -12,4 +12,5 @@ actual fun PhotoCanvas(
     minZoom: Float,
     maskOverlay: Int,
     modifier: Modifier,
-) = GlPhotoCanvas(bitmap, parameters, showOriginal, transform, minZoom, maskOverlay, modifier)
+    highPrecisionSource: FloatPixelBuffer?,
+) = GlPhotoCanvas(bitmap, parameters, showOriginal, transform, minZoom, maskOverlay, modifier, highPrecisionSource)

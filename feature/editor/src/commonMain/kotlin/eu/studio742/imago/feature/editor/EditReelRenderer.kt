@@ -39,6 +39,14 @@ class CpuReelPhotoRenderer(source: PixelBuffer, maxSide: Int) : ReelPhotoRendere
     override fun render(recipe: EditRecipe): ImageBitmap = RecipePixels.render(reduced, recipe).toImageBitmap()
 }
 
+/** RAW video frames retain the same camera precision as photo preview and export. */
+class FloatReelPhotoRenderer(source: eu.studio742.imago.core.render.FloatPixelBuffer, maxSide: Int) : ReelPhotoRenderer {
+    private val reduced = RecipePixels.reduce(source, (maxSide * REEL_CPU_MARGIN).toInt())
+    override val sourceWidth: Int get() = reduced.width
+    override val sourceHeight: Int get() = reduced.height
+    override fun render(recipe: EditRecipe): ImageBitmap = RecipePixels.render(reduced, recipe).toImageBitmap()
+}
+
 /**
  * The video's frames, one at a time: the photo rendered with the recipe of each instant, and the
  * painter's overlay on top.

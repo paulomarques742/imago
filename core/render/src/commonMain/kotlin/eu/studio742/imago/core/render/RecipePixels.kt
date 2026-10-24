@@ -19,6 +19,63 @@ import kotlin.math.roundToInt
  * PixelBuffer uses. The rows are split across cores: each one only writes to its part of the array.
  */
 object RecipePixels {
+    /** The same geometry and processor, with camera precision retained until the output boundary. */
+    fun render(source: FloatPixelBuffer, recipe: EditRecipe, consumeSource: Boolean = false): PixelBuffer {
+        requireUser(recipe.processVersion <= CURRENT_PROCESS_VERSION, UserMessage.EDIT_NEEDS_NEWER_APP)
+        return renderFloat(source, recipe.toRenderParameters(), consumeSource = consumeSource).toPixelBuffer()
+    }
+
+    fun renderFloat(
+        source: FloatPixelBuffer,
+        params: RenderParameters,
+        renderScale: Float = 1f,
+        brushes: BrushRasters = BrushRasters.of(params, source),
+        consumeSource: Boolean = false,
+    ): FloatPixelBuffer {
+        val frame = params.frameGeometry(source.width, source.height)
+        val turns = params.normalizedQuarterTurns()
+        val width = ((if (turns % 2 == 1) source.height else source.width) * params.cropWidth).roundToInt().coerceAtLeast(1)
+        val height = ((if (turns % 2 == 1) source.width else source.height) * params.cropHeight).roundToInt().coerceAtLeast(1)
+        val framed = if (consumeSource && frame == FrameGeometry(source.width, source.height)) source else {
+            FloatPixelBuffer(width, height, linear = source.linear).also { output ->
+                IntStream.range(0, height).parallel().forEach { y ->
+                    if (Thread.currentThread().isInterrupted) throw CancellationException()
+                    val uv = FloatArray(2)
+                    for (x in 0 until width) {
+                        frame.imageFromFramed((x + .5f) / width, (y + .5f) / height, uv)
+                        sampleFloat(source, uv[0] * source.width - .5f, uv[1] * source.height - .5f, output, (y * width + x) * 3)
+                    }
+                }
+            }
+        }
+        return BitmapPhotoProcessor.renderInPlace(framed, params, frame, renderScale, brushes)
+    }
+
+    fun reduce(source: FloatPixelBuffer, maxSide: Int): FloatPixelBuffer {
+        val scale = maxSide.toFloat() / max(source.width, source.height)
+        if (scale >= 1f) return source
+        val width = (source.width * scale).roundToInt().coerceAtLeast(1)
+        val height = (source.height * scale).roundToInt().coerceAtLeast(1)
+        return FloatPixelBuffer(width, height, linear = source.linear).also { output ->
+            IntStream.range(0, height).parallel().forEach { y ->
+                for (x in 0 until width) sampleFloat(source, (x + .5f) / scale - .5f, (y + .5f) / scale - .5f, output, (y * width + x) * 3)
+            }
+        }
+    }
+
+    private fun sampleFloat(source: FloatPixelBuffer, x: Float, y: Float, output: FloatPixelBuffer, offset: Int) {
+        val sx = if (x.isFinite()) x.coerceIn(0f, (source.width - 1).toFloat()) else 0f
+        val sy = if (y.isFinite()) y.coerceIn(0f, (source.height - 1).toFloat()) else 0f
+        val x0 = floor(sx).toInt(); val y0 = floor(sy).toInt()
+        val x1 = min(x0 + 1, source.width - 1); val y1 = min(y0 + 1, source.height - 1)
+        val fx = sx - x0; val fy = sy - y0
+        repeat(3) { c ->
+            val top = source.rgb[(y0 * source.width + x0) * 3 + c] * (1 - fx) + source.rgb[(y0 * source.width + x1) * 3 + c] * fx
+            val bottom = source.rgb[(y1 * source.width + x0) * 3 + c] * (1 - fx) + source.rgb[(y1 * source.width + x1) * 3 + c] * fx
+            output.rgb[offset + c] = top * (1 - fy) + bottom * fy
+        }
+    }
+
     fun render(source: PixelBuffer, recipe: EditRecipe): PixelBuffer {
         requireUser(recipe.processVersion <= CURRENT_PROCESS_VERSION, UserMessage.EDIT_NEEDS_NEWER_APP)
         return render(source, recipe.toRenderParameters())

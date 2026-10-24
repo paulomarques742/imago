@@ -50,26 +50,27 @@ internal class LocalToneMask private constructor(
             val halfHeight = max(height / 2, 1)
 
             val half = FloatArray(halfWidth * halfHeight)
-            val top = IntArray(width)
-            val bottom = IntArray(width)
+            val top = FloatArray(width * 4)
+            val bottom = FloatArray(width * 4)
+            val scratch = IntArray(width)
             val rgb = FloatArray(3)
             val weights = FloatArray(MAX_LOCAL_MASKS)
             val tone = parameters.effectiveTone()
             for (row in 0 until halfHeight) {
                 val topRow = min(row * 2, height - 1)
                 val bottomRow = min(topRow + 1, height - 1)
-                bitmap.getPixels(top, 0, width, 0, topRow, width, 1)
-                bitmap.getPixels(bottom, 0, width, 0, bottomRow, width, 1)
+                bitmap.readRgbaRow(topRow, top, scratch)
+                bitmap.readRgbaRow(bottomRow, bottom, scratch)
                 val base = row * halfWidth
                 val v = (row + 0.5f) / halfHeight
                 for (x in 0 until halfWidth) {
                     val left = min(x * 2, width - 1)
                     val right = min(left + 1, width - 1)
-                    rgb[0] = averageChannel(top, bottom, left, right, 16)
-                    rgb[1] = averageChannel(top, bottom, left, right, 8)
-                    rgb[2] = averageChannel(top, bottom, left, right, 0)
+                    rgb[0] = averageChannel(top, bottom, left, right, 0)
+                    rgb[1] = averageChannel(top, bottom, left, right, 1)
+                    rgb[2] = averageChannel(top, bottom, left, right, 2)
                     if (field != null) field.resolve(parameters, (x + 0.5f) / halfWidth, v, weights, tone)
-                    BitmapPhotoProcessor.applyBaseTone(rgb, tone)
+                    BitmapPhotoProcessor.applyBaseTone(rgb, tone, bitmap is FloatPixelBuffer && bitmap.linear)
                     half[base + x] = PhotoEffects.luminance(rgb[0], rgb[1], rgb[2])
                 }
             }
@@ -91,14 +92,14 @@ internal class LocalToneMask private constructor(
 
         /** 2×2 average of a channel, the same four pixels the shader's four samples read. */
         private fun averageChannel(
-            top: IntArray,
-            bottom: IntArray,
+            top: FloatArray,
+            bottom: FloatArray,
             left: Int,
             right: Int,
-            shift: Int,
+            channel: Int,
         ): Float = (
-            (top[left] ushr shift and 0xFF) + (top[right] ushr shift and 0xFF) +
-                (bottom[left] ushr shift and 0xFF) + (bottom[right] ushr shift and 0xFF)
-            ) / (4f * 255f)
+            top[left * 4 + channel] + top[right * 4 + channel] +
+                bottom[left * 4 + channel] + bottom[right * 4 + channel]
+            ) / 4f
     }
 }

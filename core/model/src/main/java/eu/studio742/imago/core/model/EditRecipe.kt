@@ -5,6 +5,8 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 19 adds a versioned RAW development stage; older apps must not render its recipes on JPEG previews.
+ *
  * 17 activates range mask components (`MaskShape.LUMINANCE` and `MaskShape.COLOR`). No earlier app
  * knows the two shapes, so none can decode such a recipe and sync skips it; the version is raised anyway,
  * as for every new shape, so that the gate in `RecipeRendering` is checked and not assumed.
@@ -54,7 +56,15 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 17
+const val CURRENT_PROCESS_VERSION = 19
+
+/** Process 19 adds a versioned RAW development stage before the existing editing pipeline. */
+const val RAW_PROCESS_VERSION = 19
+const val CURRENT_RAW_ENGINE = "libraw-0.22.2-imago-1"
+
+@Serializable
+/** A missing engine field always means engine 1, including after future decoder upgrades. */
+data class RawDevelopment(val engine: String = "libraw-0.22.2-imago-1")
 
 @Serializable
 data class EditRecipe(
@@ -76,6 +86,7 @@ data class EditRecipe(
     val geometry: Geometry = Geometry(),
     val masks: List<LocalMask> = emptyList(),
     val retouches: List<Retouch> = emptyList(),
+    val rawDevelopment: RawDevelopment? = null,
 )
 
 /**

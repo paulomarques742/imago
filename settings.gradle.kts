@@ -20,6 +20,7 @@ include(
     ":app",
     ":core:model",
     ":core:render",
+    ":core:raw",
     ":core:immich",
     ":core:data",
     ":core:designsystem",

@@ -131,6 +131,7 @@ gradle.taskGraph.whenReady {
 dependencies {
     implementation(libs.okhttp)
     implementation(project(":core:model"))
+    implementation(project(":core:render"))
     implementation(project(":core:data"))
     implementation(project(":core:designsystem"))
     implementation(project(":feature:shell"))

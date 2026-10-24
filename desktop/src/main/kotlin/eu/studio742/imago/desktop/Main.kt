@@ -52,6 +52,9 @@ import java.nio.file.Path
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
+    coil3.SingletonImageLoader.setSafe { context ->
+        coil3.ImageLoader.Builder(context).components { add(eu.studio742.imago.core.render.RawPhotoDecoder.Factory()) }.build()
+    }
     // The Windows language, read before the app can change the process locale.
     val systemLocale = java.util.Locale.getDefault()
     val paths = AppPaths()

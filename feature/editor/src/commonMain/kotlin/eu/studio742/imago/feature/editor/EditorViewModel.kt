@@ -94,6 +94,13 @@ import eu.studio742.imago.core.render.RenderParameters
 import eu.studio742.imago.core.render.toRenderParameters
 import kotlin.math.floor
 import java.io.File
+import eu.studio742.imago.core.render.FloatPixelBuffer
+import eu.studio742.imago.core.render.decodeRawPhoto
+import eu.studio742.imago.core.render.shouldInspectRawOriginal
+import eu.studio742.imago.core.render.createPhotoTempFile
+import eu.studio742.imago.core.render.toPlatformBitmap
+import eu.studio742.imago.core.model.RawDevelopment
+import eu.studio742.imago.core.model.CURRENT_RAW_ENGINE
 import java.time.Instant
 import java.util.UUID
 
@@ -455,6 +462,7 @@ fun formatAdjustmentValue(adjustment: Adjustment, value: Float): String = when {
 data class EditorUiState(
     val asset: EditorAsset? = null,
     val bitmap: Bitmap? = null,
+    val highPrecisionSource: FloatPixelBuffer? = null,
     val recipe: EditRecipe? = null,
     val panel: EditorPanel = EditorPanel.LIGHT,
     val sheet: EditorSheet = EditorSheet.ADJUSTMENTS,
@@ -679,7 +687,7 @@ open class EditorViewModel(
         loadJob = viewModelScope.launch {
             runCatching {
                 coroutineScope {
-                    val bitmap = async { loadBitmap(asset) }
+                    val bitmap = async { loadPhoto(asset) }
                     val stored = async {
                         when (target) {
                             is PhotoEditTarget.Asset -> recipes.get(asset.id)
@@ -696,7 +704,8 @@ open class EditorViewModel(
                     val fromStore = stored.await()
                     // A recipe from a newer app never goes through the old pipeline: the original
                     // opens, and nothing is saved over it.
-                    needsNewerApp = fromStore != null && fromStore.processVersion > CURRENT_PROCESS_VERSION
+                    needsNewerApp = fromStore != null && (fromStore.processVersion > CURRENT_PROCESS_VERSION ||
+                        fromStore.rawDevelopment?.engine?.let { it != CURRENT_RAW_ENGINE } == true)
                     val storedRecipe = fromStore?.takeIf {
                         !needsNewerApp &&
                             (it.originalChecksum.isBlank() || asset.checksum.isBlank() || it.originalChecksum == asset.checksum)
@@ -717,11 +726,12 @@ open class EditorViewModel(
                     val loaded = bitmap.await()
                     // A recipe with Auto shows the sample with the sample's own light found.
                     val shown = if (target is PhotoEditTarget.Recipe && recipe.whiteBalance.auto) {
-                        recipe.withAutoWhiteBalance(autoWhiteBalanceFor(loaded))
+                        recipe.withAutoWhiteBalance(autoWhiteBalanceFor(loaded.bitmap))
                     } else {
                         recipe
                     }
-                    Triple(loaded, shown, storedRecipe != null)
+                    Triple(loaded, if (loaded.raw != null) shown.copy(processVersion = CURRENT_PROCESS_VERSION,
+                        rawDevelopment = shown.rawDevelopment ?: RawDevelopment()) else shown, storedRecipe != null)
                 }
             }.onSuccess { (bitmap, recipe, existed) ->
                 shouldPersist = target is PhotoEditTarget.Asset && existed
@@ -740,7 +750,8 @@ open class EditorViewModel(
                 )
                 mutableState.update {
                     it.copy(
-                        bitmap = bitmap,
+                        bitmap = bitmap.bitmap,
+                        highPrecisionSource = bitmap.raw,
                         recipe = recipe,
                         isLoading = false,
                         history = history.all,
@@ -776,7 +787,7 @@ open class EditorViewModel(
     private fun switchSample(target: PhotoEditTarget.Recipe) {
         activeTarget = target
         loadJob?.cancel()
-        mutableState.update { it.copy(asset = target.asset, bitmap = null, isLoading = true, error = null) }
+        mutableState.update { it.copy(asset = target.asset, bitmap = null, highPrecisionSource = null, isLoading = true, error = null) }
         loadJob = viewModelScope.launch {
             runCatching { loadBitmap(target.asset) }
                 .onSuccess { bitmap -> mutableState.update { it.copy(bitmap = bitmap, isLoading = false) } }
@@ -2551,6 +2562,23 @@ open class EditorViewModel(
     }
 
     private suspend fun loadBitmap(asset: EditorAsset): Bitmap {
+        return loadPhoto(asset).bitmap
+    }
+
+    private data class LoadedPhoto(val bitmap: Bitmap, val raw: FloatPixelBuffer? = null)
+
+    private suspend fun loadPhoto(asset: EditorAsset): LoadedPhoto {
+        if (library != null && shouldInspectRawOriginal(asset.fileName)) {
+            val original = createPhotoTempFile(context)
+            try {
+                library.downloadOriginal(asset.id, original)
+                val raw = decodeRawPhoto(original, halfSize = true)
+                if (raw != null) {
+                    val preview = withContext(Dispatchers.Default) { RecipePixels.reduce(raw, 2048) }
+                    return LoadedPhoto(withContext(Dispatchers.Default) { preview.toPixelBuffer().toPlatformBitmap() }, preview)
+                }
+            } finally { original.delete() }
+        }
         val result = SingletonImageLoader.get(context).execute(
             ImageRequest.Builder(context)
                 .data(editorImageData(asset))
@@ -2560,7 +2588,7 @@ open class EditorViewModel(
                 .build(),
         )
         if (result !is SuccessResult) throw LocalizedException(uiText(Res.string.editor_image_unreadable))
-        return result.image.toBitmap()
+        return LoadedPhoto(result.image.toBitmap())
     }
 }
 

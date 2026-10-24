@@ -20,6 +20,7 @@ class SkiaRecipeTransformation(private val recipe: EditRecipe) : Transformation(
     override val cacheKey: String = "recipe:${recipe.assetId}:${recipe.processVersion}:${recipe.updatedAt}"
 
     override suspend fun transform(input: Bitmap, size: Size): Bitmap = withContext(Dispatchers.Default) {
+        if (DevelopedRawBitmaps.contains(input, cacheKey)) return@withContext input
         RecipePixels.render(input.toPixelBuffer(), recipe).toSkiaBitmap()
     }
 }

@@ -24,6 +24,48 @@ import javax.imageio.ImageIO
  * engine and a JPEG saved — the same path as on the phone, with the Windows pieces.
  */
 class DesktopEditorExporterTest {
+    @Test fun `real camera samples develop and export at full resolution`() = runBlocking {
+        val sampleFolder = System.getProperty("imago.raw.samples")
+        org.junit.Assume.assumeTrue("Optional external camera samples were not requested.", sampleFolder != null)
+        val folder = File(requireNotNull(sampleFolder))
+        val originals = folder.listFiles().orEmpty().filter { it.extension.lowercase() in setOf("dng", "raf", "cr3") }
+        assertTrue("The sample folder must contain camera originals.", originals.isNotEmpty())
+        for (original in originals) {
+            val info = requireNotNull(eu.studio742.imago.core.raw.RawDecoder.identify(original))
+            val before = java.security.MessageDigest.getInstance("SHA-256").digest(original.readBytes())
+            val asset = EditorAsset("raw:${original.name}", "", original.name, original.toURI().toString(), "", "2026-10-24T00:00:00Z")
+            val recipe = EditRecipe(assetId = asset.id, originalChecksum = "", createdAt = "", updatedAt = "",
+                tone = Tone(exposure = -1f), rawDevelopment = eu.studio742.imago.core.model.RawDevelopment())
+            val started = System.nanoTime()
+            val output = DesktopEditorExporter(FileLibrary(original)).renderJpeg(asset, recipe) { }
+            try {
+                Image.makeFromEncoded(output.readBytes()).use { image ->
+                    assertEquals(info.width to info.height, image.width to image.height)
+                    output.copyTo(File(folder, original.name + ".jpg"), overwrite = true)
+                    println("RAW ${info.cameraMake} ${info.cameraModel}: ${image.width}x${image.height}, export ${(System.nanoTime() - started) / 1_000_000} ms")
+                }
+                org.junit.Assert.assertArrayEquals(before, java.security.MessageDigest.getInstance("SHA-256").digest(original.readBytes()))
+            } finally { output.delete() }
+        }
+    }
+
+    @Test fun `RAW export recovers sensor highlights and leaves the original unchanged`() = runBlocking {
+        val original = File.createTempFile("imago-raw-export-", ".asset")
+        val bytes = eu.studio742.imago.core.raw.syntheticDng(1, warmWhiteBalance = true)
+        original.writeBytes(bytes)
+        val asset = EditorAsset("raw", "", "photo.dng", original.toURI().toString(), "", "2026-10-24T00:00:00Z")
+        val recipe = EditRecipe(assetId = asset.id, originalChecksum = "", createdAt = "", updatedAt = "",
+            tone = Tone(exposure = -2f), rawDevelopment = eu.studio742.imago.core.model.RawDevelopment())
+        val output = DesktopEditorExporter(FileLibrary(original)).renderJpeg(asset, recipe) { }
+        try {
+            val image = Image.makeFromEncoded(output.readBytes()).use { org.jetbrains.skia.Bitmap.makeFromImage(it).toPixelBuffer() }
+            assertEquals(64 to 48, image.width to image.height)
+            val red = image.pixels[24 * 64 + 32] ushr 16 and 255
+            assertTrue("The RAW highlight must survive until exposure ($red).", red in 168..190)
+            org.junit.Assert.assertArrayEquals(bytes, original.readBytes())
+        } finally { output.delete(); original.delete() }
+    }
+
     /** A library that only knows how to hand over the requested file; it is all the export uses. */
     private class FileLibrary(private val original: File) : LibraryRepository {
         override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?) = error("not used")

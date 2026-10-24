@@ -125,16 +125,19 @@ class FolderLibraryRepository(
 
     private fun entity(file: Path, favorites: Set<String>): AssetEntity? {
         val extension = file.extension.lowercase()
+        val raw = if (extension !in VIDEO_EXTENSIONS && extension !in IMAGE_EXTENSIONS) {
+            runCatching { eu.studio742.imago.core.raw.RawDecoder.identify(file.toFile()) }.getOrNull()
+        } else null
         val type = when (extension) {
             in IMAGE_EXTENSIONS -> AssetType.IMAGE
             in VIDEO_EXTENSIONS -> AssetType.VIDEO
-            else -> return null
+            else -> if (raw != null) AssetType.IMAGE else return null
         }
         val stat = Files.readAttributes(file, BasicFileAttributes::class.java)
         val id = file.toUri().toString()
         val taken = if (type == AssetType.IMAGE) exifDate(file) else null
         val instant = taken ?: stat.lastModifiedTime().toInstant()
-        val (width, height) = if (type == AssetType.IMAGE) dimensions(file) else null to null
+        val (width, height) = if (raw != null) raw.width.toLong() to raw.height.toLong() else if (type == AssetType.IMAGE) dimensions(file) else null to null
         return AssetEntity(
             libraryKey = DEVICE_LIBRARY_ID,
             id = id,
@@ -148,7 +151,7 @@ class FolderLibraryRepository(
             isEdited = false,
             hasLocalRecipe = false,
             type = type.name,
-            mimeType = MIME_TYPES[extension],
+            mimeType = if (raw != null) "image/x-raw" else MIME_TYPES[extension],
             folderId = file.parent.toString(),
             folderName = file.parent.name,
             sizeBytes = stat.size(),

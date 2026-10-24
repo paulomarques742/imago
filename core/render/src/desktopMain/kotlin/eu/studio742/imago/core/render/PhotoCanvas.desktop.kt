@@ -35,26 +35,28 @@ actual fun PhotoCanvas(
     minZoom: Float,
     maskOverlay: Int,
     modifier: Modifier,
+    highPrecisionSource: FloatPixelBuffer?,
 ) {
     val source = remember(bitmap) { bitmap.toPixelBuffer() }
     val draft = remember(source) { RecipePixels.reduce(source, DRAFT_SIDE) }
+    val floatDraft = remember(highPrecisionSource) { highPrecisionSource?.let { RecipePixels.reduce(it, DRAFT_SIDE) } }
     // Painted over the full photo and given to the draft too: a brush raster does not depend on the
     // size of what it is drawn on, and a stroke being drawn only adds its newest dabs.
     val brushCache = remember(source) { BrushRasterCache() }
     val active = if (showOriginal) RenderParameters() else parameters
     var frame by remember(source) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(source, active, maskOverlay) {
+    LaunchedEffect(source, highPrecisionSource, active, maskOverlay) {
         if (draft !== source) {
             // The draft says it is a draft: without that, the grain would come out with the granularity
             // of its eight hundred pixels and change look when full resolution replaced it.
             val scale = draft.width.toFloat() / source.width
             frame = withContext(Dispatchers.Default) {
-                renderFrame(draft, active, maskOverlay, brushCache.of(active, source), scale)
+                renderFrame(draft, active, maskOverlay, brushCache.of(active, source), scale, floatDraft)
             }
             delay(FULL_RESOLUTION_PAUSE_MS)
         }
-        frame = withContext(Dispatchers.Default) { renderFrame(source, active, maskOverlay, brushCache.of(active, source)) }
+        frame = withContext(Dispatchers.Default) { renderFrame(source, active, maskOverlay, brushCache.of(active, source), floatSource = highPrecisionSource) }
     }
 
     Canvas(modifier) {
@@ -98,8 +100,10 @@ private fun renderFrame(
     maskOverlay: Int,
     brushes: BrushRasters,
     renderScale: Float = 1f,
+    floatSource: FloatPixelBuffer? = null,
 ): ImageBitmap {
-    val framed = RecipePixels.render(source, parameters, renderScale, brushes)
+    val framed = if (floatSource == null) RecipePixels.render(source, parameters, renderScale, brushes) else
+        RecipePixels.renderFloat(floatSource, parameters, renderScale, brushes).toPixelBuffer()
     if (maskOverlay in 0 until minOf(parameters.masks.size, MAX_LOCAL_MASKS)) tintMask(framed, source, parameters, maskOverlay, brushes)
     return framed.toSkiaBitmap().asComposeImageBitmap()
 }

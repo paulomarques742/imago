@@ -112,7 +112,7 @@ internal fun EditReelSheet(
         }
     }
     val photo = state.bitmap
-    val preview = rememberReelPreview(platform, script, style, title, photo, paused = busy)
+    val preview = rememberReelPreview(platform, script, style, title, photo, paused = busy, highPrecisionSource = state.highPrecisionSource)
     val exportMeasurer = rememberTextMeasurer()
 
     Dialog(
@@ -161,6 +161,7 @@ internal fun EditReelSheet(
                                 photo = pixels,
                                 fileName = reelFileName(state.asset?.fileName.orEmpty()),
                                 textMeasurer = exportMeasurer,
+                                highPrecisionSource = state.highPrecisionSource,
                             )
                         },
                         onCancel = exports::cancel,
@@ -213,10 +214,11 @@ private fun rememberReelPreview(
     photo: Bitmap?,
     /** While the video is being made the preview holds its frame: the two would share the processor. */
     paused: Boolean,
+    highPrecisionSource: eu.studio742.imago.core.render.FloatPixelBuffer?,
 ): ImageBitmap? {
     val measurer = rememberTextMeasurer()
     var frame by remember { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(platform, script, style, title, photo, paused) {
+    LaunchedEffect(platform, script, style, title, photo, highPrecisionSource, paused) {
         if (paused) return@LaunchedEffect
         val currentScript = script ?: return@LaunchedEffect
         val bitmap = photo ?: return@LaunchedEffect
@@ -224,7 +226,10 @@ private fun rememberReelPreview(
         delay(200)
         val texts = reelTexts(currentScript, title)
         val painter = ReelFramePainter(currentScript, style, texts, measurer, scale = PREVIEW_SCALE)
-        val photos = withContext(Dispatchers.Default) { platform.photoRenderer(bitmap, painter.photoMaxSide) }
+        val photos = withContext(Dispatchers.Default) {
+            highPrecisionSource?.let { FloatReelPhotoRenderer(it, painter.photoMaxSide) }
+                ?: platform.photoRenderer(bitmap, painter.photoMaxSide)
+        }
         try {
             val renderer = EditReelRenderer(currentScript, photos, painter)
             val start = TimeSource.Monotonic.markNow()

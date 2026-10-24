@@ -21,6 +21,7 @@ fun ImageRequest.Builder.libraryAuth(apiKey: String?): ImageRequest.Builder = ap
  * key, so the processed version is cached like any other.
  */
 fun ImageRequest.Builder.withRecipe(recipe: EditRecipe?): ImageRequest.Builder = apply {
+    extras[rawRecipeKey] = recipe
     recipe?.let { transformations(recipeTransformation(it)) }
 }
 

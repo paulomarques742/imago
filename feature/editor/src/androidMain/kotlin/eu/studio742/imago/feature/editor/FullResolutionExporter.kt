@@ -22,6 +22,10 @@ import eu.studio742.imago.core.render.BrushRasters
 import eu.studio742.imago.core.render.renderInPlace
 import eu.studio742.imago.core.render.activeGeometry
 import eu.studio742.imago.core.render.toRenderParameters
+import eu.studio742.imago.core.render.decodeRawPhoto
+import eu.studio742.imago.core.render.requireRawEngine
+import eu.studio742.imago.core.render.RecipePixels
+import eu.studio742.imago.core.render.toPlatformBitmap
 import eu.studio742.imago.core.render.frameGeometry
 import eu.studio742.imago.core.render.toRenderPerspective
 import eu.studio742.imago.core.render.transformedFrame
@@ -48,6 +52,24 @@ class FullResolutionExporter @Inject constructor(
             library.downloadOriginal(asset.id, source)
             onPhase(uiText(Res.string.editor_phase_decoding))
             val exif = runCatching { ExifInterface(source.absolutePath) }.getOrNull()
+            requireRawEngine(recipe)
+            var raw = decodeRawPhoto(source)
+            if (raw != null) {
+                onPhase(uiText(Res.string.editor_phase_processing, raw.width, raw.height))
+                bitmap = withContext(Dispatchers.Default) { RecipePixels.render(checkNotNull(raw), recipe, consumeSource = true).toPlatformBitmap() }
+                raw = null
+                onPhase(uiText(Res.string.editor_phase_encoding))
+                val developed = checkNotNull(bitmap)
+                withContext(Dispatchers.IO) {
+                    FileOutputStream(output).buffered().use { stream ->
+                        if (!developed.compress(Bitmap.CompressFormat.JPEG, 95, stream)) {
+                            throw LocalizedException(uiText(Res.string.editor_jpeg_encode_failed_android))
+                        }
+                    }
+                    copyExif(exif, output, developed.width, developed.height)
+                }
+                return output
+            }
             bitmap = decodeMutable(source)
             bitmap = applyExifOrientation(checkNotNull(bitmap), exif)
             val parameters = recipe.toRenderParameters()

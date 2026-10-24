@@ -31,6 +31,7 @@ fun GlPhotoCanvas(
      */
     maskOverlay: Int = -1,
     modifier: Modifier = Modifier,
+    highPrecisionSource: FloatPixelBuffer? = null,
 ) {
     val renderer = remember { PhotoRenderer() }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -50,6 +51,7 @@ fun GlPhotoCanvas(
         },
         update = { view ->
             renderer.setBitmap(bitmap)
+            renderer.setHighPrecisionSource(highPrecisionSource)
             renderer.setParameters(parameters)
             renderer.setShowOriginal(showOriginal)
             renderer.setMaskOverlay(maskOverlay)

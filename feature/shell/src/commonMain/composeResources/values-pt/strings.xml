@@ -10,6 +10,16 @@
     <string name="shell_news_next">Seguinte</string>
     <string name="shell_news_start">Começar</string>
     <string name="shell_news_also_in">Também na versão %1$s</string>
+    <string name="shell_news_0_22_0_1_title">Máscaras de cor e luz</string>
+    <string name="shell_news_0_22_0_1_body">Nas Máscaras, escolha uma cor ou um intervalo de luminância para ajustar só essas zonas da fotografia. Toque ou arraste para fazer a seleção, refine-a e combine-a com outras máscaras.</string>
+    <string name="shell_news_0_22_0_2_title">Desenhar sobre as fotos</string>
+    <string name="shell_news_0_22_0_2_body">No compositor, desenhe por cima das fotografias com caneta ou marcador. A ferramenta mantém-se aberta quando levanta o dedo ou a caneta, e a pressão da caneta fica preservada nos traços.</string>
+    <string name="shell_news_0_22_0_3_title">Controlos flutuantes</string>
+    <string name="shell_news_0_22_0_3_body">As definições do desenho e das formas ficam num painel flutuante que pode arrastar para onde der mais jeito. Reutilize as cores da composição ou escolha uma cor diretamente da página com o conta-gotas.</string>
+    <string name="shell_news_0_22_0_4_title">Formas com um gesto</string>
+    <string name="shell_news_0_22_0_4_body">No compositor, toque para colocar uma forma ou arraste para desenhar quadrados, círculos, linhas e setas. Ajuste-a depois e coloque-a parcialmente fora da página para compor junto às margens.</string>
+    <string name="shell_news_0_22_0_5_title">Melhorias e correções</string>
+    <string name="shell_news_0_22_0_5_body">Volte a mostrar o painel do editor sem fechar a ferramenta de máscara e aproxime a página do compositor com dois dedos. Corrigimos bloqueios ao desenhar ou ajustar o fundo e melhorámos a mudança entre ferramentas e a indicação da borracha.</string>
     <string name="shell_news_0_21_0_1_title">Mostrar a edição</string>
     <string name="shell_news_0_21_0_1_body">Em Exportar, faça um vídeo vertical da sua edição: os sliders mexem-se, a fotografia acompanha-os e no fim vem o antes e depois. Escolha um de três estilos, junte um título e partilhe-o logo dali.</string>
     <string name="shell_news_0_21_0_2_title">Máscaras que se combinam</string>

@@ -36,6 +36,7 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.junit4)
         }
+        getByName("desktopTest").kotlin.srcDir(project(":core:raw").file("src/testFixtures/kotlin"))
         getByName("desktopTest").dependencies {
             // Skia's native library, which in a Compose app comes with the window; desktop is Windows.
             implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.9.4.2")
@@ -61,6 +62,7 @@ kotlin {
 // ReelFramesTest leaves the video's key frames here for a person to look at; -Pimago.reel.photo=<file>
 // draws them over a real photo instead of the small sample.
 tasks.withType<Test>().matching { it.name == "desktopTest" }.configureEach {
+    providers.gradleProperty("imago.raw.samples").orNull?.let { systemProperty("imago.raw.samples", it) }
     val frames = layout.buildDirectory.dir("reel-frames")
     doFirst { systemProperty("imago.reel.frames", frames.get().asFile.absolutePath) }
     providers.gradleProperty("imago.reel.photo").orNull?.let { systemProperty("imago.reel.photo", it) }

@@ -19,6 +19,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":core:model"))
+            api(project(":core:raw"))
             implementation(project(":core:immich"))
             implementation(libs.kotlinx.coroutines.core)
             api(libs.coil3.compose)
@@ -31,6 +32,7 @@ kotlin {
             // Skia's native library, which in a Compose app comes with the window; desktop is Windows.
             implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.9.4.2")
         }
+        getByName("desktopTest").kotlin.srcDir(project(":core:raw").file("src/testFixtures/kotlin"))
         androidMain.dependencies {
             implementation(project.dependencies.platform(libs.compose.bom))
             implementation(libs.compose.ui)

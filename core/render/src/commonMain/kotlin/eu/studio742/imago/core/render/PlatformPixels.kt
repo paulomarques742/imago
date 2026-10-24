@@ -2,6 +2,7 @@ package eu.studio742.imago.core.render
 
 import androidx.compose.ui.graphics.ImageBitmap
 import coil3.request.ImageRequest
+import java.io.File
 
 /*
  * The bridges between each platform's images and the engine's PixelBuffer. Coil's Bitmap is
@@ -16,6 +17,8 @@ expect val coil3.Bitmap.pixelHeight: Int
 expect fun coil3.Bitmap.toPixelBuffer(): PixelBuffer
 
 expect fun PixelBuffer.toImageBitmap(): ImageBitmap
+expect fun PixelBuffer.toPlatformBitmap(): coil3.Bitmap
+expect fun createPhotoTempFile(context: coil3.PlatformContext): File
 
 /** The same pixels, for Compose to draw — not a copy. */
 expect fun coil3.Bitmap.asComposeImage(): ImageBitmap

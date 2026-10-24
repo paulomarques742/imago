@@ -5,11 +5,14 @@ import androidx.compose.ui.graphics.asComposeImageBitmap
 import coil3.request.ImageRequest
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Image
+import java.io.File
 
 actual val coil3.Bitmap.pixelWidth: Int get() = width
 actual val coil3.Bitmap.pixelHeight: Int get() = height
 
 actual fun PixelBuffer.toImageBitmap(): ImageBitmap = toSkiaBitmap().asComposeImageBitmap()
+actual fun PixelBuffer.toPlatformBitmap(): coil3.Bitmap = toSkiaBitmap()
+actual fun createPhotoTempFile(context: coil3.PlatformContext): File = File.createTempFile("imago-original-", ".asset")
 
 actual fun coil3.Bitmap.asComposeImage(): ImageBitmap = asComposeImageBitmap()
 

@@ -32,7 +32,7 @@ import java.util.Locale
 import javax.imageio.ImageIO
 
 /**
- * The 0.20.0 news cards, on a phone-sized screen in both languages. Every card shows its title, and
+ * The latest news cards, on a phone-sized screen in both languages. Every card shows its title, and
  * the last one ends the deck. With `IMAGO_SCREENSHOTS` set to a folder, each card is saved there.
  */
 @OptIn(ExperimentalTestApi::class)
@@ -66,6 +66,14 @@ class WhatsNewCardsTest {
                 }
                 val title = runBlocking { getString(release.pages[page].title) }
                 onNodeWithText(title).fetchSemanticsNode()
+                // Semantics can be ready before every graphics layer reaches the captured frame.
+                mainClock.advanceTimeBy(100)
+                waitForIdle()
+                if (folder != null) {
+                    onRoot().captureToImage()
+                    mainClock.advanceTimeByFrame()
+                    waitForIdle()
+                }
                 folder?.let { ImageIO.write(onRoot().captureToImage().toAwtImage(), "png", File(it, "news-$tag-${page + 1}.png")) }
             }
         }

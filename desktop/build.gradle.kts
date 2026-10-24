@@ -18,6 +18,7 @@ version = providers.gradleProperty("imago.version").get()
 kotlin { jvmToolchain(17) }
 
 dependencies {
+    implementation(project(":core:render"))
     implementation(project(":feature:shell"))
     implementation(project(":core:data"))
     implementation(project(":core:designsystem"))

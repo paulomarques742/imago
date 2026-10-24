@@ -256,7 +256,7 @@ internal object PhotoShaders {
         }
 
         vec3 applyBaseTone(vec3 srgb, float temperature, float tint, float exposure, float whites, float blacks) {
-            vec3 linear = toLinear(srgb);
+            vec3 linear = uSourceLinear == 1 ? srgb : toLinear(srgb);
             if (uLightWhiteBalance == 1) {
                 linear = whiteBalanceAt(temperature, tint) * linear;
             } else {
@@ -313,6 +313,7 @@ internal object PhotoShaders {
     const val LOCAL_BASE = """#version 300 es
         precision highp float;
         uniform sampler2D uTexture;
+        uniform int uSourceLinear;
         uniform vec2 uSourceTexel;
         uniform float uTemperature;
         uniform float uTint;
@@ -356,6 +357,7 @@ internal object PhotoShaders {
     const val TONE = """#version 300 es
         precision highp float;
         uniform sampler2D uTexture;
+        uniform int uSourceLinear;
         uniform sampler2D uLocalBlur;
         uniform int uLocalEnabled;
         uniform float uTemperature;

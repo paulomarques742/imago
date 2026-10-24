@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
+import java.io.File
 
 actual val coil3.Bitmap.pixelWidth: Int get() = width
 
@@ -21,6 +22,9 @@ actual fun coil3.Bitmap.toPixelBuffer(): PixelBuffer {
 
 actual fun PixelBuffer.toImageBitmap(): ImageBitmap =
     Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888).asImageBitmap()
+
+actual fun PixelBuffer.toPlatformBitmap(): coil3.Bitmap = Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+actual fun createPhotoTempFile(context: coil3.PlatformContext): File = File.createTempFile("imago-original-", ".asset", context.cacheDir)
 
 actual fun decodePixels(bytes: ByteArray): PixelBuffer? = runCatching {
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 })

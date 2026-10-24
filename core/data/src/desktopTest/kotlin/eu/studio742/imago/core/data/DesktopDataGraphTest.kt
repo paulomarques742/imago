@@ -21,6 +21,20 @@ import javax.imageio.ImageIO
  * folder library — working with the shared repositories.
  */
 class DesktopDataGraphTest {
+    @Test fun `RAW files enter the folder catalogue by contents with an unknown extension`() = runBlocking {
+        val root = Files.createTempDirectory("imago-raw-catalogue-")
+        val photos = Files.createDirectories(root.resolve("Photos"))
+        Files.write(photos.resolve("camera.unlisted"), eu.studio742.imago.core.raw.syntheticDng(6))
+        DesktopDataGraph(root.resolve("app")).use { graph ->
+            graph.folders.addFolder(photos)
+            val row = graph.database.assetDao().allAssets(DEVICE_LIBRARY_ID).single()
+            assertEquals("camera.unlisted", row.originalFileName)
+            assertEquals("IMAGE", row.type)
+            assertEquals("image/x-raw", row.mimeType)
+            assertEquals(48L to 64L, row.width to row.height)
+        }
+    }
+
     @Test
     fun `a folder enters the catalogue, keeps recipes and favourites, and the configuration survives reopening`() = runBlocking {
         val root = Files.createTempDirectory("imago-data-graph")

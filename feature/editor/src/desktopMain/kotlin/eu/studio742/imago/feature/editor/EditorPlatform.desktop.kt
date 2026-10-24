@@ -22,6 +22,8 @@ import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.render.PixelBuffer
 import eu.studio742.imago.core.render.RecipePixels
 import eu.studio742.imago.core.render.decodePixels
+import eu.studio742.imago.core.render.decodeRawPhoto
+import eu.studio742.imago.core.render.requireRawEngine
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -38,10 +40,16 @@ class DesktopEditorExporter(private val library: LibraryRepository) : EditorExpo
         val original = File.createTempFile("imago-original-", ".asset")
         try {
             library.downloadOriginal(asset.id, original)
-            val pixels = decodePixels(original.readBytes()) ?: readWithImageIo(original)
-                ?: throw LocalizedException(uiText(Res.string.editor_format_unsupported_desktop))
+            requireRawEngine(recipe)
+            var raw = decodeRawPhoto(original)
             onPhase(uiText(Res.string.editor_phase_applying))
-            val rendered = RecipePixels.render(pixels, recipe)
+            val rendered = if (raw != null) RecipePixels.render(raw, recipe, consumeSource = true) else {
+                val pixels = decodePixels(original.readBytes()) ?: readWithImageIo(original)
+                    ?: throw LocalizedException(uiText(Res.string.editor_format_unsupported_desktop))
+                RecipePixels.render(pixels, recipe)
+            }
+            // The full-resolution float source must leave the heap before JPEG staging allocates.
+            raw = null
             onPhase(uiText(Res.string.editor_phase_writing))
             File.createTempFile("imago-export-", ".jpg").also { output -> output.writeBytes(encodeJpeg(rendered)) }
         } finally {

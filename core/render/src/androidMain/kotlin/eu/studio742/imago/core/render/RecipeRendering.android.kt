@@ -154,7 +154,9 @@ class EditRecipeTransformation(private val recipe: EditRecipe) : Transformation(
     override val cacheKey: String = "recipe:${recipe.assetId}:${recipe.processVersion}:${recipe.updatedAt}"
 
     override suspend fun transform(input: Bitmap, size: Size): Bitmap =
-        withContext(Dispatchers.Default) { renderRecipePreview(input, recipe) }
+        withContext(Dispatchers.Default) {
+            if (DevelopedRawBitmaps.contains(input, cacheKey)) input else renderRecipePreview(input, recipe)
+        }
 }
 
 actual fun recipeTransformation(recipe: EditRecipe): Transformation = EditRecipeTransformation(recipe)

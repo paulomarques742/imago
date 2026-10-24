@@ -42,16 +42,17 @@ internal class DetailPyramid private constructor(
             val halfHeight = max(height / 2, 1)
 
             val half = FloatArray(halfWidth * halfHeight)
-            val pixels = IntArray(width)
+            val pixels = FloatArray(width * 4)
+            val scratch = IntArray(width)
             val topLuma = FloatArray(width)
             val bottomLuma = FloatArray(width)
             for (targetRow in 0 until halfHeight) {
                 val top = min(targetRow * 2, height - 1)
                 val bottom = min(top + 1, height - 1)
-                bitmap.getPixels(pixels, 0, width, 0, top, width, 1)
-                for (x in 0 until width) topLuma[x] = pixelLuminance(pixels[x])
-                bitmap.getPixels(pixels, 0, width, 0, bottom, width, 1)
-                for (x in 0 until width) bottomLuma[x] = pixelLuminance(pixels[x])
+                bitmap.readRgbaRow(top, pixels, scratch)
+                for (x in 0 until width) topLuma[x] = PhotoEffects.luminance(pixels[x * 4], pixels[x * 4 + 1], pixels[x * 4 + 2])
+                bitmap.readRgbaRow(bottom, pixels, scratch)
+                for (x in 0 until width) bottomLuma[x] = PhotoEffects.luminance(pixels[x * 4], pixels[x * 4 + 1], pixels[x * 4 + 2])
                 accumulateHalfRow(half, halfWidth, targetRow, topLuma, bottomLuma, width)
             }
 
@@ -228,7 +229,8 @@ internal class DehazeStats private constructor(val dark: FloatArray, val airligh
             val quarterBright = FloatArray(quarterWidth * quarterHeight)
             val width = bitmap.width
             val height = bitmap.height
-            val row = IntArray(width)
+            val row = FloatArray(width * 4)
+            val scratch = IntArray(width)
             val redSum = FloatArray(quarterWidth)
             val greenSum = FloatArray(quarterWidth)
             val blueSum = FloatArray(quarterWidth)
@@ -237,13 +239,12 @@ internal class DehazeStats private constructor(val dark: FloatArray, val airligh
             var target = 0
             var rowsInBlock = 0
             for (y in 0 until height) {
-                bitmap.getPixels(row, 0, width, 0, y, width, 1)
+                bitmap.readRgbaRow(y, row, scratch)
                 for (x in 0 until width) {
                     val column = min(x / 4, quarterWidth - 1)
-                    val pixel = row[x]
-                    redSum[column] += (pixel ushr 16 and 0xFF) / 255f
-                    greenSum[column] += (pixel ushr 8 and 0xFF) / 255f
-                    blueSum[column] += (pixel and 0xFF) / 255f
+                    redSum[column] += row[x * 4]
+                    greenSum[column] += row[x * 4 + 1]
+                    blueSum[column] += row[x * 4 + 2]
                     counts[column] += 1f
                 }
                 rowsInBlock++

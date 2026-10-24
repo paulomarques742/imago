@@ -10,6 +10,16 @@
     <string name="shell_news_next">Next</string>
     <string name="shell_news_start">Get started</string>
     <string name="shell_news_also_in">Also in version %1$s</string>
+    <string name="shell_news_0_22_0_1_title">Color and light masks</string>
+    <string name="shell_news_0_22_0_1_body">In Masks, select a color or a luminance range to adjust only those parts of your photo. Tap or drag to sample, refine the selection and combine it with other masks.</string>
+    <string name="shell_news_0_22_0_2_title">Draw over your photos</string>
+    <string name="shell_news_0_22_0_2_body">In the composer, draw over photos with the pen or marker. The tool stays open when you lift your finger or stylus, and stylus pressure is preserved in your strokes.</string>
+    <string name="shell_news_0_22_0_3_title">Floating controls</string>
+    <string name="shell_news_0_22_0_3_body">Drawing and shape settings now sit in a floating panel you can drag out of the way. Reuse colors from your composition or pick a color directly from the page with the eyedropper.</string>
+    <string name="shell_news_0_22_0_4_title">Shapes with a gesture</string>
+    <string name="shell_news_0_22_0_4_body">In the composer, tap to place a shape or drag to draw squares, circles, lines and arrows. Adjust it afterwards and let it extend beyond the page edges to build your layout.</string>
+    <string name="shell_news_0_22_0_5_title">Improvements and fixes</string>
+    <string name="shell_news_0_22_0_5_body">Bring back the editor panel without closing the mask tool, and zoom into the composer page with two fingers. We fixed freezes when drawing or reframing the background and improved tool switching and the eraser indicator.</string>
     <string name="shell_news_0_21_0_1_title">Show your edit</string>
     <string name="shell_news_0_21_0_1_body">In Export, make a vertical video of your edit: the sliders move, the photo follows them, and the before and after comes at the end. Pick one of three styles, add a title and share it right away.</string>
     <string name="shell_news_0_21_0_2_title">Masks that combine</string>

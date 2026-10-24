@@ -26,6 +26,21 @@ class ShellNewsTest {
         assertTrue(ShellViewModel(configuration).newsState.value.isEmpty())
     }
 
+    @Test fun updatingFromThePreviousReleaseShowsOnlyTheNewDeckOnce() {
+        val previous = Releases[1].version.toString()
+        val configuration = FakeConfiguration(lastSeen = previous, welcomeCompleted = true)
+        val updated = ShellViewModel(configuration)
+
+        assertEquals(listOf(InstalledVersion), updated.newsState.value.map { it.version })
+        assertTrue(updated.newsState.value.single().pages.isNotEmpty())
+        assertEquals(previous, configuration.lastSeenAppVersion)
+
+        updated.newsSeen()
+
+        assertEquals(APP_VERSION, configuration.lastSeenAppVersion)
+        assertTrue(ShellViewModel(configuration).newsState.value.isEmpty())
+    }
+
     /** Leaving the app with the news still open is not having seen it. */
     @Test fun theNewsStaysPendingUntilClosed() {
         val configuration = FakeConfiguration(lastSeen = null, welcomeCompleted = true)

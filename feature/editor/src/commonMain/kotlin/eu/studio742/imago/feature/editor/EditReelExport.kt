@@ -94,6 +94,7 @@ class ReelExportViewModel : ViewModel() {
         photo: Bitmap,
         fileName: String,
         textMeasurer: TextMeasurer,
+        highPrecisionSource: eu.studio742.imago.core.render.FloatPixelBuffer? = null,
     ) {
         if (job?.isActive == true) return
         mutableState.value = ReelExportState(progress = 0f)
@@ -103,7 +104,8 @@ class ReelExportViewModel : ViewModel() {
                 val texts = reelTexts(script, title)
                 video = withContext(Dispatchers.Default) {
                     val painter = ReelFramePainter(script, style, texts, textMeasurer, scale = platform.frameScale())
-                    platform.photoRenderer(photo, painter.photoMaxSide).use { photos ->
+                    (highPrecisionSource?.let { FloatReelPhotoRenderer(it, painter.photoMaxSide) }
+                        ?: platform.photoRenderer(photo, painter.photoMaxSide)).use { photos ->
                         val renderer = EditReelRenderer(script, photos, painter)
                         platform.encode(painter.width, painter.height, renderer.fps, renderer.frameCount, renderer::frame) { done ->
                             mutableState.update { it.copy(progress = done) }

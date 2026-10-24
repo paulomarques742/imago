@@ -28,6 +28,7 @@ import eu.studio742.imago.core.model.LocalAdjustments
  */
 internal class PhotoRenderer : GLSurfaceView.Renderer {
     @Volatile private var bitmap: Bitmap? = null
+    @Volatile private var highPrecisionSource: FloatPixelBuffer? = null
     @Volatile private var pendingUpload = false
     @Volatile private var parameters = RenderParameters()
     @Volatile private var showOriginal = false
@@ -117,6 +118,10 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         }
     }
 
+    fun setHighPrecisionSource(value: FloatPixelBuffer?) {
+        if (value !== highPrecisionSource) { highPrecisionSource = value; pendingUpload = bitmap != null }
+    }
+
     fun setParameters(value: RenderParameters) { parameters = value }
     fun setShowOriginal(value: Boolean) { showOriginal = value }
 
@@ -173,7 +178,17 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         val source = bitmap ?: return
         if (pendingUpload) {
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, sourceTexture)
-            GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, source, 0)
+            val raw = highPrecisionSource
+            if (raw == null) GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, source, 0) else {
+                val pixels = ByteBuffer.allocateDirect(Math.multiplyExact(raw.width * raw.height, 16))
+                    .order(ByteOrder.nativeOrder()).asFloatBuffer()
+                for (i in 0 until raw.width * raw.height) {
+                    pixels.put(raw.rgb[i * 3]); pixels.put(raw.rgb[i * 3 + 1]); pixels.put(raw.rgb[i * 3 + 2]); pixels.put(1f)
+                }
+                pixels.position(0)
+                GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA16F, raw.width, raw.height, 0,
+                    GLES30.GL_RGBA, GLES30.GL_FLOAT, pixels)
+            }
             imageWidth = source.width.coerceAtLeast(1)
             imageHeight = source.height.coerceAtLeast(1)
             pendingUpload = false
@@ -716,6 +731,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
      * is built once here; the constants let the shader build it per pixel where a mask moves them.
      */
     private fun bindWhiteBalance(program: GlProgram, active: RenderParameters) {
+        program.boolean("uSourceLinear", highPrecisionSource?.linear == true)
         program.boolean("uLightWhiteBalance", active.lightWhiteBalance)
         if (!active.lightWhiteBalance) return
         program.mat3("uWhiteBalance", WhiteBalanceModel.matrix(active.temperature / 100f, active.tint / 100f))

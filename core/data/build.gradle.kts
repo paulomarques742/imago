@@ -22,6 +22,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":core:model"))
+            implementation(project(":core:raw"))
             api(project(":core:composition"))
             implementation(project(":shared:sync-protocol"))
             implementation(project(":core:immich"))
@@ -58,6 +59,7 @@ kotlin {
             implementation(libs.junit4)
             implementation(libs.kotlinx.coroutines.test)
         }
+        getByName("desktopTest").kotlin.srcDir(project(":core:raw").file("src/testFixtures/kotlin"))
     }
 }
 

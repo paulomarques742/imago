@@ -22,4 +22,5 @@ expect fun PhotoCanvas(
     minZoom: Float = MIN_PHOTO_ZOOM,
     maskOverlay: Int = -1,
     modifier: Modifier = Modifier,
+    highPrecisionSource: FloatPixelBuffer? = null,
 )

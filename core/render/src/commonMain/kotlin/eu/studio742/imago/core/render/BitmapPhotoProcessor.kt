@@ -39,7 +39,7 @@ object BitmapPhotoProcessor {
         renderScale: Float = 1f,
         brushes: BrushRasters = BrushRasters.NONE,
     ): T {
-        if (!parameters.isColorNeutral) process(bitmap, parameters, geometry, renderScale, brushes)
+        if (!parameters.isColorNeutral || (bitmap is FloatPixelBuffer && bitmap.linear)) process(bitmap, parameters, geometry, renderScale, brushes)
         geometry?.takeIf { it.showsOutside }?.let { paintOutside(bitmap, it) }
         return bitmap
     }
@@ -115,6 +115,25 @@ object BitmapPhotoProcessor {
         }
         val width = bitmap.width
         val height = bitmap.height
+        if (bitmap is FloatPixelBuffer) {
+            val linearInput = bitmap.linear
+            forEachRowBand(bitmap) { from, until ->
+                val base = FloatArray(3)
+                val weights = FloatArray(MAX_LOCAL_MASKS)
+                val tone = parameters.effectiveTone()
+                for (y in from until until) for (x in 0 until width) {
+                    val u = (x + .5f) / width
+                    val v = (y + .5f) / height
+                    if (field != null) field.resolve(parameters, u, v, weights, tone)
+                    val index = (y * width + x) * 3
+                    bitmap.rgb.copyInto(base, 0, index, index + 3)
+                    processColor(base, parameters, tone, mask?.at(u, v) ?: NO_LOCAL_BASE, linearInput)
+                    repeat(3) { bitmap.rgb[index + it] = base[it] }
+                }
+            }
+            bitmap.linear = false
+            return
+        }
         // Each pixel only depends on itself: the strips do not see each other. The buffers and the
         // effective tone, which the masks rewrite for every pixel, belong to each strip.
         forEachRowBand(bitmap) { fromRow, untilRow ->
@@ -164,10 +183,11 @@ object BitmapPhotoProcessor {
         val input: PixelSurface = if (rowsRunInParallel(bitmap)) (bitmap as PixelBuffer).copy() else bitmap
 
         forEachRowBand(bitmap) { fromRow, untilRow ->
-            val above = IntArray(width)
-            val current = IntArray(width)
-            val below = IntArray(width)
-            val output = IntArray(width)
+            val above = FloatArray(width * 4)
+            val current = FloatArray(width * 4)
+            val below = FloatArray(width * 4)
+            val output = FloatArray(width * 4)
+            val scratch = IntArray(width)
             // Step 12 works on the whole triple and not channel by channel — a wheel's chroma has
             // components of different signs. The buffer belongs to the strip, not to the pixel.
             val graded = FloatArray(3)
@@ -178,17 +198,16 @@ object BitmapPhotoProcessor {
             var clarity = parameters.clarity / 100f
             var dehaze = parameters.dehaze / 100f
 
-            input.getPixels(current, 0, width, 0, fromRow, width, 1)
-            if (fromRow > 0) input.getPixels(above, 0, width, 0, fromRow - 1, width, 1) else System.arraycopy(current, 0, above, 0, width)
-            if (fromRow + 1 < height) input.getPixels(below, 0, width, 0, fromRow + 1, width, 1) else System.arraycopy(current, 0, below, 0, width)
+            input.readRgbaRow(fromRow, current, scratch)
+            if (fromRow > 0) input.readRgbaRow(fromRow - 1, above, scratch) else current.copyInto(above)
+            if (fromRow + 1 < height) input.readRgbaRow(fromRow + 1, below, scratch) else current.copyInto(below)
 
             for (y in fromRow until untilRow) {
                 val v = (y + 0.5f) / height
                 for (x in 0 until width) {
-                    val pixel = current[x]
-                    var red = (pixel ushr 16 and 0xFF) / 255f
-                    var green = (pixel ushr 8 and 0xFF) / 255f
-                    var blue = (pixel and 0xFF) / 255f
+                    var red = current[x * 4]
+                    var green = current[x * 4 + 1]
+                    var blue = current[x * 4 + 2]
                     val u = (x + 0.5f) / width
 
                     // Texture, clarity and dehaze are local; the rest of step 13 is not. The
@@ -259,18 +278,18 @@ object BitmapPhotoProcessor {
                         blue = (blue + noise * strength).coerceIn(0f, 1f)
                     }
 
-                    output[x] = (pixel and 0xFF000000.toInt()) or
-                        ((red * 255f + 0.5f).toInt() shl 16) or
-                        ((green * 255f + 0.5f).toInt() shl 8) or
-                        (blue * 255f + 0.5f).toInt()
+                    output[x * 4] = red
+                    output[x * 4 + 1] = green
+                    output[x * 4 + 2] = blue
+                    output[x * 4 + 3] = current[x * 4 + 3]
                 }
-                bitmap.setPixels(output, 0, width, 0, y, width, 1)
+                bitmap.writeRgbaRow(y, output, scratch)
 
-                System.arraycopy(current, 0, above, 0, width)
-                System.arraycopy(below, 0, current, 0, width)
+                current.copyInto(above)
+                below.copyInto(current)
                 val nextRow = y + 2
                 if (nextRow < height) {
-                    input.getPixels(below, 0, width, 0, nextRow, width, 1)
+                    input.readRgbaRow(nextRow, below, scratch)
                 }
             }
         }
@@ -278,21 +297,23 @@ object BitmapPhotoProcessor {
 
     /** 3×3 tent [1 2 1]⊗[1 2 1]/16 over the luminance, the fine term of the texture band. */
     private fun tentLuminance(
-        above: IntArray,
-        current: IntArray,
-        below: IntArray,
+        above: FloatArray,
+        current: FloatArray,
+        below: FloatArray,
         x: Int,
         width: Int,
     ): Float {
         val left = max(x - 1, 0)
         val right = min(x + 1, width - 1)
         return (
-            pixelLuminance(above[left]) + 2f * pixelLuminance(above[x]) + pixelLuminance(above[right]) +
-                2f * pixelLuminance(current[left]) + 4f * pixelLuminance(current[x]) +
-                2f * pixelLuminance(current[right]) +
-                pixelLuminance(below[left]) + 2f * pixelLuminance(below[x]) + pixelLuminance(below[right])
+            rowLuminance(above, left) + 2f * rowLuminance(above, x) + rowLuminance(above, right) +
+                2f * rowLuminance(current, left) + 4f * rowLuminance(current, x) +
+                2f * rowLuminance(current, right) +
+                rowLuminance(below, left) + 2f * rowLuminance(below, x) + rowLuminance(below, right)
             ) / 16f
     }
+
+    private fun rowLuminance(row: FloatArray, x: Int): Float = PhotoEffects.luminance(row[x * 4], row[x * 4 + 1], row[x * 4 + 2])
 
     private fun pixelLuminance(argb: Int): Float = PhotoEffects.luminance(
         (argb ushr 16 and 0xFF) / 255f,
@@ -307,10 +328,10 @@ object BitmapPhotoProcessor {
      * no others: it is the image as it enters step 8 that decides what is a highlight and what is a
      * shadow. Two copies of this arithmetic would be two definitions of "light".
      */
-    internal fun applyBaseTone(rgb: FloatArray, tone: EffectiveTone) {
-        var red = srgbToLinear(rgb[0])
-        var green = srgbToLinear(rgb[1])
-        var blue = srgbToLinear(rgb[2])
+    internal fun applyBaseTone(rgb: FloatArray, tone: EffectiveTone, linearInput: Boolean = false) {
+        var red = if (linearInput) rgb[0] else srgbToLinear(rgb[0])
+        var green = if (linearInput) rgb[1] else srgbToLinear(rgb[1])
+        var blue = if (linearInput) rgb[2] else srgbToLinear(rgb[2])
 
         if (tone.lightWhiteBalance) {
             val m = tone.whiteBalanceMatrix()
@@ -361,7 +382,21 @@ object BitmapPhotoProcessor {
             (argb ushr 8 and 0xFF) / 255f,
             (argb and 0xFF) / 255f,
         )
-        applyBaseTone(base, tone)
+        processColor(base, parameters, tone, localBase)
+        val outputRed = (base[0].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+        val outputGreen = (base[1].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+        val outputBlue = (base[2].coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+        return alpha shl 24 or (outputRed shl 16) or (outputGreen shl 8) or outputBlue
+    }
+
+    private fun processColor(
+        base: FloatArray,
+        parameters: RenderParameters,
+        tone: EffectiveTone,
+        localBase: Float,
+        linearInput: Boolean = false,
+    ) {
+        applyBaseTone(base, tone, linearInput)
         var red = base[0]
         var green = base[1]
         var blue = base[2]
@@ -402,10 +437,9 @@ object BitmapPhotoProcessor {
         green = mix(perceived, green, vibrance)
         blue = mix(perceived, blue, vibrance)
 
-        val outputRed = (red.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
-        val outputGreen = (green.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
-        val outputBlue = (blue.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
-        return alpha shl 24 or (outputRed shl 16) or (outputGreen shl 8) or outputBlue
+        base[0] = red.coerceIn(0f, 1f)
+        base[1] = green.coerceIn(0f, 1f)
+        base[2] = blue.coerceIn(0f, 1f)
     }
 
     private fun applyHslBands(rgb: FloatArray, bands: List<HslRenderBand>): FloatArray {
