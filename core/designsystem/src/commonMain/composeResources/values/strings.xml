@@ -4,6 +4,8 @@
   Translations live in values-<language>/ with the same keys.
 -->
 <resources>
+    <string name="settings_category_expanded">Expanded</string>
+    <string name="settings_category_collapsed">Collapsed</string>
     <!-- Auto-save (AutoSaveStatus) -->
     <string name="autosave_saving">Saving…</string>
     <string name="autosave_saved">✓ Saved</string>
@@ -21,6 +23,18 @@
     <string name="message_library_reconnect">Reconnect this library in Settings.</string>
     <string name="message_address_already_in_library">This address is already part of the library.</string>
     <string name="message_address_wrong_server">This address belongs to another server or another Immich account.</string>
+    <string name="message_immich_protected">Something in front of the server answered before Immich did, such as a proxy or an access service asking for authentication. Open Advanced and add the headers it needs, or check the ones you set.</string>
+    <string name="message_immich_certificate_required">The server asks for a client certificate. Import one in Advanced.</string>
+    <string name="message_immich_certificate_untrusted">This device doesn’t trust the server’s certificate. Use a certificate from a public authority, or install the authority that issued it on this device.</string>
+    <string name="message_certificate_unreadable">This file isn’t a client certificate. Pick a .p12 or .pfx file.</string>
+    <string name="message_certificate_bad_password">The password doesn’t open this certificate file.</string>
+    <string name="message_certificate_no_key">This file has no private key, so it can’t identify this device to the server. Export the certificate together with its key.</string>
+    <string name="message_certificate_expired">This certificate is outside its validity dates.</string>
+    <string name="message_connection_needs_https">Headers are secrets: they are only sent over https:// addresses.</string>
+    <string name="message_connection_header_name_invalid">A header name can only have letters, digits and these symbols: - _ . ! # $ % &amp; ’ * + ^ ` | ~</string>
+    <string name="message_connection_header_name_reserved">This header is managed by the app and can’t be set here.</string>
+    <string name="message_connection_header_value_invalid">A header needs a value, on a single line.</string>
+    <string name="message_connection_header_repeated">The same header is listed twice.</string>
     <string name="message_library_needs_address">A library needs at least one address.</string>
     <string name="message_library_disconnected">The library %1$s is disconnected. Reconnect it in Settings.</string>
     <string name="message_choose_folder">Choose a folder.</string>

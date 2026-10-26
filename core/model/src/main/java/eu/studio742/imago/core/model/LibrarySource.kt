@@ -40,9 +40,15 @@ data class LibrarySource(
     val userId: String? = null,
     val apiKey: String? = null,
     @Transient val activeUrl: String? = null,
+    /** Per address, by the address as listed in [serverUrls]. Absent when an address needs nothing. */
+    val profiles: Map<String, ConnectionProfile> = emptyMap(),
 ) {
     /** The address in use: the active one, if it still belongs to the list, or the first. */
     val serverUrl: String? get() = activeUrl?.takeIf { it in serverUrls } ?: serverUrls.firstOrNull()
+    /** The options of one address, whether it is listed with a trailing slash or not. */
+    fun profileOf(address: String): ConnectionProfile? =
+        (profiles[address] ?: profiles.entries.firstOrNull { it.key.trimEnd('/').equals(address.trimEnd('/'), ignoreCase = true) }?.value)
+            ?.takeIf { !it.isEmpty }
     val isDevice: Boolean get() = id == DEVICE_LIBRARY_ID
     val isUnified: Boolean get() = id == UNIFIED_LIBRARY_ID
     val isConnected: Boolean get() = isDevice || isUnified || !apiKey.isNullOrBlank()

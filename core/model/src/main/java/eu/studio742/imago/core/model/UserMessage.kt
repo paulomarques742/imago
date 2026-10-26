@@ -69,6 +69,33 @@ enum class UserMessage {
     /** Removing a library's last address. */
     LIBRARY_NEEDS_ADDRESS,
 
+    /** Extra headers or a certificate on an address that is not https: the secret would travel in clear. */
+    CONNECTION_NEEDS_HTTPS,
+
+    /** A connection header whose name is not a valid HTTP header name. */
+    CONNECTION_HEADER_NAME_INVALID,
+
+    /** A connection header the app or the HTTP stack owns, such as the API key's. */
+    CONNECTION_HEADER_NAME_RESERVED,
+
+    /** A connection header with an empty value or one with a line break. */
+    CONNECTION_HEADER_VALUE_INVALID,
+
+    /** The same connection header twice. */
+    CONNECTION_HEADER_REPEATED,
+
+    /** The picked file is not a PKCS#12 certificate. */
+    CERTIFICATE_UNREADABLE,
+
+    /** The password does not open the certificate file. */
+    CERTIFICATE_BAD_PASSWORD,
+
+    /** The certificate file has no private key: the server cannot be answered with it. */
+    CERTIFICATE_NO_KEY,
+
+    /** The certificate is outside its validity dates. */
+    CERTIFICATE_EXPIRED,
+
     /** A disconnected library. Argument: its name. */
     LIBRARY_DISCONNECTED,
 
@@ -83,6 +110,15 @@ enum class UserMessage {
 
     /** An Immich server address is not a valid http(s) URL. */
     IMMICH_INVALID_URL,
+
+    /** Something in front of the server asked for authentication before Immich answered. */
+    IMMICH_PROTECTED,
+
+    /** The server asks for a client certificate. */
+    IMMICH_CERTIFICATE_REQUIRED,
+
+    /** The server's certificate is not trusted by this device. */
+    IMMICH_CERTIFICATE_UNTRUSTED,
 
     /** The Immich server refused the API key. */
     IMMICH_KEY_REJECTED,

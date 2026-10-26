@@ -51,6 +51,7 @@ android {
         // Debug builds use the dev project.
         buildConfigField("String", "SUPABASE_URL", "\"${buildSetting("SUPABASE_URL")}\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${buildSetting("SUPABASE_PUBLISHABLE_KEY")}\"")
+        buildConfigField("String", "FORUM_WEBSITE_URL", "\"${buildSetting("FORUM_WEBSITE_URL")}\"")
     }
 
     // The Play Store upload key. It lives outside the repository, and only whoever ships to the
@@ -73,6 +74,7 @@ android {
             // The release only talks to the prod project; without it configured, `whenReady` refuses it.
             buildConfigField("String", "SUPABASE_URL", "\"${buildSetting("SUPABASE_RELEASE_URL")}\"")
             buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${buildSetting("SUPABASE_RELEASE_PUBLISHABLE_KEY")}\"")
+            buildConfigField("String", "FORUM_WEBSITE_URL", "\"https://imago.742studio.eu\"")
             signingConfig = signingConfigs.getByName("release").takeIf { it.storeFile != null }
             isMinifyEnabled = true
             isShrinkResources = true
@@ -133,6 +135,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:render"))
     implementation(project(":core:data"))
+    implementation(project(":core:immich"))
     implementation(project(":core:designsystem"))
     implementation(project(":feature:shell"))
     implementation(project(":feature:library"))

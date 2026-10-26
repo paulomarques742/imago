@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Português europeu. As mesmas chaves de values/strings.xml. -->
 <resources>
+    <string name="settings_category_expanded">Expandido</string>
+    <string name="settings_category_collapsed">Recolhido</string>
     <!-- Guardado automático (AutoSaveStatus) -->
     <string name="autosave_saving">A guardar…</string>
     <string name="autosave_saved">✓ Guardado</string>
@@ -17,6 +19,18 @@
     <string name="message_library_reconnect">Volte a ligar esta biblioteca nas Definições.</string>
     <string name="message_address_already_in_library">Este endereço já faz parte da biblioteca.</string>
     <string name="message_address_wrong_server">Este endereço pertence a outro servidor ou a outra conta Immich.</string>
+    <string name="message_immich_protected">Alguma coisa à frente do servidor respondeu antes do Immich, como uma proxy ou um serviço de acesso que pede autenticação. Abra o Avançado e junte os cabeçalhos de que precisa, ou confirme os que definiu.</string>
+    <string name="message_immich_certificate_required">O servidor pede um certificado de cliente. Importe um no Avançado.</string>
+    <string name="message_immich_certificate_untrusted">Este aparelho não confia no certificado do servidor. Use um certificado de uma autoridade pública, ou instale neste aparelho a autoridade que o emitiu.</string>
+    <string name="message_certificate_unreadable">Este ficheiro não é um certificado de cliente. Escolha um ficheiro .p12 ou .pfx.</string>
+    <string name="message_certificate_bad_password">A palavra-passe não abre este ficheiro de certificado.</string>
+    <string name="message_certificate_no_key">Este ficheiro não tem chave privada, por isso não identifica este aparelho perante o servidor. Exporte o certificado com a chave.</string>
+    <string name="message_certificate_expired">Este certificado está fora do prazo de validade.</string>
+    <string name="message_connection_needs_https">Os cabeçalhos são segredos: só se enviam para endereços https://.</string>
+    <string name="message_connection_header_name_invalid">O nome de um cabeçalho só pode ter letras, algarismos e estes símbolos: - _ . ! # $ % &amp; ’ * + ^ ` | ~</string>
+    <string name="message_connection_header_name_reserved">Este cabeçalho é gerido pela app e não se pode definir aqui.</string>
+    <string name="message_connection_header_value_invalid">Um cabeçalho precisa de um valor, numa só linha.</string>
+    <string name="message_connection_header_repeated">O mesmo cabeçalho está repetido.</string>
     <string name="message_library_needs_address">Uma biblioteca precisa de pelo menos um endereço.</string>
     <string name="message_library_disconnected">A biblioteca %1$s está desligada. Volte a ligá-la nas Definições.</string>
     <string name="message_choose_folder">Escolha uma pasta.</string>

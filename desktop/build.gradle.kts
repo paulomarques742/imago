@@ -17,10 +17,22 @@ group = "eu.studio742.imago"
 version = providers.gradleProperty("imago.version").get()
 kotlin { jvmToolchain(17) }
 
+val generateDiagnosticVersion by tasks.registering {
+    val appVersion = project.version.toString()
+    inputs.property("version", appVersion)
+    val output = layout.buildDirectory.dir("generated/diagnosticVersion")
+    outputs.dir(output)
+    doLast {
+        output.get().file("imago-version.txt").asFile.apply { parentFile.mkdirs(); writeText(appVersion) }
+    }
+}
+sourceSets.main { resources.srcDir(generateDiagnosticVersion) }
+
 dependencies {
     implementation(project(":core:render"))
     implementation(project(":feature:shell"))
     implementation(project(":core:data"))
+    implementation(project(":core:immich"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:sync"))
     implementation(project(":shared:sync-protocol"))
@@ -59,7 +71,7 @@ val generateSupabaseSettings by tasks.registering {
         fun setting(name: String) = (properties.getProperty(name) ?: System.getenv(name) ?: "").trim()
         val file = output.get().file("imago-supabase.properties").asFile
         file.parentFile.mkdirs()
-        file.writeText("url=${setting("SUPABASE_URL")}\npublishableKey=${setting("SUPABASE_PUBLISHABLE_KEY")}\n")
+        file.writeText("url=${setting("SUPABASE_URL")}\npublishableKey=${setting("SUPABASE_PUBLISHABLE_KEY")}\nforumWebsiteUrl=${setting("FORUM_WEBSITE_URL")}\n")
     }
 }
 sourceSets.main { resources.srcDir(generateSupabaseSettings) }

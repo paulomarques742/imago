@@ -150,3 +150,21 @@ actual fun rememberSendToImmich(): ((List<String>, String) -> Unit)? = null
 
 @Composable
 actual fun rememberLocationAccess(onGranted: () -> Unit): (() -> Unit)? = null
+
+@Composable
+actual fun rememberCertificateFilePicker(onPicked: (ByteArray?) -> Unit): () -> Unit {
+    val scope = rememberCoroutineScope()
+    val latest by rememberUpdatedState(onPicked)
+    return {
+        scope.launch {
+            val filter = eu.studio742.imago.core.designsystem.NativeDialogs.Filter(
+                eu.studio742.imago.core.designsystem.i18n.appString(Res.string.connection_certificate_filter), listOf("p12", "pfx"))
+            val bytes = runCatching { eu.studio742.imago.core.designsystem.NativeDialogs.openFile(listOf(filter)) }.getOrNull()?.let { path ->
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { if (java.nio.file.Files.size(path) <= CERTIFICATE_FILE_MAX_BYTES) java.nio.file.Files.readAllBytes(path) else null }.getOrNull()
+                }
+            }
+            latest(bytes)
+        }
+    }
+}

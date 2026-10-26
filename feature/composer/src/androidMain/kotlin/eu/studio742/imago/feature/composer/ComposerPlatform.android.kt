@@ -18,7 +18,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
@@ -209,7 +208,8 @@ actual fun ElementVideoPlayer(
     // The player survives changes to `timing`: having it in the `remember` key recreated it (and
     // reloaded the video) on every tap of the trim buttons. What changes is applied through an effect.
     val player = remember(element.id, url, apiKey) {
-        val http = DefaultHttpDataSource.Factory().setDefaultRequestProperties(if (apiKey.isBlank()) emptyMap() else mapOf("x-api-key" to apiKey))
+        val http = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(eu.studio742.imago.core.immich.ImmichHttp.client)
+            .setDefaultRequestProperties(if (apiKey.isBlank()) emptyMap() else mapOf(eu.studio742.imago.core.immich.IMMICH_API_KEY_HEADER to apiKey))
         ExoPlayer.Builder(context).setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(context, http))).build()
     }
     LaunchedEffect(player, element.timing.trimStartMs, element.timing.trimEndMs, url) {

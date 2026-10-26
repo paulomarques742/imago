@@ -19,7 +19,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import eu.studio742.imago.core.composition.CompositionElement
 import eu.studio742.imago.core.data.LocalDesktopDataGraph
@@ -104,7 +103,7 @@ private fun ExternalPlayerBox(modifier: Modifier, file: suspend () -> File) {
     }
 }
 
-private val http by lazy { OkHttpClient() }
+private val http get() = eu.studio742.imago.core.immich.ImmichHttp.client
 
 private fun localVideo(url: String, apiKey: String): File {
     if (url.startsWith("file:")) return File(URI(url))

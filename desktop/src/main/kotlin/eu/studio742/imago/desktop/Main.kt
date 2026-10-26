@@ -27,6 +27,7 @@ import eu.studio742.imago.desktop.platform.SingleInstance
 import eu.studio742.imago.desktop.platform.WindowsSecretStore
 import eu.studio742.imago.desktop.sync.DesktopAccount
 import eu.studio742.imago.core.data.DesktopDataGraph
+import eu.studio742.imago.core.data.observeDiagnosticVersions
 import eu.studio742.imago.core.data.LocalDesktopDataGraph
 import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.ImagoTheme
@@ -53,7 +54,10 @@ import java.nio.file.Path
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
     coil3.SingletonImageLoader.setSafe { context ->
-        coil3.ImageLoader.Builder(context).components { add(eu.studio742.imago.core.render.RawPhotoDecoder.Factory()) }.build()
+        coil3.ImageLoader.Builder(context).components {
+            add(eu.studio742.imago.core.render.RawPhotoDecoder.Factory())
+            add(coil3.network.okhttp.OkHttpNetworkFetcherFactory(callFactory = { eu.studio742.imago.core.immich.ImmichHttp.client }))
+        }.build()
     }
     // The Windows language, read before the app can change the process locale.
     val systemLocale = java.util.Locale.getDefault()
@@ -63,7 +67,18 @@ fun main(args: Array<String>) {
     // A window is already open: the link (or just the focus request) goes to it, and this launch ends.
     if (instance.forward(link)) return
 
+    val diagnostics = eu.studio742.imago.core.model.diagnostics.DiagnosticStore(paths.root.resolve("diagnostics").toFile())
+    eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.start(diagnostics, mapOf(
+        "Platform" to "Windows", "OS" to System.getProperty("os.version", "unknown"),
+        "Architecture" to System.getProperty("os.arch", "unknown"),
+        "App" to (object {}.javaClass.getResourceAsStream("/imago-version.txt")?.bufferedReader()?.use { it.readText().trim() } ?: "unknown"),
+    ))
+    java.util.Timer("local-diagnostics-cleanup", true).scheduleAtFixedRate(object : java.util.TimerTask() {
+        override fun run() { runCatching { diagnostics.cleanup() } }
+    }, 60 * 60 * 1000L, 60 * 60 * 1000L)
+
     val graph = DesktopDataGraph(paths.root)
+    CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { graph.configuration.observeDiagnosticVersions() }
     val languageSettings = DesktopLanguageSettings(paths.root.resolve("language"))
     val secrets = WindowsSecretStore(paths.secrets)
     val backend = DesktopAccount.backend(secrets)

@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Cleartext stays open by default for one reason: Immich servers on the local network are often
      plain HTTP, at an address the person types and the build cannot know. The services the app itself
-     talks to are named here and refuse it, so an account token or a password never travels in clear. -->
+     talks to are named here and refuse it, so an account token or a password never travels in clear.
+
+     The same split holds for certificates. An Immich server may sit behind a certificate from the
+     person's own authority (a home lab), which they install on the phone, and the address is the one
+     they type — so what the build does not name trusts the system's authorities and those. The
+     services above trust the system's only: an authority installed on the phone cannot stand in for
+     them. -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true" />
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
     <domain-config cleartextTrafficPermitted="false">
         <!-- The IMAGO account and sync. -->
         <domain includeSubdomains="true">supabase.co</domain>
@@ -11,5 +22,8 @@
         <domain includeSubdomains="true">742studio.eu</domain>
         <!-- The map's tiles. -->
         <domain includeSubdomains="true">openfreemap.org</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
     </domain-config>
 </network-security-config>

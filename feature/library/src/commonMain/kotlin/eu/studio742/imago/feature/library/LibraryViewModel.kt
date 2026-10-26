@@ -18,7 +18,6 @@ import eu.studio742.imago.feature.library.resources.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
-import androidx.paging.cachedIn
 import androidx.paging.map
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
@@ -27,7 +26,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -248,19 +246,19 @@ open class LibraryViewModel(
         val byContent: Boolean,
     )
 
-    val assets: Flow<PagingData<AssetUiModel>> = combine(
+    val assets: StateFlow<Flow<PagingData<AssetUiModel>>> = combine(
         combine(filter, configuration.activeSource()) { filter, source -> filter to source },
         uiState.map { it.selectedMonth },
-        uiState.map { it.selectedAlbum },
+        uiState.map { it.selectedAlbum }.distinctAlbumContents(),
         uiState.map { it.query.trim() }.distinctUntilChanged().debounce { if (it.isEmpty()) 0 else SEARCH_DEBOUNCE_MS },
         uiState.map { it.contentSearchAvailable && it.searchMode == SearchMode.CONTENT }.distinctUntilChanged(),
     ) { activeFilter, month, album, query, byContent ->
         AssetQuery(activeFilter.first, month, album, query, activeFilter.second, byContent)
     }
         .distinctUntilChanged()
-        .flatMapLatest { (activeFilter, month, album, query, _, byContent) ->
-            val albumId = album?.let { gridAlbumId(it, configuration.selectedLibraryId.value) }
-            if (album?.isPerson == true) {
+        .pagingForEachQuery(viewModelScope) { (activeFilter, month, album, query, source, byContent) ->
+            val albumId = album?.let { gridAlbumId(it, source.id) }
+            val pages = if (album?.isPerson == true) {
                 library.personAssets(album.id, activeFilter)
             } else if (album?.placeAssetIds != null) {
                 library.assetsWithIds(album.placeAssetIds)
@@ -276,9 +274,8 @@ open class LibraryViewModel(
                     query = query.takeIf(String::isNotEmpty),
                 )
             }
+            pages.map { pagingData -> pagingData.map { asset -> asset.toAssetUiModel(library, asset.localRecipe()) } }
         }
-        .map { pagingData -> pagingData.map { asset -> asset.toAssetUiModel(library, asset.localRecipe()) } }
-        .cachedIn(viewModelScope)
 
     /** How the timeline sync is going, so the bar can say. */
     val catalogSync: StateFlow<CatalogSyncState> = library.catalogSync

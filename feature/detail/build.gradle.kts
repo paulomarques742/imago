@@ -41,6 +41,9 @@ kotlin {
             implementation(libs.hilt.android)
             implementation(libs.hilt.navigation.compose)
             implementation(libs.media3.exoplayer)
+            implementation(libs.media3.datasource.okhttp)
+            implementation(project(":core:immich"))
+            implementation(libs.okhttp)
             implementation(libs.media3.ui)
             implementation(libs.kotlinx.coroutines.android)
         }

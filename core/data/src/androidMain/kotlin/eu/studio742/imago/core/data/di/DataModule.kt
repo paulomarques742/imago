@@ -10,6 +10,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import eu.studio742.imago.core.immich.withConnectionProfiles
 import okhttp3.OkHttpClient
 import eu.studio742.imago.core.data.ConfigurationRepository
 import eu.studio742.imago.core.data.DerivedAssetRepository
@@ -213,7 +214,8 @@ object DataProviders {
     @Provides
     @Singleton
     fun api(triggers: eu.studio742.imago.core.data.EndpointTriggers): ImmichApi = OkHttpImmichApi(
-        OkHttpClient.Builder()
+        eu.studio742.imago.core.immich.ImmichHttp.install(OkHttpClient.Builder()
+            .withConnectionProfiles()
             .retryOnConnectionFailure(true)
             // A request that does not reach the server may mean one left the home network: the
             // configuration chooses each library's address again.
@@ -223,6 +225,6 @@ object DataProviders {
                     throw error
                 }
             }
-            .build(),
+            .build()),
     )
 }

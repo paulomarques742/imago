@@ -180,6 +180,8 @@ class ReferenceTranslator(
         private val CHECKSUM_FIELDS = listOf("checksum", "originalChecksum")
         private val FORBIDDEN_FIELDS = setOf(
             "apikey", "api_key", "x-api-key", "serverurl", "serverurls", "activeurl", "authorization", "librarykey",
+            "connectionprofile", "connectionprofiles",
+            "ownershiptoken", "community_posts", "community_name",
         )
 
         /** The fields that hold references: `assetId`, `derivedAssetId`, `thumbnailAssetId`… */

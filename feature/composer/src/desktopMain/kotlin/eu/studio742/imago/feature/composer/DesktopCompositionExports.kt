@@ -8,7 +8,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
@@ -42,7 +41,7 @@ class DesktopCompositionExports(
     private val picturesFolder: Path = Path.of(System.getProperty("user.home"), "Pictures", "IMAGO"),
 ) : CompositionExports {
     private val renderer = CompositionRenderer()
-    private val http = OkHttpClient()
+    private val http get() = eu.studio742.imago.core.immich.ImmichHttp.client
 
     override suspend fun export(
         project: CompositionProject,

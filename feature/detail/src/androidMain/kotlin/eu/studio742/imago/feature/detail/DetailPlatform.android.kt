@@ -18,7 +18,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -104,7 +103,8 @@ actual fun rememberVideoPlayback(url: String?, apiKey: String): VideoPlayback? {
     if (url == null) return null
     val context = LocalContext.current
     val playback = remember(url, apiKey) {
-        val http = DefaultHttpDataSource.Factory().setDefaultRequestProperties(if (apiKey.isBlank()) emptyMap() else mapOf("x-api-key" to apiKey))
+        val http = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(eu.studio742.imago.core.immich.ImmichHttp.client)
+            .setDefaultRequestProperties(if (apiKey.isBlank()) emptyMap() else mapOf(eu.studio742.imago.core.immich.IMMICH_API_KEY_HEADER to apiKey))
         val player = ExoPlayer.Builder(context)
             .setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(context, http)))
             .build()
@@ -167,6 +167,11 @@ private class ExoVideoPlayback(val player: ExoPlayer) : VideoPlayback {
         private set
 
     private val listener = object : Player.Listener {
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                eu.studio742.imago.core.model.diagnostics.DiagnosticArea.VIDEO, error,
+                eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.VIDEO)
+        }
         override fun onEvents(player: Player, events: Player.Events) = sync()
     }
 

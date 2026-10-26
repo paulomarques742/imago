@@ -9,6 +9,7 @@ import eu.studio742.imago.feature.library.resources.*
 import android.Manifest
 import android.app.Activity
 import android.os.Build
+import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -268,4 +269,32 @@ actual fun rememberSendToImmich(): ((List<String>, String) -> Unit)? {
             )
         }
     }
+}
+
+@Composable
+actual fun rememberCertificateFilePicker(onPicked: (ByteArray?) -> Unit): () -> Unit {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val latest by rememberUpdatedState(onPicked)
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) latest(null) else scope.launch {
+            val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        val buffer = ByteArray(CERTIFICATE_FILE_MAX_BYTES + 1)
+                        var size = 0
+                        while (size < buffer.size) {
+                            val read = input.read(buffer, size, buffer.size - size)
+                            if (read < 0) break
+                            size += read
+                        }
+                        if (size > CERTIFICATE_FILE_MAX_BYTES) null else buffer.copyOf(size)
+                    }
+                }.getOrNull()
+            }
+            latest(bytes)
+        }
+    }
+    // File managers do not agree on the type of a .p12, so the chooser is not narrowed by it.
+    return { launcher.launch(arrayOf("*/*")) }
 }

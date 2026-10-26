@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import eu.studio742.imago.core.immich.withConnectionProfiles
 import okhttp3.OkHttpClient
 import eu.studio742.imago.core.data.db.ImmichRoomDatabase
 import eu.studio742.imago.core.immich.ImmichApi
@@ -72,7 +73,8 @@ class DesktopDataGraph(
     private val endpointTriggers = MutableSharedFlow<EndpointTrigger>(extraBufferCapacity = 8)
 
     val api: ImmichApi = OkHttpImmichApi(
-        OkHttpClient.Builder()
+        eu.studio742.imago.core.immich.ImmichHttp.install(OkHttpClient.Builder()
+            .withConnectionProfiles()
             .retryOnConnectionFailure(true)
             // As on Android: a request that does not reach the server may mean one left the home
             // network, and the configuration chooses each library's address again.
@@ -82,7 +84,7 @@ class DesktopDataGraph(
                     throw error
                 }
             }
-            .build(),
+            .build()),
     )
 
     val preferences: SecurePreferences = WindowsSecurePreferences(root.resolve(PREFERENCES_FILE))

@@ -293,7 +293,12 @@ sealed class ImmichApiException(
         listOf(status),
         detail = detail,
     )
-    class Connection(cause: Throwable) : ImmichApiException(UserMessage.IMMICH_UNREACHABLE, cause = cause)
+    open class Connection(cause: Throwable, message: UserMessage = UserMessage.IMMICH_UNREACHABLE) : ImmichApiException(message, cause = cause)
+
+    /** A proxy or access service answered in place of Immich: a login page, a redirect to another host, a 407. */
+    class Protected : ImmichApiException(UserMessage.IMMICH_PROTECTED)
+    class CertificateRequired(cause: Throwable) : Connection(cause, UserMessage.IMMICH_CERTIFICATE_REQUIRED)
+    class CertificateUntrusted(cause: Throwable) : Connection(cause, UserMessage.IMMICH_CERTIFICATE_UNTRUSTED)
 }
 
 /** A memory as the server sends it: the year it remembers and its photos, whole. */

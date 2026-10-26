@@ -34,6 +34,8 @@ data class ImmichAsset(
      */
     val stackId: String? = null,
     val stackCount: Int? = null,
+    /** The server's external library, distinct from the source configured in IMAGO. */
+    val externalLibraryId: String? = null,
 )
 
 @Serializable

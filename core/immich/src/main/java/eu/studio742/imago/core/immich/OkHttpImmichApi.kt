@@ -41,6 +41,7 @@ import eu.studio742.imago.core.model.LibraryFilter
 import eu.studio742.imago.core.model.RECENT_FILTER_DAYS
 import eu.studio742.imago.core.model.ServerVersion
 import java.io.IOException
+import eu.studio742.imago.core.model.diagnostics.*
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
@@ -73,6 +74,9 @@ class OkHttpImmichApi(
             permission = null,
         ).toDomain()
 
+        LocalDiagnostics.record(DiagnosticEvent(DiagnosticArea.IMMICH, DiagnosticOutcome.SUCCESS,
+            DiagnosticOperation.SERVER_VERSION, connection = DiagnosticConnection.from(connection.serverUrl), version = version))
+
         if (version < ImmichCompatibility.minimum) throw ImmichApiException.UnsupportedVersion(version)
 
         execute(
@@ -95,6 +99,9 @@ class OkHttpImmichApi(
     }
 
     override suspend fun ping(serverUrl: String, timeoutMillis: Long): Boolean = withContext(Dispatchers.IO) {
+        val started = System.nanoTime()
+        LocalDiagnostics.record(DiagnosticEvent(DiagnosticArea.IMMICH, DiagnosticOutcome.START,
+            DiagnosticOperation.PING, connection = DiagnosticConnection.from(serverUrl)))
         runCatching {
             val url = endpoint(ImmichConnection(serverUrl, ""), ImmichContract.PING_SERVER)
             // Without the app's interceptors: a failed ping is not a connection failure to report.
@@ -103,9 +110,21 @@ class OkHttpImmichApi(
                 .callTimeout(timeoutMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
                 .retryOnConnectionFailure(false)
                 .build()
-            quick.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
-                response.isSuccessful && response.body?.string().orEmpty().contains("pong")
+            val request = Request.Builder().url(url).get().build()
+            quick.newCall(request).execute().use { response ->
+                val blocked = answeredInsteadOfImmich(request, response)
+                val answered = !blocked && response.isSuccessful && response.body?.string().orEmpty().contains("pong")
+                recordRequest(request, when { answered -> DiagnosticOutcome.SUCCESS
+                    response.isSuccessful -> DiagnosticOutcome.INVALID_RESPONSE; else -> DiagnosticOutcome.HTTP_ERROR },
+                    response.code, (System.nanoTime() - started) / 1_000_000,
+                    protection = DiagnosticProtection.PROXY_AUTH.takeIf { blocked })
+                answered
             }
+        }.onFailure { error ->
+            LocalDiagnostics.record { DiagnosticEvent(DiagnosticArea.IMMICH, diagnosticOutcome(error),
+                DiagnosticOperation.PING, durationMs = (System.nanoTime() - started) / 1_000_000,
+                connection = DiagnosticConnection.from(serverUrl), failure = DiagnosticFailure.from(error),
+                protection = diagnosticProtection(error)) }
         }.getOrDefault(false)
     }
 
@@ -807,6 +826,7 @@ class OkHttpImmichApi(
             try {
                 json.decodeFromString<T>(payload)
             } catch (error: Exception) {
+                recordRequest(request, DiagnosticOutcome.INVALID_RESPONSE, response.code, error = error)
                 // The reason goes along. "Invalid response" alone does not tell a field that was
                 // renamed from a whole contract that changed shape, and that difference is what
                 // decides whether the problem is ours or the server version's.
@@ -832,11 +852,35 @@ class OkHttpImmichApi(
             if (!apiKey.isNullOrBlank()) header(ImmichContract.API_KEY_HEADER, apiKey)
         }.build()
 
+        val started = System.nanoTime()
+        recordRequest(request, DiagnosticOutcome.START)
         val response = try {
             client.newCall(authenticated).execute()
         } catch (error: IOException) {
-            throw ImmichApiException.Connection(error)
+            recordRequest(request, diagnosticOutcome(error), durationMs = (System.nanoTime() - started) / 1_000_000, error = error)
+            // The certificate problems get their own message: "unreachable" would send a person
+            // checking their network when the server answered and was refused.
+            throw when (diagnosticProtection(error)) {
+                DiagnosticProtection.CLIENT_CERTIFICATE_REQUIRED -> ImmichApiException.CertificateRequired(error)
+                DiagnosticProtection.UNTRUSTED_CERTIFICATE -> ImmichApiException.CertificateUntrusted(error)
+                else -> ImmichApiException.Connection(error)
+            }
         }
+
+        val elapsed = (System.nanoTime() - started) / 1_000_000
+        if (askedForClientCertificate(response)) {
+            recordRequest(request, DiagnosticOutcome.HTTP_ERROR, response.code, elapsed, protection = DiagnosticProtection.CLIENT_CERTIFICATE_REQUIRED)
+            response.close()
+            throw ImmichApiException.CertificateRequired(IOException("The server asked for a client certificate."))
+        }
+        if (answeredInsteadOfImmich(request, response)) {
+            recordRequest(request, if (response.code >= 400) DiagnosticOutcome.HTTP_ERROR else DiagnosticOutcome.INVALID_RESPONSE,
+                response.code, elapsed, protection = DiagnosticProtection.PROXY_AUTH)
+            response.close()
+            throw ImmichApiException.Protected()
+        }
+        recordRequest(request, if (response.isSuccessful) DiagnosticOutcome.SUCCESS else DiagnosticOutcome.HTTP_ERROR,
+            response.code, elapsed)
 
         if (response.isSuccessful) return response
 
@@ -847,12 +891,95 @@ class OkHttpImmichApi(
         throw ImmichApiException.Server(response.code, detail)
     }
 
-    private companion object {
-        const val KEY_PERMISSIONS_TIMEOUT_MS = 3_000L
-        const val PEOPLE_PAGE = 500
-        const val PEOPLE_LIMIT = 5_000
-        val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
-        val JPEG_MEDIA_TYPE = "image/jpeg".toMediaType()
+    private fun recordRequest(
+        request: Request, outcome: DiagnosticOutcome, status: Int? = null, durationMs: Long? = null, error: Throwable? = null,
+        protection: DiagnosticProtection? = null,
+    ) {
+        LocalDiagnostics.record {
+            DiagnosticEvent(DiagnosticArea.IMMICH, outcome, diagnosticOperationForPath(request.url.encodedPath), status, durationMs,
+                DiagnosticConnection.from(request.url.toString()), failure = error?.let(DiagnosticFailure::from),
+                protection = protection ?: error?.let(::diagnosticProtection),
+                customHeaders = ImmichHttp.profiles.headersFor(request.url).isNotEmpty(),
+                customCertificate = ImmichHttp.profiles.hasCertificate(request.url))
+        }
+    }
+
+    /**
+     * A proxy that checks client certificates usually says so with a page and not with a TLS alert:
+     * nginx answers 496 (or a 400 page that mentions the certificate), and the app has no other
+     * reason to see "certificate" in an HTML error.
+     */
+    private fun askedForClientCertificate(response: okhttp3.Response): Boolean {
+        if (response.code == 496) return true
+        if (response.code != 400 || response.header("Content-Type").orEmpty().contains("html", ignoreCase = true).not()) return false
+        return response.peekBody(512).string().contains("certificate", ignoreCase = true)
+    }
+
+    /**
+     * Whether what came back is something in front of Immich and not Immich: a redirect that ended on
+     * another host, a page where the API speaks JSON, or a refusal that is not Immich's own.
+     * Immich answers its refusals in JSON, so a 401 or 403 with a page, or with a `WWW-Authenticate`
+     * challenge and no JSON, is a proxy asking for authentication and not a wrong key. A gateway
+     * error (502, 503…) is not this: the proxy is up and Immich is not, and "unreachable" is right.
+     */
+    private fun answeredInsteadOfImmich(request: Request, response: okhttp3.Response): Boolean {
+        if (!response.request.url.host.equals(request.url.host, ignoreCase = true)) return true
+        val code = response.code
+        val type = response.header("Content-Type").orEmpty()
+        val page = type.contains("html", ignoreCase = true)
+        if (code in 200..299) return page
+        if (code != 401 && code != 403) return false
+        if (page) return true
+        if (type.contains("json", ignoreCase = true)) return false
+        return response.header("WWW-Authenticate") != null || response.peekBody(64).string().trimStart().startsWith("<")
+    }
+
+    companion object {
+        /** Literal segment matching avoids differences between Android ICU and the desktop regex engine. */
+        internal fun diagnosticOperationForPath(path: String): DiagnosticOperation {
+            val actual = path.trim('/').split('/')
+            return diagnosticPaths.firstOrNull { (template, _) ->
+                actual.size >= template.size && template.indices.all { index ->
+                    val expected = template[index]
+                    val segment = actual[actual.size - template.size + index]
+                    segment.isNotEmpty() && (expected == segment || expected.startsWith('{') && expected.endsWith('}'))
+                }
+            }?.second ?: DiagnosticOperation.OTHER
+        }
+
+        private val diagnosticPaths = listOf(
+            ImmichContract.GET_SERVER_VERSION to DiagnosticOperation.SERVER_VERSION,
+            ImmichContract.PING_SERVER to DiagnosticOperation.PING,
+            ImmichContract.GET_CURRENT_USER to DiagnosticOperation.CURRENT_USER,
+            ImmichContract.SEARCH_ASSETS to DiagnosticOperation.SEARCH,
+            ImmichContract.GET_ALBUMS to DiagnosticOperation.ALBUMS,
+            ImmichContract.GET_TIME_BUCKETS to DiagnosticOperation.TIME_BUCKETS,
+            ImmichContract.GET_TIME_BUCKET to DiagnosticOperation.TIME_BUCKET,
+            ImmichContract.VIEW_ASSET to DiagnosticOperation.THUMBNAIL,
+            ImmichContract.PLAY_ASSET_VIDEO to DiagnosticOperation.VIDEO,
+            ImmichContract.DOWNLOAD_ASSET to DiagnosticOperation.DOWNLOAD,
+            ImmichContract.UPLOAD_ASSET to DiagnosticOperation.UPLOAD,
+            ImmichContract.GET_STACK to DiagnosticOperation.STACK,
+            ImmichContract.CREATE_STACK to DiagnosticOperation.STACK,
+            ImmichContract.GET_ASSET_INFO to DiagnosticOperation.ASSET,
+            ImmichContract.DELETE_ASSETS to DiagnosticOperation.DELETE,
+            ImmichContract.RESTORE_ASSETS to DiagnosticOperation.RESTORE,
+            ImmichContract.EMPTY_TRASH to DiagnosticOperation.TRASH,
+            ImmichContract.GET_SERVER_CONFIG to DiagnosticOperation.SERVER_CONFIG,
+            ImmichContract.SEARCH_SMART to DiagnosticOperation.SMART_SEARCH,
+            ImmichContract.GET_SERVER_FEATURES to DiagnosticOperation.SERVER_FEATURES,
+            ImmichContract.GET_MY_API_KEY to DiagnosticOperation.KEY_PERMISSIONS,
+            ImmichContract.ASSET_EDITS to DiagnosticOperation.EDITS,
+            ImmichContract.GET_ALL_PEOPLE to DiagnosticOperation.PEOPLE,
+            ImmichContract.GET_PERSON_THUMBNAIL to DiagnosticOperation.THUMBNAIL,
+            ImmichContract.GET_MAP_MARKERS to DiagnosticOperation.MAP,
+            ImmichContract.SEARCH_MEMORIES to DiagnosticOperation.MEMORIES,
+        ).map { (path, operation) -> path.trim('/').split('/') to operation }
+        private const val KEY_PERMISSIONS_TIMEOUT_MS = 3_000L
+        private const val PEOPLE_PAGE = 500
+        private const val PEOPLE_LIMIT = 5_000
+        private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+        private val JPEG_MEDIA_TYPE = "image/jpeg".toMediaType()
     }
 }
 
@@ -1072,6 +1199,7 @@ private data class AssetDetailResponseDto(
     val visibility: String? = null,
     val isArchived: Boolean? = null,
     val people: List<PersonResponseDto> = emptyList(),
+    val libraryId: String? = null,
 ) {
     fun toDomain() = ImmichAssetDetail(
         people = people.filterNot { it.isHidden }.sortedBy { it.name.isBlank() }.map { ImmichPerson(it.id, it.name.trim()) },
@@ -1094,6 +1222,7 @@ private data class AssetDetailResponseDto(
             mimeType = originalMimeType,
             durationMs = duration.toDurationMs(),
             isArchived = visibility.equals("archive", ignoreCase = true) || isArchived == true,
+            externalLibraryId = libraryId?.takeIf(String::isNotBlank),
         ),
         exif = exifInfo?.toDomain() ?: AssetExif(),
     )
@@ -1275,6 +1404,7 @@ private data class AssetResponseDto(
     /** "archive" from v2 on; `isArchived` is the older form of the same answer. */
     val visibility: String? = null,
     val isArchived: Boolean? = null,
+    val libraryId: String? = null,
 ) {
     fun toDomain() = ImmichAsset(
         id = id,
@@ -1295,6 +1425,7 @@ private data class AssetResponseDto(
         mimeType = originalMimeType,
         durationMs = duration.toDurationMs(),
         isArchived = visibility.equals("archive", ignoreCase = true) || isArchived == true,
+        externalLibraryId = libraryId?.takeIf(String::isNotBlank),
     )
 }
 

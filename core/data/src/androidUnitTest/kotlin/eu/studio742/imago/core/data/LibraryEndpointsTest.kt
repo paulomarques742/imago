@@ -5,6 +5,7 @@ import eu.studio742.imago.core.model.UserMessageException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import org.junit.Assert.*
 import org.junit.Test
@@ -73,6 +74,42 @@ class LibraryEndpointsTest {
         assertEquals(listOf(HOME, AWAY), repo.source(id).serverUrls)
         assertTrue(runCatching { repo.removeServerUrl(id, HOME); repo.removeServerUrl(id, AWAY) }.isFailure)
         assertEquals(listOf(AWAY), repo.source(id).serverUrls)
+    }
+
+    @Test fun profileBelongsToItsAddressAndSurvivesARestart() = runBlocking {
+        val prefs = prefs()
+        val repo = EncryptedConfigurationRepository(SharedPreferencesStore(prefs), api)
+        val cloudflare = ConnectionProfile(listOf(ConnectionHeader("CF-Access-Client-Id", "id"), ConnectionHeader("CF-Access-Client-Secret", "secret-value")))
+        repo.saveLibrary(null, "Casa", HOME, "secret")
+        val id = repo.libraries.value.last().id
+        repo.addServerUrl(id, AWAY, cloudflare)
+        assertEquals(cloudflare, repo.source(id).profiles[AWAY])
+        assertNull(repo.source(id).profiles[HOME])
+        assertEquals(cloudflare, EncryptedConfigurationRepository(SharedPreferencesStore(prefs), api).source(id).profiles[AWAY])
+        // What the network layer reads is the saved state, and it goes with the address.
+        assertEquals(cloudflare.headers, ImmichHttp.profiles.headersFor("$AWAY/api/server/ping".toHttpUrl()))
+        assertTrue(ImmichHttp.profiles.headersFor("$STRANGER/api/server/ping".toHttpUrl()).isEmpty())
+        repo.setConnectionProfile(id, AWAY, ConnectionProfile.None)
+        assertNull(repo.source(id).profiles[AWAY])
+        assertTrue(ImmichHttp.profiles.headersFor("$AWAY/api/server/ping".toHttpUrl()).isEmpty())
+        repo.setConnectionProfile(id, AWAY, cloudflare)
+        repo.removeServerUrl(id, AWAY)
+        assertTrue(repo.source(id).profiles.isEmpty())
+    }
+
+    @Test fun headersAreRefusedOnPlainHttpBeforeAnythingIsSent() = runBlocking {
+        val repo = EncryptedConfigurationRepository(SharedPreferencesStore(prefs()), api)
+        val profile = ConnectionProfile(listOf(ConnectionHeader("X-Secret", "value")))
+        val error = runCatching { repo.saveLibrary(null, "Casa", HOME, "secret", profile) }.exceptionOrNull()
+        assertEquals(UserMessage.CONNECTION_NEEDS_HTTPS, (error as? UserMessageException)?.userMessage)
+        assertTrue(repo.libraries.value.none { !it.isDevice })
+    }
+
+    @Test fun aFileThatIsNotACertificateIsRefusedAndDescribesAsNothing() {
+        val repo = EncryptedConfigurationRepository(SharedPreferencesStore(prefs()), api)
+        val error = runCatching { repo.importClientCertificate("not a certificate".toByteArray(), "any") }.exceptionOrNull()
+        assertEquals(UserMessage.CERTIFICATE_UNREADABLE, (error as? UserMessageException)?.userMessage)
+        assertNull(repo.describeClientCertificate(ClientCertificate("bm90IGEgY2VydA==", "any")))
     }
 
     @Test fun activeAddressIsTheFirstThatAnswersAndInFlightRequestsKeepTheirs() = runBlocking {

@@ -24,7 +24,9 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import eu.studio742.imago.core.immich.ImmichApi
+import eu.studio742.imago.core.immich.ClientCertificates
 import eu.studio742.imago.core.immich.ImmichApiException
+import eu.studio742.imago.core.immich.ImmichHttp
 import eu.studio742.imago.core.immich.canonicalServerUrl
 import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
 import eu.studio742.imago.core.model.*
@@ -189,13 +191,18 @@ class EncryptedConfigurationRepository(
         welcome.value = true
     }
 
-    override suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String): ServerVersion {
+    override suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String, profile: ConnectionProfile): ServerVersion {
         requireUser(name.isNotBlank(), UserMessage.LIBRARY_NAME_REQUIRED)
         val url = canonicalServerUrl(serverUrl)
+        profile.problem(url)?.let { throw UserMessageException(it) }
         val candidate = ImmichConnection(url, apiKey.trim())
-        val version = api.validateConnection(candidate)
-        requireRequiredPermissions(candidate)
-        val userId = api.currentUserId(candidate)
+        // The headers are tried before the address is accepted: behind a proxy that asks for them,
+        // nothing answers without.
+        val (version, userId) = ImmichHttp.profiles.staged(url, profile) {
+            val version = api.validateConnection(candidate)
+            requireRequiredPermissions(candidate)
+            version to api.currentUserId(candidate)
+        }
         // A legacy profile has no stored user ID. Verify its existing credential before
         // matching it by URL, otherwise replacing it with another account would reuse edits.
         val candidates = sources.value.map { existing ->
@@ -213,7 +220,8 @@ class EncryptedConfigurationRepository(
         val base = old ?: match
         val key = base?.id ?: libraryKeyOf("immich|$userId")
         val urls = base?.serverUrls.orEmpty().let { known -> if (url in known.map(::canonicalServerUrl)) known else known + url }
-        val source = LibrarySource(key, name.trim(), urls, userId, apiKey.trim(), activeUrl = url)
+        val source = LibrarySource(key, name.trim(), urls, userId, apiKey.trim(), activeUrl = url,
+            profiles = base?.profiles.orEmpty().withProfile(url, profile))
         database?.libraryIdentityDao()?.insert(eu.studio742.imago.core.data.db.LibraryIdentityEntity(key))
         sources.value = candidates.filterNot { it.id == key } + source
         probes.update { it + (key to (it[key].orEmpty() + (url to true))) }
@@ -239,12 +247,18 @@ class EncryptedConfigurationRepository(
         if (missing.isNotEmpty()) throw ImmichApiException.MissingPermission(missing)
     }
 
-    override suspend fun addServerUrl(id: String, serverUrl: String): ServerVersion {
+    override suspend fun addServerUrl(id: String, serverUrl: String, profile: ConnectionProfile): ServerVersion {
         val source = source(id)
         requireUser(!source.isDevice && source.isConnected, UserMessage.LIBRARY_RECONNECT)
         val url = canonicalServerUrl(serverUrl)
         requireUser(url !in source.canonicalUrls(), UserMessage.ADDRESS_ALREADY_IN_LIBRARY)
+        profile.problem(url)?.let { throw UserMessageException(it) }
         val connection = ImmichConnection(url, checkNotNull(source.apiKey), id)
+        return ImmichHttp.profiles.staged(url, profile) { joinAddress(source, url, connection, profile) }
+    }
+
+    private suspend fun joinAddress(source: LibrarySource, url: String, connection: ImmichConnection, profile: ConnectionProfile): ServerVersion {
+        val id = source.id
         val version = try {
             api.validateConnection(connection)
         } catch (error: ImmichApiException.Authentication) {
@@ -253,10 +267,28 @@ class EncryptedConfigurationRepository(
         val expected = source.userId ?: runCatching { api.currentUserId(source.connection()) }.getOrNull()
             ?: throw UserMessageException(UserMessage.ACCOUNT_UNCONFIRMED)
         requireUser(api.currentUserId(connection) == expected, UserMessage.ADDRESS_WRONG_SERVER)
-        sources.update { list -> list.map { if (it.id == id) it.copy(serverUrls = it.serverUrls + url, userId = expected) else it } }
+        sources.update { list -> list.map { if (it.id == id) it.copy(serverUrls = it.serverUrls + url, userId = expected, profiles = it.profiles.withProfile(url, profile)) else it } }
         probes.update { it + (id to (it[id].orEmpty() + (url to true))) }
         persist()
         refreshEndpoints()
+        return version
+    }
+
+    override fun importClientCertificate(file: ByteArray, password: String) = ClientCertificates.import(file, password)
+
+    override fun describeClientCertificate(certificate: ClientCertificate) = runCatching { ClientCertificates.inspect(certificate) }.getOrNull()
+
+    override suspend fun setConnectionProfile(id: String, serverUrl: String, profile: ConnectionProfile): ServerVersion {
+        val source = source(id)
+        requireUser(!source.isDevice && source.isConnected, UserMessage.LIBRARY_RECONNECT)
+        val url = canonicalServerUrl(serverUrl)
+        require(url in source.canonicalUrls())
+        profile.problem(url)?.let { throw UserMessageException(it) }
+        val connection = ImmichConnection(url, checkNotNull(source.apiKey), id)
+        val version = ImmichHttp.profiles.staged(url, profile) { api.validateConnection(connection) }
+        sources.update { list -> list.map { if (it.id == id) it.copy(profiles = it.profiles.withProfile(url, profile)) else it } }
+        persist()
+        scope.launch { runCatching { refreshEndpoints() } }
         return version
     }
 
@@ -264,7 +296,8 @@ class EncryptedConfigurationRepository(
         val source = source(id)
         require(serverUrl in source.serverUrls)
         requireUser(source.serverUrls.size > 1, UserMessage.LIBRARY_NEEDS_ADDRESS)
-        sources.update { list -> list.map { if (it.id == id) it.copy(serverUrls = it.serverUrls - serverUrl) else it } }
+        val dropped = runCatching { canonicalServerUrl(serverUrl) }.getOrDefault(serverUrl)
+        sources.update { list -> list.map { if (it.id == id) it.copy(serverUrls = it.serverUrls - serverUrl, profiles = it.profiles.filterKeys { key -> key != dropped }) else it } }
         probes.update { it + (id to (it[id].orEmpty() - serverUrl)) }
         state.value = currentConnection()
         persist()
@@ -295,13 +328,14 @@ class EncryptedConfigurationRepository(
 
     override fun removeLibrary(id: String) {
         require(id != DEVICE_LIBRARY_ID)
-        sources.value = sources.value.map { if (it.id == id) it.copy(apiKey = null) else it }
+        // Source observers may resume immediately and open the current provider before this call returns.
         if (selected.value == id) selected.value = DEVICE_LIBRARY_ID
+        sources.value = sources.value.map { if (it.id == id) it.copy(apiKey = null) else it }
         state.value = currentConnection()
         persist()
     }
-    override suspend fun validateAndSave(serverUrl: String, apiKey: String): ServerVersion {
-        val version = saveLibrary(null, "Immich", serverUrl, apiKey)
+    override suspend fun validateAndSave(serverUrl: String, apiKey: String, profile: ConnectionProfile): ServerVersion {
+        val version = saveLibrary(null, "Immich", serverUrl, apiKey, profile)
         selectLibrary(sources.value.last().id)
         return version
     }
@@ -319,6 +353,7 @@ class EncryptedConfigurationRepository(
         return listOf(device, LibrarySource(libraryKeyOf(url), "Immich", listOf(url), apiKey = key))
     }
     @Synchronized private fun persist() {
+        ImmichHttp.profiles.replaceAll(sources.value)
         val active = sources.value.mapNotNull { source -> source.activeUrl?.let { source.id to it } }.toMap()
         check(preferences.write(mapOf(
             "libraries_v2" to json.encodeToString(sources.value),
@@ -352,6 +387,9 @@ internal fun LibrarySource.withoutLegacyName(): LibrarySource = when {
 }
 
 private const val LEGACY_PREVIOUS_LIBRARY_NAME = "Biblioteca anterior · "
+
+private fun Map<String, ConnectionProfile>.withProfile(url: String, profile: ConnectionProfile) =
+    if (profile.isEmpty) this - url else this + (url to profile)
 
 private fun LibrarySource.canonicalUrls() = serverUrls.map { runCatching { canonicalServerUrl(it) }.getOrDefault(it) }
 

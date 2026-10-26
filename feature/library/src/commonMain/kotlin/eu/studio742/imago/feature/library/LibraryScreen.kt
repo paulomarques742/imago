@@ -3,6 +3,7 @@
 package eu.studio742.imago.feature.library
 
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import eu.studio742.imago.core.model.AlbumPlace
 import eu.studio742.imago.core.designsystem.i18n.resolve
@@ -125,7 +126,9 @@ import androidx.compose.ui.layout.ContentScale
 import coil3.compose.LocalPlatformContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -434,7 +437,8 @@ private fun LibraryHost(
 ) {
     val sourceId by viewModel.selectedSource.collectAsStateWithLifecycle()
     val savedSourceState = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
-    val assets = viewModel.assets.collectAsLazyPagingItems()
+    val assetPages by viewModel.assets.collectAsStateWithLifecycle()
+    val assets = key(assetPages) { assetPages.collectAsLazyPagingItems() }
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val catalogSync by viewModel.catalogSync.collectAsStateWithLifecycle()
@@ -1400,6 +1404,9 @@ private fun PhotoBrowser(
         assets.itemCount == 0 && assets.loadState.refresh is LoadState.NotLoading ->
             EmptyState(filter = filter, query = query)
         else -> Column(Modifier.fillMaxSize()) {
+            (assets.loadState.refresh as? LoadState.Error)?.let { failure ->
+                LoadErrorBanner(failure.error.toUiText(Res.string.library_load_failed), assets::retry)
+            }
             // Above the grid and not in it: the grid's indices are the photos', which the fast scroll,
             // the jump to a date and the way back to a photo count on. It folds away once the grid
             // leaves the top, and comes back with it.
@@ -1580,39 +1587,41 @@ private fun AlbumBrowser(
     val revealed = state.revealingHiddenAlbums
     val shown = remember(state.albums, hidden, state.query, revealed) { albumsInGrid(state.albums, hidden, state.query, revealed) }
     val hiddenCount = remember(state.albums, hidden) { state.albums.count { it.id in hidden } }
-    when {
-        state.isLoadingNavigation && state.albums.isEmpty() -> LoadingState()
-        state.navigationError != null && state.albums.isEmpty() -> ErrorState(state.navigationError.resolve(), onRetry)
-        state.albums.isEmpty() && onNewAlbum == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(stringResource(Res.string.library_no_albums), color = ImagoColors.TextSecondary)
-        }
-        state.query.isNotBlank() && shown.isEmpty() ->
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(stringResource(Res.string.library_no_album_match, state.query.trim()), color = ImagoColors.TextSecondary)
+    BrowserWithRefreshError(state.navigationError, state.albums.isNotEmpty(), onRetry) {
+        when {
+            state.isLoadingNavigation && state.albums.isEmpty() -> LoadingState()
+            state.navigationError != null && state.albums.isEmpty() -> ErrorState(state.navigationError.resolve(), onRetry)
+            state.albums.isEmpty() && onNewAlbum == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(stringResource(Res.string.library_no_albums), color = ImagoColors.TextSecondary)
             }
-        else -> LazyVerticalGrid(
-            columns = GridCells.Adaptive(160.dp),
-            modifier = Modifier.fillMaxSize().padding(horizontal = ImagoSpacing.Sm),
-            horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Lg),
-        ) {
-            // While searching, the tile would answer a question nobody asked.
-            if (onNewAlbum != null && state.query.isBlank()) {
-                item(key = "new-album") { NewAlbumTile(onClick = { naming = true }) }
-            }
-            gridItems(shown, key = AlbumUiModel::id) { album ->
-                val isHidden = album.id in hidden
-                AlbumTile(
-                    album,
-                    onClick = { onOpenAlbum(album) },
-                    gridChoice = if (isHidden) Res.string.library_album_unhide else Res.string.library_album_hide,
-                    onGridChoice = { onHideFromGrid(if (isHidden) hidden - album.id else hidden + album.id) },
-                )
-            }
-            // Last, so the albums keep their places. Once tapped the hidden ones are in the grid like
-            // the rest, and the tile has nothing left to show.
-            if (state.query.isBlank() && hiddenCount > 0 && !revealed) {
-                item(key = "show-all-albums") { ShowAllAlbumsTile(hiddenCount = hiddenCount, onClick = onRevealHidden) }
+            state.query.isNotBlank() && shown.isEmpty() ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(stringResource(Res.string.library_no_album_match, state.query.trim()), color = ImagoColors.TextSecondary)
+                }
+            else -> LazyVerticalGrid(
+                columns = GridCells.Adaptive(160.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = ImagoSpacing.Sm),
+                horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Lg),
+            ) {
+                // While searching, the tile would answer a question nobody asked.
+                if (onNewAlbum != null && state.query.isBlank()) {
+                    item(key = "new-album") { NewAlbumTile(onClick = { naming = true }) }
+                }
+                gridItems(shown, key = AlbumUiModel::id) { album ->
+                    val isHidden = album.id in hidden
+                    AlbumTile(
+                        album,
+                        onClick = { onOpenAlbum(album) },
+                        gridChoice = if (isHidden) Res.string.library_album_unhide else Res.string.library_album_hide,
+                        onGridChoice = { onHideFromGrid(if (isHidden) hidden - album.id else hidden + album.id) },
+                    )
+                }
+                // Last, so the albums keep their places. Once tapped the hidden ones are in the grid like
+                // the rest, and the tile has nothing left to show.
+                if (state.query.isBlank() && hiddenCount > 0 && !revealed) {
+                    item(key = "show-all-albums") { ShowAllAlbumsTile(hiddenCount = hiddenCount, onClick = onRevealHidden) }
+                }
             }
         }
     }
@@ -1636,22 +1645,24 @@ private fun AlbumBrowser(
 @Composable
 private fun PeopleBrowser(state: LibraryUiState, onOpenPerson: (PersonUiModel) -> Unit, onRetry: () -> Unit) {
     val shown = remember(state.people, state.query) { peopleMatching(state.people, state.query) }
-    when {
-        state.isLoadingPeople && state.people.isEmpty() -> LoadingState()
-        state.peopleError != null && state.people.isEmpty() -> ErrorState(state.peopleError.resolve(), onRetry)
-        state.people.isEmpty() -> Box(Modifier.fillMaxSize().padding(ImagoSpacing.Xxxl), contentAlignment = Alignment.Center) {
-            Text(stringResource(Res.string.library_people_none), color = ImagoColors.TextSecondary)
-        }
-        shown.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(stringResource(Res.string.library_no_person_match, state.query.trim()), color = ImagoColors.TextSecondary)
-        }
-        else -> LazyVerticalGrid(
-            columns = GridCells.Adaptive(96.dp),
-            modifier = Modifier.fillMaxSize().padding(horizontal = ImagoSpacing.Md),
-            horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
-            verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Lg),
-        ) {
-            gridItems(shown, key = PersonUiModel::id) { person -> PersonTile(person, onClick = { onOpenPerson(person) }) }
+    BrowserWithRefreshError(state.peopleError, state.people.isNotEmpty(), onRetry) {
+        when {
+            state.isLoadingPeople && state.people.isEmpty() -> LoadingState()
+            state.peopleError != null && state.people.isEmpty() -> ErrorState(state.peopleError.resolve(), onRetry)
+            state.people.isEmpty() -> Box(Modifier.fillMaxSize().padding(ImagoSpacing.Xxxl), contentAlignment = Alignment.Center) {
+                Text(stringResource(Res.string.library_people_none), color = ImagoColors.TextSecondary)
+            }
+            shown.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(stringResource(Res.string.library_no_person_match, state.query.trim()), color = ImagoColors.TextSecondary)
+            }
+            else -> LazyVerticalGrid(
+                columns = GridCells.Adaptive(96.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = ImagoSpacing.Md),
+                horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
+                verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Lg),
+            ) {
+                gridItems(shown, key = PersonUiModel::id) { person -> PersonTile(person, onClick = { onOpenPerson(person) }) }
+            }
         }
     }
 }
@@ -2139,6 +2150,27 @@ private fun LoadingState() {
             )
         }
     }
+}
+
+@Composable
+private fun BrowserWithRefreshError(error: UiText?, hasContent: Boolean, onRetry: () -> Unit, content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        if (error != null && hasContent) LoadErrorBanner(error, onRetry)
+        Box(Modifier.fillMaxWidth().weight(1f)) { content() }
+    }
+}
+
+@Composable
+private fun LoadErrorBanner(message: UiText, onRetry: () -> Unit) = Row(
+    modifier = Modifier.fillMaxWidth().background(ImagoColors.SurfaceElevated)
+        .semantics { liveRegion = LiveRegionMode.Polite }
+        .padding(horizontal = ImagoSpacing.Md, vertical = ImagoSpacing.Sm),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+) {
+    Icon(Icons.Outlined.BrokenImage, contentDescription = null, tint = ImagoColors.TextSecondary)
+    Text(message.resolve(), modifier = Modifier.weight(1f), color = ImagoColors.TextPrimary, style = MaterialTheme.typography.bodySmall)
+    TextButton(onClick = onRetry) { Text(stringResource(Res.string.library_retry)) }
 }
 
 @Composable

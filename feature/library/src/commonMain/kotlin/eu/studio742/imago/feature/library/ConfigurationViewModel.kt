@@ -11,12 +11,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import eu.studio742.imago.core.data.ConfigurationRepository
+import eu.studio742.imago.core.model.ConnectionHeader
 
 data class ConfigurationUiState(
     val serverUrl: String = "",
     val apiKey: String = "",
+    /** The rows of the Advanced section, blank ones included while they are being typed. */
+    val headers: List<ConnectionHeader> = emptyList(),
+    val certificate: eu.studio742.imago.core.model.ClientCertificate? = null,
     val isChecking: Boolean = false,
     val error: UiText? = null,
+    /** The error is about something in front of the server, which the Advanced section configures. */
+    val needsConnectionOptions: Boolean = false,
 )
 
 open class ConfigurationViewModel(
@@ -27,6 +33,10 @@ open class ConfigurationViewModel(
 
     fun updateServerUrl(value: String) = mutableState.update { it.copy(serverUrl = value, error = null) }
     fun updateApiKey(value: String) = mutableState.update { it.copy(apiKey = value, error = null) }
+    fun updateHeaders(value: List<ConnectionHeader>) = mutableState.update { it.copy(headers = value, error = null) }
+    fun updateCertificate(value: eu.studio742.imago.core.model.ClientCertificate?) = mutableState.update { it.copy(certificate = value, error = null) }
+
+    val certificates = CertificateSupport(repository::importClientCertificate, repository::describeClientCertificate)
 
     /** Connects to the server and stays on it; only with the connection saved does the welcome end. */
     fun connect(onConnected: () -> Unit) {
@@ -36,8 +46,8 @@ open class ConfigurationViewModel(
             return
         }
         viewModelScope.launch {
-            mutableState.update { it.copy(isChecking = true, error = null) }
-            runCatching { repository.validateAndSave(snapshot.serverUrl, snapshot.apiKey) }
+            mutableState.update { it.copy(isChecking = true, error = null, needsConnectionOptions = false) }
+            runCatching { repository.validateAndSave(snapshot.serverUrl, snapshot.apiKey, snapshot.headers.toProfile(snapshot.certificate)) }
                 .onSuccess {
                     // The key does not stay in the state once saved: it already lives encrypted in the repository.
                     mutableState.value = ConfigurationUiState()
@@ -46,7 +56,8 @@ open class ConfigurationViewModel(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(isChecking = false, error = error.toUiText(Res.string.library_validation_failed))
+                        it.copy(isChecking = false, error = error.toUiText(Res.string.library_validation_failed),
+                            needsConnectionOptions = error.isProtection())
                     }
                 }
         }

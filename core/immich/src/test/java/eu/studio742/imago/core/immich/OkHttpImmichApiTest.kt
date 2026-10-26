@@ -45,6 +45,21 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun pingKeepsNetworkInterceptorsButNotTheFailureReporter() = runTest {
+        var reported = 0
+        val shared = OkHttpClient.Builder()
+            .addInterceptor { chain -> reported++; chain.proceed(chain.request()) }
+            .addNetworkInterceptor { chain ->
+                chain.proceed(chain.request().newBuilder().header("X-Connection-Test", "present").build())
+            }
+            .build()
+        server.enqueue(MockResponse().setBody("""{"res":"pong"}"""))
+        assertTrue(OkHttpImmichApi(shared).ping(server.url("/").toString()))
+        assertEquals("present", server.takeRequest().getHeader("X-Connection-Test"))
+        assertEquals("The failure reporter must not run for a probe", 0, reported)
+    }
+
+    @Test
     fun pingsWithoutApiKeyAndTreatsSilenceAsUnavailable() = runTest {
         server.enqueue(MockResponse().setBody("""{"res":"pong"}"""))
         assertTrue(api.ping(server.url("/api/").toString()))
@@ -655,6 +670,37 @@ class OkHttpImmichApiTest {
         assertEquals("Praia do Amado", detail.exif.description)
         // A blank EXIF is not a value: it would be an empty bar in the detail screen's strip.
         assertNull(detail.exif.lensModel)
+    }
+
+    @Test
+    fun theDetailIdentifiesTheExternalLibrarySeparatelyFromTheConfiguredSource() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"id":"a1","libraryId":"external-1","originalFileName":"photo.jpg","fileCreatedAt":"2026-10-17T14:54:05Z","localDateTime":"2026-10-17T16:54:05","width":4000,"height":3000,"isFavorite":false,"isEdited":false,"type":"IMAGE"}""",
+        ))
+
+        val detail = api.getAssetDetail(connection().copy(libraryId = "configured-source"), "a1")
+
+        assertEquals("external-1", detail.asset.externalLibraryId)
+        assertEquals("/api/assets/a1", server.takeRequest().path)
+    }
+
+    @Test
+    fun absentNullAndBlankExternalLibraryIdsDoNotInventAnExternalOrigin() = runTest {
+        for (field in listOf("", "\"libraryId\":null,", "\"libraryId\":\"\",")) {
+            server.enqueue(MockResponse().setBody(
+                """{"id":"a1",${field}"originalFileName":"photo.jpg","fileCreatedAt":"2026-10-17T14:54:05Z","localDateTime":"2026-10-17T16:54:05","width":4000,"height":3000,"isFavorite":false,"isEdited":false,"type":"IMAGE"}""",
+            ))
+            assertNull(api.getAssetDetail(connection(), "a1").asset.externalLibraryId)
+        }
+    }
+
+    @Test
+    fun searchAlsoKeepsTheExternalLibraryId() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"assets":{"items":[{"id":"a1","libraryId":"external-1","originalFileName":"photo.jpg","fileCreatedAt":"2026-10-17T14:54:05Z","localDateTime":"2026-10-17T16:54:05","width":4000,"height":3000,"isFavorite":false,"isEdited":false,"type":"IMAGE"}],"nextPage":null}}""",
+        ))
+
+        assertEquals("external-1", api.searchAssets(connection(), 1, 100, LibraryFilter.ALL).items.single().externalLibraryId)
     }
 
     /** A photo without metadata is normal — it must not crash the detail screen. */

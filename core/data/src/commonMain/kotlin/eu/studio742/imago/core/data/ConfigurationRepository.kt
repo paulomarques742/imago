@@ -1,6 +1,7 @@
 package eu.studio742.imago.core.data
 
 import kotlinx.coroutines.flow.Flow
+import eu.studio742.imago.core.model.ConnectionProfile
 import eu.studio742.imago.core.model.ImmichConnection
 import eu.studio742.imago.core.model.ServerVersion
 
@@ -33,7 +34,7 @@ interface ConfigurationRepository {
 
     fun setBrushTool(encoded: String) = Unit
     fun source(id: String): eu.studio742.imago.core.model.LibrarySource
-    suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String): ServerVersion
+    suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String, profile: ConnectionProfile = ConnectionProfile.None): ServerVersion
     suspend fun testLibrary(id: String): ServerVersion
 
     /**
@@ -48,7 +49,19 @@ interface ConfigurationRepository {
      * It is only accepted if it answers with a supported version and returns the same account with
      * the library's key: an address of another server or another account is refused.
      */
-    suspend fun addServerUrl(id: String, serverUrl: String): ServerVersion
+    suspend fun addServerUrl(id: String, serverUrl: String, profile: ConnectionProfile = ConnectionProfile.None): ServerVersion
+
+    /**
+     * Changes what one address of a library needs besides the key. The address is tested with it
+     * before it is kept, and the same account has to answer.
+     */
+    suspend fun setConnectionProfile(id: String, serverUrl: String, profile: ConnectionProfile): ServerVersion
+
+    /** Reads a PKCS#12 file the person picked. Fails with the reason, as a [eu.studio742.imago.core.model.UserMessageException]. */
+    fun importClientCertificate(file: ByteArray, password: String): eu.studio742.imago.core.model.ClientCertificate = error("unused")
+
+    /** Who the certificate is for and until when; null if it can no longer be read. */
+    fun describeClientCertificate(certificate: eu.studio742.imago.core.model.ClientCertificate): eu.studio742.imago.core.model.ClientCertificateInfo? = null
     fun removeServerUrl(id: String, serverUrl: String)
 
     /** Moves an address [offset] positions in the order of preference. */
@@ -94,7 +107,7 @@ interface ConfigurationRepository {
     fun setAlbumsHiddenFromGrid(libraryId: String, albumIds: Set<String>) = Unit
     val connection: Flow<ImmichConnection?>
     fun currentConnection(): ImmichConnection?
-    suspend fun validateAndSave(serverUrl: String, apiKey: String): ServerVersion
+    suspend fun validateAndSave(serverUrl: String, apiKey: String, profile: ConnectionProfile = ConnectionProfile.None): ServerVersion
     suspend fun clear()
 }
 

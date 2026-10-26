@@ -38,6 +38,18 @@ private fun UserMessage.resource(): StringResource = when (this) {
     UserMessage.ADDRESS_ALREADY_IN_LIBRARY -> Res.string.message_address_already_in_library
     UserMessage.ADDRESS_WRONG_SERVER -> Res.string.message_address_wrong_server
     UserMessage.LIBRARY_NEEDS_ADDRESS -> Res.string.message_library_needs_address
+    UserMessage.IMMICH_PROTECTED -> Res.string.message_immich_protected
+    UserMessage.IMMICH_CERTIFICATE_REQUIRED -> Res.string.message_immich_certificate_required
+    UserMessage.IMMICH_CERTIFICATE_UNTRUSTED -> Res.string.message_immich_certificate_untrusted
+    UserMessage.CERTIFICATE_UNREADABLE -> Res.string.message_certificate_unreadable
+    UserMessage.CERTIFICATE_BAD_PASSWORD -> Res.string.message_certificate_bad_password
+    UserMessage.CERTIFICATE_NO_KEY -> Res.string.message_certificate_no_key
+    UserMessage.CERTIFICATE_EXPIRED -> Res.string.message_certificate_expired
+    UserMessage.CONNECTION_NEEDS_HTTPS -> Res.string.message_connection_needs_https
+    UserMessage.CONNECTION_HEADER_NAME_INVALID -> Res.string.message_connection_header_name_invalid
+    UserMessage.CONNECTION_HEADER_NAME_RESERVED -> Res.string.message_connection_header_name_reserved
+    UserMessage.CONNECTION_HEADER_VALUE_INVALID -> Res.string.message_connection_header_value_invalid
+    UserMessage.CONNECTION_HEADER_REPEATED -> Res.string.message_connection_header_repeated
     UserMessage.LIBRARY_DISCONNECTED -> Res.string.message_library_disconnected
     UserMessage.CHOOSE_FOLDER -> Res.string.message_choose_folder
     UserMessage.COMPOSITION_UNAVAILABLE -> Res.string.message_composition_unavailable
@@ -76,6 +88,8 @@ class LocalizedException(val text: UiText, cause: Throwable? = null) : Exception
  * nothing to someone editing a photo. It stays in the logs.
  */
 fun Throwable.toUiText(fallback: StringResource = Res.string.error_generic): UiText {
+    eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+        eu.studio742.imago.core.model.diagnostics.DiagnosticArea.INTERFACE, this)
     for (failure in generateSequence(this) { it.cause }) {
         when (failure) {
             is LocalizedException -> return failure.text

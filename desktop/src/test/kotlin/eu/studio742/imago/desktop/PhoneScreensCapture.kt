@@ -9,6 +9,9 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.platform.LocalDensity
@@ -51,6 +54,7 @@ import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.ImagoTheme
 import eu.studio742.imago.core.designsystem.i18n.AppSyncTexts
 import eu.studio742.imago.core.designsystem.i18n.LocalLanguageSettings
+import eu.studio742.imago.core.designsystem.i18n.LanguagePreference
 import eu.studio742.imago.core.designsystem.i18n.ProvideAppLanguage
 import eu.studio742.imago.core.sync.SyncEngine
 import eu.studio742.imago.desktop.platform.AppPaths
@@ -120,6 +124,7 @@ class PhoneScreensCapture {
         }
         graph.configuration.completeWelcome()
         val languageSettings = DesktopLanguageSettings(paths.root.resolve("language"))
+        languageSettings.choose(LanguagePreference.SYSTEM)
         val secrets = WindowsSecretStore(paths.secrets)
         val backend = DesktopAccount.backend(secrets)
         val account = DesktopAccount.create(paths, secrets, graph, backend = backend)
@@ -148,7 +153,8 @@ class PhoneScreensCapture {
                     LocalSyncEngine provides sync,
                     LocalLanguageSettings provides languageSettings,
                 ) {
-                    ProvideAppLanguage(languageSettings.preference.value, Locale.ENGLISH) {
+                    val captureLanguage by languageSettings.preference.collectAsState()
+                    ProvideAppLanguage(captureLanguage, Locale.ENGLISH) {
                         ImagoTheme {
                             val shell = shellViewModel()
                             Surface(Modifier.fillMaxSize(), color = ImagoColors.Background) {
@@ -162,6 +168,75 @@ class PhoneScreensCapture {
             if (onAllNodesWithText("Skip").fetchSemanticsNodes().isNotEmpty()) onNodeWithText("Skip").performClick()
             settle(4_000)
             shot("01-library")
+
+            if (wants("settings")) {
+                onNodeWithContentDescription("More options").performClick()
+                onNodeWithText("Settings").performClick()
+                settle(500)
+                onNodeWithText("Preferences").assertIsDisplayed()
+                onNodeWithText("Contact support").assertDoesNotExist()
+                onNodeWithText("Add Immich server").assertDoesNotExist()
+                shot("settings-00-collapsed")
+                onNodeWithText("Preferences").performClick()
+                onNodeWithText("System").performClick()
+                onNodeWithText("English").performClick()
+                settle(500)
+                org.junit.Assert.assertEquals(LanguagePreference.ENGLISH, languageSettings.preference.value)
+                shot("settings-01-top-en")
+                runOnIdle { languageSettings.choose(LanguagePreference.PORTUGUESE) }
+                settle(500)
+                shot("settings-02-top-pt")
+                runOnIdle { languageSettings.choose(LanguagePreference.ENGLISH) }
+                settle(500)
+                onNodeWithText("Libraries").performScrollTo()
+                onNodeWithText("Libraries").performClick()
+                shot("settings-03-libraries")
+                onNodeWithText("Add Immich server").performScrollTo().performClick()
+                onNodeWithText("Verify and save").performScrollTo().assertIsDisplayed()
+                shot("settings-04-add-server")
+                onNodeWithText("Cancel").performClick()
+                onNodeWithText("Support and diagnostics").performScrollTo().performClick()
+                onNodeWithText("Contact support").performScrollTo().performClick()
+                onNodeWithText("Briefly describe the problem").assertIsDisplayed()
+                shot("settings-05-support-dialog")
+                onNodeWithText("Cancel").performClick()
+                onNodeWithText("New forum topic").performScrollTo().performClick()
+                settle(500)
+                onNodeWithText("Title (3–120 characters)").performScrollTo().performTextReplacement("A community question")
+                onNodeWithText("Message (up to 5000 characters)").performScrollTo().performTextReplacement("How do you organise your edits in IMAGO?")
+                onNodeWithText("Public name (up to 40 characters)").performScrollTo().performTextReplacement("Community tester")
+                shot("community-00-form-en")
+                onNodeWithText("Review post").performClick()
+                onNodeWithText("Publish").assertIsDisplayed()
+                onNodeWithText("A community question").assertIsDisplayed()
+                shot("community-01-review-en")
+                onNodeWithText("Edit").performClick()
+                onNodeWithText("Cancel").performClick()
+                runOnIdle { languageSettings.choose(LanguagePreference.PORTUGUESE) }
+                settle(500)
+                onNodeWithText("Suporte e diagnóstico").performScrollTo().performClick()
+                onNodeWithText("Novo tópico no fórum").performScrollTo().performClick()
+                settle(500)
+                onNodeWithText("Título (3–120 caracteres)").performScrollTo().performTextReplacement("Uma dúvida da comunidade")
+                onNodeWithText("Mensagem (até 5000 caracteres)").performScrollTo().performTextReplacement("Como organizam as vossas edições no IMAGO?")
+                onNodeWithText("Nome público (até 40 caracteres)").performScrollTo().performTextReplacement("Pessoa de teste")
+                onNodeWithText("Rever publicação").performClick()
+                onNodeWithText("Publicar").assertIsDisplayed()
+                shot("community-02-review-pt")
+                onNodeWithText("Editar").performClick()
+                shot("community-03-form-pt")
+                onNodeWithText("Cancelar").performClick()
+                runOnIdle { languageSettings.choose(LanguagePreference.ENGLISH) }
+                settle(500)
+                onNodeWithText("About").performScrollTo()
+                shot("settings-06-bottom-en")
+                runOnIdle { languageSettings.choose(LanguagePreference.PORTUGUESE) }
+                settle(500)
+                shot("settings-07-bottom-pt")
+                runOnIdle { languageSettings.choose(LanguagePreference.ENGLISH) }
+                settle(500)
+                onNodeWithContentDescription("Back").performClick()
+            }
 
             val screen = onAllNodes(isRoot())[0]
             if (wants("scroll")) {

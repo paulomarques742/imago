@@ -22,6 +22,7 @@ kotlin {
             implementation(compose.components.resources)
             implementation(project(":core:model"))
             implementation(project(":core:data"))
+            api(project(":core:sync"))
             implementation(project(":core:designsystem"))
             implementation(project(":core:render"))
             implementation(compose.materialIconsExtended)
@@ -39,6 +40,7 @@ kotlin {
         }
         getByName("desktopTest").dependencies {
             implementation(libs.junit4)
+            implementation(libs.kotlinx.coroutines.test)
             // Tests only: the key's permission list is checked against the generated contract.
             implementation(project(":core:immich"))
             // Skia for this machine: the map snapshots draw with it.

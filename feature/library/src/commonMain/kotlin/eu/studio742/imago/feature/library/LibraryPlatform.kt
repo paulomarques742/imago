@@ -108,3 +108,14 @@ expect val SelectionDeleteDeviceBody: StringResource
  */
 @Composable
 expect fun rememberSendToImmich(): ((assetIds: List<String>, mimeType: String) -> Unit)?
+
+/**
+ * Opens the platform's file chooser for a client certificate (.p12 or .pfx) and hands over what the
+ * file holds, or null when the person cancelled or the file could not be read. The result is a
+ * function that opens the chooser.
+ */
+@Composable
+expect fun rememberCertificateFilePicker(onPicked: (ByteArray?) -> Unit): () -> Unit
+
+/** A certificate file is a few kilobytes; anything much bigger is not one. */
+const val CERTIFICATE_FILE_MAX_BYTES = 1_048_576

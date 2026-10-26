@@ -128,6 +128,9 @@ fun WelcomeRoute(
                         onBack = { connectingImmich = false },
                         onServerUrlChange = viewModel::updateServerUrl,
                         onApiKeyChange = viewModel::updateApiKey,
+                        onHeadersChange = viewModel::updateHeaders,
+                        onCertificateChange = viewModel::updateCertificate,
+                        certificates = viewModel.certificates,
                         onConnect = { viewModel.connect(onConnected = onFinished) },
                     )
                 } else {
@@ -252,6 +255,9 @@ private fun ImmichConnectForm(
     onBack: () -> Unit,
     onServerUrlChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
+    onHeadersChange: (List<eu.studio742.imago.core.model.ConnectionHeader>) -> Unit,
+    onCertificateChange: (eu.studio742.imago.core.model.ClientCertificate?) -> Unit,
+    certificates: CertificateSupport,
     onConnect: () -> Unit,
 ) {
     var showKey by remember { mutableStateOf(false) }
@@ -302,6 +308,8 @@ private fun ImmichConnectForm(
         modifier = Modifier.fillMaxWidth(),
     )
     ImmichKeyPermissions(Modifier.padding(top = ImagoSpacing.Sm))
+    ConnectionAdvanced(state.headers, onHeadersChange, enabled = !state.isChecking, modifier = Modifier.padding(top = ImagoSpacing.Sm),
+        highlight = state.needsConnectionOptions, certificate = state.certificate, onCertificateChange = onCertificateChange, certificates = certificates)
     state.error?.let {
         Text(
             text = it.resolve(),

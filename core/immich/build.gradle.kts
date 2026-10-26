@@ -151,6 +151,7 @@ val generateImmichContract by tasks.registering {
         // The photo detail: the EXIF strip, the favourite and the caption used as the title. The
         // caption is read-only — Immich does not expose renaming in any validated version.
         check(propertiesOf("AssetResponseDto").contains("exifInfo"))
+        check(propertiesOf("AssetResponseDto").contains("libraryId"))
         check(
             propertiesOf("ExifResponseDto").containsAll(
                 setOf("fNumber", "exposureTime", "iso", "focalLength", "make", "model", "lensModel", "description"),
@@ -270,6 +271,7 @@ val generateImmichContract by tasks.registering {
             check(validatedProperties("AssetBulkUpdateDto").contains("visibility"))
             check(validatedProperties("MetadataSearchDto").contains("visibility"))
             check(validatedProperties("AssetResponseDto").contains("visibility"))
+            check(validatedProperties("AssetResponseDto").contains("libraryId"))
             check(validatedProperties("ExifResponseDto").containsAll(setOf("latitude", "longitude", "city", "state", "country", "fileSizeInByte")))
             check(validatedProperties("AssetResponseDto").contains("people"))
         }
@@ -417,5 +419,6 @@ dependencies {
 
     testImplementation(libs.junit4)
     testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.okhttp.tls)
     testImplementation(libs.kotlinx.coroutines.test)
 }
