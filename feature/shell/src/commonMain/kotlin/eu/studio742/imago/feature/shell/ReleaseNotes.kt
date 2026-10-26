@@ -3,6 +3,10 @@ package eu.studio742.imago.feature.shell
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.JoinInner
 import androidx.compose.material.icons.outlined.Layers
@@ -18,6 +22,18 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.WbAuto
 import androidx.compose.ui.graphics.vector.ImageVector
 import eu.studio742.imago.feature.shell.resources.Res
+import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_1_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_1_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_2_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_2_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_3_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_3_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_4_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_4_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_5_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_5_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_6_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_6_body
 import eu.studio742.imago.feature.shell.resources.shell_news_0_22_0_1_title
 import eu.studio742.imago.feature.shell.resources.shell_news_0_22_0_1_body
 import eu.studio742.imago.feature.shell.resources.shell_news_0_22_0_2_title
@@ -101,6 +117,17 @@ internal class Release(
  * A version without an entry — a fix nobody would notice — opens nothing after the update.
  */
 internal val Releases: List<Release> = listOf(
+    Release(
+        AppVersion(0, 23, 0),
+        pages = listOf(
+            NewsPage(Icons.Outlined.Lock, Res.string.shell_news_0_23_0_1_title, Res.string.shell_news_0_23_0_1_body),
+            NewsPage(Icons.Outlined.Checklist, Res.string.shell_news_0_23_0_2_title, Res.string.shell_news_0_23_0_2_body),
+            NewsPage(Icons.Outlined.Info, Res.string.shell_news_0_23_0_3_title, Res.string.shell_news_0_23_0_3_body),
+            NewsPage(Icons.Outlined.Forum, Res.string.shell_news_0_23_0_4_title, Res.string.shell_news_0_23_0_4_body),
+            NewsPage(Icons.Outlined.Settings, Res.string.shell_news_0_23_0_5_title, Res.string.shell_news_0_23_0_5_body),
+            NewsPage(Icons.Outlined.Build, Res.string.shell_news_0_23_0_6_title, Res.string.shell_news_0_23_0_6_body),
+        ),
+    ),
     Release(
         AppVersion(0, 22, 0),
         pages = listOf(

@@ -59,12 +59,9 @@ internal fun WhatsNewDialog(releases: List<Release>, onDismiss: () -> Unit) {
 internal fun AboutSettingsCard() {
     val release = remember { currentRelease() }
     var showingNews by remember { mutableStateOf(false) }
-    Surface(color = ImagoColors.SurfaceElevated, shape = RoundedCornerShape(ImagoRadii.Medium), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(ImagoSpacing.Lg), verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-                Icon(Icons.Outlined.Info, null, tint = ImagoColors.Ivory)
-                Text(stringResource(Res.string.shell_about_title), style = MaterialTheme.typography.titleMedium)
-            }
+    var expanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    eu.studio742.imago.core.designsystem.CollapsibleSettingsCard(
+        stringResource(Res.string.shell_about_title), Icons.Outlined.Info, expanded, { expanded = it }) {
             Text(
                 stringResource(Res.string.shell_about_version, InstalledVersion.toString()),
                 style = MaterialTheme.typography.bodyMedium,
@@ -73,7 +70,6 @@ internal fun AboutSettingsCard() {
             if (release != null) {
                 TextButton(onClick = { showingNews = true }) { Text(stringResource(Res.string.shell_news_title)) }
             }
-        }
     }
     if (showingNews && release != null) WhatsNewDialog(listOf(release)) { showingNews = false }
 }
