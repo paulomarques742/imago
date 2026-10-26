@@ -62,7 +62,7 @@ import eu.studio742.imago.core.sync.SyncEntity
 import java.io.IOException
 
 /** This build's Supabase project. Incomplete means no account, and nothing leaves the device. */
-data class SupabaseSettings(val url: String, val publishableKey: String) {
+data class SupabaseSettings(val url: String, val publishableKey: String, val forumWebsiteUrl: String? = null) {
     val isComplete: Boolean get() = url.startsWith("http") && publishableKey.isNotBlank()
 }
 
@@ -114,6 +114,14 @@ class SupabaseSyncBackend(
         }
         ?.stateIn(scope, SharingStarted.Eagerly, null)
         ?: MutableStateFlow(null)
+
+    override val forum = if (!settings.isComplete) null else SupabaseForumBackend(settings, httpClient) {
+        val active = client
+        if (active == null) null else try {
+            active.withFreshSession { auth.currentSessionOrNull()?.accessToken }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { throw eu.studio742.imago.core.sync.ForumException(eu.studio742.imago.core.sync.ForumException.Reason.SESSION_EXPIRED) }
+    }
 
     override suspend fun signUp(email: String, password: String): SignUpResult = call {
         auth.signUpWith(Email, redirectUrl = CONFIRMATION_URL) {

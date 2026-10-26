@@ -18,6 +18,9 @@ interface SyncBackend {
     /** The account session, or null without a session. */
     val session: StateFlow<AccountSession?>
 
+    /** Available to guests too, but only contacted by an explicit community action. */
+    val forum: ForumBackend? get() = null
+
     suspend fun signUp(email: String, password: String): SignUpResult
     suspend fun signIn(email: String, password: String)
     suspend fun sendPasswordReset(email: String)

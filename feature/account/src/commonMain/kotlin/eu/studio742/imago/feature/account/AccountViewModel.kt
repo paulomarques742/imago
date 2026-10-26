@@ -29,6 +29,7 @@ open class AccountViewModel(
 ) : ViewModel() {
     val isAvailable = account.isAvailable
     val session = account.session
+    val community = account.community
     val deviceName = account.deviceName
     val passwordRecoveryPending = account.passwordRecoveryPending
 

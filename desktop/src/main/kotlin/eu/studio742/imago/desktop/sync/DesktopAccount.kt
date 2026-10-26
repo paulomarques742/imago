@@ -42,7 +42,8 @@ object DesktopAccount {
     fun bundledSettings(): SupabaseSettings {
         val properties = Properties()
         DesktopAccount::class.java.getResourceAsStream("/imago-supabase.properties")?.use(properties::load)
-        return SupabaseSettings(properties.getProperty("url").orEmpty(), properties.getProperty("publishableKey").orEmpty())
+        return SupabaseSettings(properties.getProperty("url").orEmpty(), properties.getProperty("publishableKey").orEmpty(),
+            properties.getProperty("forumWebsiteUrl"))
     }
 
     private fun computerName(): String = System.getenv("COMPUTERNAME")?.takeIf(String::isNotBlank)

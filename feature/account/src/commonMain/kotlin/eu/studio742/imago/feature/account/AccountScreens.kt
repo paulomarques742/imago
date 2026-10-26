@@ -51,11 +51,9 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun AccountSettingsCard(onOpenAccount: (signUp: Boolean) -> Unit, viewModel: AccountViewModel = accountViewModel()) {
     val session by viewModel.session.collectAsStateWithLifecycle()
-    AccountCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-            Icon(Icons.Outlined.AccountCircle, null, tint = ImagoColors.Ivory)
-            Text(stringResource(Res.string.account_imago_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-        }
+    var expanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    eu.studio742.imago.core.designsystem.CollapsibleSettingsCard(
+        stringResource(Res.string.account_imago_title), Icons.Outlined.AccountCircle, expanded, { expanded = it }) {
         when {
             !viewModel.isAvailable -> Text(
                 stringResource(Res.string.account_unavailable_detail),

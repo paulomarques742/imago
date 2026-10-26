@@ -250,6 +250,8 @@ class SyncEngine(
             mutableStatus.update { it.copy(running = false) }
             throw cancel
         } catch (error: Exception) {
+            eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                eu.studio742.imago.core.model.diagnostics.DiagnosticArea.SYNC, error)
             val offline = (error as? AccountException)?.reason == AccountException.Reason.OFFLINE ||
                 generateSequence<Throwable>(error) { it.cause }.any { it is java.io.IOException }
             mutableStatus.update {

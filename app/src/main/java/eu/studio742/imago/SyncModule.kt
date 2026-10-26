@@ -21,7 +21,7 @@ object SyncModule {
     @Singleton
     fun syncBackend(@ApplicationContext context: Context): SyncBackend = AndroidSupabase.create(
         context,
-        SupabaseSettings(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_PUBLISHABLE_KEY),
+        SupabaseSettings(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_PUBLISHABLE_KEY, BuildConfig.FORUM_WEBSITE_URL),
     )
 
     /** What sync writes into the data comes out in the app language; the strings live in the design system. */

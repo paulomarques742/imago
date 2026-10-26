@@ -33,6 +33,8 @@ class AccountRepository(
     platformName: String,
 ) {
 
+    val community = backend.forum?.let { CommunityRepository(it, preferences) }
+
     private val platform = object : AccountPlatform {
         override fun storedDevice(): StoredDevice? {
             val id = preferences.getString(KEY_DEVICE) ?: return null
