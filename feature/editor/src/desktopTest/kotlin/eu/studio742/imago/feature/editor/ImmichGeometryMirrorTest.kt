@@ -10,6 +10,7 @@ import eu.studio742.imago.core.model.AssetExif
 import eu.studio742.imago.core.model.AssetPage
 import eu.studio742.imago.core.model.AssetReference
 import eu.studio742.imago.core.model.AssetType
+import eu.studio742.imago.core.model.ConnectionProfile
 import eu.studio742.imago.core.model.CropRect
 import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.core.model.EditRecipe
@@ -209,9 +210,10 @@ class ImmichGeometryMirrorTest {
         override val selectedLibraryId: StateFlow<String> = MutableStateFlow(LIBRARY_ID)
         override fun source(id: String): LibrarySource = library
         override fun selectLibrary(id: String) = unused()
-        override suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String): ServerVersion = unused()
+        override suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String, profile: ConnectionProfile): ServerVersion = unused()
         override suspend fun testLibrary(id: String): ServerVersion = unused()
-        override suspend fun addServerUrl(id: String, serverUrl: String): ServerVersion = unused()
+        override suspend fun addServerUrl(id: String, serverUrl: String, profile: ConnectionProfile): ServerVersion = unused()
+        override suspend fun setConnectionProfile(id: String, serverUrl: String, profile: ConnectionProfile): ServerVersion = unused()
         override fun removeServerUrl(id: String, serverUrl: String) = unused()
         override fun moveServerUrl(id: String, serverUrl: String, offset: Int) = unused()
         override val endpointProbes: StateFlow<Map<String, Map<String, Boolean>>> = MutableStateFlow(emptyMap())
@@ -223,7 +225,7 @@ class ImmichGeometryMirrorTest {
         override var lastSeenAppVersion: String? = null
         override val connection: Flow<ImmichConnection?> = flowOf(null)
         override fun currentConnection(): ImmichConnection? = null
-        override suspend fun validateAndSave(serverUrl: String, apiKey: String): ServerVersion = unused()
+        override suspend fun validateAndSave(serverUrl: String, apiKey: String, profile: ConnectionProfile): ServerVersion = unused()
         override suspend fun clear() = unused()
     }
 

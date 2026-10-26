@@ -113,7 +113,7 @@ Java_eu_studio742_imago_core_raw_NativeRaw_identify(JNIEnv *env, jobject, jstrin
 }
 
 extern "C" JNIEXPORT jobject JNICALL
-Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring path, jboolean halfSize) {
+Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring path, jboolean halfSize, jint maxSide) {
     try {
         LibRaw decoder;
         auto threadClass = env->FindClass("java/lang/Thread");
@@ -143,10 +143,16 @@ Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring 
             decoder.dcraw_make_mem_image(&code), LibRaw::dcraw_clear_mem);
         if (!image || code != LIBRAW_SUCCESS) { failure(env, code); return nullptr; }
         const size_t pixelCount = static_cast<size_t>(image->width) * image->height;
-        const size_t count = pixelCount * 3;
         if (image->type != LIBRAW_IMAGE_BITMAP || image->bits != 16 ||
             (image->colors < 1 || image->colors > 4 || image->colors == 2) ||
-            count > static_cast<size_t>(std::numeric_limits<jsize>::max()) || image->data_size != pixelCount * image->colors * 2) {
+            pixelCount == 0 || image->data_size != pixelCount * image->colors * 2) {
+            failure(env, LIBRAW_DATA_ERROR); return nullptr;
+        }
+        const float scale = maxSide > 0 ? std::min(1.f, static_cast<float>(maxSide) / std::max(image->width, image->height)) : 1.f;
+        const unsigned width = std::max(1l, std::lround(image->width * scale));
+        const unsigned height = std::max(1l, std::lround(image->height * scale));
+        const size_t count = static_cast<size_t>(width) * height * 3;
+        if (count > static_cast<size_t>(std::numeric_limits<jsize>::max())) {
             failure(env, LIBRAW_DATA_ERROR); return nullptr;
         }
         if (progress(&cancel, LIBRAW_PROGRESS_LOAD_RAW, 0, 1)) {
@@ -159,21 +165,37 @@ Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring 
         for (unsigned c = 0; c < image->colors; ++c)
             if (color.pre_mul[c] > 0.f && std::isfinite(color.pre_mul[c])) minGain = std::min(minGain, color.pre_mul[c]);
         const float normalization = 1.f / (65535.f * minGain);
-        std::vector<jshort> row(static_cast<size_t>(image->width) * 3);
+        std::vector<jshort> row(static_cast<size_t>(width) * 3);
         const auto source = reinterpret_cast<const unsigned short *>(image->data);
-        for (unsigned y = 0; y < image->height; ++y) {
-            if (progress(&cancel, LIBRAW_PROGRESS_CONVERT_RGB, y, image->height)) {
+        auto channel = [&](unsigned x, unsigned y, unsigned c) {
+            const auto pixel = source + (static_cast<size_t>(y) * image->width + x) * image->colors;
+            if (image->colors == 1) return pixel[0] / 65535.f;
+            float value = 0.f;
+            for (unsigned cameraChannel = 0; cameraChannel < image->colors; ++cameraChannel)
+                value += color.rgb_cam[c][cameraChannel] * pixel[cameraChannel];
+            return value * normalization;
+        };
+        for (unsigned y = 0; y < height; ++y) {
+            if (progress(&cancel, LIBRAW_PROGRESS_CONVERT_RGB, y, height)) {
                 failure(env, LIBRAW_CANCELLED_BY_CALLBACK); return nullptr;
             }
-            for (unsigned x = 0; x < image->width; ++x) {
-                const auto pixel = source + (static_cast<size_t>(y) * image->width + x) * image->colors;
-                if (image->colors == 1) {
-                    row[x * 3] = row[x * 3 + 1] = row[x * 3 + 2] = static_cast<jshort>(halfFloat(pixel[0] / 65535.f));
-                } else for (unsigned c = 0; c < 3; ++c) {
-                    float value = 0.f;
-                    for (unsigned channel = 0; channel < image->colors; ++channel)
-                        value += color.rgb_cam[c][channel] * pixel[channel];
-                    row[x * 3 + c] = static_cast<jshort>(halfFloat(value * normalization));
+            for (unsigned x = 0; x < width; ++x) {
+                for (unsigned c = 0; c < 3; ++c) {
+                    float value;
+                    if (scale == 1.f) {
+                        value = channel(x, y, c);
+                    } else {
+                        // Sample scene-linear channels before FP16 storage, never an embedded JPEG.
+                        const float sx = std::clamp((x + .5f) / scale - .5f, 0.f, image->width - 1.f);
+                        const float sy = std::clamp((y + .5f) / scale - .5f, 0.f, image->height - 1.f);
+                        const auto x0 = static_cast<unsigned>(sx), y0 = static_cast<unsigned>(sy);
+                        const auto x1 = std::min(x0 + 1, image->width - 1u), y1 = std::min(y0 + 1, image->height - 1u);
+                        const float fx = sx - x0, fy = sy - y0;
+                        const float top = channel(x0, y0, c) * (1.f - fx) + channel(x1, y0, c) * fx;
+                        const float bottom = channel(x0, y1, c) * (1.f - fx) + channel(x1, y1, c) * fx;
+                        value = top * (1.f - fy) + bottom * fy;
+                    }
+                    row[x * 3 + c] = static_cast<jshort>(halfFloat(value));
                 }
             }
             env->SetShortArrayRegion(pixels, static_cast<jsize>(y * row.size()), static_cast<jsize>(row.size()), row.data());
@@ -181,7 +203,7 @@ Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring 
         }
         auto cls = env->FindClass("eu/studio742/imago/core/raw/RawImage");
         auto ctor = env->GetMethodID(cls, "<init>", "(II[SLjava/lang/String;Ljava/lang/String;)V");
-        return env->NewObject(cls, ctor, static_cast<jint>(image->width), static_cast<jint>(image->height), pixels,
+        return env->NewObject(cls, ctor, static_cast<jint>(width), static_cast<jint>(height), pixels,
             env->NewStringUTF(decoder.imgdata.idata.make), env->NewStringUTF(decoder.imgdata.idata.model));
     } catch (const std::bad_alloc &) {
         env->ThrowNew(env->FindClass("java/lang/OutOfMemoryError"), "Not enough memory to decode the RAW image.");

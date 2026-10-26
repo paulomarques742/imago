@@ -27,14 +27,13 @@ internal object DevelopedRawBitmaps {
 /** Library thumbnails and detail images use the same development and recipe as the editor. */
 class RawPhotoDecoder private constructor(private val file: File, private val options: Options) : Decoder {
     override suspend fun decode(): DecodeResult? {
-        val raw = decodeRawPhoto(file, halfSize = true) ?: return null
         val side = maxOf((options.size.width as? Dimension.Pixels)?.px ?: 0,
             (options.size.height as? Dimension.Pixels)?.px ?: 0).takeIf { it > 0 }?.coerceAtMost(2048) ?: 2048
+        val raw = decodeRawPreview(file, side) ?: return null
         val recipe = options.extras[rawRecipeKey]
         val bitmap = withContext(Dispatchers.Default) {
-            val source = RecipePixels.reduce(raw, side)
             if (recipe != null) requireRawEngine(recipe)
-            val rendered = RecipePixels.renderFloat(source, recipe?.toRenderParameters() ?: RenderParameters(), consumeSource = true)
+            val rendered = RecipePixels.renderFloat(raw, recipe?.toRenderParameters() ?: RenderParameters(), consumeSource = true)
             rendered.toPixelBuffer().toPlatformBitmap().also { image ->
                 if (recipe != null) DevelopedRawBitmaps.mark(image, recipeTransformation(recipe).cacheKey)
             }

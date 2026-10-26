@@ -43,6 +43,37 @@ class RawDecoderTest {
         }
     }
 
+    @Test fun `bounded previews allocate only the requested oriented linear pixels`() {
+        for (orientation in 1..8) withDng(orientation) { file ->
+            file.writeBytes(syntheticDng(orientation, warmWhiteBalance = true))
+            val preview = requireNotNull(RawDecoder.decodePreview(file, maxSide = 16))
+            assertEquals(if (orientation >= 5) 12 to 16 else 16 to 12, preview.width to preview.height)
+            assertEquals(16 * 12 * 3, preview.rgb.size)
+            assertTrue(preview.rgb.indices.all { preview.sample(it).isFinite() })
+            assertTrue("Preview reduction must retain camera highlights.", preview.rgb.indices.any { preview.sample(it) > 1.1f })
+        }
+    }
+
+    @Test fun `a preview request never enlarges the decoded sensor`() {
+        withDng { file ->
+            val preview = requireNotNull(RawDecoder.decodePreview(file, maxSide = 2048))
+            val half = requireNotNull(RawDecoder.decode(file, halfSize = true))
+            assertEquals(half.width to half.height, preview.width to preview.height)
+            assertArrayEquals(half.rgb, preview.rgb)
+            val full = requireNotNull(RawDecoder.decode(file))
+            assertEquals(64 to 48, full.width to full.height)
+        }
+    }
+
+    @Test fun `preview limits handle a single pixel and reject invalid dimensions`() {
+        withDng { file ->
+            val preview = requireNotNull(RawDecoder.decodePreview(file, maxSide = 1))
+            assertEquals(1 to 1, preview.width to preview.height)
+            assertThrows(IllegalArgumentException::class.java) { RawDecoder.decodePreview(file, maxSide = 0) }
+            assertThrows(IllegalArgumentException::class.java) { RawDecoder.decodePreview(file, maxSide = -1) }
+        }
+    }
+
     @Test fun `floating point deflate DNG preserves the sensor signal`() {
         withDng { file ->
             val original = requireNotNull(RawDecoder.decode(file))

@@ -186,6 +186,9 @@
     <string name="editor_export_stacked">Exportação enviada e agrupada com o original no Immich.</string>
     <string name="editor_export_not_stacked">Exportação enviada, mas não foi possível agrupá-la com o original.</string>
     <string name="editor_export_sent">Exportação enviada para o Immich.</string>
+    <string name="editor_export_checking_origin">A verificar a biblioteca da fotografia…</string>
+    <string name="editor_export_external_library">Esta fotografia pertence a uma biblioteca externa. A edição será enviada para o armazenamento gerido pelo Immich, fora da pasta do original. Nas vistas de pastas ou álbuns, os dois ficheiros podem aparecer separados mesmo quando estão agrupados.</string>
+    <string name="editor_export_origin_unavailable">Não foi possível verificar se esta fotografia pertence a uma biblioteca externa. As edições enviadas para o Immich ficam no armazenamento gerido por ele.</string>
     <string name="editor_phase_preparing">A preparar a exportação…</string>
     <string name="editor_export_failed">Não foi possível exportar a fotografia.</string>
     <string name="editor_history_version_from">Versão de %1$s</string>

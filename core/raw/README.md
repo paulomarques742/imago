@@ -9,6 +9,13 @@ decodes each stored component to a Kotlin Float. An unsupported format returns n
 throws `RawDecodeException`. Thread interruption cancels native processing through LibRaw's
 progress callback. Each decode owns its LibRaw instance and closes the input before returning.
 
+`RawDecoder.decodePreview(file, maxSide)` uses half-size development and reduces oriented,
+scene-linear channels in the native bridge before allocating the Kotlin FP16 buffer. The long
+side is bounded by the request, with no upscaling. Full-resolution exports keep using `decode`.
+Developments share an interruptible queue so image grids cannot accumulate concurrent LibRaw
+sensor and demosaic buffers. Cancellation also removes a worker waiting for its turn.
+This bounds preview storage on the JVM; LibRaw still needs native memory to unpack the sensor.
+
 White balance uses LibRaw's gain normalization that preserves sensor headroom. Camera channels
 stay unconverted until IMAGO applies the camera-to-sRGB matrix in floating point; display clipping
 comes after exposure and white-balance adjustments in the shared editor pipeline. Binary16 storage

@@ -186,6 +186,9 @@
     <string name="editor_export_stacked">Export sent and stacked with the original in Immich.</string>
     <string name="editor_export_not_stacked">Export sent, but it couldn’t be stacked with the original.</string>
     <string name="editor_export_sent">Export sent to Immich.</string>
+    <string name="editor_export_checking_origin">Checking the photo’s library…</string>
+    <string name="editor_export_external_library">This photo is in an external library. The edit will be uploaded to Immich’s managed storage, outside the original folder. Folder or album views may show the two files separately even when stacked.</string>
+    <string name="editor_export_origin_unavailable">Couldn’t check whether this photo is in an external library. Edits sent to Immich are uploaded to its managed storage.</string>
     <string name="editor_phase_preparing">Preparing the export…</string>
     <string name="editor_export_failed">Couldn’t export the photo.</string>
     <string name="editor_history_version_from">Version from %1$s</string>

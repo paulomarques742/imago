@@ -15,6 +15,11 @@ suspend fun decodeRawPhoto(file: File, halfSize: Boolean = false): FloatPixelBuf
     RawDecoder.decode(file, halfSize)?.let { FloatPixelBuffer(it.width, it.height, it.rgb) }
 }
 
+/** Reduces inside the native bridge so a thumbnail never allocates a sensor-sized JVM array. */
+suspend fun decodeRawPreview(file: File, maxSide: Int): FloatPixelBuffer? = runInterruptible(Dispatchers.IO) {
+    RawDecoder.decodePreview(file, maxSide)?.let { FloatPixelBuffer(it.width, it.height, it.rgb) }
+}
+
 fun requireRawEngine(recipe: EditRecipe) {
     requireUser(recipe.processVersion <= CURRENT_PROCESS_VERSION, UserMessage.EDIT_NEEDS_NEWER_APP)
     requireUser(recipe.rawDevelopment?.engine?.let { it == CURRENT_RAW_ENGINE } != false, UserMessage.EDIT_NEEDS_NEWER_APP)

@@ -33,6 +33,13 @@ class DesktopEditorExporterTest {
         for (original in originals) {
             val info = requireNotNull(eu.studio742.imago.core.raw.RawDecoder.identify(original))
             val before = java.security.MessageDigest.getInstance("SHA-256").digest(original.readBytes())
+            val previewStarted = System.nanoTime()
+            eu.studio742.imago.core.render.decodeRawPreview(original, maxSide = 2048).let { preview ->
+                requireNotNull(preview)
+                assertTrue(maxOf(preview.width, preview.height) <= 2048)
+                assertTrue(preview.linear)
+                println("RAW preview ${info.cameraMake} ${info.cameraModel}: ${preview.width}x${preview.height}, FP16 buffer ${preview.rgb.size.toLong() * 2} bytes, ${(System.nanoTime() - previewStarted) / 1_000_000} ms")
+            }
             val asset = EditorAsset("raw:${original.name}", "", original.name, original.toURI().toString(), "", "2026-10-24T00:00:00Z")
             val recipe = EditRecipe(assetId = asset.id, originalChecksum = "", createdAt = "", updatedAt = "",
                 tone = Tone(exposure = -1f), rawDevelopment = eu.studio742.imago.core.model.RawDevelopment())

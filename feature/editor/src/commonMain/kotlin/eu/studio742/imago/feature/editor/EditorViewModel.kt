@@ -95,7 +95,7 @@ import eu.studio742.imago.core.render.toRenderParameters
 import kotlin.math.floor
 import java.io.File
 import eu.studio742.imago.core.render.FloatPixelBuffer
-import eu.studio742.imago.core.render.decodeRawPhoto
+import eu.studio742.imago.core.render.decodeRawPreview
 import eu.studio742.imago.core.render.shouldInspectRawOriginal
 import eu.studio742.imago.core.render.createPhotoTempFile
 import eu.studio742.imago.core.render.toPlatformBitmap
@@ -594,6 +594,14 @@ open class EditorViewModel(
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(EditorUiState(brushTool = BrushTool.decode(configuration.brushTool)))
     val state = mutableState.asStateFlow()
+    private val exportOriginChecker = ExportOriginChecker(viewModelScope) { assetId ->
+        checkNotNull(library).assetDetail(assetId).asset.externalLibraryId
+    }
+    val exportOrigin = exportOriginChecker.state
+
+    fun prepareExport() {
+        state.value.asset?.id?.let(exportOriginChecker::check)
+    }
 
     private val history = EditHistory()
     private var editStart: EditRecipe? = null
@@ -663,6 +671,7 @@ open class EditorViewModel(
         }
         if (keyMatches && state.value.bitmap != null) return
         if (sameRecipeSession && state.value.recipe != null) return switchSample(target as PhotoEditTarget.Recipe)
+        exportOriginChecker.reset()
         activeTarget = target
         recipeSessionKey = (target as? PhotoEditTarget.Recipe)?.source?.key
         loadJob?.cancel()
@@ -785,6 +794,7 @@ open class EditorViewModel(
 
     /** Another sample under the recipe being edited: the photo changes, and nothing else does. */
     private fun switchSample(target: PhotoEditTarget.Recipe) {
+        exportOriginChecker.reset()
         activeTarget = target
         loadJob?.cancel()
         mutableState.update { it.copy(asset = target.asset, bitmap = null, highPrecisionSource = null, isLoading = true, error = null) }
@@ -803,6 +813,7 @@ open class EditorViewModel(
      */
     fun closeRecipe() {
         if (activeTarget !is PhotoEditTarget.Recipe) return
+        exportOriginChecker.reset()
         loadJob?.cancel()
         activeTarget = null
         recipeSessionKey = null
@@ -2572,10 +2583,9 @@ open class EditorViewModel(
             val original = createPhotoTempFile(context)
             try {
                 library.downloadOriginal(asset.id, original)
-                val raw = decodeRawPhoto(original, halfSize = true)
+                val raw = decodeRawPreview(original, maxSide = 2048)
                 if (raw != null) {
-                    val preview = withContext(Dispatchers.Default) { RecipePixels.reduce(raw, 2048) }
-                    return LoadedPhoto(withContext(Dispatchers.Default) { preview.toPixelBuffer().toPlatformBitmap() }, preview)
+                    return LoadedPhoto(withContext(Dispatchers.Default) { raw.toPixelBuffer().toPlatformBitmap() }, raw)
                 }
             } finally { original.delete() }
         }

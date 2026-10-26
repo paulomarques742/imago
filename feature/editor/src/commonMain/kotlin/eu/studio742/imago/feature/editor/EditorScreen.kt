@@ -282,6 +282,7 @@ fun EditorRoute(
     viewModel: EditorViewModel = editorViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val exportOrigin by viewModel.exportOrigin.collectAsStateWithLifecycle()
     val compositionMode = target is PhotoEditTarget.Composition
     val recipeMode = target is PhotoEditTarget.Recipe
     DisposableEffect(asset.id, target) {
@@ -368,6 +369,8 @@ fun EditorRoute(
         onConsumeRecipeNotice = viewModel::consumeRecipeNotice,
         onExportGallery = viewModel::exportToGallery,
         onExportImmich = viewModel::exportToImmich,
+        exportOrigin = exportOrigin,
+        onPrepareExport = viewModel::prepareExport,
         onConsumeExportResult = viewModel::consumeExportResult,
         onExportPermissionDenied = {
             viewModel.reportExportError(uiText(Res.string.editor_gallery_permission_needed))
@@ -583,6 +586,8 @@ private fun EditorScreen(
     onConsumeRecipeNotice: () -> Unit,
     onExportGallery: () -> Unit,
     onExportImmich: (String) -> Unit,
+    exportOrigin: ImmichExportOrigin,
+    onPrepareExport: () -> Unit,
     onConsumeExportResult: () -> Unit,
     onExportPermissionDenied: () -> Unit,
     /** Read when the sheet opens: the last style may have changed since this screen was composed. */
@@ -2262,12 +2267,13 @@ private fun EditorScreen(
         )
     }
     if (!compositionMode && showExportDialog) {
+        LaunchedEffect(state.asset?.id) { onPrepareExport() }
         var exportDestination by remember { mutableStateOf<String?>(null) }
         AlertDialog(
             onDismissRequest = { if (!state.isExporting) showExportDialog = false },
             title = { Text(stringResource(Res.string.editor_export_photo)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(stringResource(Res.string.editor_export_body))
                     eu.studio742.imago.feature.library.ExportLibrarySelector(
                         originId = state.asset?.id?.let { eu.studio742.imago.core.model.AssetReference.parse(it).libraryId },
@@ -2280,14 +2286,14 @@ private fun EditorScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text(stringResource(SaveToDeviceLabel)) }
-                    Button(
-                        onClick = {
+                    ImmichExportAction(
+                        origin = exportOrigin,
+                        hasDestination = exportDestination != null,
+                        onSend = {
                             showExportDialog = false
                             exportDestination?.let(onExportImmich)
                         },
-                        enabled = exportDestination != null,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(stringResource(Res.string.editor_send_to_immich)) }
+                    )
                     OutlinedButton(
                         onClick = {
                             showExportDialog = false
