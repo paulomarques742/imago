@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Only two cache folders are exposed: what is shared, and what another app picked from IMAGO. The
+    Only these cache folders are exposed: shares, picked media and user-prepared support reports. The
     files are written there and nothing else of the app's storage is reachable by the recipient.
 -->
 <paths>
     <cache-path name="imago-share" path="share/" />
     <cache-path name="imago-picked" path="picked/" />
+    <cache-path name="imago-support" path="support-reports/" />
 </paths>
