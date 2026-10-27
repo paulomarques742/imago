@@ -5,6 +5,7 @@ import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
 import dagger.hilt.android.HiltAndroidApp
 import okio.Path.Companion.toOkioPath
 import eu.studio742.imago.core.sync.AndroidSync
@@ -20,12 +21,19 @@ class ImmichRoomApplication : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        // Before anything is drawn: the grid's first edited tiles already look for their render here.
+        eu.studio742.imago.core.render.RecipeRenderCache.install(
+            cacheDir.resolve("recipe_renders").toOkioPath(), RECIPE_RENDER_CACHE_BYTES,
+        )
         eu.studio742.imago.feature.library.AndroidDiagnostics.start(this, "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
         // Without an account the engine waits; with one, it sends and receives while the app is
         // alive, and WorkManager finishes the upload when the network comes back.
         AndroidSync.start(this, syncEngine)
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
             configuration.observeDiagnosticVersions()
+        }
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
+            CacheSweeper(cacheDir).sweep()
         }
     }
 
@@ -38,7 +46,15 @@ class ImmichRoomApplication : Application(), SingletonImageLoader.Factory {
             // The shared client, not Coil's own: what the connection needs (headers, certificates)
             // is configured on it.
             add(coil3.network.okhttp.OkHttpNetworkFetcherFactory(callFactory = { eu.studio742.imago.core.immich.ImmichHttp.client }))
-            add(LocalVideoThumbnailFetcher.Factory(this@ImmichRoomApplication))
+            add(LocalThumbnailFetcher.Factory(this@ImmichRoomApplication))
+        }
+        // Coil's default share was too small to outlive a visit to the detail: a few full-screen
+        // previews pushed every grid tile out, and coming back to the grid loaded it all again. Bitmaps
+        // live outside the Java heap, and Coil trims the cache when the system asks for memory.
+        .memoryCache {
+            MemoryCache.Builder()
+                .maxSizePercent(context, MEMORY_CACHE_SHARE)
+                .build()
         }
         .diskCache {
             DiskCache.Builder()
@@ -47,4 +63,9 @@ class ImmichRoomApplication : Application(), SingletonImageLoader.Factory {
                 .build()
         }
         .build()
+
+    private companion object {
+        const val MEMORY_CACHE_SHARE = 0.4
+        const val RECIPE_RENDER_CACHE_BYTES = 100L * 1024L * 1024L
+    }
 }

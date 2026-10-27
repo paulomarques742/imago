@@ -43,6 +43,7 @@ import eu.studio742.imago.feature.shell.shellViewModel
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
+import okio.Path.Companion.toOkioPath
 
 /**
  * The IMAGO app for Windows.
@@ -66,6 +67,12 @@ fun main(args: Array<String>) {
     val instance = SingleInstance(paths)
     // A window is already open: the link (or just the focus request) goes to it, and this launch ends.
     if (instance.forward(link)) return
+    // Edited photos rendered once are read back from here, instead of running the recipe again on
+    // every visit to the grid or the detail.
+    eu.studio742.imago.core.render.RecipeRenderCache.install(
+        paths.cache.resolve("recipe-renders").toOkioPath(),
+        RECIPE_RENDER_CACHE_BYTES,
+    )
 
     val diagnostics = eu.studio742.imago.core.model.diagnostics.DiagnosticStore(paths.root.resolve("diagnostics").toFile())
     eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.start(diagnostics, mapOf(
@@ -166,3 +173,5 @@ fun main(args: Array<String>) {
         }
     }
 }
+
+private const val RECIPE_RENDER_CACHE_BYTES = 200L * 1024L * 1024L

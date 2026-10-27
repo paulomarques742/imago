@@ -18,7 +18,7 @@ fun ImageRequest.Builder.libraryAuth(apiKey: String?): ImageRequest.Builder = ap
 
 /**
  * The local recipe applied to the image Coil loads. Coil treats the transformation as part of the
- * key, so the processed version is cached like any other.
+ * memory cache key; on disk, the processed version is kept by [RecipeRenderCache].
  */
 fun ImageRequest.Builder.withRecipe(recipe: EditRecipe?): ImageRequest.Builder = apply {
     extras[rawRecipeKey] = recipe

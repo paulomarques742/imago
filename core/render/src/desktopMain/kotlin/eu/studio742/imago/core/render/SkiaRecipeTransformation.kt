@@ -7,6 +7,8 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
+import org.jetbrains.skia.EncodedImageFormat
+import org.jetbrains.skia.Image
 import org.jetbrains.skia.ImageInfo
 import eu.studio742.imago.core.model.EditRecipe
 
@@ -14,16 +16,33 @@ import eu.studio742.imago.core.model.EditRecipe
  * The recipe applied to the Skia Bitmap Coil delivers on desktop.
  *
  * The same CPU engine as the preview and the export: the thumbnail shows what the export produces.
- * The key includes the instant of the last save, as on Android.
+ * The key includes the instant of the last save, as on Android, and the result goes to
+ * [RecipeRenderCache] in the same way.
  */
 class SkiaRecipeTransformation(private val recipe: EditRecipe) : Transformation() {
     override val cacheKey: String = "recipe:${recipe.assetId}:${recipe.processVersion}:${recipe.updatedAt}"
 
     override suspend fun transform(input: Bitmap, size: Size): Bitmap = withContext(Dispatchers.Default) {
         if (DevelopedRawBitmaps.contains(input, cacheKey)) return@withContext input
-        RecipePixels.render(input.toPixelBuffer(), recipe).toSkiaBitmap()
+        val key = RecipeRenderCache.key(cacheKey, input.width, input.height, input::getColor)
+        RecipeRenderCache.read(key)?.let(::decodeCachedRender)?.let { return@withContext it }
+        RecipePixels.render(input.toPixelBuffer(), recipe).toSkiaBitmap().also { rendered ->
+            RecipeRenderCache.write(key) {
+                val image = Image.makeFromBitmap(rendered)
+                // JPEG only where this Skia was built without the WebP encoder.
+                (image.encodeToData(EncodedImageFormat.WEBP, RENDER_CACHE_QUALITY)
+                    ?: image.encodeToData(EncodedImageFormat.JPEG, RENDER_CACHE_QUALITY))?.bytes
+            }
+        }
     }
 }
+
+/** A render read back from [RecipeRenderCache]; null when the bytes do not decode. */
+private fun decodeCachedRender(bytes: ByteArray): Bitmap? = runCatching {
+    Bitmap.makeFromImage(Image.makeFromEncoded(bytes)).apply { setImmutable() }
+}.getOrNull()
+
+private const val RENDER_CACHE_QUALITY = 90
 
 actual fun recipeTransformation(recipe: EditRecipe): Transformation = SkiaRecipeTransformation(recipe)
 

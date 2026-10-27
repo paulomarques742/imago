@@ -7,9 +7,11 @@ import coil3.request.CachePolicy
 import coil3.request.ErrorResult
 import coil3.request.ImageResult
 import coil3.request.transformations
+import eu.studio742.imago.core.render.EditRecipeTransformation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
 /** Authenticated image caches are account-specific; revoked local grants cannot use cached pixels. */
 class LibraryImageInterceptor : Interceptor {
@@ -45,18 +47,37 @@ class LibraryImageInterceptor : Interceptor {
                 if (error is kotlinx.coroutines.CancellationException) throw error
                 return ErrorResult(null, request, error)
             }
+            // The grant was checked just above, before any cache is read, so the memory cache cannot
+            // show a photo whose access was taken away. Without it, every tile that came back into view
+            // was decoded again. Nothing of it is written to disk, by Coil or by the recipe.
             return chain.withRequest(request.newBuilder()
                 .httpHeaders(request.httpHeaders.newBuilder().set(API_KEY, emptyList()).build())
-                .memoryCachePolicy(CachePolicy.DISABLED).diskCachePolicy(CachePolicy.DISABLED).build())
+                .diskCachePolicy(CachePolicy.DISABLED)
+                .apply {
+                    val current = request.transformations
+                    if (current.any { it is EditRecipeTransformation }) {
+                        transformations(current.map { (it as? EditRecipeTransformation)?.withoutDiskCopy() ?: it })
+                    }
+                }
+                .build())
                 .proceed()
         }
         val credential = request.httpHeaders[API_KEY] ?: return chain.proceed()
-        val partition = MessageDigest.getInstance("SHA-256").digest(credential.toByteArray())
-            .joinToString("") { "%02x".format(it) }
-        val key = "${request.data}:$partition"
+        val key = "${request.data}:${partitionOf(credential)}"
         return chain.withRequest(request.newBuilder().diskCacheKey(key)
             .memoryCacheKey("$key:${request.transformations.joinToString { it.cacheKey }}").build())
             .proceed()
+    }
+
+    /**
+     * Each credential's hash, made once: it is asked for by every tile, on the thread that draws them.
+     * There are as many entries as servers in the library.
+     */
+    private val partitions = ConcurrentHashMap<String, String>()
+
+    private fun partitionOf(credential: String): String = partitions.getOrPut(credential) {
+        MessageDigest.getInstance("SHA-256").digest(credential.toByteArray())
+            .joinToString("") { "%02x".format(it) }
     }
 
     private companion object {

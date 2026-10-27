@@ -1,6 +1,7 @@
 package eu.studio742.imago.core.render
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
@@ -10,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.Geometry
+import java.io.ByteArrayOutputStream
 import kotlin.math.roundToInt
 
 /**
@@ -148,15 +150,43 @@ private fun applyRecipeGeometry(source: Bitmap, geometry: Geometry): Bitmap {
  * The recipe applied to everything Coil loads.
  *
  * The `cacheKey` includes the instant of the last save: saving the recipe again has to change the
- * thumbnail, and nothing else does.
+ * thumbnail, and nothing else does. The result also goes to [RecipeRenderCache], unless [persists] is
+ * false.
  */
-class EditRecipeTransformation(private val recipe: EditRecipe) : Transformation() {
+class EditRecipeTransformation(
+    private val recipe: EditRecipe,
+    /** False for a photo read through a grant that can be revoked: no copy of it stays on disk. */
+    private val persists: Boolean = true,
+) : Transformation() {
     override val cacheKey: String = "recipe:${recipe.assetId}:${recipe.processVersion}:${recipe.updatedAt}"
+
+    /** The same recipe, with nothing written to disk. */
+    fun withoutDiskCopy(): EditRecipeTransformation = EditRecipeTransformation(recipe, persists = false)
 
     override suspend fun transform(input: Bitmap, size: Size): Bitmap =
         withContext(Dispatchers.Default) {
-            if (DevelopedRawBitmaps.contains(input, cacheKey)) input else renderRecipePreview(input, recipe)
+            if (DevelopedRawBitmaps.contains(input, cacheKey)) return@withContext input
+            // `getPixel` cannot read a hardware bitmap; Coil hands transformations software ones, but
+            // if one ever came through it is rendered without the cache rather than failing.
+            val key = if (persists && input.config != Bitmap.Config.HARDWARE) {
+                RecipeRenderCache.key(cacheKey, input.width, input.height, input::getPixel)
+            } else {
+                null
+            }
+            key?.let(RecipeRenderCache::read)
+                ?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
+                ?.let { return@withContext it }
+            renderRecipePreview(input, recipe).also { rendered ->
+                if (key != null) RecipeRenderCache.write(key) { rendered.encodedForCache() }
+            }
         }
 }
+
+/** Lossy WebP: the render only goes back on screen, at the size it was made; it is never exported. */
+private fun Bitmap.encodedForCache(): ByteArray? = ByteArrayOutputStream().use { bytes ->
+    if (compress(Bitmap.CompressFormat.WEBP_LOSSY, RENDER_CACHE_QUALITY, bytes)) bytes.toByteArray() else null
+}
+
+private const val RENDER_CACHE_QUALITY = 90
 
 actual fun recipeTransformation(recipe: EditRecipe): Transformation = EditRecipeTransformation(recipe)

@@ -21,6 +21,7 @@ import coil3.toBitmap
 import eu.studio742.imago.core.render.pixelHeight
 import eu.studio742.imago.core.render.pixelWidth
 import eu.studio742.imago.core.render.softwareBitmap
+import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import kotlinx.coroutines.CancellationException
@@ -2595,6 +2596,9 @@ open class EditorViewModel(
                 .libraryAuth(asset.apiKey)
                 .size(2048)
                 .softwareBitmap()
+                // The editor keeps this bitmap for as long as it is open. In the memory cache it was a
+                // second copy, big enough to push the library's thumbnails out of it.
+                .memoryCachePolicy(CachePolicy.READ_ONLY)
                 .build(),
         )
         if (result !is SuccessResult) throw LocalizedException(uiText(Res.string.editor_image_unreadable))
