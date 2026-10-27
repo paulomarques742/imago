@@ -2,6 +2,8 @@ package eu.studio742.imago.feature.editor
 
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.designsystem.i18n.appString
+import eu.studio742.imago.core.data.WorkingCopies
+import eu.studio742.imago.core.data.lookFingerprint
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.immichRoomExportFileName
 import eu.studio742.imago.feature.editor.resources.*
@@ -39,12 +41,35 @@ interface EditorExporter {
  * gallery", for whoever has the recipe but not the editor open.
  */
 suspend fun EditorExporter.saveEditedToDevice(asset: EditorAsset, recipe: EditRecipe, onPhase: (UiText) -> Unit): UiText? {
-    val jpeg = renderJpeg(asset, recipe, onPhase)
+    val jpeg = renderJpegOnce(asset, recipe, onPhase)
     try {
         return saveToDevice(jpeg, exportFileName(asset), asset.fileCreatedAt)
     } finally {
         jpeg.delete()
     }
+}
+
+/**
+ * [EditorExporter.renderJpeg], rendered once for as long as the recipe looks the same: sending to Immich,
+ * saving to the phone and sharing the same edit read one export instead of downloading, rendering and
+ * encoding it each time. The returned file is the caller's, to delete as before.
+ */
+suspend fun EditorExporter.renderJpegOnce(asset: EditorAsset, recipe: EditRecipe, onPhase: (UiText) -> Unit): File {
+    val destination = WorkingCopies.scratchFile(".jpg") ?: return renderJpeg(asset, recipe, onPhase)
+    try {
+        WorkingCopies.fill("export:${asset.id}:${asset.checksum}:${recipe.lookFingerprint()}", destination) { target ->
+            val jpeg = renderJpeg(asset, recipe, onPhase)
+            try {
+                jpeg.copyTo(target, overwrite = true)
+            } finally {
+                jpeg.delete()
+            }
+        }
+    } catch (failure: Throwable) {
+        destination.delete()
+        throw failure
+    }
+    return destination
 }
 
 /** The export's file name; an original without a name gets one in the app language. */

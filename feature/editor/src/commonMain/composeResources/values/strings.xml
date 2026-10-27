@@ -3,6 +3,7 @@
 <resources>
     <string name="editor_saved_to_gallery">Export saved to Pictures/IMAGO.</string>
     <string name="editor_save_to_gallery">Save to gallery</string>
+    <string name="editor_share_edited">Share</string>
     <string name="editor_phase_reading">Reading the original…</string>
     <string name="editor_phase_decoding">Decoding at full resolution…</string>
     <string name="editor_phase_processing">Processing %1$s × %2$s pixels…</string>

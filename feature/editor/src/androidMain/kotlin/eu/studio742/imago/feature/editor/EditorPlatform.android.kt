@@ -132,4 +132,8 @@ actual fun rememberSaveToDevice(onSave: () -> Unit, onDenied: () -> Unit): () ->
 
 actual val SaveToDeviceLabel: StringResource get() = Res.string.editor_save_to_gallery
 
+@Composable
+actual fun rememberEditedShare(): eu.studio742.imago.feature.library.SelectionShare? =
+    eu.studio742.imago.feature.library.rememberSelectionShare()
+
 actual fun Modifier.excludeSystemGestures(): Modifier = systemGestureExclusion()

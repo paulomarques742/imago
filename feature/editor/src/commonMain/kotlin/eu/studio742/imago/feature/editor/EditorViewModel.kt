@@ -1908,6 +1908,14 @@ open class EditorViewModel(
         exporter.saveToDevice(jpeg, exportFileName(asset), asset.fileCreatedAt)
     }
 
+    /** The edited photo to another app, through [share]: the same export the other destinations read. */
+    fun shareEdited(share: eu.studio742.imago.feature.library.SelectionShare) = export { asset, jpeg, _ ->
+        val folder = share.prepare() ?: return@export null
+        val file = File(folder, exportFileName(asset))
+        withContext(Dispatchers.IO) { jpeg.copyTo(file, overwrite = true) }
+        share.deliver(listOf(file), "image/jpeg")
+    }
+
     fun exportToImmich(targetLibraryId: String) = export(
         // Before rendering, which takes seconds on a large original: a key without the upload
         // permission hears it on the tap.
@@ -1970,7 +1978,7 @@ open class EditorViewModel(
         viewModelScope.launch {
             runCatching {
                 before()
-                val jpeg = exporter.renderJpeg(asset, recipe) { phase ->
+                val jpeg = exporter.renderJpegOnce(asset, recipe) { phase ->
                     mutableState.update { it.copy(exportPhase = phase) }
                 }
                 try {

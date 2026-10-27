@@ -39,6 +39,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -89,6 +90,7 @@ import androidx.compose.material.icons.outlined.Rotate90DegreesCw
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
@@ -110,6 +112,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -369,6 +372,7 @@ fun EditorRoute(
         onConsumeRecipeNotice = viewModel::consumeRecipeNotice,
         onExportGallery = viewModel::exportToGallery,
         onExportImmich = viewModel::exportToImmich,
+        onShareEdited = rememberEditedShare()?.let { share -> { viewModel.shareEdited(share) } },
         exportOrigin = exportOrigin,
         onPrepareExport = viewModel::prepareExport,
         onConsumeExportResult = viewModel::consumeExportResult,
@@ -586,6 +590,8 @@ private fun EditorScreen(
     onConsumeRecipeNotice: () -> Unit,
     onExportGallery: () -> Unit,
     onExportImmich: (String) -> Unit,
+    /** Null where there is no share sheet to hand the edit to. */
+    onShareEdited: (() -> Unit)?,
     exportOrigin: ImmichExportOrigin,
     onPrepareExport: () -> Unit,
     onConsumeExportResult: () -> Unit,
@@ -2046,7 +2052,9 @@ private fun EditorScreen(
                             onClick = { showExportDialog = true },
                             enabled = state.bitmap != null && !state.isExporting,
                         ) {
-                            Icon(Icons.Outlined.Share, contentDescription = stringResource(Res.string.editor_tool_export))
+                            // Save, not share: what the dialog does first is keep the edit — on the
+                            // phone, in Immich. Sharing is one of the ways out inside it.
+                            Icon(Icons.Outlined.Save, contentDescription = stringResource(Res.string.editor_tool_export))
                         }
                     }
                     Box {
@@ -2294,12 +2302,31 @@ private fun EditorScreen(
                             exportDestination?.let(onExportImmich)
                         },
                     )
+                    if (onShareEdited != null) {
+                        OutlinedButton(
+                            onClick = {
+                                showExportDialog = false
+                                onShareEdited()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(ImagoSizes.IconSmall))
+                            Text(stringResource(Res.string.editor_share_edited), modifier = Modifier.padding(start = ImagoSpacing.Sm))
+                        }
+                    }
+                    // Gold, like the door to the Curves: it opens something of its own rather than
+                    // sending the photo somewhere.
                     OutlinedButton(
                         onClick = {
                             showExportDialog = false
                             showReel = true
                         },
                         enabled = state.recipe != null,
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = ImagoColors.Gold.copy(alpha = 0.10f),
+                            contentColor = ImagoColors.Gold,
+                        ),
+                        border = BorderStroke(1.dp, ImagoColors.Gold.copy(alpha = if (state.recipe != null) 0.35f else 0.12f)),
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text(stringResource(Res.string.reel_open)) }
                 }

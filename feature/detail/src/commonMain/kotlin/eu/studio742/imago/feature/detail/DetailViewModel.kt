@@ -20,6 +20,7 @@ import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.render.changesTheImage
 import eu.studio742.imago.feature.editor.EditorAsset
 import eu.studio742.imago.feature.editor.EditorExporter
+import eu.studio742.imago.feature.editor.renderJpegOnce
 import eu.studio742.imago.feature.editor.saveEditedToDevice
 import java.io.File
 import org.jetbrains.compose.resources.StringResource
@@ -452,7 +453,7 @@ open class DetailViewModel(
                 val directory = shareDirectory.apply { deleteRecursively(); mkdirs() }
                 if (recipe != null) {
                     val target = EditorAsset(asset.id, asset.checksum, asset.fileName, asset.previewUrl, asset.apiKey, asset.fileCreatedAt)
-                    val jpeg = exporter.renderJpeg(target, recipe) { phase -> mutableState.update { it.copy(busyLabel = phase) } }
+                    val jpeg = exporter.renderJpegOnce(target, recipe) { phase -> mutableState.update { it.copy(busyLabel = phase) } }
                     File(directory, asset.fileName.substringBeforeLast('.') + ".jpg").also { jpeg.copyTo(it, overwrite = true); jpeg.delete() } to "image/jpeg"
                 } else {
                     File(directory, asset.fileName.ifBlank { "IMAGO.jpg" }).also { library.downloadOriginal(asset.id, it) } to "image/*"

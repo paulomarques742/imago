@@ -21,6 +21,13 @@ expect fun rememberSaveToDevice(onSave: () -> Unit, onDenied: () -> Unit): () ->
 expect val SaveToDeviceLabel: StringResource
 
 /**
+ * Where "Share" hands the edited photo: Android's share sheet. Null on desktop, where handing a copy
+ * over is choosing a folder for it — which "Save as…" already is.
+ */
+@Composable
+expect fun rememberEditedShare(): eu.studio742.imago.feature.library.SelectionShare?
+
+/**
  * Keeps the system's edge gestures off this element. On Android a drag that starts near the left or
  * right edge is the back gesture; on desktop there is nothing to keep off.
  */

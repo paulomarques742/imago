@@ -42,6 +42,13 @@ object WorkingCopies {
         directory = null
     }
 
+    /**
+     * A new empty file of the caller's own, beside the copies, for [fill] to fill; null when nothing is
+     * installed. A file left behind by a process that died is swept at the next launch.
+     */
+    fun scratchFile(suffix: String): File? =
+        directory?.let { File.createTempFile("imago-copy-", suffix, it.parentFile) }
+
     /** Deletes every copy, off the caller's thread: a library was disconnected. */
     fun clear() {
         val folder = directory ?: return
