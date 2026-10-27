@@ -10,6 +10,9 @@ import androidx.paging.PagingState
 import androidx.paging.RemoteMediator
 import androidx.paging.RemoteMediator.InitializeAction
 import androidx.paging.map
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -61,6 +64,15 @@ class RoomLibraryRepository @Inject constructor(
      * `@Singleton`, so this lives as long as the process.
      */
     private val refreshedThisSession: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /**
+     * The server's months. Opening the library asks for them from the navigation, the catalogue sync
+     * and the month a jump needs, all at once; the server hears it once.
+     */
+    private val serverBuckets = RecentRequest<ImmichConnection, List<ImmichTimeBucket>>(
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        freshForMillis = BUCKETS_FRESH_MILLIS,
+    ) { connection -> api.getTimeBuckets(connection) }
 
     @OptIn(ExperimentalPagingApi::class)
     override fun assets(
@@ -266,10 +278,16 @@ class RoomLibraryRepository @Inject constructor(
     override suspend fun deleteForever(assetIds: List<String>) = api.deleteAssets(requireConnection(), assetIds, force = true)
 
     override suspend fun emptyTrash() = api.emptyTrash(requireConnection())
+    override suspend fun cachedTimeBuckets(): List<ImmichTimeBucket> {
+        val connection = configuration.currentConnection() ?: return emptyList()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        return database.assetDao().timeBuckets(libraryKey).map { ImmichTimeBucket(month = it.month, assetCount = it.assetCount) }
+    }
+
     override suspend fun timeBuckets(): List<ImmichTimeBucket> {
         val connection = requireConnection()
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
-        val remote = runCatching { api.getTimeBuckets(connection) }
+        val remote = runCatching { serverBuckets.get(connection) }
         val cached = database.assetDao().timeBuckets(libraryKey).map {
             ImmichTimeBucket(month = it.month, assetCount = it.assetCount)
         }
@@ -290,7 +308,7 @@ class RoomLibraryRepository @Inject constructor(
         catalogSyncLock.withLock {
             // Without the buckets there is nothing to sync, and a network failure here is not an
             // error to show: the library keeps working with what it has.
-            val buckets = runCatching { api.getTimeBuckets(connection) }
+            val buckets = runCatching { serverBuckets.get(connection) }
                 .onFailure { syncLog("W", "no buckets: ${it.message}") }
                 .getOrNull() ?: return
             refreshStacks(connection, libraryKey)
@@ -333,7 +351,7 @@ class RoomLibraryRepository @Inject constructor(
             // The bucket id is the server's, not ours: the list is requested and its own id used.
             // Building a "2019-03-01" here would assume a format the version on the other side may
             // write differently — and a month that does not exist silently returns empty.
-            val bucket = runCatching { api.getTimeBuckets(connection) }.getOrNull()
+            val bucket = runCatching { serverBuckets.get(connection) }.getOrNull()
                 ?.firstOrNull { it.month.take(MONTH_PREFIX) == month.take(MONTH_PREFIX) }
                 ?: return
             syncMonth(connection, libraryKey, bucket)
@@ -681,6 +699,8 @@ class RoomLibraryRepository @Inject constructor(
 
     private companion object {
         const val PAGE_SIZE = 100
+        /** Long enough to cover one opening of the library, short enough for a pull to ask again. */
+        const val BUCKETS_FRESH_MILLIS = 5_000L
         const val TRASH_PAGE = 500
         const val TRASH_LIMIT = 5_000
         const val ARCHIVE_LIMIT = 10_000

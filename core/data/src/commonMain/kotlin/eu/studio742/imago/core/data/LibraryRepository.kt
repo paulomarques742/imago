@@ -41,6 +41,12 @@ interface LibraryRepository {
     suspend fun albumsOf(libraryId: String): List<ImmichAlbum> = albums()
     suspend fun timeBuckets(): List<ImmichTimeBucket>
 
+    /**
+     * The months as the local catalogue knows them, without asking anyone: what the library shows while
+     * [timeBuckets] is still on its way. Empty where the months are only known by asking.
+     */
+    suspend fun cachedTimeBuckets(): List<ImmichTimeBucket> = emptyList()
+
     /** How the skeleton sync is going, so the library can say. */
     val catalogSync: StateFlow<CatalogSyncState>
 

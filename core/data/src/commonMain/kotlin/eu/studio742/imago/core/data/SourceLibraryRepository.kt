@@ -188,6 +188,7 @@ class SourceLibraryRepository @Inject constructor(
     )
 
     override suspend fun timeBuckets() = provider(configuration.selectedLibraryId.value).timeBuckets()
+    override suspend fun cachedTimeBuckets() = provider(configuration.selectedLibraryId.value).cachedTimeBuckets()
     override suspend fun syncCatalog() {
         val selected = configuration.selectedLibraryId.value
         provider(selected).syncCatalog()

@@ -509,8 +509,9 @@ private fun LibraryHost(
                 if (viewModel.uiState.value.showingPeople) viewModel.loadPeople()
                 viewModel.loadMemories()
                 // Pulling down asks the server what changed, and what changed in the timeline counts
-                // too: without this, a new month only appeared on the next launch.
-                viewModel.syncCatalog()
+                // too: without this, a new month only appeared on the next launch. The albums are
+                // already being asked for just above.
+                viewModel.syncCatalog(refreshAlbums = false)
             },
             onOpenSettings = onOpenSettings,
             onOpenTrash = onOpenTrash?.takeIf { hasTrash },

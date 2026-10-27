@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import eu.studio742.imago.core.data.activeSource
 import eu.studio742.imago.core.data.CatalogSyncState
@@ -304,8 +305,10 @@ open class LibraryViewModel(
                 loadMemories()
                 if (uiState.value.showingMap) loadMap()
                 if (uiState.value.showingPeople) loadPeople()
+                showCachedMonths()
                 refreshNavigation()
-                syncCatalog()
+                // The albums are already on their way: the sync only brings months back.
+                syncCatalog(refreshAlbums = false)
                 // A server says whether it searches by content; the phone and the folders do not.
                 launch {
                     val available = runCatching { library.contentSearchAvailable() }.getOrDefault(false)
@@ -335,12 +338,38 @@ open class LibraryViewModel(
      * request. It is what gives the grid the library's true size, and fast scrolling somewhere to
      * land in any year.
      */
-    fun syncCatalog() {
+    fun syncCatalog(refreshAlbums: Boolean = true) {
         viewModelScope.launch {
             runCatching { library.syncCatalog() }.onFailure { error ->
                 if (error !is kotlinx.coroutines.CancellationException) uiState.update { it.copy(actionError = error.toUiText(Res.string.library_refresh_failed)) }
             }
-            refreshNavigation()
+            // A sync changes the catalogue's months, never the albums: asking for those again was a
+            // second trip to the server for the same list whenever the albums were already loading.
+            if (refreshAlbums) refreshNavigation() else refreshMonths()
+        }
+    }
+
+    /**
+     * The months the catalogue already has, on screen before the server answers. Only while there are
+     * none: once the server's list is in, the catalogue's would be a step back.
+     */
+    private fun showCachedMonths() {
+        val sourceId = configuration.selectedLibraryId.value
+        viewModelScope.launch {
+            val cached = runCatching { library.cachedTimeBuckets() }.getOrNull().orEmpty()
+            if (cached.isEmpty() || sourceId != configuration.selectedLibraryId.value) return@launch
+            uiState.update { state ->
+                if (state.months.isNotEmpty()) state else state.copy(months = cached.map { MonthUiModel(it.month, it.assetCount) })
+            }
+        }
+    }
+
+    private fun refreshMonths() {
+        val sourceId = configuration.selectedLibraryId.value
+        viewModelScope.launch {
+            val months = runCatching { library.timeBuckets() }.getOrNull() ?: return@launch
+            if (sourceId != configuration.selectedLibraryId.value) return@launch
+            uiState.update { it.copy(months = months.map { month -> MonthUiModel(month.month, month.assetCount) }) }
         }
     }
 
@@ -955,8 +984,11 @@ open class LibraryViewModel(
         uiState.update { it.copy(isLoadingNavigation = true, navigationError = null) }
         val sourceId = configuration.selectedLibraryId.value
         navigationJob = viewModelScope.launch {
-            val albums = runCatching { library.albums() }
-            val months = runCatching { library.timeBuckets() }
+            // Side by side: neither waits for the other, and the slower one sets the pace alone.
+            val albumsRequest = async { runCatching { library.albums() } }
+            val monthsRequest = async { runCatching { library.timeBuckets() } }
+            val albums = albumsRequest.await()
+            val months = monthsRequest.await()
             if (sourceId != configuration.selectedLibraryId.value) return@launch
             val refreshed = albums.getOrNull()?.map { it.toUiModel() }?.sortedWith(
                 compareByDescending<AlbumUiModel> { it.endDate.orEmpty() }.thenBy { it.name.lowercase() },
