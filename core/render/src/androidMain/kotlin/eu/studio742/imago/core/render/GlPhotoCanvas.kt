@@ -4,12 +4,8 @@ import android.graphics.Bitmap
 import android.opengl.GLSurfaceView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -40,29 +36,23 @@ fun GlPhotoCanvas(
     val renderer = remember { PhotoRenderer() }
     val lifecycleOwner = LocalLifecycleOwner.current
     val viewHolder = remember { arrayOfNulls<GLSurfaceView>(1) }
-    // A SurfaceView sits behind the window, and only shows once the window, redrawn, cuts a hole in
-    // what Compose painted over it — the editor's black background. The hole is only cut after the
-    // surface's first frame has finished; when that frame was slower than the editor's last redraw
-    // (the shaders and a 2048 px upload are), nothing redrew the window again and the photo stayed
-    // black until a tap or a pinch recomposed something. Each presented photo now asks for that redraw
-    // itself.
-    var presentedPhotos by remember { mutableIntStateOf(0) }
+    // Entering the editor, the first frames with the photo did not reach the screen: it stayed black
+    // until a tap or a pinch, and waiting changed nothing. What a tap does is recompose and ask this view
+    // for one more frame — and that frame always showed. Why the first ones are lost is not proven (the
+    // likeliest is a buffer handed over before the system had placed the surface); asking for a few more
+    // frames after the first one, as the tap did, is what makes the photo appear without it. Asking the
+    // window to redraw, without a new frame, was tried and did not.
     DisposableEffect(renderer) {
         renderer.onPhotoPresented = {
             viewHolder[0]?.let { view ->
-                // SurfaceView marks its first frame as finished in a message of its own, posted after
-                // the swap; a redraw that runs before it would cut nothing. A second one, a moment
-                // later, lands after it.
-                view.post { presentedPhotos++ }
-                view.postDelayed({ presentedPhotos++ }, PRESENT_REDRAW_DELAY_MS)
+                PRESENT_RETRY_DELAYS_MS.forEach { delay -> view.postDelayed({ view.requestRender() }, delay) }
             }
         }
         onDispose { renderer.onPhotoPresented = null }
     }
 
     AndroidView(
-        // Reading the counter where the view is drawn is what makes the window draw it again.
-        modifier = modifier.drawBehind { presentedPhotos },
+        modifier = modifier,
         factory = { context ->
             GLSurfaceView(context).apply {
                 setEGLContextClientVersion(3)
@@ -70,6 +60,11 @@ fun GlPhotoCanvas(
                 setEGLConfigChooser(8, 8, 8, 8, 16, 0)
                 setRenderer(renderer)
                 renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+                // Moved or resized without anything recomposing — the pager settling, the chrome
+                // folding away — the surface gets a frame for its new place too.
+                addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+                    if (left != oldLeft || top != oldTop || right != oldRight || bottom != oldBottom) requestRender()
+                }
                 viewHolder[0] = this
             }
         },
@@ -100,7 +95,8 @@ fun GlPhotoCanvas(
     }
 }
 
-private const val PRESENT_REDRAW_DELAY_MS = 120L
+/** The extra frames after a photo is first drawn: the next frame, and two more across half a second. */
+private val PRESENT_RETRY_DELAYS_MS = longArrayOf(16L, 150L, 500L)
 
 private object Es31ContextFactory : GLSurfaceView.EGLContextFactory {
     private const val EGL_CONTEXT_CLIENT_VERSION = 0x3098
