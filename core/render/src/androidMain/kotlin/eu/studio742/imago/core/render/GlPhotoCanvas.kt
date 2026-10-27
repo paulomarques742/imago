@@ -2,6 +2,7 @@ package eu.studio742.imago.core.render
 
 import android.graphics.Bitmap
 import android.opengl.GLSurfaceView
+import android.view.SurfaceHolder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -36,20 +37,9 @@ fun GlPhotoCanvas(
     val renderer = remember { PhotoRenderer() }
     val lifecycleOwner = LocalLifecycleOwner.current
     val viewHolder = remember { arrayOfNulls<GLSurfaceView>(1) }
-    // Entering the editor, the first frames with the photo did not reach the screen: it stayed black
-    // until a tap or a pinch, and waiting changed nothing. What a tap does is recompose and ask this view
-    // for one more frame — and that frame always showed. Why the first ones are lost is not proven (the
-    // likeliest is a buffer handed over before the system had placed the surface); asking for a few more
-    // frames after the first one, as the tap did, is what makes the photo appear without it. Asking the
-    // window to redraw, without a new frame, was tried and did not.
-    DisposableEffect(renderer) {
-        renderer.onPhotoPresented = {
-            viewHolder[0]?.let { view ->
-                PRESENT_RETRY_DELAYS_MS.forEach { delay -> view.postDelayed({ view.requestRender() }, delay) }
-            }
-        }
-        onDispose { renderer.onPhotoPresented = null }
-    }
+    // The renderer's inputs as the last composition gave them, so they can be handed over again
+    // outside one.
+    val applyInputs = remember { arrayOfNulls<() -> Unit>(1) }
 
     AndroidView(
         modifier = modifier,
@@ -60,8 +50,31 @@ fun GlPhotoCanvas(
                 setEGLConfigChooser(8, 8, 8, 8, 16, 0)
                 setRenderer(renderer)
                 renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
-                // Moved or resized without anything recomposing — the pager settling, the chrome
-                // folding away — the surface gets a frame for its new place too.
+                // The stage stayed black when this view was born into a screen already in place — the
+                // first time a photo opens in the editor, and every photo swiped to inside it — and not
+                // when it was born with the screen, coming back to a photo already loaded. Waiting
+                // changed nothing; a tap always brought the photo. A tap does three things: the renderer
+                // gets its inputs again and draws a frame, and the window lays out and redraws, which is
+                // when a SurfaceView behind it is placed and shown. Asking only for frames, and only
+                // once the renderer reported a drawn photo, did not help. So the surface starts all
+                // three itself whenever the system says it is ready or changed, now and twice more
+                // across half a second. The first frames of each surface are logged (tag "ImagoGl")
+                // with what they did, in case this is still not it.
+                val surfaceView = this
+                holder.addCallback(object : SurfaceHolder.Callback {
+                    override fun surfaceCreated(holder: SurfaceHolder) = Unit
+                    override fun surfaceDestroyed(holder: SurfaceHolder) = Unit
+                    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+                        SURFACE_FRAME_DELAYS_MS.forEach { delay ->
+                            surfaceView.postDelayed({
+                                applyInputs[0]?.invoke()
+                                surfaceView.requestRender()
+                                surfaceView.requestLayout()
+                                surfaceView.invalidate()
+                            }, delay)
+                        }
+                    }
+                })
                 addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
                     if (left != oldLeft || top != oldTop || right != oldRight || bottom != oldBottom) requestRender()
                 }
@@ -69,12 +82,16 @@ fun GlPhotoCanvas(
             }
         },
         update = { view ->
-            renderer.setBitmap(bitmap)
-            renderer.setHighPrecisionSource(highPrecisionSource)
-            renderer.setParameters(parameters)
-            renderer.setShowOriginal(showOriginal)
-            renderer.setMaskOverlay(maskOverlay)
-            renderer.setTransform(transform, minZoom)
+            val inputs = {
+                renderer.setBitmap(bitmap)
+                renderer.setHighPrecisionSource(highPrecisionSource)
+                renderer.setParameters(parameters)
+                renderer.setShowOriginal(showOriginal)
+                renderer.setMaskOverlay(maskOverlay)
+                renderer.setTransform(transform, minZoom)
+            }
+            applyInputs[0] = inputs
+            inputs()
             view.requestRender()
         },
     )
@@ -95,8 +112,8 @@ fun GlPhotoCanvas(
     }
 }
 
-/** The extra frames after a photo is first drawn: the next frame, and two more across half a second. */
-private val PRESENT_RETRY_DELAYS_MS = longArrayOf(16L, 150L, 500L)
+/** The frames asked for when the surface is ready or changes: right away, and two more across half a second. */
+private val SURFACE_FRAME_DELAYS_MS = longArrayOf(0L, 150L, 500L)
 
 private object Es31ContextFactory : GLSurfaceView.EGLContextFactory {
     private const val EGL_CONTEXT_CLIENT_VERSION = 0x3098
