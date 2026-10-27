@@ -555,4 +555,6 @@
     <string name="community_error_replies">This topic already has replies. Contact the moderator through the forum to delete it.</string>
     <string name="community_error_not_found">This topic no longer exists.</string>
     <string name="community_error_failed">Could not confirm the operation. Check your connection and the forum before trying again.</string>
+    <string name="library_raw">RAW</string>
+    <string name="library_raw_description">RAW photo</string>
 </resources>

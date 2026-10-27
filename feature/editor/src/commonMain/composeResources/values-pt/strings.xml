@@ -92,6 +92,7 @@
     <string name="editor_curve_channel_green">Verde</string>
     <string name="editor_curve_channel_blue">Azul</string>
     <string name="editor_profile">Perfil</string>
+    <string name="editor_profiles">Perfis</string>
     <string name="editor_profile_choose">Escolher o perfil</string>
     <string name="editor_profile_color">Cor</string>
     <string name="editor_profile_monochrome">Monocromático</string>
@@ -103,6 +104,14 @@
     <string name="editor_white_balance_preset">Predefinição do equilíbrio de brancos</string>
     <string name="editor_white_balance_as_shot">Como foi tirada</string>
     <string name="editor_white_balance_auto">Automático</string>
+    <string name="editor_white_balance_daylight">Luz do dia</string>
+    <string name="editor_white_balance_cloudy">Nublado</string>
+    <string name="editor_white_balance_shade">Sombra</string>
+    <string name="editor_white_balance_tungsten">Tungsténio</string>
+    <string name="editor_white_balance_fluorescent">Fluorescente</string>
+    <string name="editor_white_balance_flash">Flash</string>
+    <string name="editor_white_balance_from_raw">Aplicada. O equilíbrio de brancos veio de uma fotografia RAW e pode não corresponder nesta.</string>
+    <string name="editor_white_balance_from_jpeg">Aplicada. O equilíbrio de brancos veio de um JPEG e pode não corresponder neste RAW.</string>
     <string name="editor_white_balance_custom">Personalizado</string>
     <string name="editor_history_white_balance_picked">Seletor</string>
     <string name="editor_crop_frame">Moldura de corte ajustável</string>
@@ -408,4 +417,5 @@
     <string name="reel_failed">Não foi possível fazer o vídeo.</string>
     <string name="reel_ffmpeg_unavailable">FFmpeg indisponível. Configure IMAGO_FFMPEG com o executável.</string>
     <string name="reel_preview">Pré-visualização do vídeo</string>
+    <string name="editor_developing_raw">A revelar o RAW…</string>
 </resources>

@@ -1938,11 +1938,12 @@ private fun AssetTile(
         if (checked) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.38f)))
         }
-        if (asset.isVideo || asset.stackCount != null) {
+        if (asset.isVideo || asset.stackCount != null || asset.isRaw) {
             Row(
                 modifier = Modifier.align(Alignment.TopEnd).padding(ImagoSpacing.Sm),
                 horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs),
             ) {
+                if (asset.isRaw) RawBadge()
                 asset.stackCount?.let { StackBadge(it) }
                 if (asset.isVideo) VideoBadge(durationMs = asset.durationMs)
             }
@@ -2069,6 +2070,22 @@ private fun CatalogSyncBar(state: CatalogSyncState, label: String? = null) {
  * The cover of a stack: the photos under it are not in the grid, and this says how many there are.
  * It has the video badge's look because it sits beside it, in the same corner.
  */
+/** A camera RAW: developed when opened, so slower than a JPEG, and with what only a RAW has. */
+@Composable
+private fun RawBadge(modifier: Modifier = Modifier) {
+    val description = stringResource(Res.string.library_raw_description)
+    Text(
+        text = stringResource(Res.string.library_raw),
+        style = MaterialTheme.typography.labelSmall,
+        color = ImagoColors.BrandWhite,
+        modifier = modifier
+            .clip(RoundedCornerShape(ImagoRadii.Small))
+            .background(Color.Black.copy(alpha = 0.55f))
+            .padding(horizontal = ImagoSpacing.Xs, vertical = 2.dp)
+            .semantics { contentDescription = description },
+    )
+}
+
 @Composable
 private fun StackBadge(count: Int, modifier: Modifier = Modifier) {
     val description = stringResource(Res.string.library_stack_count, count)

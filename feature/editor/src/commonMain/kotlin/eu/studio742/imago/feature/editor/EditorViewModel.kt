@@ -80,6 +80,7 @@ import eu.studio742.imago.core.model.UprightGuide
 import eu.studio742.imago.core.model.WhiteBalance
 import eu.studio742.imago.core.render.frameGeometry
 import eu.studio742.imago.core.render.solveGuidedUpright
+import kotlin.math.roundToInt
 import kotlin.math.hypot
 import eu.studio742.imago.core.model.ColorGrading
 import eu.studio742.imago.core.model.ColorWheel
@@ -96,7 +97,9 @@ import eu.studio742.imago.core.render.toRenderParameters
 import kotlin.math.floor
 import java.io.File
 import eu.studio742.imago.core.render.FloatPixelBuffer
-import eu.studio742.imago.core.render.decodeRawPreview
+import eu.studio742.imago.core.render.decodeRawEditorPreview
+import eu.studio742.imago.core.render.CameraLight
+import eu.studio742.imago.core.render.KelvinTint
 import eu.studio742.imago.core.render.CameraExposureMatch
 import eu.studio742.imago.core.render.shouldInspectRawOriginal
 import eu.studio742.imago.core.render.createPhotoTempFile
@@ -460,6 +463,9 @@ fun ColorGradeComponent.format(value: Float): String = when (this) {
 }
 
 /** The value as it appears beside the slider and in the history entry. */
+/** Kelvin to the nearest 10 K, without thousands separators, as Lightroom writes it. */
+internal fun formatKelvin(kelvin: Float): String = "%d K".format((kelvin / 10f).roundToInt() * 10)
+
 fun formatAdjustmentValue(adjustment: Adjustment, value: Float): String = when {
     adjustment == Adjustment.EXPOSURE -> "%+.2f EV".format(value)
     // A range that never goes below zero is a quantity, not a deviation: showing it a sign would only
@@ -472,6 +478,8 @@ data class EditorUiState(
     val asset: EditorAsset? = null,
     val bitmap: Bitmap? = null,
     val highPrecisionSource: FloatPixelBuffer? = null,
+    /** A RAW's camera colour: its white balance reads in kelvin. Null for a JPEG, or a camera without a matrix. */
+    val cameraLight: CameraLight? = null,
     val recipe: EditRecipe? = null,
     val panel: EditorPanel = EditorPanel.LIGHT,
     val sheet: EditorSheet = EditorSheet.ADJUSTMENTS,
@@ -580,6 +588,22 @@ data class EditorUiState(
      * the same `AdjustmentPanel` in both cases, and a second copy of it would be a second way for the
      * same slider to behave.
      */
+    /**
+     * A slider's value as it is read. A RAW's Temperature and Tint, outside a mask, are the scene's
+     * light: kelvin, and the absolute Tint; the slider itself still moves the light relative to As Shot.
+     */
+    fun formatValue(adjustment: Adjustment, value: Float): String {
+        val light = cameraLight
+        val global = !(selectedMaskId != null && adjustment.isMaskSlider() && sheet == EditorSheet.MASK_ADJUSTMENTS)
+        val balance = recipe?.whiteBalance
+        if (light == null || !global || balance == null) return formatAdjustmentValue(adjustment, value)
+        return when (adjustment) {
+            Adjustment.TEMPERATURE -> formatKelvin(light.kelvinTint(value, balance.tint).kelvin)
+            Adjustment.TINT -> "%+d".format(light.kelvinTint(balance.temp, value).tint.roundToInt())
+            else -> formatAdjustmentValue(adjustment, value)
+        }
+    }
+
     fun valueOf(adjustment: Adjustment): Float {
         val current = recipe ?: return adjustment.neutral
         val maskId = selectedMaskId
@@ -782,6 +806,7 @@ open class EditorViewModel(
                     it.copy(
                         bitmap = bitmap.bitmap,
                         highPrecisionSource = bitmap.raw,
+                        cameraLight = bitmap.light,
                         recipe = recipe,
                         isLoading = false,
                         history = history.all,
@@ -818,7 +843,7 @@ open class EditorViewModel(
         exportOriginChecker.reset()
         activeTarget = target
         loadJob?.cancel()
-        mutableState.update { it.copy(asset = target.asset, bitmap = null, highPrecisionSource = null, isLoading = true, error = null) }
+        mutableState.update { it.copy(asset = target.asset, bitmap = null, highPrecisionSource = null, cameraLight = null, isLoading = true, error = null) }
         loadJob = viewModelScope.launch {
             runCatching { loadPhoto(target.asset, state.value.recipe?.appliesBaselineExposure() ?: true, measure = false).bitmap }
                 .onSuccess { bitmap -> mutableState.update { it.copy(bitmap = bitmap, isLoading = false) } }
@@ -1079,6 +1104,13 @@ open class EditorViewModel(
         when (preset) {
             WhiteBalancePreset.AS_SHOT -> commitWhiteBalance(WhiteBalance(), preset)
             WhiteBalancePreset.CUSTOM -> commitWhiteBalance(current.whiteBalance.copy(auto = false), preset)
+            WhiteBalancePreset.DAYLIGHT, WhiteBalancePreset.CLOUDY, WhiteBalancePreset.SHADE,
+            WhiteBalancePreset.TUNGSTEN, WhiteBalancePreset.FLUORESCENT, WhiteBalancePreset.FLASH -> {
+                val light = state.value.cameraLight ?: return
+                val target = preset.light ?: return
+                val (temperature, tint) = light.sliders(target.kelvin, target.tint)
+                commitWhiteBalance(WhiteBalance(temp = temperature, tint = tint), preset)
+            }
             WhiteBalancePreset.AUTO -> {
                 val bitmap = state.value.bitmap ?: return
                 viewModelScope.launch {
@@ -1206,11 +1238,11 @@ open class EditorViewModel(
                 label = UiText.Resource(change.adjustment.labelRes),
                 detail = change.maskId?.let { id -> current.mask(id)?.name?.let { uiText(Res.string.editor_history_mask_named, it) } }
                     ?: uiText(Res.string.editor_history_manual),
-                valueText = formatAdjustmentValue(
-                    change.adjustment,
-                    change.maskId?.let { current.maskSliderValue(it, change.adjustment) }
-                        ?: current.adjustmentValue(change.adjustment),
-                ).asUiText(),
+                valueText = (
+                    change.maskId?.let { formatAdjustmentValue(change.adjustment, current.maskSliderValue(it, change.adjustment)) }
+                        ?: state.value.copy(recipe = current, selectedMaskId = null)
+                            .formatValue(change.adjustment, current.adjustmentValue(change.adjustment))
+                    ).asUiText(),
                 icon = if (change.maskId != null) HistoryIcon.MASK else change.adjustment.historyIcon(),
                 timestamp = Instant.now().toString(),
                 recipe = current,
@@ -1817,6 +1849,7 @@ open class EditorViewModel(
             RecipePart.BUILT_IN,
             uiText(Res.string.editor_filter_applied, builtIn.nameText()),
             label = builtIn.nameText(),
+            fromPhoto = false,
         )
         val mark = state.value.builtInMarks.firstOrNull { it.id == id } ?: BuiltInRecipeMark(id)
         viewModelScope.launch {
@@ -2084,14 +2117,26 @@ open class EditorViewModel(
         parts: Set<RecipePart>,
         message: UiText,
         label: UiText = uiText(Res.string.editor_history_recipe),
+        fromPhoto: Boolean = true,
     ) {
         val current = state.value.recipe ?: return
         editStart = null
         pendingChange = null
         val rebased = source.rebasedOnto(current, Instant.now().toString(), parts)
+        // The white balance travels as the light's difference from As Shot. Between a RAW and a JPEG that
+        // is the nearest thing to the same light, and Lightroom says it may not match; so does this.
+        val sourceRaw = source.rawDevelopment != null
+        val targetRaw = state.value.highPrecisionSource?.linear == true
+        val notice = if (fromPhoto && RecipePart.WHITE_BALANCE in parts && sourceRaw != targetRaw &&
+            !source.whiteBalance.isAsShot && !source.whiteBalance.auto
+        ) {
+            uiText(if (sourceRaw) Res.string.editor_white_balance_from_raw else Res.string.editor_white_balance_from_jpeg)
+        } else {
+            message
+        }
         val bitmap = state.value.bitmap
         if (!rebased.whiteBalance.auto || bitmap == null) {
-            commitReusableRecipe(rebased, message, label)
+            commitReusableRecipe(rebased, notice, label)
             return
         }
         // An Auto white balance travels as Auto: this photo's light is found, as Lightroom does when
@@ -2099,7 +2144,7 @@ open class EditorViewModel(
         viewModelScope.launch {
             val found = autoWhiteBalanceFor(bitmap)
             if (state.value.bitmap !== bitmap) return@launch
-            commitReusableRecipe(rebased.withAutoWhiteBalance(found), message, label)
+            commitReusableRecipe(rebased.withAutoWhiteBalance(found), notice, label)
         }
     }
 
@@ -2629,7 +2674,12 @@ open class EditorViewModel(
     }
 
     /** [rawExposure] is what matched the camera's JPEG ([CameraExposureMatch]), for a RAW developed now. */
-    private data class LoadedPhoto(val bitmap: Bitmap, val raw: FloatPixelBuffer? = null, val rawExposure: Float = 0f)
+    private data class LoadedPhoto(
+        val bitmap: Bitmap,
+        val raw: FloatPixelBuffer? = null,
+        val rawExposure: Float = 0f,
+        val light: CameraLight? = null,
+    )
 
     /** [baselineExposure] is the recipe's [appliesBaselineExposure]; a JPEG ignores it. */
     private suspend fun loadPhoto(asset: EditorAsset, baselineExposure: Boolean, measure: Boolean = baselineExposure): LoadedPhoto {
@@ -2637,11 +2687,12 @@ open class EditorViewModel(
             val original = createPhotoTempFile(context)
             try {
                 library.downloadOriginal(asset.id, original)
-                val raw = decodeRawPreview(original, maxSide = 2048, baselineExposure = baselineExposure)
+                val preview = decodeRawEditorPreview(original, maxSide = 2048, baselineExposure = baselineExposure)
+                val raw = preview?.pixels
                 if (raw != null) {
                     // Measured before the original is deleted; only a development made now uses it.
                     val matched = if (measure) CameraExposureMatch.of(original, raw) else 0f
-                    return LoadedPhoto(withContext(Dispatchers.Default) { raw.toPixelBuffer().toPlatformBitmap() }, raw, matched)
+                    return LoadedPhoto(withContext(Dispatchers.Default) { raw.toPixelBuffer().toPlatformBitmap() }, raw, matched, preview.light)
                 }
             } finally { original.delete() }
         }
@@ -2994,18 +3045,42 @@ enum class RawProfileChoice(val id: String, val labelRes: org.jetbrains.compose.
     }
 }
 
-/** Lightroom's white balance presets for a JPEG, read from a recipe's [WhiteBalance]. */
-enum class WhiteBalancePreset(val labelRes: org.jetbrains.compose.resources.StringResource) {
+/**
+ * The white balance menu. A JPEG has Lightroom's three; a RAW also the lights, at IMAGO's own values in
+ * kelvin and Tint — the physical ones of each light, rounded, with the green of a fluorescent tube
+ * taken out by a little magenta.
+ */
+enum class WhiteBalancePreset(
+    val labelRes: org.jetbrains.compose.resources.StringResource,
+    /** A RAW's light; null for the three every photo has. */
+    val light: KelvinTint? = null,
+) {
     AS_SHOT(Res.string.editor_white_balance_as_shot),
     AUTO(Res.string.editor_white_balance_auto),
+    DAYLIGHT(Res.string.editor_white_balance_daylight, KelvinTint(5500f, 0f)),
+    CLOUDY(Res.string.editor_white_balance_cloudy, KelvinTint(6500f, 0f)),
+    SHADE(Res.string.editor_white_balance_shade, KelvinTint(7500f, 0f)),
+    TUNGSTEN(Res.string.editor_white_balance_tungsten, KelvinTint(2850f, 0f)),
+    FLUORESCENT(Res.string.editor_white_balance_fluorescent, KelvinTint(4000f, 10f)),
+    FLASH(Res.string.editor_white_balance_flash, KelvinTint(5500f, 0f)),
     CUSTOM(Res.string.editor_white_balance_custom),
     ;
 
     companion object {
-        fun of(balance: WhiteBalance): WhiteBalancePreset = when {
+        /** What the menu offers: the lights only where the camera's colour says what they are. */
+        fun offered(light: CameraLight?): List<WhiteBalancePreset> = entries.filter { it.light == null || light != null }
+
+        /** A light preset is shown while the sliders are still where it put them, as in Lightroom. */
+        fun of(balance: WhiteBalance, light: CameraLight? = null): WhiteBalancePreset = when {
             balance.auto -> AUTO
             balance.isAsShot -> AS_SHOT
-            else -> CUSTOM
+            light == null -> CUSTOM
+            else -> entries.firstOrNull { preset ->
+                preset.light?.let { target ->
+                    val (temperature, tint) = light.sliders(target.kelvin, target.tint)
+                    kotlin.math.abs(temperature - balance.temp) < 0.05f && kotlin.math.abs(tint - balance.tint) < 0.05f
+                } == true
+            } ?: CUSTOM
         }
     }
 }

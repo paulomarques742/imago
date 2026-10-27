@@ -92,6 +92,7 @@
     <string name="editor_curve_channel_green">Green</string>
     <string name="editor_curve_channel_blue">Blue</string>
     <string name="editor_profile">Profile</string>
+    <string name="editor_profiles">Profiles</string>
     <string name="editor_profile_choose">Choose the profile</string>
     <string name="editor_profile_color">Color</string>
     <string name="editor_profile_monochrome">Monochrome</string>
@@ -103,6 +104,14 @@
     <string name="editor_white_balance_preset">White balance preset</string>
     <string name="editor_white_balance_as_shot">As Shot</string>
     <string name="editor_white_balance_auto">Auto</string>
+    <string name="editor_white_balance_daylight">Daylight</string>
+    <string name="editor_white_balance_cloudy">Cloudy</string>
+    <string name="editor_white_balance_shade">Shade</string>
+    <string name="editor_white_balance_tungsten">Tungsten</string>
+    <string name="editor_white_balance_fluorescent">Fluorescent</string>
+    <string name="editor_white_balance_flash">Flash</string>
+    <string name="editor_white_balance_from_raw">Applied. Its white balance came from a RAW photo and may not match on this one.</string>
+    <string name="editor_white_balance_from_jpeg">Applied. Its white balance came from a JPEG and may not match on this RAW.</string>
     <string name="editor_white_balance_custom">Custom</string>
     <string name="editor_history_white_balance_picked">Selector</string>
     <string name="editor_crop_frame">Adjustable crop frame</string>
@@ -408,4 +417,5 @@
     <string name="reel_failed">The video could not be made.</string>
     <string name="reel_ffmpeg_unavailable">FFmpeg unavailable. Set IMAGO_FFMPEG to the executable.</string>
     <string name="reel_preview">Preview of the video</string>
+    <string name="editor_developing_raw">Developing the RAW…</string>
 </resources>

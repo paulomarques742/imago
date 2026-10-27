@@ -27,6 +27,17 @@ suspend fun decodeRawPreview(file: File, maxSide: Int, baselineExposure: Boolean
         RawDecoder.decodePreview(file, maxSide, baselineExposure)?.let { FloatPixelBuffer(it.width, it.height, it.rgb) }
     }
 
+/** The editor's preview of a RAW: the pixels, and the camera's colour for white balance in kelvin. */
+class RawPreview(val pixels: FloatPixelBuffer, val light: CameraLight?)
+
+/** As [decodeRawPreview], with the camera's colour the editor needs. */
+suspend fun decodeRawEditorPreview(file: File, maxSide: Int, baselineExposure: Boolean): RawPreview? =
+    runInterruptible(Dispatchers.IO) {
+        RawDecoder.decodePreview(file, maxSide, baselineExposure)?.let {
+            RawPreview(FloatPixelBuffer(it.width, it.height, it.rgb), CameraLight.of(it.xyzToDeveloped))
+        }
+    }
+
 fun requireRawEngine(recipe: EditRecipe) {
     requireUser(recipe.processVersion <= CURRENT_PROCESS_VERSION, UserMessage.EDIT_NEEDS_NEWER_APP)
     requireUser(recipe.rawDevelopment?.engine?.let { it == CURRENT_RAW_ENGINE } != false, UserMessage.EDIT_NEEDS_NEWER_APP)

@@ -203,6 +203,7 @@ import eu.studio742.imago.core.designsystem.LocalImagoWindow
 import eu.studio742.imago.core.designsystem.LocalReducedMotion
 import eu.studio742.imago.core.designsystem.imagoGlassBlur
 import eu.studio742.imago.core.designsystem.imagoTween
+import eu.studio742.imago.core.model.isRawOriginal
 import eu.studio742.imago.core.model.rawExposure
 import eu.studio742.imago.core.model.rawRendering
 import eu.studio742.imago.core.model.CURRENT_RAW_RENDERING
@@ -1719,7 +1720,22 @@ private fun EditorScreen(
                         }
                     }
                     if (isActiveAsset && state.isLoading) {
-                        CircularProgressIndicator(color = ImagoColors.Ivory)
+                        // A RAW is developed before it can be edited, which takes longer than a JPEG; saying
+                        // so keeps the wait from looking like a fault.
+                        val raw = isRawOriginal(null, pageAsset.fileName)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
+                        ) {
+                            CircularProgressIndicator(color = ImagoColors.Ivory)
+                            if (raw) {
+                                Text(
+                                    text = stringResource(Res.string.editor_developing_raw),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ImagoColors.TextSecondary,
+                                )
+                            }
+                        }
                     }
                     if (isActiveAsset && state.error != null) {
                         // An error must never be left without a way out. The recipe is still saved
@@ -1958,7 +1974,7 @@ private fun EditorScreen(
                     val value = state.valueOf(adjustment)
                     FocusedAdjustmentScale(
                         label = adjustment.label(),
-                        valueText = formatAdjustmentValue(adjustment, value),
+                        valueText = state.formatValue(adjustment, value),
                         value = value,
                         range = adjustment.range,
                         tint = when (adjustment) {
@@ -1966,7 +1982,7 @@ private fun EditorScreen(
                             Adjustment.TINT -> ImagoScaleTint.TINT
                             else -> ImagoScaleTint.NEUTRAL
                         },
-                        formatBound = { formatAdjustmentValue(adjustment, it) },
+                        formatBound = { state.formatValue(adjustment, it) },
                     )
                 }
             }
@@ -2506,9 +2522,10 @@ private fun AdjustmentPanel(
                         whiteBalanceActions = whiteBalanceActions,
                         header = {
                             val recipe = state.recipe
-                            if (state.panel == EditorPanel.COLOR && state.showsRawProfile && recipe != null) {
+                            if (state.panel == EditorPanel.LIGHT && state.showsRawProfile && recipe != null) {
                                 ProfileRow(
-                                    current = RawProfileChoice.of(recipe.profile),
+                                    assetId = state.asset?.id,
+                                    recipe = recipe,
                                     onSelect = whiteBalanceActions.onProfile,
                                     modifier = Modifier.alpha(if (editingKey == null) 1f else 0f),
                                 )
@@ -2751,7 +2768,11 @@ private fun List<Adjustment>.withLabels(): List<Pair<Adjustment, String>> = map 
  * listed, as Lightroom lists it, and choosing it lets go of Auto.
  */
 @Composable
-private fun WhiteBalancePresetMenu(current: WhiteBalancePreset, onSelect: (WhiteBalancePreset) -> Unit) {
+private fun WhiteBalancePresetMenu(
+    current: WhiteBalancePreset,
+    offered: List<WhiteBalancePreset>,
+    onSelect: (WhiteBalancePreset) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
     val description = stringResource(Res.string.editor_white_balance_preset)
     Box {
@@ -2763,7 +2784,7 @@ private fun WhiteBalancePresetMenu(current: WhiteBalancePreset, onSelect: (White
             Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = ImagoColors.TextSecondary)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            WhiteBalancePreset.entries.forEach { preset ->
+            offered.forEach { preset ->
                 DropdownMenuItem(
                     text = {
                         Text(
@@ -2776,51 +2797,6 @@ private fun WhiteBalancePresetMenu(current: WhiteBalancePreset, onSelect: (White
                         onSelect(preset)
                     },
                 )
-            }
-        }
-    }
-}
-
-/**
- * The RAW's base profile, above the white balance as Lightroom has it above everything: its name and
- * a menu of the others.
- */
-@Composable
-private fun ProfileRow(current: RawProfileChoice, onSelect: (RawProfileChoice) -> Unit, modifier: Modifier = Modifier) {
-    var open by remember { mutableStateOf(false) }
-    val description = stringResource(Res.string.editor_profile_choose)
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = stringResource(Res.string.editor_profile),
-            style = MaterialTheme.typography.labelLarge,
-            color = ImagoColors.Gold,
-            modifier = Modifier
-                .weight(1f)
-                .padding(top = ImagoSpacing.Sm, bottom = ImagoSpacing.Xs),
-        )
-        Box {
-            TextButton(
-                onClick = { open = true },
-                modifier = Modifier.semantics { contentDescription = description },
-            ) {
-                Text(stringResource(current.labelRes), style = MaterialTheme.typography.labelLarge, color = ImagoColors.TextSecondary)
-                Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = ImagoColors.TextSecondary)
-            }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                RawProfileChoice.entries.forEach { choice ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                stringResource(choice.labelRes),
-                                color = if (choice == current) ImagoColors.Gold else ImagoColors.TextPrimary,
-                            )
-                        },
-                        onClick = {
-                            open = false
-                            onSelect(choice)
-                        },
-                    )
-                }
             }
         }
     }
@@ -2897,7 +2873,11 @@ private fun SliderPanel(
                         )
                         if (picker != null) {
                             state.recipe?.let { recipe ->
-                                WhiteBalancePresetMenu(WhiteBalancePreset.of(recipe.whiteBalance), picker.onPreset)
+                                WhiteBalancePresetMenu(
+                                    current = WhiteBalancePreset.of(recipe.whiteBalance, state.cameraLight),
+                                    offered = WhiteBalancePreset.offered(state.cameraLight),
+                                    onSelect = picker.onPreset,
+                                )
                             }
                             IconButton(onClick = picker.onStart) {
                                 Icon(
@@ -2925,7 +2905,7 @@ private fun SliderPanel(
                     enabled = enabled,
                     editingKey = editingKey,
                     onEditing = onEditing,
-                    valueText = { formatAdjustmentValue(adjustment, it) },
+                    valueText = { state.formatValue(adjustment, it) },
                     onValueChange = { onAdjustment(adjustment, it) },
                     onValueChangeFinished = onAdjustmentFinished,
                     onReset = { onResetAdjustment(adjustment) },
@@ -3563,7 +3543,7 @@ data class WhiteBalancePickActions(
     val onAccept: () -> Unit,
     val onCancel: () -> Unit,
     val onPreset: (WhiteBalancePreset) -> Unit,
-    /** The RAW profile's menu, at the top of the same Colour panel. */
+    /** The RAW profile's browser, at the top of the Light panel. */
     val onProfile: (RawProfileChoice) -> Unit,
 )
 

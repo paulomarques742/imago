@@ -555,4 +555,6 @@
     <string name="community_error_replies">Este tópico já tem respostas. Contacta a moderação através do fórum para o apagar.</string>
     <string name="community_error_not_found">Este tópico já não existe.</string>
     <string name="community_error_failed">Não foi possível confirmar a operação. Verifica a ligação e o fórum antes de tentar de novo.</string>
+    <string name="library_raw">RAW</string>
+    <string name="library_raw_description">Fotografia RAW</string>
 </resources>

@@ -51,6 +51,41 @@ void failure(JNIEnv *env, int code) {
     env->Throw(static_cast<jthrowable>(env->NewObject(cls, ctor, code)));
 }
 
+// XYZ to camera: LibRaw's table for a camera it knows, or, in a DNG, the file's own ColorMatrix (times its
+// CameraCalibration), preferring the daylight one as LibRaw does — it leaves cam_xyz empty for DNGs.
+void cameraToXyz(const libraw_colordata_t &color, int colors, float out[4][3]) {
+    bool fromTable = false;
+    for (int c = 0; c < colors; ++c)
+        for (int j = 0; j < 3; ++j) {
+            out[c][j] = color.cam_xyz[c][j];
+            fromTable = fromTable || out[c][j] != 0.f;
+        }
+    if (fromTable) return;
+    int chosen = -1;
+    for (int pass = 0; pass < 3 && chosen < 0; ++pass)
+        for (int i = 0; i < 2 && chosen < 0; ++i) {
+            const auto &dng = color.dng_color[i];
+            bool present = false;
+            for (int c = 0; c < colors; ++c) for (int j = 0; j < 3; ++j) present = present || dng.colormatrix[c][j] != 0.f;
+            if (!present) continue;
+            const int light = dng.illuminant;
+            const bool daylight = light == LIBRAW_WBI_Daylight || light == LIBRAW_WBI_D55 || light == LIBRAW_WBI_D75 ||
+                light == LIBRAW_WBI_D50 || light == LIBRAW_WBI_Flash;
+            if ((pass == 0 && light == LIBRAW_WBI_D65) || (pass == 1 && daylight) || pass == 2) chosen = i;
+        }
+    if (chosen < 0) return;
+    const auto &dng = color.dng_color[chosen];
+    bool calibrated = false;
+    for (int c = 0; c < colors; ++c) calibrated = calibrated || dng.calibration[c][c] != 0.f;
+    for (int c = 0; c < colors; ++c)
+        for (int j = 0; j < 3; ++j) {
+            float value = 0.f;
+            for (int k = 0; k < colors; ++k)
+                value += (calibrated ? dng.calibration[c][k] : (c == k ? 1.f : 0.f)) * dng.colormatrix[k][j];
+            out[c][j] = value;
+        }
+}
+
 int openPath(JNIEnv *env, LibRaw &decoder, jstring path) {
 #ifdef _WIN32
     const auto chars = env->GetStringChars(path, nullptr);
@@ -232,11 +267,38 @@ Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring 
             env->SetShortArrayRegion(pixels, static_cast<jsize>(y * row.size()), static_cast<jsize>(row.size()), row.data());
             if (env->ExceptionCheck()) return nullptr;
         }
+        // A light's XYZ to the colour it takes in this development: the camera's response (cam_xyz),
+        // the white balance LibRaw applied (pre_mul, the as-shot multipliers once processed) and the
+        // matrix to sRGB. White balance in kelvin is read through it; up to a scale, which it ignores.
+        jfloatArray xyzToDeveloped = nullptr;
+        const int cameraColors = decoder.imgdata.idata.colors;
+        float camXyz[4][3] = {};
+        if (cameraColors >= 3 && cameraColors <= 4) cameraToXyz(color, cameraColors, camXyz);
+        if (cameraColors >= 3 && cameraColors <= 4) {
+            float matrix[9] = {};
+            bool known = false;
+            for (int row = 0; row < 3; ++row)
+                for (int column = 0; column < 3; ++column) {
+                    float value = 0.f;
+                    for (int c = 0; c < cameraColors; ++c)
+                        value += color.rgb_cam[row][c] * color.pre_mul[c] * camXyz[c][column];
+                    matrix[row * 3 + column] = value;
+                    known = known || (std::isfinite(value) && value != 0.f);
+                }
+            const float determinant =
+                matrix[0] * (matrix[4] * matrix[8] - matrix[5] * matrix[7]) -
+                matrix[1] * (matrix[3] * matrix[8] - matrix[5] * matrix[6]) +
+                matrix[2] * (matrix[3] * matrix[7] - matrix[4] * matrix[6]);
+            if (known && std::isfinite(determinant) && std::fabs(determinant) > 1e-12f) {
+                xyzToDeveloped = env->NewFloatArray(9);
+                if (xyzToDeveloped) env->SetFloatArrayRegion(xyzToDeveloped, 0, 9, matrix);
+            }
+        }
         auto cls = env->FindClass("eu/studio742/imago/core/raw/RawImage");
-        auto ctor = env->GetMethodID(cls, "<init>", "(II[SLjava/lang/String;Ljava/lang/String;F)V");
+        auto ctor = env->GetMethodID(cls, "<init>", "(II[SLjava/lang/String;Ljava/lang/String;F[F)V");
         return env->NewObject(cls, ctor, static_cast<jint>(width), static_cast<jint>(height), pixels,
             env->NewStringUTF(decoder.imgdata.idata.make), env->NewStringUTF(decoder.imgdata.idata.model),
-            static_cast<jfloat>(foundBaseline));
+            static_cast<jfloat>(foundBaseline), xyzToDeveloped);
     } catch (const std::bad_alloc &) {
         env->ThrowNew(env->FindClass("java/lang/OutOfMemoryError"), "Not enough memory to decode the RAW image.");
     } catch (...) {

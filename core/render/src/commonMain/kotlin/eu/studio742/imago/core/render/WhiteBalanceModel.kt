@@ -119,6 +119,54 @@ object WhiteBalanceModel {
         return FloatArray(3) { (rgb[it] / rgb[1]).toFloat() }
     }
 
+    /**
+     * A light given as CIE XYZ, as a colour temperature in kelvin and a tint: the point of the
+     * Planckian locus whose normal passes through it, and how far off the locus it is along that normal,
+     * where ±150 is the DNG SDK's ±0.05 in uv. Positive is a greener light, which a magenta Tint corrects.
+     * Kept within 2000 K to 25 000 K, where the locus spline holds.
+     */
+    fun kelvinAndTint(x: Double, y: Double, z: Double): Pair<Float, Float> {
+        val sum = x + y + z
+        if (sum <= 0.0) return (1.0e6 / D65_MIRED).toFloat() to 0f
+        val (u, v) = uv(x / sum, y / sum)
+        fun along(mired: Double): Double {
+            val point = planckUv(mired)
+            val tangent = tangent(mired)
+            return (u - point[0]) * tangent[0] + (v - point[1]) * tangent[1]
+        }
+        var low = WARM_MIRED
+        var high = KELVIN_COLD_MIRED
+        val mired = when {
+            along(low) <= 0.0 -> low
+            along(high) >= 0.0 -> high
+            else -> {
+                repeat(60) {
+                    val middle = (low + high) / 2.0
+                    if (along(middle) > 0.0) low = middle else high = middle
+                }
+                (low + high) / 2.0
+            }
+        }
+        val point = planckUv(mired)
+        val normal = normal(mired)
+        val offset = (u - point[0]) * normal[0] + (v - point[1]) * normal[1]
+        return (1.0e6 / mired).toFloat() to (offset / TINT_REACH * KELVIN_TINT_REACH).toFloat()
+    }
+
+    /** The light at [kelvin] and [tint] ([kelvinAndTint]'s units) as CIE XYZ with Y = 1. */
+    fun xyzOf(kelvin: Float, tint: Float): DoubleArray {
+        val mired = (1.0e6 / kelvin.toDouble()).coerceIn(WARM_MIRED, KELVIN_COLD_MIRED)
+        val point = planckUv(mired)
+        val normal = normal(mired)
+        val offset = tint.toDouble() / KELVIN_TINT_REACH * TINT_REACH
+        val u = point[0] + normal[0] * offset
+        val v = point[1] + normal[1] * offset
+        val denominator = 2.0 * u - 8.0 * v + 4.0
+        val x = 3.0 * u / denominator
+        val y = 2.0 * v / denominator
+        return doubleArrayOf(x / y, 1.0, (1.0 - x - y) / y)
+    }
+
     /** The light the sliders describe, as CIE xy. */
     private fun lightXy(temperature: Double, tint: Double): Pair<Double, Double> {
         val mired = if (temperature < 0.0) {
@@ -204,6 +252,10 @@ object WhiteBalanceModel {
     /** D65's correlated colour temperature, 6504 K. */
     private const val D65_MIRED = NEUTRAL_MIRED
     private const val TINT_REACH = TINT_REACH_UV
+    /** 2000 K, the cold end of the absolute scale. */
+    private const val KELVIN_COLD_MIRED = 500.0
+    /** The absolute Tint's end, as the DNG SDK numbers it. */
+    private const val KELVIN_TINT_REACH = 150.0
 
     /** Linear sRGB to XYZ, D65 white. */
     private val RGB_TO_XYZ = doubleArrayOf(

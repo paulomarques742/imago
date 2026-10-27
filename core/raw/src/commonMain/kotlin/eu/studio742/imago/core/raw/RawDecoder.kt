@@ -7,7 +7,9 @@ import java.util.concurrent.locks.ReentrantLock
 /**
  * Scene-linear sRGB after camera white balance and orientation, including values above white.
  * [baselineExposure] is the DNG's BaselineExposure in stops, 0 when the file has none, whether or not
- * the decode applied it.
+ * the decode applied it. [xyzToDeveloped] (row-major 3×3, up to a scale) takes a light's CIE XYZ to the
+ * colour it has in this development, as-shot white balance included; null when the camera's colour
+ * matrix is unknown or the sensor is monochrome.
  */
 class RawImage(
     val width: Int,
@@ -16,6 +18,7 @@ class RawImage(
     val cameraMake: String,
     val cameraModel: String,
     val baselineExposure: Float = 0f,
+    val xyzToDeveloped: FloatArray? = null,
 ) {
     init {
         require(width > 0 && height > 0)

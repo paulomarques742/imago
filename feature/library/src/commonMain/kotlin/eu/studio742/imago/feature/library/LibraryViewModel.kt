@@ -4,6 +4,7 @@ import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.designsystem.i18n.toUiText
 import eu.studio742.imago.core.designsystem.i18n.uiPlural
 import eu.studio742.imago.core.designsystem.i18n.uiText
+import eu.studio742.imago.core.model.isRawOriginal
 import eu.studio742.imago.core.model.AssetReference
 import eu.studio742.imago.core.model.FolderTransfer
 import kotlinx.coroutines.CancellationException
@@ -76,6 +77,8 @@ data class AssetUiModel(
     val isArchived: Boolean = false,
     /** The cover of an Immich stack of this many photos; null for a photo on its own. */
     val stackCount: Int? = null,
+    /** A camera RAW: it takes longer to open, and the tile says why ([isRawOriginal]). */
+    val isRaw: Boolean = false,
 )
 
 data class AlbumUiModel(
@@ -132,6 +135,7 @@ fun ImmichAsset.toAssetUiModel(library: LibraryRepository, recipe: EditRecipe?):
         isOnServer = isOnServer,
         isArchived = isArchived,
         stackCount = stackCount?.takeIf { stackId != null && it > 1 },
+        isRaw = !isVideo && isRawOriginal(mimeType, originalFileName),
     )
 }
 
