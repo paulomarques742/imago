@@ -15,6 +15,10 @@ import eu.studio742.imago.core.model.maxLocalMasks
 import eu.studio742.imago.core.model.MaskComponent
 import eu.studio742.imago.core.model.MaskShape
 import eu.studio742.imago.core.model.UPRIGHT_OFF
+import eu.studio742.imago.core.model.RAW_PROFILE_MONOCHROME
+import eu.studio742.imago.core.model.RAW_RENDERING_PROFILED
+import eu.studio742.imago.core.model.rawExposure
+import eu.studio742.imago.core.model.rawRendering
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.roundToInt
@@ -40,14 +44,28 @@ private fun EditRecipe.channelCurveLut(points: List<CurvePoint>?) =
  * saved in version 5 did not know about crop, and reinterpreting it with the default crop would change
  * a photo the user considered finished.
  *
+ * @param rawRendering how the photo's RAW development is shown: the recipe's own unless a caller
+ *   renders a recipe from elsewhere — a preset's preview — on a photo developed its own way.
+ * @param rawExposure the development's own exposure, likewise; or, for a RAW not yet developed by the
+ *   editor, the one [CameraExposureMatch] finds.
  * @param showMask a mask the editor has open: it reaches the render even with no adjustments, so that
  *   its red overlay shows while it is being drawn — a brush has no outline, and without this nothing
  *   at all would show where it was painting. With no adjustments it changes no pixel.
  */
-fun EditRecipe.toRenderParameters(showMask: String? = null) = RenderParameters(
+fun EditRecipe.toRenderParameters(
+    showMask: String? = null,
+    rawRendering: Int = rawRendering(),
+    rawExposure: Float = rawExposure(),
+) = RenderParameters(
     temperature = whiteBalance.temp,
     tint = whiteBalance.tint,
     lightWhiteBalance = processVersion >= 13,
+    rawProfile = when {
+        rawRendering < RAW_RENDERING_PROFILED -> RawProfile.NONE
+        profile == RAW_PROFILE_MONOCHROME -> RawProfile.MONOCHROME
+        else -> RawProfile.COLOR
+    },
+    rawExposure = if (rawRendering < RAW_RENDERING_PROFILED) 0f else rawExposure,
     exposure = tone.exposure,
     contrast = tone.contrast,
     highlights = tone.highlights,

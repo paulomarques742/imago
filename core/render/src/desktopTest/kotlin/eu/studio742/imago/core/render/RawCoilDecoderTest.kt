@@ -22,7 +22,7 @@ class RawCoilDecoderTest {
             file.writeBytes(syntheticDng(6, warmWhiteBalance = true))
             val half = requireNotNull(RawDecoder.decode(file, halfSize = true))
             val reference = RecipePixels.reduce(FloatPixelBuffer(half.width, half.height, half.rgb), 17)
-            val preview = requireNotNull(decodeRawPreview(file, maxSide = 17))
+            val preview = requireNotNull(decodeRawPreview(file, maxSide = 17, baselineExposure = false))
             assertEquals(reference.width to reference.height, preview.width to preview.height)
             assertTrue(preview.linear)
             for (i in preview.rgb.indices) {
@@ -57,6 +57,27 @@ class RawCoilDecoderTest {
             val pixels = (result as SuccessResult).image.toBitmap().toPixelBuffer()
             val red = pixels.pixels[(pixels.height / 2) * pixels.width + pixels.width / 2] ushr 16 and 255
             assertTrue("The original highlight must reach the thumbnail once ($red).", red in 168..190)
+        } finally { loader.shutdown(); assertTrue(file.delete()) }
+    }
+
+    @Test fun `an unedited RAW thumbnail has the current rendering, a process 19 recipe keeps its own`() = runBlocking {
+        val file = Files.createTempFile("imago-raw-coil-rendering-", ".asset").toFile()
+        val loader = ImageLoader.Builder(PlatformContext.INSTANCE).components { add(RawPhotoDecoder.Factory()) }.build()
+        suspend fun centreGreen(recipe: EditRecipe?): Int {
+            val result = loader.execute(ImageRequest.Builder(PlatformContext.INSTANCE).data(file).size(64).withRecipe(recipe)
+                .memoryCachePolicy(coil3.request.CachePolicy.DISABLED).softwareBitmap().build())
+            assertTrue("$result", result is SuccessResult)
+            val pixels = (result as SuccessResult).image.toBitmap().toPixelBuffer()
+            return pixels.pixels[(pixels.height / 2) * pixels.width + pixels.width / 2] ushr 8 and 255
+        }
+        try {
+            file.writeBytes(syntheticDng(1, baselineExposure = -2))
+            val written19 = EditRecipe(assetId = "raw", originalChecksum = "", createdAt = "", updatedAt = "1",
+                processVersion = 19, rawDevelopment = RawDevelopment())
+            val developed = centreGreen(null)
+            val asShot = centreGreen(written19)
+            assertTrue("Two stops down must darken the unedited thumbnail ($developed against $asShot).", developed < asShot - 20)
+            assertEquals(developed, centreGreen(written19.copy(processVersion = 20, rawDevelopment = RawDevelopment(rendering = 2))))
         } finally { loader.shutdown(); assertTrue(file.delete()) }
     }
 }

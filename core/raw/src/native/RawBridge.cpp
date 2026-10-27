@@ -112,8 +112,34 @@ Java_eu_studio742_imago_core_raw_NativeRaw_identify(JNIEnv *env, jobject, jstrin
     return nullptr;
 }
 
+// The JPEG the camera rendered and stored in the file, as it is; null when there is none, or when the
+// file stores it as a bitmap or above the size bound.
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_eu_studio742_imago_core_raw_NativeRaw_embeddedJpeg(JNIEnv *env, jobject, jstring path) {
+    try {
+        LibRaw decoder;
+        decoder.imgdata.rawparams.max_raw_memory_mb = 512;
+        int code = openPath(env, decoder, path);
+        if (env->ExceptionCheck() || code != LIBRAW_SUCCESS) return nullptr;
+        if (decoder.unpack_thumb() != LIBRAW_SUCCESS) return nullptr;
+        std::unique_ptr<libraw_processed_image_t, decltype(&LibRaw::dcraw_clear_mem)> thumb(
+            decoder.dcraw_make_mem_thumb(&code), LibRaw::dcraw_clear_mem);
+        if (!thumb || code != LIBRAW_SUCCESS || thumb->type != LIBRAW_IMAGE_JPEG) return nullptr;
+        if (thumb->data_size == 0 || thumb->data_size > 64u * 1024u * 1024u) return nullptr;
+        auto bytes = env->NewByteArray(static_cast<jsize>(thumb->data_size));
+        if (!bytes) return nullptr;
+        env->SetByteArrayRegion(bytes, 0, static_cast<jsize>(thumb->data_size), reinterpret_cast<const jbyte *>(thumb->data));
+        return bytes;
+    } catch (const std::bad_alloc &) {
+        return nullptr;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
 extern "C" JNIEXPORT jobject JNICALL
-Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring path, jboolean halfSize, jint maxSide) {
+Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring path, jboolean halfSize, jint maxSide,
+    jboolean baselineExposure) {
     try {
         LibRaw decoder;
         auto threadClass = env->FindClass("java/lang/Thread");
@@ -164,12 +190,17 @@ Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring 
         float minGain = 1.f;
         for (unsigned c = 0; c < image->colors; ++c)
             if (color.pre_mul[c] > 0.f && std::isfinite(color.pre_mul[c])) minGain = std::min(minGain, color.pre_mul[c]);
-        const float normalization = 1.f / (65535.f * minGain);
+        // LibRaw reads a DNG's BaselineExposure without applying it; -999 means the file has none. The
+        // bound keeps a corrupt tag from overflowing binary16.
+        const float baseline = color.dng_levels.baseline_exposure;
+        const float foundBaseline = std::isfinite(baseline) && baseline > -100.f ? std::clamp(baseline, -10.f, 10.f) : 0.f;
+        const float exposure = baselineExposure ? std::exp2(foundBaseline) : 1.f;
+        const float normalization = exposure / (65535.f * minGain);
         std::vector<jshort> row(static_cast<size_t>(width) * 3);
         const auto source = reinterpret_cast<const unsigned short *>(image->data);
         auto channel = [&](unsigned x, unsigned y, unsigned c) {
             const auto pixel = source + (static_cast<size_t>(y) * image->width + x) * image->colors;
-            if (image->colors == 1) return pixel[0] / 65535.f;
+            if (image->colors == 1) return pixel[0] * exposure / 65535.f;
             float value = 0.f;
             for (unsigned cameraChannel = 0; cameraChannel < image->colors; ++cameraChannel)
                 value += color.rgb_cam[c][cameraChannel] * pixel[cameraChannel];
@@ -202,9 +233,10 @@ Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring 
             if (env->ExceptionCheck()) return nullptr;
         }
         auto cls = env->FindClass("eu/studio742/imago/core/raw/RawImage");
-        auto ctor = env->GetMethodID(cls, "<init>", "(II[SLjava/lang/String;Ljava/lang/String;)V");
+        auto ctor = env->GetMethodID(cls, "<init>", "(II[SLjava/lang/String;Ljava/lang/String;F)V");
         return env->NewObject(cls, ctor, static_cast<jint>(width), static_cast<jint>(height), pixels,
-            env->NewStringUTF(decoder.imgdata.idata.make), env->NewStringUTF(decoder.imgdata.idata.model));
+            env->NewStringUTF(decoder.imgdata.idata.make), env->NewStringUTF(decoder.imgdata.idata.model),
+            static_cast<jfloat>(foundBaseline));
     } catch (const std::bad_alloc &) {
         env->ThrowNew(env->FindClass("java/lang/OutOfMemoryError"), "Not enough memory to decode the RAW image.");
     } catch (...) {

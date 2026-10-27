@@ -118,6 +118,34 @@ class RawDecoderTest {
         }
     }
 
+    @Test fun `a DNG BaselineExposure is reported and applied only on request`() {
+        val file = Files.createTempFile("imago-raw-baseline-", ".asset").toFile()
+        try {
+            file.writeBytes(syntheticDng(orientation = 1, baselineExposure = 2))
+            val asShot = requireNotNull(RawDecoder.decode(file))
+            val developed = requireNotNull(RawDecoder.decode(file, baselineExposure = true))
+            val preview = requireNotNull(RawDecoder.decodePreview(file, maxSide = 16, baselineExposure = true))
+            val previewAsShot = requireNotNull(RawDecoder.decodePreview(file, maxSide = 16))
+            assertEquals(2f, asShot.baselineExposure)
+            assertEquals(2f, developed.baselineExposure)
+            for (i in asShot.rgb.indices) assertEquals("Component $i", asShot.sample(i) * 4f, developed.sample(i), Math.abs(asShot.sample(i)) * .004f + 1e-6f)
+            for (i in preview.rgb.indices) assertEquals("Preview $i", previewAsShot.sample(i) * 4f, preview.sample(i), Math.abs(previewAsShot.sample(i)) * .004f + 1e-6f)
+            file.writeBytes(syntheticDng(orientation = 1))
+            val none = requireNotNull(RawDecoder.decode(file, baselineExposure = true))
+            assertEquals(0f, none.baselineExposure)
+            assertArrayEquals(asShot.rgb, none.rgb)
+        } finally { assertTrue(file.delete()) }
+    }
+
+    @Test fun `a file without a camera JPEG has none to give`() {
+        withDng { file -> assertNull(RawDecoder.embeddedJpeg(file)) }
+        val file = Files.createTempFile("imago-raw-invalid-jpeg-", ".asset").toFile()
+        try {
+            file.writeBytes(ByteArray(2048))
+            assertNull(RawDecoder.embeddedJpeg(file))
+        } finally { assertTrue(file.delete()) }
+    }
+
     @Test fun `native decoding applies the recorded orientation exactly once`() {
         withDng(orientation = 6) { file ->
             val image = requireNotNull(RawDecoder.decode(file))

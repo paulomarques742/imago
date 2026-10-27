@@ -9,6 +9,7 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 enum class RecipePart {
+    PROFILE,
     EXPOSURE, CONTRAST, HIGHLIGHTS, SHADOWS, WHITES, BLACKS, TONE_CURVE,
     WHITE_BALANCE, VIBRANCE, SATURATION, COLOR_MIXER, COLOR_GRADING,
     TEXTURE, CLARITY, DEHAZE,
@@ -29,8 +30,12 @@ enum class RecipePart {
         /**
          * What a recipe saved before the choice existed carries. Its geometry came along by accident,
          * and applying it cropped and tilted every photo it touched; its masks were there on purpose.
+         * It never chose a profile: there were none.
          */
-        val LEGACY: Set<RecipePart> = entries.toSet() - GEOMETRY
+        val LEGACY: Set<RecipePart> = entries.toSet() - GEOMETRY - PROFILE
+
+        /** What the app's filters write: a look made on top of whichever profile the photo has. */
+        val BUILT_IN: Set<RecipePart> = LOOK - PROFILE
 
         /** A stored list back as a set. Names from a newer app are skipped, not fatal. */
         fun parse(names: Iterable<String>): Set<RecipePart> =
@@ -79,6 +84,7 @@ fun EditRecipe.withPartsFrom(source: EditRecipe, parts: Set<RecipePart>): EditRe
         perspective = pick(RecipePart.PERSPECTIVE, source.geometry.perspective, geometry.perspective),
     )
     return copy(
+        profile = pick(RecipePart.PROFILE, source.profile, profile),
         whiteBalance = pick(RecipePart.WHITE_BALANCE, source.whiteBalance, whiteBalance),
         tone = tone,
         presence = presence,

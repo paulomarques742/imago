@@ -16,6 +16,16 @@ data class RenderParameters(
     val tint: Float = 0f,
     /** Temperature and Tint as a light ([WhiteBalanceModel]), from process 13; false is the older three gains. */
     val lightWhiteBalance: Boolean = true,
+    /**
+     * How a linear RAW source reaches the screen ([RawProfile]); a JPEG ignores it. A RAW without a
+     * recipe is developed with the current rendering, and so whoever draws one asks for colour.
+     */
+    val rawProfile: Int = RawProfile.NONE,
+    /**
+     * The RAW development's own exposure, in stops ([CameraExposureMatch]): added to [exposure], but
+     * kept apart so that "before" still has it. Always 0 for a JPEG.
+     */
+    val rawExposure: Float = 0f,
     val exposure: Float = 0f,
     val contrast: Float = 0f,
     val highlights: Float = 0f,
@@ -86,9 +96,21 @@ data class RenderParameters(
         tables
     }
 
+    /**
+     * What "before" shows: no adjustment, but the photo still developed as it is — a RAW of the current
+     * rendering through its default profile, as Lightroom's before shows the default settings, and
+     * not the bare linear development that no screen ever showed.
+     */
+    val original: RenderParameters
+        get() = RenderParameters(
+            rawProfile = if (rawProfile == RawProfile.NONE) RawProfile.NONE else RawProfile.COLOR,
+            rawExposure = rawExposure,
+        )
+
     // Either white balance model does nothing at 0, 0: which one it is says nothing about neutrality.
+    // Nor does the profile, which only a linear RAW reads, and a linear source is always processed.
     val isNeutral: Boolean
-        get() = copy(lightWhiteBalance = true) == RenderParameters()
+        get() = copy(lightWhiteBalance = true, rawProfile = RawProfile.NONE, rawExposure = 0f) == RenderParameters()
 
     val isColorNeutral: Boolean
         get() = copy(
@@ -102,6 +124,8 @@ data class RenderParameters(
             mirrorV = false,
             perspective = PerspectiveParameters(),
             lightWhiteBalance = true,
+            rawProfile = RawProfile.NONE,
+            rawExposure = 0f,
         ) == RenderParameters()
 
     /**

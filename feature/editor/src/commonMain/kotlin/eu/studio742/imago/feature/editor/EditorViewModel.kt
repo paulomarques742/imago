@@ -97,10 +97,18 @@ import kotlin.math.floor
 import java.io.File
 import eu.studio742.imago.core.render.FloatPixelBuffer
 import eu.studio742.imago.core.render.decodeRawPreview
+import eu.studio742.imago.core.render.CameraExposureMatch
 import eu.studio742.imago.core.render.shouldInspectRawOriginal
 import eu.studio742.imago.core.render.createPhotoTempFile
 import eu.studio742.imago.core.render.toPlatformBitmap
-import eu.studio742.imago.core.model.RawDevelopment
+import eu.studio742.imago.core.model.appliesBaselineExposure
+import eu.studio742.imago.core.model.CURRENT_RAW_RENDERING
+import eu.studio742.imago.core.model.RAW_PROFILE_COLOR
+import eu.studio742.imago.core.model.RAW_PROFILE_MONOCHROME
+import eu.studio742.imago.core.model.RAW_RENDERING_PROFILED
+import eu.studio742.imago.core.model.needsNewerRawRendering
+import eu.studio742.imago.core.model.rawRendering
+import eu.studio742.imago.core.model.developedAsRaw
 import eu.studio742.imago.core.model.CURRENT_RAW_ENGINE
 import java.time.Instant
 import java.util.UUID
@@ -516,6 +524,13 @@ data class EditorUiState(
     val recipeEdit: RecipeEditState? = null,
     val error: UiText? = null,
 ) {
+    /**
+     * A RAW whose rendering has profiles. A recipe edited on process 19's rendering keeps it, and there
+     * the menu would change nothing.
+     */
+    val showsRawProfile: Boolean
+        get() = highPrecisionSource?.linear == true && recipe?.let { it.rawRendering() >= RAW_RENDERING_PROFILED } == true
+
     val hasUnsavedRecipeChanges: Boolean
         get() {
             val edit = recipeEdit ?: return false
@@ -697,7 +712,6 @@ open class EditorViewModel(
         loadJob = viewModelScope.launch {
             runCatching {
                 coroutineScope {
-                    val bitmap = async { loadPhoto(asset) }
                     val stored = async {
                         when (target) {
                             is PhotoEditTarget.Asset -> recipes.get(asset.id)
@@ -709,17 +723,23 @@ open class EditorViewModel(
                             }
                         }
                     }
+                    // How the original is developed is the photo's: a stored recipe keeps its own, and a
+                    // recipe edited on a sample is applied as to a new photo. Decoding needs it first.
+                    val development = async {
+                        if (target is PhotoEditTarget.Recipe) null
+                        else stored.await()?.takeIf { !it.needsNewerApp() && it.belongsTo(asset) }
+                    }
+                    val rendering = async { development.await()?.rawRendering() ?: CURRENT_RAW_RENDERING }
+                    val bitmap = async {
+                        val profiled = rendering.await() >= RAW_RENDERING_PROFILED
+                        // A development already recorded keeps its exposure: nothing to measure.
+                        loadPhoto(asset, profiled, measure = profiled && development.await()?.rawDevelopment == null)
+                    }
                     val appliedParts = (target as? PhotoEditTarget.Recipe)?.source?.appliedParts ?: RecipePart.entries.toSet()
                     val now = Instant.now().toString()
                     val fromStore = stored.await()
-                    // A recipe from a newer app never goes through the old pipeline: the original
-                    // opens, and nothing is saved over it.
-                    needsNewerApp = fromStore != null && (fromStore.processVersion > CURRENT_PROCESS_VERSION ||
-                        fromStore.rawDevelopment?.engine?.let { it != CURRENT_RAW_ENGINE } == true)
-                    val storedRecipe = fromStore?.takeIf {
-                        !needsNewerApp &&
-                            (it.originalChecksum.isBlank() || asset.checksum.isBlank() || it.originalChecksum == asset.checksum)
-                    }
+                    needsNewerApp = fromStore?.needsNewerApp() == true
+                    val storedRecipe = fromStore?.takeIf { !needsNewerApp && it.belongsTo(asset) }
                     val recipe = if (target is PhotoEditTarget.Recipe) {
                         // Seen through `rebasedOnto`, a recipe is exactly what applying it to a photo
                         // would give — the sample shows the truth, not the stored record.
@@ -740,8 +760,8 @@ open class EditorViewModel(
                     } else {
                         recipe
                     }
-                    Triple(loaded, if (loaded.raw != null) shown.copy(processVersion = CURRENT_PROCESS_VERSION,
-                        rawDevelopment = shown.rawDevelopment ?: RawDevelopment()) else shown, storedRecipe != null)
+                    Triple(loaded, if (loaded.raw != null) shown.developedAsRaw(rendering.await(), loaded.rawExposure) else shown,
+                        storedRecipe != null)
                 }
             }.onSuccess { (bitmap, recipe, existed) ->
                 shouldPersist = target is PhotoEditTarget.Asset && existed
@@ -800,7 +820,7 @@ open class EditorViewModel(
         loadJob?.cancel()
         mutableState.update { it.copy(asset = target.asset, bitmap = null, highPrecisionSource = null, isLoading = true, error = null) }
         loadJob = viewModelScope.launch {
-            runCatching { loadBitmap(target.asset) }
+            runCatching { loadPhoto(target.asset, state.value.recipe?.appliesBaselineExposure() ?: true, measure = false).bitmap }
                 .onSuccess { bitmap -> mutableState.update { it.copy(bitmap = bitmap, isLoading = false) } }
                 .onFailure { error ->
                     mutableState.update { it.copy(isLoading = false, error = error.toUiText(Res.string.editor_open_failed)) }
@@ -1019,6 +1039,33 @@ open class EditorViewModel(
             mutableState.update { it.copy(recipe = start, isSaving = true) }
             scheduleSave(start)
         }
+    }
+
+    /** The RAW's base profile, the first choice of Lightroom's Basic panel. */
+    fun selectProfile(profile: RawProfileChoice) {
+        val current = state.value.recipe ?: return
+        if (current.profile == profile.id) return
+        finishAdjustment()
+        editStart = null
+        pendingChange = null
+        val updated = current.copy(
+            processVersion = CURRENT_PROCESS_VERSION,
+            geometry = current.geometry.activeAtProcess(current.processVersion),
+            profile = profile.id,
+            updatedAt = Instant.now().toString(),
+        )
+        setRecipeAndSave(updated)
+        pushHistory(
+            HistoryEntry(
+                id = UUID.randomUUID().toString(),
+                label = uiText(Res.string.editor_profile),
+                detail = UiText.Resource(profile.labelRes),
+                valueText = null,
+                icon = HistoryIcon.COLOR,
+                timestamp = Instant.now().toString(),
+                recipe = updated,
+            ),
+        )
     }
 
     /**
@@ -1767,7 +1814,7 @@ open class EditorViewModel(
         // The app's filters are looks: they never crop, tilt or mask the photo they are put on.
         applyReusableRecipe(
             builtIn.recipe,
-            RecipePart.LOOK,
+            RecipePart.BUILT_IN,
             uiText(Res.string.editor_filter_applied, builtIn.nameText()),
             label = builtIn.nameText(),
         )
@@ -2581,20 +2628,20 @@ open class EditorViewModel(
         mirrorJob = viewModelScope.launch(NonCancellable) { geometryMirror.mirror(recipe) }
     }
 
-    private suspend fun loadBitmap(asset: EditorAsset): Bitmap {
-        return loadPhoto(asset).bitmap
-    }
+    /** [rawExposure] is what matched the camera's JPEG ([CameraExposureMatch]), for a RAW developed now. */
+    private data class LoadedPhoto(val bitmap: Bitmap, val raw: FloatPixelBuffer? = null, val rawExposure: Float = 0f)
 
-    private data class LoadedPhoto(val bitmap: Bitmap, val raw: FloatPixelBuffer? = null)
-
-    private suspend fun loadPhoto(asset: EditorAsset): LoadedPhoto {
+    /** [baselineExposure] is the recipe's [appliesBaselineExposure]; a JPEG ignores it. */
+    private suspend fun loadPhoto(asset: EditorAsset, baselineExposure: Boolean, measure: Boolean = baselineExposure): LoadedPhoto {
         if (library != null && shouldInspectRawOriginal(asset.fileName)) {
             val original = createPhotoTempFile(context)
             try {
                 library.downloadOriginal(asset.id, original)
-                val raw = decodeRawPreview(original, maxSide = 2048)
+                val raw = decodeRawPreview(original, maxSide = 2048, baselineExposure = baselineExposure)
                 if (raw != null) {
-                    return LoadedPhoto(withContext(Dispatchers.Default) { raw.toPixelBuffer().toPlatformBitmap() }, raw)
+                    // Measured before the original is deleted; only a development made now uses it.
+                    val matched = if (measure) CameraExposureMatch.of(original, raw) else 0f
+                    return LoadedPhoto(withContext(Dispatchers.Default) { raw.toPixelBuffer().toPlatformBitmap() }, raw, matched)
                 }
             } finally { original.delete() }
         }
@@ -2613,6 +2660,15 @@ open class EditorViewModel(
         return LoadedPhoto(result.image.toBitmap())
     }
 }
+
+/** A recipe from a newer app never goes through the old pipeline: the original opens, and nothing is saved over it. */
+private fun EditRecipe.needsNewerApp(): Boolean =
+    processVersion > CURRENT_PROCESS_VERSION || rawDevelopment?.engine?.let { it != CURRENT_RAW_ENGINE } == true ||
+        needsNewerRawRendering()
+
+/** A recipe stored for another version of the file is not this photo's. */
+private fun EditRecipe.belongsTo(asset: EditorAsset): Boolean =
+    originalChecksum.isBlank() || asset.checksum.isBlank() || originalChecksum == asset.checksum
 
 /**
  * The photo a recipe is edited against, as the recipe sees it. Not the sample's id: swapping the sample
@@ -2703,7 +2759,8 @@ internal fun EditRecipe.changedParts(other: EditRecipe): Set<RecipePart> =
 internal val RecipeSource.appliedParts: Set<RecipePart>
     get() = when (this) {
         is RecipeSource.Saved -> saved.appliedParts
-        is RecipeSource.BuiltIn, is RecipeSource.New -> RecipePart.LOOK
+        is RecipeSource.BuiltIn -> RecipePart.BUILT_IN
+        is RecipeSource.New -> RecipePart.LOOK
     }
 
 private fun Geometry.activeAtProcess(processVersion: Int): Geometry = copy(
@@ -2924,6 +2981,17 @@ fun EditRecipe.adjustmentValue(adjustment: Adjustment): Float = when (adjustment
     Adjustment.PERSPECTIVE_OFFSET_X -> geometry.perspective.offsetX
     Adjustment.PERSPECTIVE_OFFSET_Y -> geometry.perspective.offsetY
     Adjustment.MASK_AMOUNT -> Adjustment.MASK_AMOUNT.neutral
+}
+
+/** The base profiles the editor offers for a RAW, in the menu's order. */
+enum class RawProfileChoice(val id: String, val labelRes: org.jetbrains.compose.resources.StringResource) {
+    COLOR(RAW_PROFILE_COLOR, Res.string.editor_profile_color),
+    MONOCHROME(RAW_PROFILE_MONOCHROME, Res.string.editor_profile_monochrome),
+    ;
+
+    companion object {
+        fun of(id: String): RawProfileChoice = entries.firstOrNull { it.id == id } ?: COLOR
+    }
 }
 
 /** Lightroom's white balance presets for a JPEG, read from a recipe's [WhiteBalance]. */

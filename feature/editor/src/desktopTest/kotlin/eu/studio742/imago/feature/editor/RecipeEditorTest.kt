@@ -361,6 +361,19 @@ class RecipeEditorTest {
     }
 
     @Test
+    fun `the profile is a step of its own, and a JPEG sample has no menu for it`() {
+        openRecipe(RecipeSource.Saved(original))
+        assertFalse("a JPEG has no profile to choose", viewModel.state.value.showsRawProfile)
+
+        viewModel.selectProfile(RawProfileChoice.MONOCHROME)
+        assertEquals(eu.studio742.imago.core.model.RAW_PROFILE_MONOCHROME, viewModel.state.value.recipe!!.profile)
+        assertTrue(viewModel.state.value.hasUnsavedRecipeChanges)
+
+        viewModel.undo()
+        assertEquals(eu.studio742.imago.core.model.RAW_PROFILE_COLOR, viewModel.state.value.recipe!!.profile)
+    }
+
+    @Test
     fun `a hand on a slider or the selector makes Auto Custom`() {
         openRecipe(RecipeSource.Saved(original))
         viewModel.selectWhiteBalancePreset(WhiteBalancePreset.AUTO)

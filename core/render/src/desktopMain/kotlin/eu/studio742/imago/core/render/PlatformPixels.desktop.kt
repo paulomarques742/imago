@@ -21,4 +21,21 @@ actual fun decodePixels(bytes: ByteArray): PixelBuffer? = runCatching {
     Image.makeFromEncoded(bytes).use { image -> Bitmap.makeFromImage(image).toPixelBuffer() }
 }.getOrNull()
 
+/** ImageIO subsamples a JPEG while reading it; anything else goes through Skia whole. */
+actual fun decodePixelsReduced(bytes: ByteArray, minSide: Int): PixelBuffer? = runCatching {
+    javax.imageio.ImageIO.createImageInputStream(java.io.ByteArrayInputStream(bytes)).use { input ->
+        val reader = javax.imageio.ImageIO.getImageReaders(input).asSequence().firstOrNull() ?: return@use null
+        try {
+            reader.input = input
+            val longSide = maxOf(reader.getWidth(0), reader.getHeight(0))
+            var sample = 1
+            while (longSide / (sample * 2) >= minSide) sample *= 2
+            val image = reader.read(0, reader.defaultReadParam.apply { setSourceSubsampling(sample, sample, 0, 0) })
+            PixelBuffer(image.width, image.height, image.getRGB(0, 0, image.width, image.height, null, 0, image.width))
+        } finally {
+            reader.dispose()
+        }
+    }
+}.getOrNull() ?: decodePixels(bytes)
+
 actual fun ImageRequest.Builder.softwareBitmap(): ImageRequest.Builder = this

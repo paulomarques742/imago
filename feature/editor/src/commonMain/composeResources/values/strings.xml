@@ -91,6 +91,10 @@
     <string name="editor_curve_channel_red">Red</string>
     <string name="editor_curve_channel_green">Green</string>
     <string name="editor_curve_channel_blue">Blue</string>
+    <string name="editor_profile">Profile</string>
+    <string name="editor_profile_choose">Choose the profile</string>
+    <string name="editor_profile_color">Color</string>
+    <string name="editor_profile_monochrome">Monochrome</string>
     <string name="editor_white_balance">White Balance</string>
     <string name="editor_white_balance_picker">White Balance Selector</string>
     <string name="editor_white_balance_pick">Pick the white balance on the photo</string>

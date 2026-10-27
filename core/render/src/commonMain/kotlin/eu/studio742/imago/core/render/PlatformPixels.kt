@@ -26,5 +26,12 @@ expect fun coil3.Bitmap.asComposeImage(): ImageBitmap
 /** An encoded image (JPEG, PNG, WebP) as pixels, or null if it cannot be read. */
 expect fun decodePixels(bytes: ByteArray): PixelBuffer?
 
+/**
+ * As [decodePixels], subsampled while decoding so the long side is at least [minSide] and not much
+ * more: a camera's full-size preview never becomes a full-size bitmap. The EXIF orientation is not
+ * applied.
+ */
+expect fun decodePixelsReduced(bytes: ByteArray, minSide: Int): PixelBuffer?
+
 /** A bitmap the CPU processor can read: on Android, never a hardware bitmap. */
 expect fun ImageRequest.Builder.softwareBitmap(): ImageRequest.Builder

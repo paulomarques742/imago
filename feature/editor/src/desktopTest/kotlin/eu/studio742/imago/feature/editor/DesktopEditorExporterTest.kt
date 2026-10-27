@@ -28,16 +28,19 @@ class DesktopEditorExporterTest {
         val sampleFolder = System.getProperty("imago.raw.samples")
         org.junit.Assume.assumeTrue("Optional external camera samples were not requested.", sampleFolder != null)
         val folder = File(requireNotNull(sampleFolder))
-        val originals = folder.listFiles().orEmpty().filter { it.extension.lowercase() in setOf("dng", "raf", "cr3") }
+        val originals = folder.listFiles().orEmpty().filter { it.extension.lowercase() in setOf("dng", "raf", "cr3", "cr2", "nef", "arw", "orf", "rw2", "pef") }
         assertTrue("The sample folder must contain camera originals.", originals.isNotEmpty())
         for (original in originals) {
             val info = requireNotNull(eu.studio742.imago.core.raw.RawDecoder.identify(original))
             val before = java.security.MessageDigest.getInstance("SHA-256").digest(original.readBytes())
             val previewStarted = System.nanoTime()
-            eu.studio742.imago.core.render.decodeRawPreview(original, maxSide = 2048).let { preview ->
+            eu.studio742.imago.core.render.decodeRawPreview(original, maxSide = 2048, baselineExposure = true).let { preview ->
                 requireNotNull(preview)
                 assertTrue(maxOf(preview.width, preview.height) <= 2048)
                 assertTrue(preview.linear)
+                val matched = eu.studio742.imago.core.render.CameraExposureMatch.of(original, preview)
+                assertTrue(kotlin.math.abs(matched) <= eu.studio742.imago.core.render.CameraExposureMatch.LIMIT)
+                println("RAW camera JPEG match ${info.cameraMake} ${info.cameraModel}: ${"%+.2f".format(matched)} EV")
                 println("RAW preview ${info.cameraMake} ${info.cameraModel}: ${preview.width}x${preview.height}, FP16 buffer ${preview.rgb.size.toLong() * 2} bytes, ${(System.nanoTime() - previewStarted) / 1_000_000} ms")
             }
             val asset = EditorAsset("raw:${original.name}", "", original.name, original.toURI().toString(), "", "2026-10-24T00:00:00Z")

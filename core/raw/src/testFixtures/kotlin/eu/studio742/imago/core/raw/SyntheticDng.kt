@@ -6,7 +6,13 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.DeflaterOutputStream
 
 /** A tiny, uncompressed Bayer DNG with enough distinct sensor values to detect 8-bit truncation. */
-internal fun syntheticDng(orientation: Int, compressed: Boolean = false, monochrome: Boolean = false, warmWhiteBalance: Boolean = false): ByteArray {
+internal fun syntheticDng(
+    orientation: Int,
+    compressed: Boolean = false,
+    monochrome: Boolean = false,
+    warmWhiteBalance: Boolean = false,
+    baselineExposure: Int? = null,
+): ByteArray {
     data class Tag(val id: Int, val type: Int, val count: Int, val data: ByteArray)
     fun shorts(vararg values: Int) = ByteBuffer.allocate(values.size * 2).order(ByteOrder.LITTLE_ENDIAN)
         .apply { values.forEach { putShort(it.toShort()) } }.array()
@@ -51,6 +57,7 @@ internal fun syntheticDng(orientation: Int, compressed: Boolean = false, monochr
     val matrix = intArrayOf(3240454, -1537138, -498531, -969266, 1876011, 41556, 55643, -204026, 1057225)
     tags += Tag(50721, 10, 9, longs(*matrix.flatMap { listOf(it, 1000000) }.toIntArray()))
     tags += Tag(50728, 5, 3, if (warmWhiteBalance) longs(1, 4, 1, 1, 1, 2) else longs(1, 1, 1, 1, 1, 1))
+    baselineExposure?.let { tags += Tag(50730, 10, 1, longs(it, 1)) }
     short(50778, 21)
     tags.sortBy { it.id }
     val directoryEnd = 8 + 2 + tags.size * 12 + 4

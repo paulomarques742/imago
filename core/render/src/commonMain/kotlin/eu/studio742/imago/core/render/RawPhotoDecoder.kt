@@ -9,6 +9,10 @@ import coil3.fetch.SourceFetchResult
 import coil3.request.Options
 import coil3.size.Dimension
 import eu.studio742.imago.core.model.EditRecipe
+import eu.studio742.imago.core.model.CURRENT_RAW_RENDERING
+import eu.studio742.imago.core.model.RAW_RENDERING_PROFILED
+import eu.studio742.imago.core.model.appliesBaselineExposure
+import eu.studio742.imago.core.model.rawRendering
 import eu.studio742.imago.core.raw.RawDecoder
 import java.io.File
 import java.util.WeakHashMap
@@ -29,11 +33,20 @@ class RawPhotoDecoder private constructor(private val file: File, private val op
     override suspend fun decode(): DecodeResult? {
         val side = maxOf((options.size.width as? Dimension.Pixels)?.px ?: 0,
             (options.size.height as? Dimension.Pixels)?.px ?: 0).takeIf { it > 0 }?.coerceAtMost(2048) ?: 2048
-        val raw = decodeRawPreview(file, side) ?: return null
         val recipe = options.extras[rawRecipeKey]
+        val raw = decodeRawPreview(file, side, recipe?.appliesBaselineExposure() ?: true) ?: return null
+        // A photo the editor has not developed yet is matched to its camera's JPEG here, as the editor
+        // will when it opens it; a developed one keeps the exposure its recipe recorded.
+        val matched = if (recipe?.rawDevelopment == null && (recipe?.rawRendering() ?: CURRENT_RAW_RENDERING) >= RAW_RENDERING_PROFILED) {
+            CameraExposureMatch.of(file, raw)
+        } else {
+            0f
+        }
         val bitmap = withContext(Dispatchers.Default) {
             if (recipe != null) requireRawEngine(recipe)
-            val rendered = RecipePixels.renderFloat(raw, recipe?.toRenderParameters() ?: RenderParameters(), consumeSource = true)
+            val parameters = recipe?.toRenderParameters(rawExposure = recipe.rawDevelopment?.exposure ?: matched)
+                ?: RenderParameters(rawProfile = RawProfile.COLOR, rawExposure = matched)
+            val rendered = RecipePixels.renderFloat(raw, parameters, consumeSource = true)
             rendered.toPixelBuffer().toPlatformBitmap().also { image ->
                 if (recipe != null) DevelopedRawBitmaps.mark(image, recipeTransformation(recipe).cacheKey)
             }

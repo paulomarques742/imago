@@ -323,6 +323,7 @@ object BitmapPhotoProcessor {
 
     /**
      * Steps 1 to 7 — white balance, exposure, whites and blacks — on an sRGB 0..1 triple, in place.
+     * A linear RAW leaves through its profile ([RawProfile]) instead of the sRGB transfer.
      *
      * It lives outside [processPixel] because the local adaptation mask needs exactly these steps and
      * no others: it is the image as it enters step 8 that decides what is a highlight and what is a
@@ -360,6 +361,10 @@ object BitmapPhotoProcessor {
         green += lift
         blue += lift
 
+        if (linearInput && tone.rawProfile != RawProfile.NONE) {
+            RawProfile.toDisplay(red, green, blue, tone.rawProfile, rgb)
+            return
+        }
         rgb[0] = linearToSrgb(red)
         rgb[1] = linearToSrgb(green)
         rgb[2] = linearToSrgb(blue)

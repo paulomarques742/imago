@@ -5,6 +5,12 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 20 is the second RAW rendering ([RAW_RENDERING_PROFILED]): a DNG at its BaselineExposure, the
+ * exposure its maker wants it seen at (+2 EV on a Samsung 50 MP DNG), and the linear development
+ * brought to the screen through a base profile ([profile]) instead of the plain sRGB transfer. Recipes
+ * written before keep the rendering they were edited on; an app at 19 would draw a new recipe dark
+ * and flat.
+ *
  * 19 adds a versioned RAW development stage; older apps must not render its recipes on JPEG previews.
  *
  * 17 activates range mask components (`MaskShape.LUMINANCE` and `MaskShape.COLOR`). No earlier app
@@ -56,15 +62,73 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 19
+const val CURRENT_PROCESS_VERSION = 20
 
 /** Process 19 adds a versioned RAW development stage before the existing editing pipeline. */
 const val RAW_PROCESS_VERSION = 19
 const val CURRENT_RAW_ENGINE = "libraw-0.22.2-imago-1"
 
+/** Process 19's rendering: the camera's linear development shown through the sRGB transfer alone. */
+const val RAW_RENDERING_LINEAR = 1
+
+/** Process 20's rendering: the DNG's BaselineExposure, and the [EditRecipe.profile] on the way to the screen. */
+const val RAW_RENDERING_PROFILED = 2
+const val CURRENT_RAW_RENDERING = RAW_RENDERING_PROFILED
+const val PROFILED_RAW_PROCESS_VERSION = 20
+
+/** The base profiles of a RAW, the first choice of Lightroom's Basic panel. A JPEG has none. */
+const val RAW_PROFILE_COLOR = "color"
+const val RAW_PROFILE_MONOCHROME = "monochrome"
+val RAW_PROFILES = listOf(RAW_PROFILE_COLOR, RAW_PROFILE_MONOCHROME)
+
+/**
+ * How the original is developed, which belongs to the photo: applying a recipe from another photo
+ * keeps the target's development.
+ *
+ * A missing engine field always means engine 1, including after future decoder upgrades. A missing
+ * [rendering] means process 19's, which every recipe edited then has.
+ *
+ * [exposure] is what made the development as bright as the JPEG the camera stored in the file, in
+ * stops, measured once when the photo was first developed and kept: the same on every device, and not
+ * changed by a better measurement later. Only rendering 2 has it; the Exposure slider is on top of it.
+ */
 @Serializable
-/** A missing engine field always means engine 1, including after future decoder upgrades. */
-data class RawDevelopment(val engine: String = "libraw-0.22.2-imago-1")
+data class RawDevelopment(
+    val engine: String = "libraw-0.22.2-imago-1",
+    val rendering: Int = RAW_RENDERING_LINEAR,
+    val exposure: Float = 0f,
+)
+
+/**
+ * How a RAW original is rendered for this recipe. A recipe that has not been opened as a RAW yet
+ * decides by the process it was written in.
+ */
+fun EditRecipe.rawRendering(): Int =
+    rawDevelopment?.rendering ?: if (processVersion >= PROFILED_RAW_PROCESS_VERSION) CURRENT_RAW_RENDERING else RAW_RENDERING_LINEAR
+
+/** Whether the original is developed at its DNG BaselineExposure, which the decoder has to know. */
+fun EditRecipe.appliesBaselineExposure(): Boolean = rawRendering() >= RAW_RENDERING_PROFILED
+
+/** A rendering or a profile this app does not know: the recipe was written by a newer one. */
+fun EditRecipe.needsNewerRawRendering(): Boolean =
+    (rawDevelopment?.rendering ?: RAW_RENDERING_LINEAR) > CURRENT_RAW_RENDERING || profile !in RAW_PROFILES
+
+/**
+ * The recipe as the editor holds it for a RAW original: at the current process, its development kept.
+ * [rendering] is what the original was decoded for, decided before the process was stamped;
+ * [exposure] what matched the camera's JPEG, for a development made now.
+ */
+fun EditRecipe.developedAsRaw(rendering: Int = rawRendering(), exposure: Float = 0f): EditRecipe = copy(
+    processVersion = CURRENT_PROCESS_VERSION,
+    rawDevelopment = rawDevelopment ?: RawDevelopment(
+        rendering = rendering,
+        exposure = if (rendering >= RAW_RENDERING_PROFILED) exposure else 0f,
+    ),
+)
+
+/** The development's own exposure, in stops, under the Exposure slider. */
+fun EditRecipe.rawExposure(): Float =
+    if (rawRendering() >= RAW_RENDERING_PROFILED) rawDevelopment?.exposure ?: 0f else 0f
 
 @Serializable
 data class EditRecipe(
@@ -87,6 +151,8 @@ data class EditRecipe(
     val masks: List<LocalMask> = emptyList(),
     val retouches: List<Retouch> = emptyList(),
     val rawDevelopment: RawDevelopment? = null,
+    /** One of [RAW_PROFILES]; part of the look, so it travels with the recipe. Only a RAW reads it. */
+    val profile: String = RAW_PROFILE_COLOR,
 )
 
 /**

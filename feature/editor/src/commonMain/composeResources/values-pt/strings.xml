@@ -91,6 +91,10 @@
     <string name="editor_curve_channel_red">Vermelho</string>
     <string name="editor_curve_channel_green">Verde</string>
     <string name="editor_curve_channel_blue">Azul</string>
+    <string name="editor_profile">Perfil</string>
+    <string name="editor_profile_choose">Escolher o perfil</string>
+    <string name="editor_profile_color">Cor</string>
+    <string name="editor_profile_monochrome">Monocromático</string>
     <string name="editor_white_balance">Equilíbrio de brancos</string>
     <string name="editor_white_balance_picker">Seletor do equilíbrio de brancos</string>
     <string name="editor_white_balance_pick">Escolher o equilíbrio de brancos na foto</string>

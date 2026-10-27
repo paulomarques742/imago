@@ -12,6 +12,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import eu.studio742.imago.core.model.CURRENT_RAW_RENDERING
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.render.BitmapPhotoProcessor
 import eu.studio742.imago.core.render.BrushRasters
@@ -51,16 +52,33 @@ object RecipePreviewCache {
     private var sourceKey: String? = null
     private var source: PixelBuffer? = null
     private var floatSource: FloatPixelBuffer? = null
+    /** How the open photo's RAW is developed: a preset is shown on it as applying it would show it. */
+    private var rawRendering: Int = CURRENT_RAW_RENDERING
+    private var rawExposure: Float = 0f
 
     /** The source's Auto white balance, found the first time a recipe with Auto asks for it. */
     private var sourceAuto: Pair<PixelBuffer, NeutralWhiteBalance?>? = null
 
     /** Sets the source photo. Switching photos throws away the old previews. */
-    fun setSource(assetId: String, bitmap: coil3.Bitmap, highPrecision: FloatPixelBuffer? = null) = setSource(assetId, bitmap.toPixelBuffer(), highPrecision)
+    fun setSource(
+        assetId: String,
+        bitmap: coil3.Bitmap,
+        highPrecision: FloatPixelBuffer? = null,
+        rendering: Int = CURRENT_RAW_RENDERING,
+        exposure: Float = 0f,
+    ) = setSource(assetId, bitmap.toPixelBuffer(), highPrecision, rendering, exposure)
 
     @Synchronized
-    fun setSource(assetId: String, pixels: PixelBuffer, highPrecision: FloatPixelBuffer? = null) {
+    fun setSource(
+        assetId: String,
+        pixels: PixelBuffer,
+        highPrecision: FloatPixelBuffer? = null,
+        rendering: Int = CURRENT_RAW_RENDERING,
+        exposure: Float = 0f,
+    ) {
         if (sourceKey == assetId && source != null) return
+        rawRendering = rendering
+        rawExposure = exposure
         cache.clear()
         sourceKey = assetId
         source = RecipePixels.reduce(pixels, PREVIEW_MAX_EDGE)
@@ -87,6 +105,10 @@ object RecipePreviewCache {
     private fun sourceFor(assetId: String): PixelBuffer? = source.takeIf { sourceKey == assetId }
     @Synchronized
     private fun floatSourceFor(assetId: String): FloatPixelBuffer? = floatSource.takeIf { sourceKey == assetId }
+    @Synchronized
+    private fun renderingFor(assetId: String): Int = if (sourceKey == assetId) rawRendering else CURRENT_RAW_RENDERING
+    @Synchronized
+    private fun exposureFor(assetId: String): Float = if (sourceKey == assetId) rawExposure else 0f
 
     @Synchronized
     private fun autoOf(origin: PixelBuffer): NeutralWhiteBalance? {
@@ -101,10 +123,12 @@ object RecipePreviewCache {
         cached(key)?.let { return it }
         val origin = sourceFor(assetId) ?: return null
         val precise = floatSourceFor(assetId)
+        val rendering = renderingFor(assetId)
+        val exposure = exposureFor(assetId)
         val rendered = withContext(Dispatchers.Default) {
             // A recipe with Auto shows what Auto finds on this photo, which is what applying it does.
             val shown = if (recipe.whiteBalance.auto) recipe.withAutoWhiteBalance(autoOf(origin)) else recipe
-            val parameters = shown.toRenderParameters()
+            val parameters = shown.toRenderParameters(rawRendering = rendering, rawExposure = exposure)
             if (precise != null) RecipePixels.renderFloat(precise, parameters).toPixelBuffer().toImageBitmap() else BitmapPhotoProcessor.renderInPlace(
                 origin.copy(),
                 parameters,

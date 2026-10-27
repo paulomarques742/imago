@@ -4,13 +4,18 @@ import java.io.File
 import java.util.concurrent.CancellationException
 import java.util.concurrent.locks.ReentrantLock
 
-/** Scene-linear sRGB after camera white balance and orientation, including values above white. */
+/**
+ * Scene-linear sRGB after camera white balance and orientation, including values above white.
+ * [baselineExposure] is the DNG's BaselineExposure in stops, 0 when the file has none, whether or not
+ * the decode applied it.
+ */
 class RawImage(
     val width: Int,
     val height: Int,
     val rgb: ShortArray,
     val cameraMake: String,
     val cameraModel: String,
+    val baselineExposure: Float = 0f,
 ) {
     init {
         require(width > 0 && height > 0)
@@ -40,15 +45,27 @@ object RawDecoder {
      * Null means that this LibRaw build does not recognize the input. A recognized but damaged
      * image throws [RawDecodeException]. Run on a worker thread; interrupt it to cancel decoding.
      * Native file I/O keeps large originals out of the JVM heap.
+     *
+     * [baselineExposure] scales the developed values by the DNG's BaselineExposure, which LibRaw only
+     * reads; whether to is the recipe's choice, not the decoder's.
      */
-    fun decode(file: File, halfSize: Boolean = false): RawImage? {
-        return RawDecodeQueue.run { NativeRaw.decode(file.absolutePath, halfSize, 0) }
+    fun decode(file: File, halfSize: Boolean = false, baselineExposure: Boolean = false): RawImage? {
+        return RawDecodeQueue.run { NativeRaw.decode(file.absolutePath, halfSize, 0, baselineExposure) }
+    }
+
+    /**
+     * The JPEG the camera rendered and stored inside the original, or null when the file has none
+     * (or keeps it as a bitmap). Reads the header and the preview only, never the sensor.
+     */
+    fun embeddedJpeg(file: File): ByteArray? {
+        if (Thread.currentThread().isInterrupted) throw CancellationException()
+        return NativeRaw.embeddedJpeg(file.absolutePath)
     }
 
     /** Bounds the JVM buffer before allocation, retaining linear precision and highlight headroom. */
-    fun decodePreview(file: File, maxSide: Int): RawImage? {
+    fun decodePreview(file: File, maxSide: Int, baselineExposure: Boolean = false): RawImage? {
         require(maxSide > 0)
-        return RawDecodeQueue.run { NativeRaw.decode(file.absolutePath, true, maxSide) }
+        return RawDecodeQueue.run { NativeRaw.decode(file.absolutePath, true, maxSide, baselineExposure) }
     }
 }
 
@@ -76,7 +93,8 @@ internal object NativeRaw {
     external fun version(): String
     external fun cameras(): Array<String>
     external fun identify(path: String): RawInfo?
-    external fun decode(path: String, halfSize: Boolean, maxSide: Int): RawImage?
+    external fun embeddedJpeg(path: String): ByteArray?
+    external fun decode(path: String, halfSize: Boolean, maxSide: Int, baselineExposure: Boolean): RawImage?
 }
 
 internal expect fun loadRawLibrary()

@@ -203,6 +203,9 @@ import eu.studio742.imago.core.designsystem.LocalImagoWindow
 import eu.studio742.imago.core.designsystem.LocalReducedMotion
 import eu.studio742.imago.core.designsystem.imagoGlassBlur
 import eu.studio742.imago.core.designsystem.imagoTween
+import eu.studio742.imago.core.model.rawExposure
+import eu.studio742.imago.core.model.rawRendering
+import eu.studio742.imago.core.model.CURRENT_RAW_RENDERING
 import eu.studio742.imago.core.model.RecipePart
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.CropRect
@@ -424,6 +427,7 @@ fun EditorRoute(
                 onAccept = viewModel::acceptWhiteBalancePick,
                 onCancel = viewModel::cancelWhiteBalancePick,
                 onPreset = viewModel::selectWhiteBalancePreset,
+                onProfile = viewModel::selectProfile,
             )
         },
         perspectiveActions = remember(viewModel) {
@@ -901,7 +905,8 @@ private fun EditorScreen(
     // photos throws away the previous ones, which no longer describe anything.
     LaunchedEffect(assetId, state.bitmap) {
         val bitmap = state.bitmap ?: return@LaunchedEffect
-        RecipePreviewCache.setSource(assetId ?: return@LaunchedEffect, bitmap, state.highPrecisionSource)
+        RecipePreviewCache.setSource(assetId ?: return@LaunchedEffect, bitmap, state.highPrecisionSource,
+            state.recipe?.rawRendering() ?: CURRENT_RAW_RENDERING, state.recipe?.rawExposure() ?: 0f)
     }
     // Undo, redo and compare are what is done most often while developing a photo, and on a tablet
     // with a keyboard there is no reason to fetch them from the bar every time. Backslash is the compare
@@ -2499,6 +2504,16 @@ private fun AdjustmentPanel(
                         onAdjustmentFinished = onAdjustmentFinished,
                         onResetAdjustment = onResetAdjustment,
                         whiteBalanceActions = whiteBalanceActions,
+                        header = {
+                            val recipe = state.recipe
+                            if (state.panel == EditorPanel.COLOR && state.showsRawProfile && recipe != null) {
+                                ProfileRow(
+                                    current = RawProfileChoice.of(recipe.profile),
+                                    onSelect = whiteBalanceActions.onProfile,
+                                    modifier = Modifier.alpha(if (editingKey == null) 1f else 0f),
+                                )
+                            }
+                        },
                     )
                 }
                 EditorSheet.CURVE -> CurvePanel(
@@ -2761,6 +2776,51 @@ private fun WhiteBalancePresetMenu(current: WhiteBalancePreset, onSelect: (White
                         onSelect(preset)
                     },
                 )
+            }
+        }
+    }
+}
+
+/**
+ * The RAW's base profile, above the white balance as Lightroom has it above everything: its name and
+ * a menu of the others.
+ */
+@Composable
+private fun ProfileRow(current: RawProfileChoice, onSelect: (RawProfileChoice) -> Unit, modifier: Modifier = Modifier) {
+    var open by remember { mutableStateOf(false) }
+    val description = stringResource(Res.string.editor_profile_choose)
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = stringResource(Res.string.editor_profile),
+            style = MaterialTheme.typography.labelLarge,
+            color = ImagoColors.Gold,
+            modifier = Modifier
+                .weight(1f)
+                .padding(top = ImagoSpacing.Sm, bottom = ImagoSpacing.Xs),
+        )
+        Box {
+            TextButton(
+                onClick = { open = true },
+                modifier = Modifier.semantics { contentDescription = description },
+            ) {
+                Text(stringResource(current.labelRes), style = MaterialTheme.typography.labelLarge, color = ImagoColors.TextSecondary)
+                Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = ImagoColors.TextSecondary)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                RawProfileChoice.entries.forEach { choice ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                stringResource(choice.labelRes),
+                                color = if (choice == current) ImagoColors.Gold else ImagoColors.TextPrimary,
+                            )
+                        },
+                        onClick = {
+                            open = false
+                            onSelect(choice)
+                        },
+                    )
+                }
             }
         }
     }
@@ -3503,6 +3563,8 @@ data class WhiteBalancePickActions(
     val onAccept: () -> Unit,
     val onCancel: () -> Unit,
     val onPreset: (WhiteBalancePreset) -> Unit,
+    /** The RAW profile's menu, at the top of the same Colour panel. */
+    val onProfile: (RawProfileChoice) -> Unit,
 )
 
 /** What the perspective sheet asks of the screen besides the sliders, which go the way of all others. */

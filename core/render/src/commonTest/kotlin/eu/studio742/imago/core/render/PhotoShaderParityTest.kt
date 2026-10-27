@@ -210,6 +210,30 @@ class PhotoShaderParityTest {
         )
     }
 
+    /** The RAW profile is the last thing both base steps do, with RawProfile's curve and hue-keeping tone. */
+    @Test
+    fun theRawProfileIsTheSameOnBothSides() {
+        listOf(
+            "x * (1.0 + uRawProfileKnee) / (x + uRawProfileKnee)" to "the profile's curve",
+            "1.0 + uRawProfileKnee / (1.0 + uRawProfileKnee) * (x - 1.0)" to "the straight line past white",
+            "if (uSourceLinear == 0 || uRawProfile == 0) return toSrgb(linear);" to "sRGB for a JPEG and process 19",
+            "if (uRawProfile == 2) return vec3(rawProfileCurve(luminance(c)));" to "monochrome as the toned luminance",
+            "return bottom + (c - low) * ((top - bottom) / (high - low));" to "the middle channel kept between the others",
+            "return toDisplay(linear);" to "the profile at the end of the base tone",
+        ).forEach { (fragment, what) ->
+            assertTrue(
+                "Both base step shaders should contain $what — \"$fragment\".",
+                PhotoShaders.TONE.contains(fragment) && PhotoShaders.LOCAL_BASE.contains(fragment),
+            )
+        }
+        assertEquals(RawProfile.MONOCHROME, 2)
+        assertEquals(RawProfile.NONE, 0)
+        listOf(PhotoShaders.TONE, PhotoShaders.LOCAL_BASE).forEach { shader ->
+            assertTrue(shader.indexOf("uniform float uRawProfileKnee;") in 0 until shader.indexOf("float rawProfileCurve"))
+            assertTrue(shader.indexOf("vec3 toDisplay") < shader.indexOf("vec3 applyBaseTone"))
+        }
+    }
+
     /** Negative is the value that says "no mask", on both sides. */
     @Test
     fun theAbsentMaskIsSpelledTheSameWayInBothImplementations() {

@@ -242,6 +242,8 @@ internal class EffectiveTone {
     var dehaze = 0f
     /** From process 13 the white balance is a light and an adaptation; before it, three gains. */
     var lightWhiteBalance = true
+    /** How a linear RAW reaches the screen; masks never change it. */
+    var rawProfile = RawProfile.NONE
 
     private var matrixTemperature = Float.NaN
     private var matrixTint = Float.NaN
@@ -263,7 +265,7 @@ internal class EffectiveTone {
     fun loadGlobal(parameters: RenderParameters) {
         temperature = parameters.temperature
         tint = parameters.tint
-        exposure = parameters.exposure
+        exposure = parameters.exposure + parameters.rawExposure
         contrast = parameters.contrast
         highlights = parameters.highlights
         shadows = parameters.shadows
@@ -275,5 +277,6 @@ internal class EffectiveTone {
         clarity = parameters.clarity
         dehaze = parameters.dehaze
         lightWhiteBalance = parameters.lightWhiteBalance
+        rawProfile = parameters.rawProfile
     }
 }

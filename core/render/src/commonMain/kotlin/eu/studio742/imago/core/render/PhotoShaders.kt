@@ -218,6 +218,26 @@ internal object PhotoShaders {
             return dot(c, vec3(0.2126, 0.7152, 0.0722));
         }
 
+        // RawProfile: a linear RAW reaches the screen through its profile, anything else through sRGB.
+        float rawProfileCurve(float x) {
+            x = max(x, 0.0);
+            return x > 1.0
+                ? 1.0 + uRawProfileKnee / (1.0 + uRawProfileKnee) * (x - 1.0)
+                : x * (1.0 + uRawProfileKnee) / (x + uRawProfileKnee);
+        }
+
+        vec3 toDisplay(vec3 linear) {
+            if (uSourceLinear == 0 || uRawProfile == 0) return toSrgb(linear);
+            vec3 c = max(linear, vec3(0.0));
+            if (uRawProfile == 2) return vec3(rawProfileCurve(luminance(c)));
+            float high = max(c.r, max(c.g, c.b));
+            float low = min(c.r, min(c.g, c.b));
+            float top = rawProfileCurve(high);
+            if (high - low < 1e-6) return vec3(top);
+            float bottom = rawProfileCurve(low);
+            return bottom + (c - low) * ((top - bottom) / (high - low));
+        }
+
         // WhiteBalanceModel, for the pixels where a mask moves Temperature or Tint; elsewhere the
         // matrix built in Kotlin at the global sliders. The constants come from there as uniforms.
         vec2 planckUv(float mired) {
@@ -267,7 +287,7 @@ internal object PhotoShaders {
             float l = luminance(linear);
             linear += blacks * (1.0 - smoothstep(0.0, 0.35, l)) * 0.18;
             linear += whites * smoothstep(0.55, 1.0, l) * 0.22;
-            return toSrgb(linear);
+            return toDisplay(linear);
         }
     """
 
@@ -314,6 +334,8 @@ internal object PhotoShaders {
         precision highp float;
         uniform sampler2D uTexture;
         uniform int uSourceLinear;
+        uniform int uRawProfile;
+        uniform float uRawProfileKnee;
         uniform vec2 uSourceTexel;
         uniform float uTemperature;
         uniform float uTint;
@@ -358,6 +380,8 @@ internal object PhotoShaders {
         precision highp float;
         uniform sampler2D uTexture;
         uniform int uSourceLinear;
+        uniform int uRawProfile;
+        uniform float uRawProfileKnee;
         uniform sampler2D uLocalBlur;
         uniform int uLocalEnabled;
         uniform float uTemperature;

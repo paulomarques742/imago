@@ -202,7 +202,8 @@ private fun maskIds(from: EditRecipe, to: EditRecipe): List<String> =
     (to.masks.map { it.id } + from.masks.map { it.id }).distinct()
 
 /**
- * The photo before any adjustment: the same asset and process version, everything else at neutral.
+ * The photo before any adjustment: the same asset, process version and RAW development, everything
+ * else at neutral — the default profile included.
  *
  * The masks stay, with their adjustments at zero — a mask without adjustments changes no pixel, and
  * keeping it lets the step that raises its sliders show the region it acts on.
@@ -216,6 +217,7 @@ internal fun EditRecipe.neutral(): EditRecipe = EditRecipe(
     updatedAt = updatedAt,
     derivedAssetId = derivedAssetId,
     masks = masks.map { it.copy(adjustments = LocalAdjustments()) },
+    rawDevelopment = rawDevelopment,
 )
 
 /** Whether two recipes draw the same photo, ignoring when they were written. */
@@ -226,7 +228,7 @@ internal fun EditRecipe.drawsLike(other: EditRecipe): Boolean =
  * The recipe a fraction [t] of the way from [from] to [to].
  *
  * Every number moves in a straight line. What has no in-between — the 90° turns, the flips, the
- * Upright mode, a mask's inversion — changes halfway. The ends are returned as they are, so the
+ * Upright mode, a mask's inversion, the profile — changes halfway. The ends are returned as they are, so the
  * last frame of a step is exactly the recipe the editor saved.
  */
 internal fun interpolateRecipe(from: EditRecipe, to: EditRecipe, t: Float): EditRecipe {
@@ -234,6 +236,7 @@ internal fun interpolateRecipe(from: EditRecipe, to: EditRecipe, t: Float): Edit
     if (t >= 1f) return to
     val late = t >= 0.5f
     return to.copy(
+        profile = if (late) to.profile else from.profile,
         whiteBalance = WhiteBalance(
             temp = lerp(from.whiteBalance.temp, to.whiteBalance.temp, t),
             tint = lerp(from.whiteBalance.tint, to.whiteBalance.tint, t),

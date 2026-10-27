@@ -78,6 +78,7 @@ internal val RECIPE_PART_GROUPS: List<RecipePartGroup> = listOf(
     RecipePartGroup(
         Res.string.editor_panel_color,
         listOf(
+            RecipePart.PROFILE to Res.string.editor_profile,
             RecipePart.WHITE_BALANCE to Res.string.editor_white_balance,
             RecipePart.VIBRANCE to Res.string.editor_adj_vibrance,
             RecipePart.SATURATION to Res.string.editor_adj_saturation,

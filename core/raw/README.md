@@ -27,6 +27,21 @@ The editor, recipe thumbnails, Coil library previews, full-resolution JPEG expor
 use the same source and processing. Recipes record the development engine and process version;
 unknown engines are rejected rather than silently interpreted with the current decoder.
 
+## DNG opcode lists
+
+Without the Adobe DNG SDK, LibRaw reads `OpcodeList1`, `OpcodeList2` and `OpcodeList3` as raw bytes into
+`imgdata.color.dng_levels.rawopcodes` and applies none of them; it only uses a `MapPolynomial` from
+`OpcodeList2` to build the tone curve of lossy DNGs. Lens shading (`GainMap`), distortion
+(`WarpRectilinear`) and vignetting (`FixVignetteRadial`) that phones write into their DNGs are therefore
+not part of the current development. `tools/dng_opcodes.py FILE_OR_FOLDER` lists the opcode lists,
+colour matrices and as-shot neutral of DNG files without reading sensor data, using only the Python
+standard library.
+
+LibRaw also reads a DNG's `BaselineExposure` without applying it. `decode` and `decodePreview` scale
+the developed values by 2^BaselineExposure when asked (`baselineExposure = true`) and always report the
+value found in `RawImage.baselineExposure`. Whether to apply it is the recipe's choice: recipes from
+before process 20 were edited without it.
+
 ## Native builds
 
 Android uses the pinned NDK and CMake versions in `build.gradle.kts`, packaged through the render

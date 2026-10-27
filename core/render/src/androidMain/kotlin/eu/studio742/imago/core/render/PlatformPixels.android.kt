@@ -31,4 +31,16 @@ actual fun decodePixels(bytes: ByteArray): PixelBuffer? = runCatching {
         ?.toPixelBuffer()
 }.getOrNull()
 
+actual fun decodePixelsReduced(bytes: ByteArray, minSide: Int): PixelBuffer? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= minSide) sample *= 2
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply {
+        inPreferredConfig = Bitmap.Config.ARGB_8888
+        inSampleSize = sample
+    })?.toPixelBuffer()
+}.getOrNull()
+
 actual fun ImageRequest.Builder.softwareBitmap(): ImageRequest.Builder = allowHardware(false)

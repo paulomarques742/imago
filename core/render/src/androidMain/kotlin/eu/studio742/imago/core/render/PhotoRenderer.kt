@@ -194,7 +194,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
             pendingUpload = false
         }
 
-        val active = if (showOriginal) RenderParameters() else parameters
+        val active = if (showOriginal) parameters.original else parameters
         if (!ensureStage()) return
         val maskFields = if (active.needsMaskField) buildMaskField(active) else 0
         val local = active.needsLocalToneMask && buildLocalToneMask(active, maskFields)
@@ -455,7 +455,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         program.float("uTemperature", active.temperature / 100f)
         program.float("uTint", active.tint / 100f)
         bindWhiteBalance(program, active)
-        program.float("uExposure", active.exposure)
+        program.float("uExposure", active.exposure + active.rawExposure)
         program.float("uWhites", active.whites / 100f)
         program.float("uBlacks", active.blacks / 100f)
         bindMaskBase(program, active, maskFields)
@@ -481,7 +481,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         program.float("uTemperature", active.temperature / 100f)
         program.float("uTint", active.tint / 100f)
         bindWhiteBalance(program, active)
-        program.float("uExposure", active.exposure)
+        program.float("uExposure", active.exposure + active.rawExposure)
         program.float("uContrast", active.contrast / 100f)
         program.float("uHighlights", active.highlights / 100f)
         program.float("uShadows", active.shadows / 100f)
@@ -732,6 +732,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
      */
     private fun bindWhiteBalance(program: GlProgram, active: RenderParameters) {
         program.boolean("uSourceLinear", highPrecisionSource?.linear == true)
+        program.int("uRawProfile", active.rawProfile)
+        program.float("uRawProfileKnee", RawProfile.KNEE)
         program.boolean("uLightWhiteBalance", active.lightWhiteBalance)
         if (!active.lightWhiteBalance) return
         program.mat3("uWhiteBalance", WhiteBalanceModel.matrix(active.temperature / 100f, active.tint / 100f))

@@ -43,7 +43,7 @@ actual fun PhotoCanvas(
     // Painted over the full photo and given to the draft too: a brush raster does not depend on the
     // size of what it is drawn on, and a stroke being drawn only adds its newest dabs.
     val brushCache = remember(source) { BrushRasterCache() }
-    val active = if (showOriginal) RenderParameters() else parameters
+    val active = if (showOriginal) parameters.original else parameters
     var frame by remember(source) { mutableStateOf<ImageBitmap?>(null) }
 
     LaunchedEffect(source, highPrecisionSource, active, maskOverlay) {
