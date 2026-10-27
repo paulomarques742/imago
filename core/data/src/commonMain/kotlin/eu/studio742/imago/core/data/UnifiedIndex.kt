@@ -50,6 +50,11 @@ const val SAVED_RECIPE_PARTS_SQL = "ALTER TABLE `saved_recipes` ADD COLUMN `part
 const val HIDDEN_FOLDERS_SQL =
     "CREATE TABLE IF NOT EXISTS `hidden_folders` (`libraryKey` TEXT NOT NULL, `folderId` TEXT NOT NULL, PRIMARY KEY(`libraryKey`, `folderId`))"
 
+/** Version 20: which photos are in which of a server's albums, so an album opens from the catalogue. */
+const val ALBUM_MEMBERS_SQL =
+    "CREATE TABLE IF NOT EXISTS `album_members` (`libraryKey` TEXT NOT NULL, `albumId` TEXT NOT NULL, `assetId` TEXT NOT NULL, " +
+        "`position` INTEGER NOT NULL, `refreshedAt` INTEGER NOT NULL, PRIMARY KEY(`libraryKey`, `albumId`, `assetId`))"
+
 /** The index of version 12, as Room names it; the same statement on both apps. */
 const val UNIFIED_INDEX_SQL =
     "CREATE INDEX IF NOT EXISTS index_assets_libraryKey_originalFileName ON assets (libraryKey, originalFileName)"

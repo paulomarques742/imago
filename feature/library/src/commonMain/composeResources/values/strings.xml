@@ -75,6 +75,7 @@
     <string name="library_has_local_edit">Has a local edit</string>
     <string name="library_edited_in_immich">Edited in Immich</string>
     <string name="library_refreshing">Refreshing the library…</string>
+    <string name="library_refreshing_album">Updating the album…</string>
     <string name="library_syncing_timeline">Syncing the timeline · %1$s of %2$s months</string>
     <string name="library_load_failed">Couldn’t load the library.</string>
     <string name="library_retry">Try again</string>

@@ -75,6 +75,7 @@
     <string name="library_has_local_edit">Tem edição local</string>
     <string name="library_edited_in_immich">Editada no Immich</string>
     <string name="library_refreshing">A atualizar a biblioteca…</string>
+    <string name="library_refreshing_album">A atualizar o álbum…</string>
     <string name="library_syncing_timeline">A sincronizar a cronologia · %1$s de %2$s meses</string>
     <string name="library_load_failed">Não foi possível carregar a biblioteca.</string>
     <string name="library_retry">Tentar novamente</string>

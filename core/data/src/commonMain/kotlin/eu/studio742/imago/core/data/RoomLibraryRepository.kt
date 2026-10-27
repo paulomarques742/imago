@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import eu.studio742.imago.core.data.db.AlbumMemberEntity
 import eu.studio742.imago.core.data.db.AssetEntity
 import eu.studio742.imago.core.data.db.CatalogMonthEntity
 import eu.studio742.imago.core.data.db.ImmichRoomDatabase
@@ -85,22 +86,21 @@ class RoomLibraryRepository @Inject constructor(
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
         val trimmedQuery = query?.trim()?.takeIf(String::isNotEmpty)
         if (albumId != null) {
+            // From the catalogue, at once; the mediator reads the album from the server behind it and
+            // the grid follows what it writes. Opening an album used to wait for the server every time.
             return Pager(
-                config = PagingConfig(
-                    pageSize = PAGE_SIZE,
-                    // By default Paging would ask the local source for `pageSize * 3` on the first
-                    // load, but the mediator only brings one page from the server at a time: the
-                    // difference was settled with two immediate APPENDs right after launch.
-                    initialLoadSize = PAGE_SIZE,
-                    prefetchDistance = 30,
-                    enablePlaceholders = false,
-                ),
+                config = PagingConfig(pageSize = PAGE_SIZE, prefetchDistance = 30, enablePlaceholders = false),
+                remoteMediator = AlbumRemoteMediator(database, api, derivedAssets, connection, libraryKey, albumId),
                 pagingSourceFactory = {
-                    AlbumAssetPagingSource(
-                        database, api, derivedAssets, connection, libraryKey, albumId, filter, trimmedQuery,
+                    database.albumMemberDao().pagingSource(
+                        libraryKey = libraryKey,
+                        albumId = albumId,
+                        favoritesOnly = filter == LibraryFilter.FAVORITES,
+                        editedOnly = filter == LibraryFilter.EDITED,
+                        query = trimmedQuery,
                     )
                 },
-            ).flow
+            ).flow.map { data -> data.map(AssetEntity::toDomain) }
         }
         val monthStart = month?.let { LocalDate.parse(it).withDayOfMonth(1) }
         // "Recent" is a sliding window, not a month; when both are active the month wins, as in the
@@ -776,6 +776,69 @@ private const val SQL_VARIABLES_PER_QUERY = 500
  * present them.
  */
 private val LIBRARY_ASSET_TYPES = setOf(AssetType.IMAGE, AssetType.VIDEO)
+
+/**
+ * An album read whole from the server into the catalogue, each time it is opened.
+ *
+ * The grid is already showing what the catalogue had; this corrects it. Each page is written as it
+ * arrives, so an album never opened before fills in from the top as it would have from the server, and
+ * once the last page is in, the photos the read did not find — taken out of the album elsewhere — go.
+ * A read that fails halfway removes nothing: what is kept is still the last complete answer, plus
+ * whatever this one had brought.
+ */
+@OptIn(ExperimentalPagingApi::class)
+private class AlbumRemoteMediator(
+    private val database: ImmichRoomDatabase,
+    private val api: ImmichApi,
+    private val derivedAssets: DerivedAssetRepository,
+    private val connection: ImmichConnection,
+    private val libraryKey: String,
+    private val albumId: String,
+) : RemoteMediator<Int, AssetEntity>() {
+    override suspend fun initialize(): InitializeAction = InitializeAction.LAUNCH_INITIAL_REFRESH
+
+    override suspend fun load(
+        loadType: LoadType,
+        state: androidx.paging.PagingState<Int, AssetEntity>,
+    ): MediatorResult {
+        // The refresh brings the whole album: there is never a next page to ask for.
+        if (loadType != LoadType.REFRESH) return MediatorResult.Success(endOfPaginationReached = true)
+        return try {
+            val readAt = System.currentTimeMillis()
+            var page: Int? = 1
+            var position = 0
+            while (page != null) {
+                // The chips and the search are applied to the catalogue: the album is read whole once,
+                // not once per chip.
+                val result = api.searchAssets(
+                    connection = connection,
+                    page = page,
+                    pageSize = PAGE_SIZE,
+                    filter = LibraryFilter.ALL,
+                    albumId = albumId,
+                )
+                val derivedIds = derivedAssets.derivedIds()
+                database.withTransaction {
+                    val shown = database.upsertFromSearch(libraryKey, result.items, derivedIds)
+                    database.assetDao().restoreLocalRecipeFlags(libraryKey)
+                    database.albumMemberDao().upsertAll(
+                        shown.map { asset -> AlbumMemberEntity(libraryKey, albumId, asset.id, position++, readAt) },
+                    )
+                }
+                page = result.nextPage
+            }
+            database.albumMemberDao().removeUnseen(libraryKey, albumId, readAt)
+            MediatorResult.Success(endOfPaginationReached = true)
+        } catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            MediatorResult.Error(error)
+        }
+    }
+
+    private companion object {
+        const val PAGE_SIZE = 100
+    }
+}
 
 @OptIn(ExperimentalPagingApi::class)
 private class AssetRemoteMediator(

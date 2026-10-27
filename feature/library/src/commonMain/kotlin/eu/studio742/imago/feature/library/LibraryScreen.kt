@@ -720,7 +720,13 @@ private fun LibraryScreen(
                 uiState.selectedMonth?.takeIf { !inAlbum && !selecting }?.let { month ->
                     SelectedMonthChip(month = month, onClear = { onSelectMonth(null) })
                 }
-                if (catalogSync.syncing) CatalogSyncBar(catalogSync)
+                if (catalogSync.syncing) {
+                    CatalogSyncBar(catalogSync)
+                } else if (inAlbum && assets.itemCount > 0 && assets.loadState.mediator?.refresh is LoadState.Loading) {
+                    // The album shows what the catalogue had while the server is asked: this says the
+                    // grid may still change. Empty, the grid's own spinner already says it.
+                    CatalogSyncBar(CatalogSyncState(syncing = true), label = stringResource(Res.string.library_refreshing_album))
+                }
             }
         },
         bottomBar = {
@@ -2030,26 +2036,32 @@ private fun PlaceholderTile() {
  * nothing: the library works anyway while it runs, it just does not reach every year yet.
  */
 @Composable
-private fun CatalogSyncBar(state: CatalogSyncState) {
+private fun CatalogSyncBar(state: CatalogSyncState, label: String? = null) {
     Column(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = ImagoSpacing.Lg, vertical = ImagoSpacing.Sm),
     ) {
         Text(
-            text = if (state.total == 0) stringResource(Res.string.library_refreshing) else stringResource(Res.string.library_syncing_timeline, state.done, state.total),
+            text = label ?: if (state.total == 0) stringResource(Res.string.library_refreshing) else stringResource(Res.string.library_syncing_timeline, state.done, state.total),
             style = MaterialTheme.typography.labelSmall,
             color = ImagoColors.TextTertiary,
         )
-        LinearProgressIndicator(
-            progress = { if (state.total == 0) 0f else state.done.toFloat() / state.total },
-            color = ImagoColors.Ivory,
-            trackColor = ImagoColors.BorderSubtle,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = ImagoSpacing.Xs)
-                .height(2.dp),
-        )
+        val barModifier = Modifier
+            .fillMaxWidth()
+            .padding(top = ImagoSpacing.Xs)
+            .height(2.dp)
+        // Without a count there is no fraction to show: the bar moves instead of sitting empty.
+        if (state.total == 0) {
+            LinearProgressIndicator(color = ImagoColors.Ivory, trackColor = ImagoColors.BorderSubtle, modifier = barModifier)
+        } else {
+            LinearProgressIndicator(
+                progress = { state.done.toFloat() / state.total },
+                color = ImagoColors.Ivory,
+                trackColor = ImagoColors.BorderSubtle,
+                modifier = barModifier,
+            )
+        }
     }
 }
 

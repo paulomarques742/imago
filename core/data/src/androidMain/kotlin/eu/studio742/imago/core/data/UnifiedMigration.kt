@@ -55,4 +55,9 @@ object UnifiedMigration {
             db.execSQL(HIDDEN_FOLDERS_SQL)
         }
     }
+    val MIGRATION_19_20 = object : Migration(19, 20) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(ALBUM_MEMBERS_SQL)
+        }
+    }
 }
