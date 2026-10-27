@@ -27,7 +27,7 @@ import kotlin.math.roundToInt
  *
  * @throws IllegalStateException from the constructor when the device gives no OpenGL ES 3 context
  */
-class OffscreenRecipeRenderer(private val source: Bitmap) : AutoCloseable {
+class OffscreenRecipeRenderer(private var source: Bitmap) : AutoCloseable {
     private val thread = Executors.newSingleThreadExecutor { Thread(it, "imago-offscreen-gl") }
     private val renderer = PhotoRenderer()
     private var display: EGLDisplay = EGL14.EGL_NO_DISPLAY
@@ -51,13 +51,28 @@ class OffscreenRecipeRenderer(private val source: Bitmap) : AutoCloseable {
     }
 
     /** [parameters] over the source, framed, with its longest side at most [maxSide]. */
-    fun render(parameters: RenderParameters, maxSide: Int): Bitmap = onThread {
+    fun render(parameters: RenderParameters, maxSide: Int): Bitmap = onThread { draw(parameters, maxSide) }
+
+    /**
+     * [parameters] over another photo, on the same context: what the library's previews use, one photo
+     * after another, without paying for a context and the shaders each time.
+     */
+    fun render(source: Bitmap, parameters: RenderParameters, maxSide: Int): Bitmap = onThread {
+        if (source !== this.source) {
+            this.source = source
+            renderer.setBitmap(source)
+        }
+        draw(parameters, maxSide)
+    }
+
+    /** On the GL thread: one frame of [parameters], read back. */
+    private fun draw(parameters: RenderParameters, maxSide: Int): Bitmap {
         val (width, height) = framedSize(parameters, maxSide)
         useSurface(width, height)
         renderer.onSurfaceChanged(null, width, height)
         renderer.setParameters(parameters)
         renderer.onDrawFrame(null)
-        readPixels(width, height)
+        return readPixels(width, height)
     }
 
     override fun close() {

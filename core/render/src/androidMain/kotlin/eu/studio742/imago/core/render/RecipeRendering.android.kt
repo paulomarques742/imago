@@ -151,7 +151,8 @@ private fun applyRecipeGeometry(source: Bitmap, geometry: Geometry): Bitmap {
  *
  * The `cacheKey` includes the instant of the last save: saving the recipe again has to change the
  * thumbnail, and nothing else does. The result also goes to [RecipeRenderCache], unless [persists] is
- * false.
+ * false. Thumbnails are rendered by the export's CPU engine; the large previews by the editor's GPU
+ * pipeline ([GpuRecipePreviews]), with the CPU as the fallback.
  */
 class EditRecipeTransformation(
     private val recipe: EditRecipe,
@@ -176,7 +177,8 @@ class EditRecipeTransformation(
             key?.let(RecipeRenderCache::read)
                 ?.let { bytes -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
                 ?.let { return@withContext it }
-            renderRecipePreview(input, recipe).also { rendered ->
+            val gpu = if (GpuRecipePreviews.suits(input)) GpuRecipePreviews.render(input, recipe) else null
+            (gpu ?: renderRecipePreview(input, recipe)).also { rendered ->
                 if (key != null) RecipeRenderCache.write(key) { rendered.encodedForCache() }
             }
         }

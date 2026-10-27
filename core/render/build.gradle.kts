@@ -33,6 +33,11 @@ kotlin {
             implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.9.4.2")
         }
         getByName("desktopTest").kotlin.srcDir(project(":core:raw").file("src/testFixtures/kotlin"))
+        getByName("androidInstrumentedTest").dependencies {
+            implementation(libs.junit4)
+            implementation(libs.androidx.test.runner)
+            implementation(libs.androidx.test.ext.junit)
+        }
         androidMain.dependencies {
             implementation(project.dependencies.platform(libs.compose.bom))
             implementation(libs.compose.ui)
@@ -46,7 +51,10 @@ android {
     namespace = "eu.studio742.imago.core.render"
     compileSdk = 36
 
-    defaultConfig { minSdk = 31 }
+    defaultConfig {
+        minSdk = 31
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
