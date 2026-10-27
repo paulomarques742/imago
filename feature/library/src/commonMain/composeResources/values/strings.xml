@@ -238,6 +238,8 @@
     <string name="library_selection_save_which_body">Some of these photos have edits. The originals are the files as they are on the server; the edited versions are rendered at full resolution. Photos without edits are saved as they are.</string>
     <string name="library_selection_save_original">Originals</string>
     <string name="library_selection_save_edited">Edited</string>
+    <string name="library_selection_share_which_question">Share which versions?</string>
+    <string name="library_selection_share_which_body">Some of these photos have edits. The originals are the files as they were taken; the edited versions are rendered at full resolution. Photos without edits are shared as they are.</string>
     <plurals name="library_selection_delete_question">
         <item quantity="one">Delete %1$d item?</item>
         <item quantity="other">Delete %1$d items?</item>

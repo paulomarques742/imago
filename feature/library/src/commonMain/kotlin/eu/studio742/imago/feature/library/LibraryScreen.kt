@@ -2241,6 +2241,7 @@ private fun LibrarySelectionBar(
     // The copies on the other side, when some of the chosen photos are on both: then it asks where.
     var deleteCounterparts by remember { mutableStateOf<Map<String, String>?>(null) }
     var askWhich by remember { mutableStateOf(false) }
+    var askShareWhich by remember { mutableStateOf(false) }
     var pickAlbum by remember { mutableStateOf(false) }
     val openAlbum = viewModel.uiState.collectAsStateWithLifecycle().value.selectedAlbum
     SelectionActionsBar(
@@ -2259,7 +2260,7 @@ private fun LibrarySelectionBar(
             else -> true
         },
         onArchive = viewModel::archiveSelection,
-        onShare = { viewModel.shareSelection(share) },
+        onShare = { if (viewModel.shareAsksWhich(selection)) askShareWhich = true else viewModel.shareSelection(share) },
         onFavorite = viewModel::favoriteSelection,
         onCompose = { onComposeSelection(selection) },
         onAddToAlbum = { pickAlbum = true },
@@ -2292,9 +2293,17 @@ private fun LibrarySelectionBar(
         )
     }
     if (askWhich) {
-        SelectionSaveWhichDialog(
+        SelectionWhichDialog(
+            sharing = false,
             onChoose = { edited -> askWhich = false; viewModel.saveSelectionToDevice(edited) },
             onDismiss = { askWhich = false },
+        )
+    }
+    if (askShareWhich) {
+        SelectionWhichDialog(
+            sharing = true,
+            onChoose = { edited -> askShareWhich = false; viewModel.shareSelection(share, edited) },
+            onDismiss = { askShareWhich = false },
         )
     }
     if (pickAlbum) {

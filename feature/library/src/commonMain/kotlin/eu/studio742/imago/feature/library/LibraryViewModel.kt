@@ -656,16 +656,28 @@ open class LibraryViewModel(
         }
     }
 
-    /** The originals, downloaded to where [share] says and handed to it. Edits are the editor's export. */
-    fun shareSelection(share: SelectionShare) {
+    /** Whether sharing this selection asks for originals or edits: some have edits, and they can be rendered here. */
+    fun shareAsksWhich(selection: List<AssetUiModel>): Boolean = deviceCopies != null && shareNeedsChoice(selection)
+
+    /**
+     * The chosen photos, written to where [share] says and handed to it: as their edits rendered at full
+     * resolution when [edited] and they have one, as the originals otherwise. It used to send the
+     * originals always, whatever had been edited.
+     */
+    fun shareSelection(share: SelectionShare, edited: Boolean = false) {
         val selection = chosen
+        val copies = deviceCopies
         runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_selection_share_failed) {
             val directory = share.prepare() ?: return@runOnSelection null
             val taken = mutableSetOf<String>()
             val files = selection.mapIndexed { index, asset ->
                 progress(Res.plurals.library_selection_preparing, index + 1, selection.size)
-                val name = withContext(Dispatchers.IO) { uniqueFileName(asset.fileName, directory, taken, "IMAGO-${index + 1}") }
-                File(directory, name).also { library.downloadOriginal(asset.id, it) }
+                val recipe = asset.shareRecipe(edited)?.takeIf { copies != null }
+                val fileName = if (recipe != null) asset.fileName.substringBeforeLast('.') + ".jpg" else asset.fileName
+                val name = withContext(Dispatchers.IO) { uniqueFileName(fileName, directory, taken, "IMAGO-${index + 1}") }
+                File(directory, name).also { file ->
+                    if (recipe != null && copies != null) copies.renderEdited(asset, recipe, file) else library.downloadOriginal(asset.id, file)
+                }
             }
             share.deliver(files, sharedMimeType(selection))
         }

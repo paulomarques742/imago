@@ -259,13 +259,13 @@ private fun DetailScreen(
      */
     onRequestDelete: (confirm: (counterpart: String?) -> Unit) -> Unit,
     onDelete: (counterpart: String?, where: DeleteWhere) -> Unit,
-    onShare: (DetailAsset, (java.io.File, String) -> Unit) -> Unit,
+    onShare: (DetailAsset, edited: Boolean, (java.io.File, String) -> Unit) -> Unit,
     onSaveOriginal: (DetailAsset) -> Unit,
     onSaveEdited: (DetailAsset) -> Unit,
     onAlbumResult: (UiText, failed: Boolean) -> Unit,
     /** Null where photos do not turn without the editor. */
     onRotate: ((DetailAsset) -> Unit)?,
-    onSetAs: (DetailAsset, (java.io.File, String) -> Unit) -> Unit,
+    onSetAs: (DetailAsset, edited: Boolean, (java.io.File, String) -> Unit) -> Unit,
     /** True archives, false brings back; null where the library has no archive. */
     onArchive: ((archived: Boolean) -> Unit)?,
     /** Null where the file keeps its name: a server's original. */
@@ -292,7 +292,8 @@ private fun DetailScreen(
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var deleteCounterpart by remember { mutableStateOf<String?>(null) }
     var showMenu by remember { mutableStateOf(false) }
-    var showVersionChoice by remember { mutableStateOf(false) }
+    // Which hand-over is waiting for the person to choose between the original and the edit.
+    var versionChoice by remember { mutableStateOf<VersionChoice?>(null) }
     var showAlbums by remember { mutableStateOf(false) }
     // A file another app opened is not IMAGO's: it is seen, edited, shared and copied, never marked,
     // filed, composed or deleted.
@@ -301,6 +302,7 @@ private fun DetailScreen(
     // As a media management app, Android no longer confirms a delete: the dialog must not promise it.
     val managesMedia = rememberMediaManagement()?.granted == true
     val deviceCopy = deviceCopyFor(asset, if (state.assetId == asset.id) state.recipe else asset.recipe)
+    val hasEdit = hasEditedVersion(asset, if (state.assetId == asset.id) state.recipe else asset.recipe)
     // Zoomed in, the photo gets the whole finger: the drag becomes its own and not the pager's.
     // Without this, pulling a zoomed photo sideways jumped to the next one.
     var zoomed by remember { mutableStateOf(false) }
@@ -420,7 +422,7 @@ private fun DetailScreen(
                                     leadingIcon = { Icon(Icons.Outlined.Wallpaper, contentDescription = null) },
                                     onClick = {
                                         showMenu = false
-                                        gate.run { onSetAs(asset, setAs) }
+                                        gate.run { if (hasEdit) versionChoice = VersionChoice.SET_AS else onSetAs(asset, false, setAs) }
                                     },
                                 )
                             }
@@ -489,7 +491,7 @@ private fun DetailScreen(
                                             when (deviceCopy) {
                                                 DeviceCopy.ORIGINAL -> onSaveOriginal(asset)
                                                 DeviceCopy.EDITED -> onSaveEdited(asset)
-                                                DeviceCopy.ORIGINAL_OR_EDITED -> showVersionChoice = true
+                                                DeviceCopy.ORIGINAL_OR_EDITED -> versionChoice = VersionChoice.SAVE
                                                 DeviceCopy.NONE -> Unit
                                             }
                                         }
@@ -584,7 +586,7 @@ private fun DetailScreen(
                         // opened a useless editor would be worse than not being there.
                         canEdit = !asset.isVideo,
                         ownsFile = !isOpenedFile,
-                        onShare = { gate.run { onShare(asset, shareFile) } },
+                        onShare = { gate.run { if (hasEdit) versionChoice = VersionChoice.SHARE else onShare(asset, false, shareFile) } },
                         onEdit = { gate.run(onEdit) },
                         onCompose = { gate.run(onAddToComposition) },
                         onInfo = { showInfo = !showInfo },
@@ -654,27 +656,33 @@ private fun DetailScreen(
             onDismiss = { renaming = false; renameError = null },
         )
     }
-    if (showVersionChoice) {
+    versionChoice?.let { choice ->
+        val choose: (edited: Boolean) -> Unit = { edited ->
+            versionChoice = null
+            when (choice) {
+                VersionChoice.SAVE -> if (edited) onSaveEdited(asset) else onSaveOriginal(asset)
+                VersionChoice.SHARE -> onShare(asset, edited, shareFile)
+                VersionChoice.SET_AS -> setAs?.let { onSetAs(asset, edited, it) }
+            }
+        }
         AlertDialog(
-            onDismissRequest = { showVersionChoice = false },
-            title = { Text(stringResource(Res.string.detail_save_which_question)) },
-            text = { Text(stringResource(Res.string.detail_save_which_body)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showVersionChoice = false
-                        onSaveEdited(asset)
-                    },
-                ) { Text(stringResource(Res.string.detail_save_edited)) }
+            onDismissRequest = { versionChoice = null },
+            title = {
+                Text(
+                    stringResource(
+                        when (choice) {
+                            VersionChoice.SAVE -> Res.string.detail_save_which_question
+                            VersionChoice.SHARE -> Res.string.detail_share_which_question
+                            VersionChoice.SET_AS -> Res.string.detail_set_as_which_question
+                        },
+                    ),
+                )
             },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showVersionChoice = false
-                        onSaveOriginal(asset)
-                    },
-                ) { Text(stringResource(Res.string.detail_save_original)) }
-            },
+            // Saving only asks for a server's photo, whose original is the server's file; sharing asks
+            // for any edited photo, the phone's own too.
+            text = { Text(stringResource(if (choice == VersionChoice.SAVE) Res.string.detail_save_which_body else Res.string.detail_hand_over_which_body)) },
+            confirmButton = { TextButton(onClick = { choose(true) }) { Text(stringResource(Res.string.detail_save_edited)) } },
+            dismissButton = { TextButton(onClick = { choose(false) }) { Text(stringResource(Res.string.detail_save_original)) } },
         )
     }
     deleteCounterpart?.let { counterpart ->
@@ -1330,3 +1338,6 @@ private val LIST_PANE_TAB_RADIUS = 12.dp
 
 /** How much of the screen the photo keeps while the information is open under it. */
 private const val INFO_PHOTO_FRACTION = 0.45f
+
+/** What waits on the original-or-edit choice: each says it in its own title. */
+private enum class VersionChoice { SAVE, SHARE, SET_AS }

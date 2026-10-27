@@ -78,6 +78,9 @@ fun deviceCopyFor(asset: DetailAsset, recipe: EditRecipe?): DeviceCopy {
     }
 }
 
+/** Whether handing the photo over has two versions to choose from: it has an edit, and is not a video. */
+fun hasEditedVersion(asset: DetailAsset, recipe: EditRecipe?): Boolean = recipe != null && !asset.isVideo
+
 data class DetailUiState(
     val assetId: String? = null,
     val exif: AssetExif = AssetExif(),
@@ -345,41 +348,11 @@ open class DetailViewModel(
     }
 
     /**
-     * Downloads the original and hands it with its content type to whoever shares it: the share menu
-     * on Android, "Save copy" on desktop.
-     *
-     * The original is shared, not the edited version: exporting the recipe belongs to the editor and
-     * has its own choices of resolution and destination.
+     * Hands the photo to whoever shares it — the share menu on Android, "Save copy" on desktop — as the
+     * edit rendered at full resolution when [edited] and it has one, else the original.
      */
-    fun share(asset: DetailAsset, onReady: (file: File, mimeType: String) -> Unit) {
-        mutableState.update { it.copy(isBusy = true, busyLabel = uiText(Res.string.detail_preparing_share)) }
-        viewModelScope.launch {
-            runCatching {
-                val directory = shareDirectory.apply {
-                    // The folder is cleared on every share: nothing here deserves to outlive the Intent,
-                    // and leaving originals in cache would pile up large files with no owner.
-                    deleteRecursively()
-                    mkdirs()
-                }
-                val file = File(directory, asset.fileName)
-                library.downloadOriginal(asset.id, file)
-                file
-            }
-                .onSuccess { file ->
-                    mutableState.update { it.copy(isBusy = false, busyLabel = null) }
-                    onReady(file, if (asset.isVideo) "video/*" else "image/*")
-                }
-                .onFailure { error ->
-                    mutableState.update {
-                        it.copy(
-                            isBusy = false,
-                            busyLabel = null,
-                            error = error.toUiText(Res.string.detail_share_failed),
-                        )
-                    }
-                }
-        }
-    }
+    fun share(asset: DetailAsset, edited: Boolean, onReady: (file: File, mimeType: String) -> Unit) =
+        handOver(asset, edited, onReady)
 
     /** The original as the library serves it — the only way a server video reaches the gallery. */
     fun saveOriginalToDevice(asset: DetailAsset) = saveToDevice(uiText(Res.string.detail_downloading)) {
@@ -439,24 +412,32 @@ open class DetailViewModel(
         }
     }
 
+    /** The photo for another app to use as a wallpaper or a contact's picture, as [share] gives it. */
+    fun setAs(asset: DetailAsset, edited: Boolean, onReady: (file: File, mimeType: String) -> Unit) =
+        handOver(asset, edited, onReady)
+
     /**
-     * The photo as it is seen — with its edits, rendered at full resolution, when it has them — for
-     * another app to use as a wallpaper or a contact's picture.
+     * The photo as another app receives it. Sharing used to send the original always and "Set as…" the
+     * edit always; the person now chooses, and both go through here.
      */
-    fun setAs(asset: DetailAsset, onReady: (file: File, mimeType: String) -> Unit) {
+    private fun handOver(asset: DetailAsset, edited: Boolean, onReady: (file: File, mimeType: String) -> Unit) {
         if (mutableState.value.isBusy) return
         val current = mutableState.value
-        val recipe = if (current.assetId == asset.id) current.recipe else asset.recipe
+        val recipe = (if (current.assetId == asset.id) current.recipe else asset.recipe)?.takeIf { edited && !asset.isVideo }
         mutableState.update { it.copy(isBusy = true, busyLabel = uiText(if (recipe != null) Res.string.detail_preparing_edit else Res.string.detail_preparing_share)) }
         viewModelScope.launch {
             runCatching {
+                // Emptied on every hand-over: nothing here deserves to outlive the Intent, and originals
+                // left in the cache would pile up with no owner.
                 val directory = shareDirectory.apply { deleteRecursively(); mkdirs() }
                 if (recipe != null) {
                     val target = EditorAsset(asset.id, asset.checksum, asset.fileName, asset.previewUrl, asset.apiKey, asset.fileCreatedAt)
                     val jpeg = exporter.renderJpegOnce(target, recipe) { phase -> mutableState.update { it.copy(busyLabel = phase) } }
-                    File(directory, asset.fileName.substringBeforeLast('.') + ".jpg").also { jpeg.copyTo(it, overwrite = true); jpeg.delete() } to "image/jpeg"
+                    File(directory, asset.fileName.substringBeforeLast('.').ifBlank { "IMAGO" } + ".jpg")
+                        .also { jpeg.copyTo(it, overwrite = true); jpeg.delete() } to "image/jpeg"
                 } else {
-                    File(directory, asset.fileName.ifBlank { "IMAGO.jpg" }).also { library.downloadOriginal(asset.id, it) } to "image/*"
+                    File(directory, asset.fileName.ifBlank { if (asset.isVideo) "IMAGO.mp4" else "IMAGO.jpg" })
+                        .also { library.downloadOriginal(asset.id, it) } to (if (asset.isVideo) "video/*" else "image/*")
                 }
             }
                 .onSuccess { (file, type) ->

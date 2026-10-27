@@ -22,6 +22,7 @@ import eu.studio742.imago.core.model.AssetReference
 import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.feature.editor.EditorAsset
 import eu.studio742.imago.feature.editor.EditorExporter
+import eu.studio742.imago.feature.editor.renderJpegOnce
 import eu.studio742.imago.feature.library.AssetUiModel
 import eu.studio742.imago.feature.library.PickForOtherAppRoute
 import eu.studio742.imago.feature.library.pickerAccepts
@@ -107,7 +108,7 @@ class PickerActivity : ComponentActivity() {
         if (recipe == null && reference.libraryId == DEVICE_LIBRARY_ID) return Uri.parse(reference.localId) to type
         val file = if (recipe != null) {
             val target = EditorAsset(asset.id, asset.checksum, asset.fileName, asset.previewUrl, asset.apiKey, asset.fileCreatedAt)
-            val jpeg = exporter.renderJpeg(target, recipe) {}
+            val jpeg = exporter.renderJpegOnce(target, recipe) {}
             withContext(Dispatchers.IO) {
                 File(folder, uniqueName(asset.fileName.substringBeforeLast('.') + ".jpg", taken)).also { jpeg.copyTo(it); jpeg.delete() }
             }

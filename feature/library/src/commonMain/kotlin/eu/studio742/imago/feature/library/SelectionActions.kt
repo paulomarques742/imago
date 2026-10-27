@@ -71,6 +71,9 @@ interface DeviceCopies {
 
     /** The photo with its recipe, at full resolution, as the editor's "Save to gallery" makes it. */
     suspend fun saveEdited(asset: AssetUiModel, recipe: EditRecipe)
+
+    /** The same render as [saveEdited], written to [destination] instead: what a share hands over. */
+    suspend fun renderEdited(asset: AssetUiModel, recipe: EditRecipe, destination: File)
 }
 
 /** Where the shared originals go: the share menu on Android, a folder the person picks on desktop. */
@@ -109,6 +112,15 @@ internal fun deviceCopyPlan(selection: List<AssetUiModel>, edited: Boolean): Lis
 /** Asked once for the whole selection, and only when a server photo in it has edits. */
 internal fun deviceCopyNeedsChoice(selection: List<AssetUiModel>): Boolean =
     selection.any { !it.isOnDevice() && it.copyRecipe() != null }
+
+/**
+ * Asked once for the whole selection when any photo in it has edits — the phone's own too: unlike a
+ * save, a share has somewhere to send the original that is not already there.
+ */
+internal fun shareNeedsChoice(selection: List<AssetUiModel>): Boolean = selection.any { it.copyRecipe() != null }
+
+/** The recipe a share renders for [asset]: when the edit was chosen and there is one to apply. */
+internal fun AssetUiModel.shareRecipe(edited: Boolean): EditRecipe? = copyRecipe()?.takeIf { edited }
 
 /** Taps the heart on every one, unless they are all favourites already: then it takes them all out. */
 internal fun favoriteTarget(selection: Collection<AssetUiModel>): Boolean = !selection.all { it.isFavorite }
@@ -337,13 +349,20 @@ internal fun SelectionDeleteDialog(selection: List<AssetUiModel>, onConfirm: () 
     )
 }
 
-/** Originals or edits, asked once when a server photo in the selection has edits. */
+/**
+ * Originals or edits, asked once for the whole selection: when saving, with a server photo that has
+ * edits; when sharing, with any photo that has them.
+ */
 @Composable
-internal fun SelectionSaveWhichDialog(onChoose: (edited: Boolean) -> Unit, onDismiss: () -> Unit) {
+internal fun SelectionWhichDialog(
+    sharing: Boolean,
+    onChoose: (edited: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.library_selection_save_which_question)) },
-        text = { Text(stringResource(Res.string.library_selection_save_which_body)) },
+        title = { Text(stringResource(if (sharing) Res.string.library_selection_share_which_question else Res.string.library_selection_save_which_question)) },
+        text = { Text(stringResource(if (sharing) Res.string.library_selection_share_which_body else Res.string.library_selection_save_which_body)) },
         confirmButton = {
             TextButton(onClick = { onChoose(true) }) { Text(stringResource(Res.string.library_selection_save_edited)) }
         },

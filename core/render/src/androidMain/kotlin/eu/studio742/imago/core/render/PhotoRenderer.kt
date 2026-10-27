@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
-import android.util.Log
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -112,12 +111,6 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         .asFloatBuffer()
         .apply { put(PhotoShaders.QUAD).position(0) }
 
-    /**
-     * Frames drawn since the surface was created, for the log of the first few — what was learnt
-     * chasing the editor's black stage (EDITOR-27): whether a frame drew the photo, or where it stopped.
-     */
-    private var framesOnSurface = 0
-
     fun setBitmap(value: Bitmap?) {
         if (value !== bitmap) {
             bitmap = value
@@ -173,7 +166,6 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         uploadedBrushes = arrayOfNulls(0)
         uploadedToneCurves = null
         pendingUpload = bitmap != null
-        framesOnSurface = 0
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -183,7 +175,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
 
     override fun onDrawFrame(gl: GL10?) {
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-        val source = bitmap ?: return logFrame("no photo yet")
+        val source = bitmap ?: return
         if (pendingUpload) {
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, sourceTexture)
             val raw = highPrecisionSource
@@ -203,19 +195,12 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         }
 
         val active = if (showOriginal) RenderParameters() else parameters
-        if (!ensureStage()) return logFrame("no stage target")
+        if (!ensureStage()) return
         val maskFields = if (active.needsMaskField) buildMaskField(active) else 0
         val local = active.needsLocalToneMask && buildLocalToneMask(active, maskFields)
         renderTone(active, local, maskFields)
         val detail = active.needsDetailStage && buildDetailPyramid(active)
         renderComposite(active, detail, maskFields)
-        logFrame("photo drawn")
-    }
-
-    private fun logFrame(outcome: String) {
-        if (framesOnSurface++ < LOGGED_FRAMES) {
-            Log.d(LOG_TAG, "frame $framesOnSurface on ${surfaceWidth}x$surfaceHeight, image ${imageWidth}x$imageHeight: $outcome")
-        }
     }
 
     /**
@@ -791,8 +776,6 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
 
     private companion object {
         const val STRIDE = 4 * Float.SIZE_BYTES
-        const val LOG_TAG = "ImagoGl"
-        const val LOGGED_FRAMES = 5
     }
 }
 

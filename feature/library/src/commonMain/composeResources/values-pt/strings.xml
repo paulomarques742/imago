@@ -238,6 +238,8 @@
     <string name="library_selection_save_which_body">Algumas destas fotografias têm edições. Os originais são os ficheiros tal como estão no servidor; as versões editadas são geradas em resolução máxima. As que não têm edições são guardadas como estão.</string>
     <string name="library_selection_save_original">Originais</string>
     <string name="library_selection_save_edited">Editadas</string>
+    <string name="library_selection_share_which_question">Que versões partilhar?</string>
+    <string name="library_selection_share_which_body">Algumas destas fotografias têm edições. Os originais são os ficheiros tal como foram tirados; as versões editadas são geradas em resolução máxima. As que não têm edições são partilhadas como estão.</string>
     <plurals name="library_selection_delete_question">
         <item quantity="one">Eliminar %1$d item?</item>
         <item quantity="other">Eliminar %1$d itens?</item>

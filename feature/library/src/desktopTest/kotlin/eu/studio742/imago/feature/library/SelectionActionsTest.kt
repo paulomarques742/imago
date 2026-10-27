@@ -77,6 +77,23 @@ class SelectionActionsTest {
     }
 
     @Test
+    fun sharingAsksForAnyEditedPhotoThePhonesOwnToo() {
+        assertTrue(shareNeedsChoice(listOf(asset(DEVICE_LIBRARY_ID, recipe = recipe))))
+        assertTrue(shareNeedsChoice(listOf(asset("server"), asset("server", "2", recipe = recipe))))
+        assertFalse(shareNeedsChoice(listOf(asset("server"), asset(DEVICE_LIBRARY_ID, "2"))))
+        assertFalse(shareNeedsChoice(listOf(asset("server", isVideo = true, recipe = recipe))))
+    }
+
+    @Test
+    fun aShareRendersTheEditOnlyWhenItWasChosen() {
+        val edited = asset("server", recipe = recipe)
+        assertEquals(recipe, edited.shareRecipe(edited = true))
+        assertEquals(null, edited.shareRecipe(edited = false))
+        assertEquals(null, asset("server").shareRecipe(edited = true))
+        assertEquals(null, asset("server", isVideo = true, recipe = recipe).shareRecipe(edited = true))
+    }
+
+    @Test
     fun theHeartMarksAllUnlessAllAreMarked() {
         assertTrue(favoriteTarget(listOf(asset("s", "1", isFavorite = true), asset("s", "2"))))
         assertFalse(favoriteTarget(listOf(asset("s", "1", isFavorite = true), asset("s", "2", isFavorite = true))))

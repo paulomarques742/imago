@@ -76,6 +76,16 @@ class ExporterDeviceCopies @Inject constructor(
         val target = EditorAsset(asset.id, asset.checksum, asset.fileName, asset.previewUrl, asset.apiKey, asset.fileCreatedAt)
         exporter.saveEditedToDevice(target, recipe) {}
     }
+
+    override suspend fun renderEdited(asset: AssetUiModel, recipe: EditRecipe, destination: File) {
+        val target = EditorAsset(asset.id, asset.checksum, asset.fileName, asset.previewUrl, asset.apiKey, asset.fileCreatedAt)
+        val jpeg = exporter.renderJpegOnce(target, recipe) {}
+        try {
+            withContext(Dispatchers.IO) { jpeg.copyTo(destination, overwrite = true) }
+        } finally {
+            jpeg.delete()
+        }
+    }
 }
 
 class HiltPhotoRotation @Inject constructor(
