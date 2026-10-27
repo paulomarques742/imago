@@ -111,10 +111,18 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         .asFloatBuffer()
         .apply { put(PhotoShaders.QUAD).position(0) }
 
+    /**
+     * Called on the GL thread after the first frame that shows a photo on a new surface, or a new photo
+     * on the same surface — not on every frame, which a slider drag produces sixty times a second.
+     */
+    @Volatile var onPhotoPresented: (() -> Unit)? = null
+    @Volatile private var announcePhoto = false
+
     fun setBitmap(value: Bitmap?) {
         if (value !== bitmap) {
             bitmap = value
             pendingUpload = value != null
+            announcePhoto = true
         }
     }
 
@@ -166,6 +174,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         uploadedBrushes = arrayOfNulls(0)
         uploadedToneCurves = null
         pendingUpload = bitmap != null
+        announcePhoto = true
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -201,6 +210,10 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         renderTone(active, local, maskFields)
         val detail = active.needsDetailStage && buildDetailPyramid(active)
         renderComposite(active, detail, maskFields)
+        if (announcePhoto) {
+            announcePhoto = false
+            onPhotoPresented?.invoke()
+        }
     }
 
     /**
