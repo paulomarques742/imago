@@ -25,6 +25,8 @@ class ImmichRoomApplication : Application(), SingletonImageLoader.Factory {
         eu.studio742.imago.core.render.RecipeRenderCache.install(
             cacheDir.resolve("recipe_renders").toOkioPath(), RECIPE_RENDER_CACHE_BYTES,
         )
+        // Emptied here, at every launch: a session's originals and exports are not kept beyond it.
+        eu.studio742.imago.core.data.WorkingCopies.install(cacheDir.resolve("originals"), WORKING_COPIES_BYTES)
         eu.studio742.imago.feature.library.AndroidDiagnostics.start(this, "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
         // Without an account the engine waits; with one, it sends and receives while the app is
         // alive, and WorkManager finishes the upload when the network comes back.
@@ -67,5 +69,6 @@ class ImmichRoomApplication : Application(), SingletonImageLoader.Factory {
     private companion object {
         const val MEMORY_CACHE_SHARE = 0.4
         const val RECIPE_RENDER_CACHE_BYTES = 100L * 1024L * 1024L
+        const val WORKING_COPIES_BYTES = 500L * 1024L * 1024L
     }
 }

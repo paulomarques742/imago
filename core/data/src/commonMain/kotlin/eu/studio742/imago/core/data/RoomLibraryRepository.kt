@@ -691,8 +691,19 @@ class RoomLibraryRepository @Inject constructor(
     override suspend fun checkCanDelete(assetId: String) =
         api.requirePermission(requireConnection(), ImmichKeyPermissions.DELETE_ASSETS)
 
-    override suspend fun downloadOriginal(assetId: String, destination: File) =
-        api.downloadOriginal(requireConnection(), assetId, destination)
+    /**
+     * Through [WorkingCopies]: the editor, the export and a share of the same photo download it once.
+     * The checksum, when the catalogue has it, keeps a photo replaced on the server from being served
+     * from the old copy.
+     */
+    override suspend fun downloadOriginal(assetId: String, destination: File) {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        val checksum = database.assetDao().byIds(libraryKey, listOf(assetId)).firstOrNull()?.checksum.orEmpty()
+        WorkingCopies.fill("original:$libraryKey:$assetId:$checksum", destination) { target ->
+            api.downloadOriginal(connection, assetId, target)
+        }
+    }
 
     private fun requireConnection(): ImmichConnection =
         checkNotNull(configuration.currentConnection()) { "Immich connection is not configured" }

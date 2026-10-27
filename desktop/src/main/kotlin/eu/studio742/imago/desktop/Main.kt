@@ -73,6 +73,8 @@ fun main(args: Array<String>) {
         paths.cache.resolve("recipe-renders").toOkioPath(),
         RECIPE_RENDER_CACHE_BYTES,
     )
+    // Emptied at every launch: a session's originals and exports are not kept beyond it.
+    eu.studio742.imago.core.data.WorkingCopies.install(paths.cache.resolve("originals").toFile(), WORKING_COPIES_BYTES)
 
     val diagnostics = eu.studio742.imago.core.model.diagnostics.DiagnosticStore(paths.root.resolve("diagnostics").toFile())
     eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.start(diagnostics, mapOf(
@@ -175,3 +177,4 @@ fun main(args: Array<String>) {
 }
 
 private const val RECIPE_RENDER_CACHE_BYTES = 200L * 1024L * 1024L
+private const val WORKING_COPIES_BYTES = 500L * 1024L * 1024L

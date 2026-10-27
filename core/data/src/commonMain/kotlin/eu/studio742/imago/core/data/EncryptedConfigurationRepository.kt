@@ -333,6 +333,8 @@ class EncryptedConfigurationRepository(
         sources.value = sources.value.map { if (it.id == id) it.copy(apiKey = null) else it }
         state.value = currentConnection()
         persist()
+        // The library's originals do not stay behind on the phone once it is disconnected.
+        WorkingCopies.clear()
     }
     override suspend fun validateAndSave(serverUrl: String, apiKey: String, profile: ConnectionProfile): ServerVersion {
         val version = saveLibrary(null, "Immich", serverUrl, apiKey, profile)
