@@ -348,17 +348,19 @@ private fun DetailScreen(
         Box(Modifier.fillMaxSize().padding(padding)) {
             HorizontalPager(
                 state = pagerState,
-                key = { page -> assets[page].id },
+                // The list can shrink between the pager counting its pages and asking for their keys.
+                key = { page -> assets.getOrNull(page)?.id ?: "gone-$page" },
                 beyondViewportPageCount = 1,
                 userScrollEnabled = !zoomed,
                 modifier = Modifier.fillMaxWidth().fillMaxHeight(photoFraction),
             ) { page ->
+                val pageAsset = assets.getOrNull(page) ?: return@HorizontalPager
                 val isCurrent = page == pagerState.settledPage
                 DetailPage(
-                    asset = assets[page],
+                    asset = pageAsset,
                     // The open page uses the recipe just read again; the neighbours keep the one that
                     // came from the library, which is what their thumbnails already showed.
-                    recipe = if (assets[page].id == state.assetId) state.recipe else assets[page].recipe,
+                    recipe = if (pageAsset.id == state.assetId) state.recipe else pageAsset.recipe,
                     // Only the settled page gets a player: one ExoPlayer per neighbouring page was a
                     // decoder open for every video the finger passes by.
                     isCurrent = isCurrent,

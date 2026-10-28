@@ -992,7 +992,7 @@ private fun EditorScreen(
         Box(Modifier.fillMaxSize().padding(padding)) {
             HorizontalPager(
                 state = pagerState,
-                key = { page -> assets[page].id },
+                key = { page -> assets.getOrNull(page)?.id ?: "gone-$page" },
                 beyondViewportPageCount = 1,
                 // With a mask open, a horizontal drag is for its handles and not for switching
                 // photos.
@@ -1005,7 +1005,7 @@ private fun EditorScreen(
                     .clipToBounds()
                     .background(Color.Black),
             ) { page ->
-                val pageAsset = assets[page]
+                val pageAsset = assets.getOrNull(page) ?: return@HorizontalPager
                 val isActiveAsset = pageAsset.id == assetId
                 Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
                     if (!isActiveAsset || state.bitmap == null) {
