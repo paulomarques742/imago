@@ -76,6 +76,9 @@
     <string name="editor_roundness">Roundness</string>
     <string name="editor_feather">Feather</string>
     <string name="editor_group_grain">Grain</string>
+    <string name="editor_histogram">Histogram</string>
+    <string name="editor_clip_shadows">Show shadows that are cut off</string>
+    <string name="editor_clip_highlights">Show highlights that are cut off</string>
     <string name="editor_group_sharpening">Sharpening</string>
     <string name="editor_group_noise_reduction">Noise reduction</string>
     <string name="editor_nr_luminance">Luminance</string>

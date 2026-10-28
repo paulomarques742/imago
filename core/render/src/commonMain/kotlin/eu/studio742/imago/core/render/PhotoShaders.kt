@@ -691,6 +691,9 @@ internal object PhotoShaders {
         // not a render parameter: it lives outside `RenderParameters` on purpose, because those are
         // what the export honours and what decides whether a recipe is neutral.
         uniform int uMaskOverlay;
+        // The clipping warning, an aid of the editor like the overlay above: Histogram.LOW and HIGH, out of 255.
+        uniform int uClipShadows;
+        uniform int uClipHighlights;
         // Step 12: each wheel's chroma with the saturation already applied and the hue converted, the
         // four luminances in a vec4 in the order shadows, midtones, highlights, global, and the two
         // controls raw. See `ColorGradeRange`.
@@ -1090,6 +1093,8 @@ internal object PhotoShaders {
                 );
                 color = mix(color, vec3(0.90, 0.20, 0.25), (dot(w, pick) + dot(w2, pickHigh)) * 0.45);
             }
+            if (uClipHighlights == 1 && any(greaterThanEqual(color, vec3(0.9961)))) color = vec3(0.95, 0.15, 0.15);
+            if (uClipShadows == 1 && any(lessThanEqual(color, vec3(0.0039)))) color = vec3(0.15, 0.35, 0.95);
             fragColor = vec4(color, staged.a);
         }
     """

@@ -23,4 +23,9 @@ expect fun PhotoCanvas(
     maskOverlay: Int = -1,
     modifier: Modifier = Modifier,
     highPrecisionSource: FloatPixelBuffer? = null,
+    /** Paints over what touches the ends of the scale; only where [photoCanvasShowsClipping]. */
+    clipping: ClippingWarning = ClippingWarning.NONE,
 )
+
+/** Whether this platform's [PhotoCanvas] can paint the clipping warning: the editor offers it only there. */
+expect val photoCanvasShowsClipping: Boolean

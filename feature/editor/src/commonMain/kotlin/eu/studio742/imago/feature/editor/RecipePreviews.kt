@@ -16,6 +16,7 @@ import eu.studio742.imago.core.model.CURRENT_RAW_RENDERING
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.render.BitmapPhotoProcessor
 import eu.studio742.imago.core.render.BrushRasters
+import eu.studio742.imago.core.render.Histogram
 import eu.studio742.imago.core.render.NeutralWhiteBalance
 import eu.studio742.imago.core.render.PixelBuffer
 import eu.studio742.imago.core.render.FloatPixelBuffer
@@ -114,6 +115,26 @@ object RecipePreviewCache {
     private fun autoOf(origin: PixelBuffer): NeutralWhiteBalance? {
         sourceAuto?.takeIf { it.first === origin }?.let { return it.second }
         return autoWhiteBalanceOf(origin).also { sourceAuto = origin to it }
+    }
+
+    /**
+     * How the open photo's pixels are spread once [recipe] has been applied, from the same render the
+     * previews are. Not kept: it is asked for at every change of the recipe, and a recipe's histogram is
+     * one pass over a 220 px image.
+     */
+    suspend fun histogram(assetId: String, recipe: EditRecipe): Histogram? {
+        val origin = sourceFor(assetId) ?: return null
+        val precise = floatSourceFor(assetId)
+        val rendering = renderingFor(assetId)
+        val exposure = exposureFor(assetId)
+        return withContext(Dispatchers.Default) {
+            val shown = if (recipe.whiteBalance.auto) recipe.withAutoWhiteBalance(autoOf(origin)) else recipe
+            val parameters = shown.toRenderParameters(rawRendering = rendering, rawExposure = exposure)
+            Histogram.of(
+                if (precise != null) RecipePixels.renderFloat(precise, parameters).toPixelBuffer()
+                else BitmapPhotoProcessor.renderInPlace(origin.copy(), parameters, brushes = BrushRasters.of(parameters, origin)),
+            )
+        }
     }
 
     suspend fun preview(assetId: String, recipeId: String, recipe: EditRecipe): ImageBitmap? {

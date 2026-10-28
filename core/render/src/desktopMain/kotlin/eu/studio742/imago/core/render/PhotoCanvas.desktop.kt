@@ -19,6 +19,8 @@ import kotlinx.coroutines.withContext
 import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
 import kotlin.math.roundToInt
 
+actual val photoCanvasShowsClipping: Boolean = false
+
 /**
  * The editor's photo on desktop, through the CPU engine.
  *
@@ -36,6 +38,7 @@ actual fun PhotoCanvas(
     maskOverlay: Int,
     modifier: Modifier,
     highPrecisionSource: FloatPixelBuffer?,
+    clipping: ClippingWarning,
 ) {
     val source = remember(bitmap) { bitmap.toPixelBuffer() }
     val draft = remember(source) { RecipePixels.reduce(source, DRAFT_SIDE) }

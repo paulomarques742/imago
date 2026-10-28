@@ -25,6 +25,8 @@ fun GlPhotoCanvas(
     maskOverlay: Int = -1,
     modifier: Modifier = Modifier,
     highPrecisionSource: FloatPixelBuffer? = null,
+    /** Paints over what touches the ends of the scale; an aid of the editor, like [maskOverlay], and not a parameter. */
+    clipping: ClippingWarning = ClippingWarning.NONE,
 ) {
     val renderer = remember { PhotoRenderer() }
     // Drawn inside the window, not behind it: see [GlTextureStage] for the black stage this ended.
@@ -46,6 +48,7 @@ fun GlPhotoCanvas(
             renderer.setParameters(parameters)
             renderer.setShowOriginal(showOriginal)
             renderer.setMaskOverlay(maskOverlay)
+            renderer.setClipping(clipping)
             renderer.setTransform(transform, minZoom)
             stage.requestRender()
         },

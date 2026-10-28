@@ -33,6 +33,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     @Volatile private var parameters = RenderParameters()
     @Volatile private var showOriginal = false
     @Volatile private var maskOverlay = -1
+    @Volatile private var clipping = ClippingWarning.NONE
     @Volatile private var minZoom = MIN_PHOTO_ZOOM
     @Volatile private var zoom = MIN_PHOTO_ZOOM
     @Volatile private var panX = 0f
@@ -149,6 +150,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
      * business in either.
      */
     fun setMaskOverlay(value: Int) { maskOverlay = value }
+    fun setClipping(value: ClippingWarning) { clipping = value }
     /**
      * @param minZoom the minimum this mode accepts. Crop passes [MIN_CROP_ZOOM] so it can zoom the
      *   photo out; viewing leaves the default and nothing changes for it.
@@ -732,6 +734,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         bindMaskAdjustment(program, "uMaskClarity", masks, 0.01f) { it.clarity }
         bindMaskAdjustment(program, "uMaskDehaze", masks, 0.01f) { it.dehaze }
         program.int("uMaskOverlay", if (maskOverlay < masks.size) maskOverlay else -1)
+        program.boolean("uClipShadows", clipping.shadows)
+        program.boolean("uClipHighlights", clipping.highlights)
 
         drawQuad()
     }

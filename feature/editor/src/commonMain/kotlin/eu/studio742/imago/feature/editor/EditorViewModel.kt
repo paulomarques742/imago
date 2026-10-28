@@ -11,6 +11,7 @@ import eu.studio742.imago.feature.editor.resources.*
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.runtime.Composable
+import eu.studio742.imago.core.render.ClippingWarning
 import eu.studio742.imago.core.render.libraryAuth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -515,6 +516,8 @@ data class EditorUiState(
     val cameraLight: CameraLight? = null,
     val recipe: EditRecipe? = null,
     val panel: EditorPanel = EditorPanel.LIGHT,
+    /** What the photo is painted with where it touches an end of the scale; the histogram's two triangles. */
+    val clipping: ClippingWarning = ClippingWarning.NONE,
     val sheet: EditorSheet = EditorSheet.ADJUSTMENTS,
     val selectedHslBand: HslColorBand = HslColorBand.RED,
     val curveChannel: CurveChannel = CurveChannel.RGB,
@@ -1098,6 +1101,14 @@ open class EditorViewModel(
             mutableState.update { it.copy(recipe = start, isSaving = true) }
             scheduleSave(start)
         }
+    }
+
+    /** The histogram's triangles: paint, over the photo, what is cut off at one end of the scale. */
+    fun toggleClipping(shadows: Boolean) = mutableState.update {
+        it.copy(
+            clipping = if (shadows) it.clipping.copy(shadows = !it.clipping.shadows)
+            else it.clipping.copy(highlights = !it.clipping.highlights),
+        )
     }
 
     /** The RAW's base profile, the first choice of Lightroom's Basic panel. */

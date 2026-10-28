@@ -76,6 +76,9 @@
     <string name="editor_roundness">Arredondamento</string>
     <string name="editor_feather">Suavização</string>
     <string name="editor_group_grain">Grão</string>
+    <string name="editor_histogram">Histograma</string>
+    <string name="editor_clip_shadows">Mostrar as sombras cortadas</string>
+    <string name="editor_clip_highlights">Mostrar as altas luzes cortadas</string>
     <string name="editor_group_sharpening">Nitidez</string>
     <string name="editor_group_noise_reduction">Redução de ruído</string>
     <string name="editor_nr_luminance">Luminância</string>

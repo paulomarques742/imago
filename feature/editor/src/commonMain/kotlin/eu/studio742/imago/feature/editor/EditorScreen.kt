@@ -175,7 +175,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import eu.studio742.imago.core.render.DOUBLE_TAP_PHOTO_ZOOM
+import eu.studio742.imago.core.render.ClippingWarning
 import eu.studio742.imago.core.render.PhotoCanvas
+import eu.studio742.imago.core.render.photoCanvasShowsClipping
 import eu.studio742.imago.core.render.pixelHeight
 import eu.studio742.imago.core.render.pixelWidth
 import eu.studio742.imago.core.render.MIN_CROP_ZOOM
@@ -347,6 +349,8 @@ fun EditorRoute(
         onRedo = viewModel::redo,
         onSelectHslBand = viewModel::selectHslBand,
         onSelectCurveChannel = viewModel::selectCurveChannel,
+        onToggleClippingShadows = { viewModel.toggleClipping(shadows = true) },
+        onToggleClippingHighlights = { viewModel.toggleClipping(shadows = false) },
         onAddCurvePoint = viewModel::addCurvePoint,
         onMoveCurvePoint = viewModel::moveCurvePoint,
         onRemoveCurvePoint = viewModel::removeCurvePoint,
@@ -566,6 +570,8 @@ private fun EditorScreen(
     onRedo: () -> Unit,
     onSelectHslBand: (HslColorBand) -> Unit,
     onSelectCurveChannel: (CurveChannel) -> Unit,
+    onToggleClippingShadows: () -> Unit,
+    onToggleClippingHighlights: () -> Unit,
     onAddCurvePoint: (Int, Int) -> Unit,
     onMoveCurvePoint: (Int, Int, Int) -> Unit,
     onRemoveCurvePoint: (Int) -> Unit,
@@ -1050,6 +1056,7 @@ private fun EditorScreen(
                                 } else {
                                     -1
                                 },
+                                clipping = if (cropMode) ClippingWarning.NONE else state.clipping,
                                 modifier = Modifier.fillMaxSize(),
                             )
                             val guidesGeometry = maskFrameGeometry
@@ -1885,6 +1892,8 @@ private fun EditorScreen(
                         onResetAdjustment = onResetAdjustment,
                         onSelectHslBand = onSelectHslBand,
                         onSelectCurveChannel = onSelectCurveChannel,
+                        onToggleClippingShadows = onToggleClippingShadows,
+                        onToggleClippingHighlights = onToggleClippingHighlights,
                         onAddCurvePoint = onAddCurvePoint,
                         onMoveCurvePoint = onMoveCurvePoint,
                         onRemoveCurvePoint = onRemoveCurvePoint,
@@ -2422,6 +2431,8 @@ private fun AdjustmentPanel(
     onResetAdjustment: (Adjustment) -> Unit,
     onSelectHslBand: (HslColorBand) -> Unit,
     onSelectCurveChannel: (CurveChannel) -> Unit,
+    onToggleClippingShadows: () -> Unit,
+    onToggleClippingHighlights: () -> Unit,
     onAddCurvePoint: (Int, Int) -> Unit,
     onMoveCurvePoint: (Int, Int, Int) -> Unit,
     onRemoveCurvePoint: (Int) -> Unit,
@@ -2522,6 +2533,17 @@ private fun AdjustmentPanel(
                         whiteBalanceActions = whiteBalanceActions,
                         header = {
                             val recipe = state.recipe
+                            if (state.panel == EditorPanel.LIGHT && recipe != null) {
+                                HistogramRow(
+                                    assetId = state.asset?.id,
+                                    recipe = recipe,
+                                    clipping = state.clipping,
+                                    showsWarning = photoCanvasShowsClipping,
+                                    onToggleShadows = onToggleClippingShadows,
+                                    onToggleHighlights = onToggleClippingHighlights,
+                                    modifier = Modifier.alpha(if (editingKey == null) 1f else 0f),
+                                )
+                            }
                             if (state.panel == EditorPanel.LIGHT && state.showsRawProfile && recipe != null) {
                                 ProfileRow(
                                     assetId = state.asset?.id,
