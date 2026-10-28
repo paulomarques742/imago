@@ -1,10 +1,12 @@
 package eu.studio742.imago.feature.editor
 
+import eu.studio742.imago.core.model.Calibration
 import eu.studio742.imago.core.model.ColorGrading
 import eu.studio742.imago.core.model.ColorWheel
 import eu.studio742.imago.core.model.CropRect
 import eu.studio742.imago.core.model.CurvePoint
 import eu.studio742.imago.core.model.Detail
+import eu.studio742.imago.core.model.LensCorrection
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.Effects
 import eu.studio742.imago.core.model.Geometry
@@ -98,6 +100,8 @@ internal fun Adjustment.reelPanel(): ReelPanel = when (this) {
     Adjustment.SHARPEN_AMOUNT, Adjustment.SHARPEN_RADIUS, Adjustment.SHARPEN_DETAIL, Adjustment.SHARPEN_MASKING,
     Adjustment.NR_LUMINANCE, Adjustment.NR_LUMINANCE_DETAIL, Adjustment.NR_CONTRAST, Adjustment.NR_COLOR, Adjustment.NR_COLOR_DETAIL, Adjustment.NR_COLOR_SMOOTHNESS,
     -> ReelPanel.DETAIL
+    Adjustment.CAL_SHADOWS_TINT, Adjustment.CAL_RED_HUE, Adjustment.CAL_RED_SATURATION, Adjustment.CAL_GREEN_HUE, Adjustment.CAL_GREEN_SATURATION, Adjustment.CAL_BLUE_HUE, Adjustment.CAL_BLUE_SATURATION -> ReelPanel.COLOR
+    Adjustment.LENS_VIGNETTE_AMOUNT, Adjustment.LENS_VIGNETTE_MIDPOINT, Adjustment.LENS_PURPLE_AMOUNT, Adjustment.LENS_PURPLE_RANGE, Adjustment.LENS_GREEN_AMOUNT, Adjustment.LENS_GREEN_RANGE -> ReelPanel.GEOMETRY
     Adjustment.VIGNETTE_AMOUNT, Adjustment.VIGNETTE_MIDPOINT, Adjustment.VIGNETTE_ROUNDNESS,
     Adjustment.VIGNETTE_FEATHER, Adjustment.GRAIN_AMOUNT, Adjustment.GRAIN_SIZE,
     Adjustment.GRAIN_ROUGHNESS,
@@ -114,6 +118,9 @@ internal fun Adjustment.reelPanel(): ReelPanel = when (this) {
 private val LIGHT_ORDER = listOf(
     Adjustment.EXPOSURE, Adjustment.CONTRAST, Adjustment.HIGHLIGHTS,
     Adjustment.SHADOWS, Adjustment.WHITES, Adjustment.BLACKS,
+)
+private val CALIBRATION_ORDER = listOf(
+    Adjustment.CAL_SHADOWS_TINT, Adjustment.CAL_RED_HUE, Adjustment.CAL_RED_SATURATION, Adjustment.CAL_GREEN_HUE, Adjustment.CAL_GREEN_SATURATION, Adjustment.CAL_BLUE_HUE, Adjustment.CAL_BLUE_SATURATION,
 )
 private val COLOR_ORDER = listOf(Adjustment.TEMPERATURE, Adjustment.TINT, Adjustment.VIBRANCE, Adjustment.SATURATION)
 private val DETAIL_ORDER = listOf(Adjustment.TEXTURE, Adjustment.CLARITY, Adjustment.DEHAZE)
@@ -170,7 +177,7 @@ internal fun changedControls(from: EditRecipe, to: EditRecipe): List<ReelControl
     CurveChannel.entries
         .filter { from.editableCurvePoints(it) != to.editableCurvePoints(it) }
         .forEach { add(ReelControl.Curve(it)) }
-    addSliders(from, to, COLOR_ORDER)
+    addSliders(from, to, COLOR_ORDER + CALIBRATION_ORDER)
     for (component in HslComponent.entries) {
         for (band in HslColorBand.entries) {
             if (from.hslBand(band).component(component) != to.hslBand(band).component(component)) {
@@ -264,6 +271,23 @@ internal fun interpolateRecipe(from: EditRecipe, to: EditRecipe, t: Float): Edit
             dehaze = lerp(from.presence.dehaze, to.presence.dehaze, t),
             vibrance = lerp(from.presence.vibrance, to.presence.vibrance, t),
             saturation = lerp(from.presence.saturation, to.presence.saturation, t),
+        ),
+        calibration = Calibration(
+            shadowsTint = lerp(from.calibration.shadowsTint, to.calibration.shadowsTint, t),
+            redHue = lerp(from.calibration.redHue, to.calibration.redHue, t),
+            redSaturation = lerp(from.calibration.redSaturation, to.calibration.redSaturation, t),
+            greenHue = lerp(from.calibration.greenHue, to.calibration.greenHue, t),
+            greenSaturation = lerp(from.calibration.greenSaturation, to.calibration.greenSaturation, t),
+            blueHue = lerp(from.calibration.blueHue, to.calibration.blueHue, t),
+            blueSaturation = lerp(from.calibration.blueSaturation, to.calibration.blueSaturation, t),
+        ),
+        lens = LensCorrection(
+            vignetteAmount = lerp(from.lens.vignetteAmount, to.lens.vignetteAmount, t),
+            vignetteMidpoint = lerp(from.lens.vignetteMidpoint, to.lens.vignetteMidpoint, t),
+            purpleAmount = lerp(from.lens.purpleAmount, to.lens.purpleAmount, t),
+            purpleRange = lerp(from.lens.purpleRange, to.lens.purpleRange, t),
+            greenAmount = lerp(from.lens.greenAmount, to.lens.greenAmount, t),
+            greenRange = lerp(from.lens.greenRange, to.lens.greenRange, t),
         ),
         toneCurve = interpolateCurves(from, to, t),
         hsl = Hsl(

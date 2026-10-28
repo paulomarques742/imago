@@ -69,6 +69,12 @@ import kotlinx.serialization.Serializable
  */
 const val CURRENT_PROCESS_VERSION = 21
 
+/** Process 21 reads [Calibration]; an app before it would draw the photo without it, and asks to be updated. */
+const val CALIBRATION_PROCESS_VERSION = 21
+
+/** Process 21 reads [LensCorrection]. */
+const val LENS_CORRECTION_PROCESS_VERSION = 21
+
 /** Process 21 reads the noise reduction of [Detail]; before it the fields were stored and ignored. */
 const val NOISE_REDUCTION_PROCESS_VERSION = 21
 
@@ -197,6 +203,8 @@ data class EditRecipe(
     val colorGrading: ColorGrading = ColorGrading(),
     val detail: Detail = Detail(),
     val effects: Effects = Effects(),
+    val calibration: Calibration = Calibration(),
+    val lens: LensCorrection = LensCorrection(),
     val geometry: Geometry = Geometry(),
     val masks: List<LocalMask> = emptyList(),
     val retouches: List<Retouch> = emptyList(),
@@ -317,6 +325,43 @@ data class Detail(
     val noiseReductionColorDetail: Float = 50f,
     /** 0 to 100: how wide a blotch of colour is smoothed. */
     val noiseReductionColorSmoothness: Float = 50f,
+)
+
+/**
+ * Lightroom's Calibration for a RAW: the shadows' tint, and the hue and saturation of each primary. All of it
+ * is -100 to 100 and 0 is off. Read from process 21 ([CALIBRATION_PROCESS_VERSION]), and only by a RAW.
+ */
+@Serializable
+data class Calibration(
+    val shadowsTint: Float = 0f,
+    val redHue: Float = 0f,
+    val redSaturation: Float = 0f,
+    val greenHue: Float = 0f,
+    val greenSaturation: Float = 0f,
+    val blueHue: Float = 0f,
+    val blueSaturation: Float = 0f,
+) {
+    val isNeutral: Boolean
+        get() = this == Calibration()
+}
+
+/**
+ * The corrections of the lens, applied to the whole frame before the crop (not Effects' vignette, which
+ * follows the crop). Read from process 21 ([LENS_CORRECTION_PROCESS_VERSION]).
+ *
+ * [vignetteAmount] is -100 to 100 and lightens (positive) or darkens the corners; [vignetteMidpoint] is how
+ * far from the centre it starts, 0 to 100. The defringe takes the colour out of the purple and green fringes
+ * along high contrast edges: each has an Amount (0 to 100) and a hue Range (0 to 100: how wide a stretch of
+ * hues around the colour counts as fringe).
+ */
+@Serializable
+data class LensCorrection(
+    val vignetteAmount: Float = 0f,
+    val vignetteMidpoint: Float = 50f,
+    val purpleAmount: Float = 0f,
+    val purpleRange: Float = 50f,
+    val greenAmount: Float = 0f,
+    val greenRange: Float = 50f,
 )
 
 @Serializable

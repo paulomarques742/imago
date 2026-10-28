@@ -58,6 +58,14 @@ data class RenderParameters(
     val noiseColor: Float = 0f,
     val noiseColorDetail: Float = 50f,
     val noiseColorSmoothness: Float = 50f,
+    /** Calibration, a RAW's own and from process 21: the shadows' tint, and each primary's hue and saturation. */
+    val calibrationShadowsTint: Float = 0f,
+    val calibrationRedHue: Float = 0f,
+    val calibrationRedSaturation: Float = 0f,
+    val calibrationGreenHue: Float = 0f,
+    val calibrationGreenSaturation: Float = 0f,
+    val calibrationBlueHue: Float = 0f,
+    val calibrationBlueSaturation: Float = 0f,
     val sharpenAmount: Float = 0f,
     val sharpenRadius: Float = 1f,
     val sharpenDetail: Float = 25f,
@@ -105,6 +113,16 @@ data class RenderParameters(
      *
      * Made once per set of parameters, outside the equality: the export reads it for every pixel.
      */
+    /**
+     * The calibration's primaries as a row-major 3×3 on linear colour, or null while they are untouched
+     * (the tint alone is not a matrix). Made once per set of parameters: the export asks for it at every pixel.
+     */
+    val calibrationMatrix: FloatArray? by lazy { CalibrationModel.matrix(this) }
+
+    /** True when the calibration has anything to do. */
+    val needsCalibration: Boolean
+        get() = calibrationMatrix != null || calibrationShadowsTint != 0f
+
     val channelToneCurves: FloatArray by lazy {
         val tables = FloatArray(CURVE_SAMPLE_COUNT * 3)
         for (sample in 0 until CURVE_SAMPLE_COUNT) {

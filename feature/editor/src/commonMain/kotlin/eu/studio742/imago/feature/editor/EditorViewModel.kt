@@ -306,6 +306,19 @@ enum class Adjustment(val neutral: Float, val range: ClosedFloatingPointRange<Fl
     NR_COLOR(0f, 0f..100f),
     NR_COLOR_DETAIL(50f, 0f..100f),
     NR_COLOR_SMOOTHNESS(50f, 0f..100f),
+    CAL_SHADOWS_TINT(0f, -100f..100f),
+    CAL_RED_HUE(0f, -100f..100f),
+    CAL_RED_SATURATION(0f, -100f..100f),
+    CAL_GREEN_HUE(0f, -100f..100f),
+    CAL_GREEN_SATURATION(0f, -100f..100f),
+    CAL_BLUE_HUE(0f, -100f..100f),
+    CAL_BLUE_SATURATION(0f, -100f..100f),
+    LENS_VIGNETTE_AMOUNT(0f, -100f..100f),
+    LENS_VIGNETTE_MIDPOINT(50f, 0f..100f),
+    LENS_PURPLE_AMOUNT(0f, 0f..100f),
+    LENS_PURPLE_RANGE(50f, 0f..100f),
+    LENS_GREEN_AMOUNT(0f, 0f..100f),
+    LENS_GREEN_RANGE(50f, 0f..100f),
     VIGNETTE_AMOUNT(0f, -100f..100f),
     VIGNETTE_MIDPOINT(50f, 0f..100f),
     VIGNETTE_ROUNDNESS(0f, -100f..100f),
@@ -353,6 +366,9 @@ fun Adjustment.parent(): Adjustment? = when (this) {
     Adjustment.SHARPEN_RADIUS, Adjustment.SHARPEN_DETAIL, Adjustment.SHARPEN_MASKING -> Adjustment.SHARPEN_AMOUNT
     Adjustment.NR_LUMINANCE_DETAIL, Adjustment.NR_CONTRAST -> Adjustment.NR_LUMINANCE
     Adjustment.NR_COLOR_DETAIL, Adjustment.NR_COLOR_SMOOTHNESS -> Adjustment.NR_COLOR
+    Adjustment.LENS_VIGNETTE_MIDPOINT -> Adjustment.LENS_VIGNETTE_AMOUNT
+    Adjustment.LENS_PURPLE_RANGE -> Adjustment.LENS_PURPLE_AMOUNT
+    Adjustment.LENS_GREEN_RANGE -> Adjustment.LENS_GREEN_AMOUNT
     else -> null
 }
 
@@ -387,6 +403,19 @@ val Adjustment.labelRes: StringResource
     Adjustment.NR_COLOR -> Res.string.editor_adj_nr_color
     Adjustment.NR_COLOR_DETAIL -> Res.string.editor_adj_nr_color_detail
     Adjustment.NR_COLOR_SMOOTHNESS -> Res.string.editor_adj_nr_color_smoothness
+    Adjustment.CAL_SHADOWS_TINT -> Res.string.editor_adj_cal_shadows_tint
+    Adjustment.CAL_RED_HUE -> Res.string.editor_adj_cal_red_hue
+    Adjustment.CAL_RED_SATURATION -> Res.string.editor_adj_cal_red_saturation
+    Adjustment.CAL_GREEN_HUE -> Res.string.editor_adj_cal_green_hue
+    Adjustment.CAL_GREEN_SATURATION -> Res.string.editor_adj_cal_green_saturation
+    Adjustment.CAL_BLUE_HUE -> Res.string.editor_adj_cal_blue_hue
+    Adjustment.CAL_BLUE_SATURATION -> Res.string.editor_adj_cal_blue_saturation
+    Adjustment.LENS_VIGNETTE_AMOUNT -> Res.string.editor_adj_lens_vignette
+    Adjustment.LENS_VIGNETTE_MIDPOINT -> Res.string.editor_adj_lens_vignette_midpoint
+    Adjustment.LENS_PURPLE_AMOUNT -> Res.string.editor_adj_lens_purple
+    Adjustment.LENS_PURPLE_RANGE -> Res.string.editor_adj_lens_purple_range
+    Adjustment.LENS_GREEN_AMOUNT -> Res.string.editor_adj_lens_green
+    Adjustment.LENS_GREEN_RANGE -> Res.string.editor_adj_lens_green_range
     Adjustment.VIGNETTE_AMOUNT -> Res.string.editor_adj_vignette
     Adjustment.VIGNETTE_MIDPOINT -> Res.string.editor_adj_vignette_midpoint
     Adjustment.VIGNETTE_ROUNDNESS -> Res.string.editor_adj_vignette_roundness
@@ -421,6 +450,8 @@ private fun Adjustment.historyIcon(): HistoryIcon = when (this) {
     Adjustment.SHARPEN_AMOUNT, Adjustment.SHARPEN_RADIUS, Adjustment.SHARPEN_DETAIL, Adjustment.SHARPEN_MASKING,
     Adjustment.NR_LUMINANCE, Adjustment.NR_LUMINANCE_DETAIL, Adjustment.NR_CONTRAST, Adjustment.NR_COLOR, Adjustment.NR_COLOR_DETAIL, Adjustment.NR_COLOR_SMOOTHNESS,
     -> HistoryIcon.DETAIL
+    Adjustment.CAL_SHADOWS_TINT, Adjustment.CAL_RED_HUE, Adjustment.CAL_RED_SATURATION, Adjustment.CAL_GREEN_HUE, Adjustment.CAL_GREEN_SATURATION, Adjustment.CAL_BLUE_HUE, Adjustment.CAL_BLUE_SATURATION -> HistoryIcon.COLOR
+    Adjustment.LENS_VIGNETTE_AMOUNT, Adjustment.LENS_VIGNETTE_MIDPOINT, Adjustment.LENS_PURPLE_AMOUNT, Adjustment.LENS_PURPLE_RANGE, Adjustment.LENS_GREEN_AMOUNT, Adjustment.LENS_GREEN_RANGE -> HistoryIcon.CROP
     Adjustment.GRADE_BLENDING, Adjustment.GRADE_BALANCE -> HistoryIcon.GRADE
     in PERSPECTIVE_ADJUSTMENTS -> HistoryIcon.CROP
     Adjustment.MASK_AMOUNT -> HistoryIcon.MASK
@@ -3033,6 +3064,19 @@ internal fun EditRecipe.withAdjustment(adjustment: Adjustment, value: Float): Ed
     Adjustment.NR_COLOR -> copy(detail = detail.copy(noiseReductionColor = value))
     Adjustment.NR_COLOR_DETAIL -> copy(detail = detail.copy(noiseReductionColorDetail = value))
     Adjustment.NR_COLOR_SMOOTHNESS -> copy(detail = detail.copy(noiseReductionColorSmoothness = value))
+    Adjustment.CAL_SHADOWS_TINT -> copy(calibration = calibration.copy(shadowsTint = value))
+    Adjustment.CAL_RED_HUE -> copy(calibration = calibration.copy(redHue = value))
+    Adjustment.CAL_RED_SATURATION -> copy(calibration = calibration.copy(redSaturation = value))
+    Adjustment.CAL_GREEN_HUE -> copy(calibration = calibration.copy(greenHue = value))
+    Adjustment.CAL_GREEN_SATURATION -> copy(calibration = calibration.copy(greenSaturation = value))
+    Adjustment.CAL_BLUE_HUE -> copy(calibration = calibration.copy(blueHue = value))
+    Adjustment.CAL_BLUE_SATURATION -> copy(calibration = calibration.copy(blueSaturation = value))
+    Adjustment.LENS_VIGNETTE_AMOUNT -> copy(lens = lens.copy(vignetteAmount = value))
+    Adjustment.LENS_VIGNETTE_MIDPOINT -> copy(lens = lens.copy(vignetteMidpoint = value))
+    Adjustment.LENS_PURPLE_AMOUNT -> copy(lens = lens.copy(purpleAmount = value))
+    Adjustment.LENS_PURPLE_RANGE -> copy(lens = lens.copy(purpleRange = value))
+    Adjustment.LENS_GREEN_AMOUNT -> copy(lens = lens.copy(greenAmount = value))
+    Adjustment.LENS_GREEN_RANGE -> copy(lens = lens.copy(greenRange = value))
     Adjustment.VIGNETTE_AMOUNT -> copy(effects = effects.copy(vignetteAmount = value))
     Adjustment.VIGNETTE_MIDPOINT -> copy(effects = effects.copy(vignetteMidpoint = value))
     Adjustment.VIGNETTE_ROUNDNESS -> copy(effects = effects.copy(vignetteRoundness = value))
@@ -3080,6 +3124,19 @@ fun EditRecipe.adjustmentValue(adjustment: Adjustment): Float = when (adjustment
     Adjustment.NR_COLOR -> detail.noiseReductionColor
     Adjustment.NR_COLOR_DETAIL -> detail.noiseReductionColorDetail
     Adjustment.NR_COLOR_SMOOTHNESS -> detail.noiseReductionColorSmoothness
+    Adjustment.CAL_SHADOWS_TINT -> calibration.shadowsTint
+    Adjustment.CAL_RED_HUE -> calibration.redHue
+    Adjustment.CAL_RED_SATURATION -> calibration.redSaturation
+    Adjustment.CAL_GREEN_HUE -> calibration.greenHue
+    Adjustment.CAL_GREEN_SATURATION -> calibration.greenSaturation
+    Adjustment.CAL_BLUE_HUE -> calibration.blueHue
+    Adjustment.CAL_BLUE_SATURATION -> calibration.blueSaturation
+    Adjustment.LENS_VIGNETTE_AMOUNT -> lens.vignetteAmount
+    Adjustment.LENS_VIGNETTE_MIDPOINT -> lens.vignetteMidpoint
+    Adjustment.LENS_PURPLE_AMOUNT -> lens.purpleAmount
+    Adjustment.LENS_PURPLE_RANGE -> lens.purpleRange
+    Adjustment.LENS_GREEN_AMOUNT -> lens.greenAmount
+    Adjustment.LENS_GREEN_RANGE -> lens.greenRange
     Adjustment.VIGNETTE_AMOUNT -> effects.vignetteAmount
     Adjustment.VIGNETTE_MIDPOINT -> effects.vignetteMidpoint
     Adjustment.VIGNETTE_ROUNDNESS -> effects.vignetteRoundness

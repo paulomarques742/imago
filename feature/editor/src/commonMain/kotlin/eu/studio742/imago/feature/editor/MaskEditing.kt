@@ -47,6 +47,8 @@ fun Adjustment.isLocal(): Boolean = when (this) {
     Adjustment.PERSPECTIVE_DISTORTION, Adjustment.PERSPECTIVE_VERTICAL, Adjustment.PERSPECTIVE_HORIZONTAL,
     Adjustment.PERSPECTIVE_ASPECT, Adjustment.PERSPECTIVE_SCALE, Adjustment.PERSPECTIVE_OFFSET_X,
     Adjustment.PERSPECTIVE_OFFSET_Y, Adjustment.MASK_AMOUNT,
+    Adjustment.CAL_SHADOWS_TINT, Adjustment.CAL_RED_HUE, Adjustment.CAL_RED_SATURATION, Adjustment.CAL_GREEN_HUE, Adjustment.CAL_GREEN_SATURATION, Adjustment.CAL_BLUE_HUE, Adjustment.CAL_BLUE_SATURATION,
+    Adjustment.LENS_VIGNETTE_AMOUNT, Adjustment.LENS_VIGNETTE_MIDPOINT, Adjustment.LENS_PURPLE_AMOUNT, Adjustment.LENS_PURPLE_RANGE, Adjustment.LENS_GREEN_AMOUNT, Adjustment.LENS_GREEN_RANGE,
     -> false
 }
 

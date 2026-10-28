@@ -363,6 +363,9 @@ object BitmapPhotoProcessor {
      * no others: it is the image as it enters step 8 that decides what is a highlight and what is a
      * shadow. Two copies of this arithmetic would be two definitions of "light".
      */
+    /** One triple per thread: the base tone runs on every strip at once. */
+    private val calibrationScratch = ThreadLocal.withInitial { FloatArray(3) }
+
     internal fun applyBaseTone(rgb: FloatArray, tone: EffectiveTone, linearInput: Boolean = false) {
         var red = if (linearInput) rgb[0] else srgbToLinear(rgb[0])
         var green = if (linearInput) rgb[1] else srgbToLinear(rgb[1])
@@ -382,6 +385,16 @@ object BitmapPhotoProcessor {
             red *= (1f + 0.20f * temperature) * (1f + 0.08f * tint)
             green *= (1f + 0.05f * tint) * (1f - 0.10f * tint)
             blue *= (1f - 0.20f * temperature) * (1f + 0.08f * tint)
+        }
+        if (linearInput && tone.rawProfile != RawProfile.NONE && (tone.calibrationMatrix != null || tone.calibrationShadowsTint != 0f)) {
+            val calibrated = calibrationScratch.get()
+            calibrated[0] = red
+            calibrated[1] = green
+            calibrated[2] = blue
+            CalibrationModel.apply(calibrated, tone.calibrationMatrix, tone.calibrationShadowsTint)
+            red = calibrated[0]
+            green = calibrated[1]
+            blue = calibrated[2]
         }
         val exposure = 2f.pow(tone.exposure)
         red *= exposure

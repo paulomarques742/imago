@@ -2524,7 +2524,7 @@ private fun AdjustmentPanel(
                     )
                     SliderPanel(
                         state = state,
-                        groups = state.panel.adjustmentGroups(),
+                        groups = state.panel.adjustmentGroups(isRaw = state.showsRawProfile),
                         editingKey = editingKey,
                         onEditing = onEditing,
                         onAdjustment = onAdjustment,
@@ -2682,7 +2682,7 @@ private data class AdjustmentGroup(
 )
 
 @Composable
-private fun EditorPanel.adjustmentGroups(): List<AdjustmentGroup> = when (this) {
+private fun EditorPanel.adjustmentGroups(isRaw: Boolean = false): List<AdjustmentGroup> = when (this) {
     EditorPanel.LIGHT -> listOf(
         AdjustmentGroup(
             title = null,
@@ -2705,6 +2705,19 @@ private fun EditorPanel.adjustmentGroups(): List<AdjustmentGroup> = when (this) 
         AdjustmentGroup(
             title = null,
             entries = listOf(Adjustment.VIBRANCE, Adjustment.SATURATION).withLabels(),
+        ),
+    ) + if (!isRaw) emptyList() else listOf(
+        AdjustmentGroup(
+            title = stringResource(Res.string.editor_group_calibration),
+            entries = listOf(
+                Adjustment.CAL_SHADOWS_TINT to stringResource(Res.string.editor_cal_shadows_tint),
+                Adjustment.CAL_RED_HUE to stringResource(Res.string.editor_cal_red_hue),
+                Adjustment.CAL_RED_SATURATION to stringResource(Res.string.editor_cal_red_saturation),
+                Adjustment.CAL_GREEN_HUE to stringResource(Res.string.editor_cal_green_hue),
+                Adjustment.CAL_GREEN_SATURATION to stringResource(Res.string.editor_cal_green_saturation),
+                Adjustment.CAL_BLUE_HUE to stringResource(Res.string.editor_cal_blue_hue),
+                Adjustment.CAL_BLUE_SATURATION to stringResource(Res.string.editor_cal_blue_saturation),
+            ),
         ),
     )
     EditorPanel.DETAIL -> listOf(

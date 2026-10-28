@@ -221,11 +221,12 @@ private fun stepsToward(target: EditRecipe): List<ReelStep> {
 }
 
 private fun EditRecipe.withPanelOf(target: EditRecipe, panel: ReelPanel): EditRecipe = when (panel) {
-    ReelPanel.GEOMETRY -> copy(geometry = target.geometry)
+    ReelPanel.GEOMETRY -> copy(geometry = target.geometry, lens = target.lens)
     ReelPanel.LIGHT -> copy(tone = target.tone)
     ReelPanel.CURVE -> copy(toneCurve = target.toneCurve)
     ReelPanel.COLOR -> copy(
         whiteBalance = target.whiteBalance,
+        calibration = target.calibration,
         presence = presence.copy(vibrance = target.presence.vibrance, saturation = target.presence.saturation),
     )
     ReelPanel.HSL -> copy(hsl = target.hsl)

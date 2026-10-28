@@ -246,6 +246,9 @@ internal class EffectiveTone {
     var rawProfile = RawProfile.NONE
     /** Where the Highlights band ends; masks never change it either. */
     var highlightCeiling = 1f
+    /** A RAW's calibration, which masks never change. */
+    var calibrationMatrix: FloatArray? = null
+    var calibrationShadowsTint = 0f
     /** Process 21's wider and stronger highlights band. */
     var wideHighlights = false
 
@@ -283,6 +286,8 @@ internal class EffectiveTone {
         lightWhiteBalance = parameters.lightWhiteBalance
         rawProfile = parameters.rawProfile
         highlightCeiling = parameters.highlightCeiling
+        calibrationMatrix = parameters.calibrationMatrix
+        calibrationShadowsTint = parameters.calibrationShadowsTint
         wideHighlights = parameters.wideHighlights
     }
 }

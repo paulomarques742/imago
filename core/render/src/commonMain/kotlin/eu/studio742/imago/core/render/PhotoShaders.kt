@@ -295,6 +295,15 @@ internal object PhotoShaders {
             return m * (1.0 / grey);
         }
 
+        // CalibrationModel.apply, for a linear RAW: the primaries' matrix, then the shadows' tint.
+        vec3 calibrate(vec3 linear) {
+            float grey = min(linear.r, min(linear.g, linear.b));
+            linear = max(vec3(grey) + uCalibration * (linear - vec3(grey)), vec3(0.0));
+            float weight = 1.0 - smoothstep(0.0, 0.25, luminance(linear));
+            float k = uCalibrationTint / 100.0 * weight;
+            return linear * vec3(1.0 + 0.06 * k, 1.0 - 0.12 * k, 1.0 + 0.06 * k);
+        }
+
         vec3 applyBaseTone(vec3 srgb, float temperature, float tint, float exposure, float whites, float blacks) {
             vec3 linear = uSourceLinear == 1 ? srgb : toLinear(srgb);
             if (uLightWhiteBalance == 1) {
@@ -303,6 +312,7 @@ internal object PhotoShaders {
                 linear *= vec3(1.0 + 0.20 * temperature, 1.0 + 0.05 * tint, 1.0 - 0.20 * temperature);
                 linear *= vec3(1.0 + 0.08 * tint, 1.0 - 0.10 * tint, 1.0 + 0.08 * tint);
             }
+            if (uCalibrationOn == 1 && uSourceLinear == 1 && uRawProfile != 0) linear = calibrate(linear);
             linear *= exp2(exposure);
             float l = luminance(linear);
             linear += blacks * (1.0 - smoothstep(0.0, 0.35, l)) * 0.18;
@@ -359,6 +369,9 @@ internal object PhotoShaders {
         uniform int uSourceLinear;
         uniform int uRawProfile;
         uniform float uRawProfileKnee;
+        uniform mat3 uCalibration;
+        uniform float uCalibrationTint;
+        uniform int uCalibrationOn;
         uniform vec2 uSourceTexel;
         uniform float uTemperature;
         uniform float uTint;
@@ -405,6 +418,9 @@ internal object PhotoShaders {
         uniform int uSourceLinear;
         uniform int uRawProfile;
         uniform float uRawProfileKnee;
+        uniform mat3 uCalibration;
+        uniform float uCalibrationTint;
+        uniform int uCalibrationOn;
         uniform sampler2D uLocalBlur;
         uniform int uLocalEnabled;
         uniform float uTemperature;

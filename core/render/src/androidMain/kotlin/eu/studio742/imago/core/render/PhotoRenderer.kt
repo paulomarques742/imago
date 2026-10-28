@@ -826,6 +826,9 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private fun bindWhiteBalance(program: GlProgram, active: RenderParameters) {
         program.boolean("uSourceLinear", highPrecisionSource?.linear == true)
         program.int("uRawProfile", active.rawProfile)
+        program.boolean("uCalibrationOn", active.needsCalibration)
+        program.mat3("uCalibration", active.calibrationMatrix ?: IDENTITY_3X3)
+        program.float("uCalibrationTint", active.calibrationShadowsTint)
         program.float("uRawProfileKnee", RawProfile.KNEE)
         program.boolean("uLightWhiteBalance", active.lightWhiteBalance)
         if (!active.lightWhiteBalance) return
@@ -891,6 +894,8 @@ private const val MASK_FIELD_2_UNIT = 7
 
 /** The brush rasters, read only by the field pass. */
 private const val BRUSH_UNIT = 8
+
+private val IDENTITY_3X3 = floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
 
 /** The stage blurred with the sharpening radius; units 0 to 8 are taken. */
 private const val SHARP_BLUR_UNIT = 9

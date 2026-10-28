@@ -20,6 +20,7 @@ import eu.studio742.imago.core.model.RAW_PROFILE_NEUTRAL
 import eu.studio742.imago.core.model.RAW_PROFILE_VIVID
 import eu.studio742.imago.core.model.RAW_RENDERING_HEADROOM
 import eu.studio742.imago.core.model.Detail
+import eu.studio742.imago.core.model.CALIBRATION_PROCESS_VERSION
 import eu.studio742.imago.core.model.NOISE_REDUCTION_PROCESS_VERSION
 import eu.studio742.imago.core.model.SHARPENING_PROCESS_VERSION
 import eu.studio742.imago.core.model.WIDE_HIGHLIGHTS_PROCESS_VERSION
@@ -100,6 +101,14 @@ fun EditRecipe.toRenderParameters(
     noiseColor = if (reducesNoise(processVersion)) detail.noiseReductionColor.coerceIn(0f, 100f) else 0f,
     noiseColorDetail = if (reducesNoise(processVersion) && detail.noiseReductionColor > 0f) detail.noiseReductionColorDetail.coerceIn(0f, 100f) else 50f,
     noiseColorSmoothness = if (reducesNoise(processVersion) && detail.noiseReductionColor > 0f) detail.noiseReductionColorSmoothness.coerceIn(0f, 100f) else 50f,
+    // Calibration is a RAW's: a JPEG has no camera primaries to move, and neither has a process before 21.
+    calibrationShadowsTint = if (calibrates(processVersion, rawRendering)) calibration.shadowsTint.coerceIn(-100f, 100f) else 0f,
+    calibrationRedHue = if (calibrates(processVersion, rawRendering)) calibration.redHue.coerceIn(-100f, 100f) else 0f,
+    calibrationRedSaturation = if (calibrates(processVersion, rawRendering)) calibration.redSaturation.coerceIn(-100f, 100f) else 0f,
+    calibrationGreenHue = if (calibrates(processVersion, rawRendering)) calibration.greenHue.coerceIn(-100f, 100f) else 0f,
+    calibrationGreenSaturation = if (calibrates(processVersion, rawRendering)) calibration.greenSaturation.coerceIn(-100f, 100f) else 0f,
+    calibrationBlueHue = if (calibrates(processVersion, rawRendering)) calibration.blueHue.coerceIn(-100f, 100f) else 0f,
+    calibrationBlueSaturation = if (calibrates(processVersion, rawRendering)) calibration.blueSaturation.coerceIn(-100f, 100f) else 0f,
     // With Amount at 0 the other three say nothing, and they stay at their defaults so that a recipe
     // whose only change is a Radius moved on an off Sharpening is still neutral.
     sharpenAmount = if (processVersion >= SHARPENING_PROCESS_VERSION) detail.sharpenAmount.coerceIn(0f, 150f) else 0f,
@@ -309,6 +318,9 @@ internal fun normalizedCropOrigin(value: Float): Float = value.coerceIn(0f, 0.99
 
 internal fun normalizedCropSize(origin: Float, size: Float): Float =
     size.coerceIn(0.0001f, 1f - normalizedCropOrigin(origin))
+
+private fun calibrates(processVersion: Int, rawRendering: Int) =
+    processVersion >= CALIBRATION_PROCESS_VERSION && rawRendering >= RAW_RENDERING_PROFILED
 
 private fun reducesNoise(processVersion: Int) = processVersion >= NOISE_REDUCTION_PROCESS_VERSION
 
