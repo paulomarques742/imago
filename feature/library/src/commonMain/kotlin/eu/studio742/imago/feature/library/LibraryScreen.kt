@@ -14,6 +14,7 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import eu.studio742.imago.feature.library.resources.*
 import eu.studio742.imago.core.render.libraryAuth
+import eu.studio742.imago.core.render.rawQuickPreview
 import eu.studio742.imago.core.render.withRecipe
 import coil3.request.crossfade
 import androidx.compose.ui.backhandler.BackHandler
@@ -1919,6 +1920,20 @@ private fun AssetTile(
                 }
             },
     ) {
+        // A RAW from the phone is developed one at a time, and a grid of them would stay blank until
+        // each one's turn. The phone already keeps a small look of it: it goes underneath, and the
+        // developed photo fades in over it when it is ready.
+        if (asset.isRaw && asset.thumbnailUrl.startsWith("content:")) {
+            val quickRequest = remember(context, asset.thumbnailUrl) {
+                ImageRequest.Builder(context).rawQuickPreview(asset.thumbnailUrl).build()
+            }
+            AsyncImage(
+                model = quickRequest,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         AsyncImage(
             model = ImageRequest.Builder(context)
                 .data(asset.thumbnailUrl)

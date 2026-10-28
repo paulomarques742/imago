@@ -1,5 +1,6 @@
 package eu.studio742.imago.core.render
 
+import coil3.Extras
 import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import coil3.request.ImageRequest
@@ -23,6 +24,24 @@ fun ImageRequest.Builder.libraryAuth(apiKey: String?): ImageRequest.Builder = ap
 fun ImageRequest.Builder.withRecipe(recipe: EditRecipe?): ImageRequest.Builder = apply {
     extras[rawRecipeKey] = recipe
     recipe?.let { transformations(recipeTransformation(it)) }
+}
+
+/**
+ * Set on a request that asks for the quick look of a RAW — what the phone already keeps of it — and
+ * not for the developed photo. A fetcher that can answer it quickly does; one that cannot fails the
+ * request, because the alternative is developing the RAW to show a placeholder.
+ */
+val RawQuickPreview = Extras.Key(default = false)
+
+/**
+ * The quick look of a RAW, for a tile to show while the developed one is still being made. It has its
+ * own memory cache key, so that it is never taken for the developed photo of the same data, and no
+ * recipe: it is the photo as the camera left it.
+ */
+fun ImageRequest.Builder.rawQuickPreview(source: String): ImageRequest.Builder = apply {
+    extras[RawQuickPreview] = true
+    data(source)
+    memoryCacheKey("raw-quick:$source")
 }
 
 /** The transformation that applies [recipe]: Android's Bitmap on one side, Skia's on the other. */
