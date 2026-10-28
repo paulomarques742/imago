@@ -258,6 +258,9 @@
     <string name="editor_export_origin_unavailable">Não foi possível verificar se esta fotografia pertence a uma biblioteca externa. As edições enviadas para o Immich ficam no armazenamento gerido por ele.</string>
     <string name="editor_phase_preparing">A preparar a exportação…</string>
     <string name="editor_export_failed">Não foi possível exportar a fotografia.</string>
+    <string name="photo_export_notification_channel">Exportações de fotografias</string>
+    <string name="photo_export_notification_title">A exportar a fotografia</string>
+    <string name="photo_export_notification_done">Fotografia exportada</string>
     <string name="editor_history_version_from">Versão de %1$s</string>
     <string name="editor_history_recovered_conflict">Recuperada de um conflito</string>
     <string name="editor_version_applied">Versão de %1$s aplicada.</string>

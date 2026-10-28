@@ -1,2 +1,11 @@
-<manifest />
-
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <application>
+        <!-- Keeps a photo going to the gallery or to Immich after the app is left. -->
+        <service
+            android:name="eu.studio742.imago.feature.editor.PhotoExportService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+</manifest>

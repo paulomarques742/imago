@@ -258,6 +258,9 @@
     <string name="editor_export_origin_unavailable">Couldn’t check whether this photo is in an external library. Edits sent to Immich are uploaded to its managed storage.</string>
     <string name="editor_phase_preparing">Preparing the export…</string>
     <string name="editor_export_failed">Couldn’t export the photo.</string>
+    <string name="photo_export_notification_channel">Photo exports</string>
+    <string name="photo_export_notification_title">Exporting the photo</string>
+    <string name="photo_export_notification_done">Photo exported</string>
     <string name="editor_history_version_from">Version from %1$s</string>
     <string name="editor_history_recovered_conflict">Recovered from a conflict</string>
     <string name="editor_version_applied">Version from %1$s applied.</string>

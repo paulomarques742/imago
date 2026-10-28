@@ -2157,7 +2157,7 @@ open class EditorViewModel(
     }
 
     /** The edited photo to another app, through [share]: the same export the other destinations read. */
-    fun shareEdited(share: eu.studio742.imago.feature.library.SelectionShare) = export { asset, jpeg, _ ->
+    fun shareEdited(share: eu.studio742.imago.feature.library.SelectionShare) = export(background = false) { asset, jpeg, _ ->
         val folder = share.prepare() ?: return@export null
         val file = File(folder, exportFileName(asset))
         withContext(Dispatchers.IO) { jpeg.copyTo(file, overwrite = true) }
@@ -2206,8 +2206,13 @@ open class EditorViewModel(
     fun consumeExportResult() = mutableState.update { it.copy(exportMessage = null, exportError = null) }
     fun reportExportError(message: UiText) = mutableState.update { it.copy(exportError = message) }
 
+    /**
+     * [background]: the export carries on when the editor is left ([PhotoExports]), with a notification. A
+     * share opens the system's sheet when it is done, which only makes sense with the app in front.
+     */
     private fun export(
         before: suspend () -> Unit = {},
+        background: Boolean = true,
         block: suspend (EditorAsset, File, EditRecipe) -> UiText?,
     ) {
         val snapshot = state.value
@@ -2223,29 +2228,33 @@ open class EditorViewModel(
                 exportError = null,
             )
         }
-        viewModelScope.launch {
-            runCatching {
-                before()
-                val jpeg = exporter.renderJpegOnce(asset, recipe) { phase ->
-                    mutableState.update { it.copy(exportPhase = phase) }
-                }
-                try {
-                    block(asset, jpeg, recipe)
-                } finally {
-                    jpeg.delete()
-                }
-            }.onSuccess { message ->
+        val work: suspend ((UiText) -> Unit) -> UiText? = { onPhase ->
+            before()
+            val jpeg = exporter.renderJpegOnce(asset, recipe) { phase ->
+                onPhase(phase)
+                mutableState.update { it.copy(exportPhase = phase) }
+            }
+            try {
+                block(asset, jpeg, recipe)
+            } finally {
+                jpeg.delete()
+            }
+        }
+        val finish: (Result<UiText?>) -> Unit = { result ->
+            result.onSuccess { message ->
                 mutableState.update { it.copy(isExporting = false, exportPhase = null, exportMessage = message) }
             }.onFailure { error ->
                 mutableState.update {
                     it.copy(
                         isExporting = false,
                         exportPhase = null,
-                        exportError = error.toUiText(Res.string.editor_export_failed),
+                        exportError = if (error is CancellationException) null else error.toUiText(Res.string.editor_export_failed),
                     )
                 }
             }
         }
+        if (background && PhotoExports.start(context, work, finish)) return
+        viewModelScope.launch { finish(runCatching { work {} }) }
     }
 
     private fun setRecipeAndSave(recipe: EditRecipe) {
