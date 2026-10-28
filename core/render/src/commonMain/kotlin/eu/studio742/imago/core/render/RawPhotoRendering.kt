@@ -29,13 +29,13 @@ suspend fun decodeRawPreview(file: File, maxSide: Int, baselineExposure: Boolean
     }
 
 /** The editor's preview of a RAW: the pixels, and the camera's colour for white balance in kelvin. */
-class RawPreview(val pixels: FloatPixelBuffer, val light: CameraLight?)
+class RawPreview(val pixels: FloatPixelBuffer, val light: CameraLight?, val baselineExposure: Float = 0f)
 
 /** As [decodeRawPreview], with the camera's colour the editor needs. */
 suspend fun decodeRawEditorPreview(file: File, maxSide: Int, baselineExposure: Boolean, highlight: Int = CURRENT_RAW_HIGHLIGHT): RawPreview? =
     runInterruptible(Dispatchers.IO) {
         RawDecoder.decodePreview(file, maxSide, baselineExposure, highlight)?.let {
-            RawPreview(FloatPixelBuffer(it.width, it.height, it.rgb), CameraLight.of(it.xyzToDeveloped))
+            RawPreview(FloatPixelBuffer(it.width, it.height, it.rgb), CameraLight.of(it.xyzToDeveloped), it.baselineExposure)
         }
     }
 

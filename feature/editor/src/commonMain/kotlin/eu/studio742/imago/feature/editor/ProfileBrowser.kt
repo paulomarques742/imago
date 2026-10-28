@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -172,3 +173,35 @@ private const val PROFILE_COLUMNS = 2
 
 /** The previews' ids in the recipe preview cache, apart from the recipes' own. */
 private const val PROFILE_PREVIEW_PREFIX = "profile:"
+
+/**
+ * Offered on a RAW kept under an older development: one tap moves it to the current one, with the
+ * Exposure compensated so the photo does not get brighter or darker. It is a history step, so it can be undone.
+ */
+@Composable
+internal fun DevelopmentUpgradeCard(
+    isWorking: Boolean,
+    onUpgrade: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = ImagoSpacing.Sm)
+            .clip(RoundedCornerShape(ImagoRadii.Medium))
+            .background(ImagoColors.Surface)
+            .padding(ImagoSpacing.Sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(Res.string.editor_development_card_title), style = MaterialTheme.typography.labelMedium, color = ImagoColors.Gold)
+            Text(stringResource(Res.string.editor_development_card_body), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+        }
+        if (isWorking) {
+            CircularProgressIndicator(color = ImagoColors.Gold, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+        } else {
+            TextButton(onClick = onUpgrade) { Text(stringResource(Res.string.editor_development_card_action)) }
+        }
+    }
+}

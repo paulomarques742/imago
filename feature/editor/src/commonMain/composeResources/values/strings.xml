@@ -127,6 +127,11 @@
     <string name="editor_curve_channel_red">Red</string>
     <string name="editor_curve_channel_green">Green</string>
     <string name="editor_curve_channel_blue">Blue</string>
+    <string name="editor_development_upgrade">Update development</string>
+    <string name="editor_development_upgraded">Newer RAW development, same brightness</string>
+    <string name="editor_development_card_title">A newer RAW development is available</string>
+    <string name="editor_development_card_body">This photo keeps the development it was edited with. The newer one recovers more highlights and adds profiles; the brightness stays where it is, and you can undo it.</string>
+    <string name="editor_development_card_action">Update</string>
     <string name="editor_profile">Profile</string>
     <string name="editor_profiles">Profiles</string>
     <string name="editor_profile_choose">Choose the profile</string>

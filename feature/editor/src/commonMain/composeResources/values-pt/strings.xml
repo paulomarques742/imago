@@ -127,6 +127,11 @@
     <string name="editor_curve_channel_red">Vermelho</string>
     <string name="editor_curve_channel_green">Verde</string>
     <string name="editor_curve_channel_blue">Azul</string>
+    <string name="editor_development_upgrade">Actualizar revelação</string>
+    <string name="editor_development_upgraded">Revelação RAW mais recente, com o mesmo brilho</string>
+    <string name="editor_development_card_title">Há uma revelação RAW mais recente</string>
+    <string name="editor_development_card_body">Esta foto mantém a revelação com que foi editada. A mais recente recupera mais realces e traz perfis; o brilho fica onde está e pode desfazer.</string>
+    <string name="editor_development_card_action">Actualizar</string>
     <string name="editor_profile">Perfil</string>
     <string name="editor_profiles">Perfis</string>
     <string name="editor_profile_choose">Escolher o perfil</string>

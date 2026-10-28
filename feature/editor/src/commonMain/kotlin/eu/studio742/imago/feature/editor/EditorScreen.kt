@@ -434,6 +434,7 @@ fun EditorRoute(
                 onCancel = viewModel::cancelWhiteBalancePick,
                 onPreset = viewModel::selectWhiteBalancePreset,
                 onProfile = viewModel::selectProfile,
+                onUpgradeDevelopment = viewModel::upgradeDevelopment,
             )
         },
         perspectiveActions = remember(viewModel) {
@@ -2545,6 +2546,13 @@ private fun AdjustmentPanel(
                                     modifier = Modifier.alpha(if (editingKey == null) 1f else 0f),
                                 )
                             }
+                            if (state.panel == EditorPanel.LIGHT && state.canUpgradeDevelopment) {
+                                DevelopmentUpgradeCard(
+                                    isWorking = state.isUpgradingDevelopment,
+                                    onUpgrade = whiteBalanceActions.onUpgradeDevelopment,
+                                    modifier = Modifier.alpha(if (editingKey == null) 1f else 0f),
+                                )
+                            }
                             if (state.panel == EditorPanel.LIGHT && state.showsRawProfile && recipe != null) {
                                 ProfileRow(
                                     assetId = state.asset?.id,
@@ -3621,6 +3629,8 @@ data class WhiteBalancePickActions(
     val onPreset: (WhiteBalancePreset) -> Unit,
     /** The RAW profile's browser, at the top of the Light panel. */
     val onProfile: (RawProfileChoice) -> Unit,
+    /** Moves an old RAW edit to the current development. */
+    val onUpgradeDevelopment: () -> Unit,
 )
 
 /** What the perspective sheet asks of the screen besides the sliders, which go the way of all others. */

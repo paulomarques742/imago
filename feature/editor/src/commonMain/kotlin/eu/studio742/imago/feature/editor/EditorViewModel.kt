@@ -99,6 +99,9 @@ import kotlin.math.floor
 import java.io.File
 import eu.studio742.imago.core.render.FloatPixelBuffer
 import eu.studio742.imago.core.render.CURRENT_RAW_HIGHLIGHT
+import eu.studio742.imago.core.render.RawDevelopmentUpgrade
+import eu.studio742.imago.core.model.RAW_RENDERING_LINEAR
+import eu.studio742.imago.core.model.rawEngine
 import eu.studio742.imago.core.render.decodeRawEditorPreview
 import eu.studio742.imago.core.render.CameraLight
 import eu.studio742.imago.core.render.KelvinTint
@@ -596,6 +599,8 @@ data class EditorUiState(
      */
     val needsNewerApp: Boolean = false,
     val recipeEdit: RecipeEditState? = null,
+    /** The development is being redone for the new rendering. */
+    val isUpgradingDevelopment: Boolean = false,
     val error: UiText? = null,
 ) {
     /**
@@ -604,6 +609,10 @@ data class EditorUiState(
      */
     val showsRawProfile: Boolean
         get() = highPrecisionSource?.linear == true && recipe?.let { it.rawRendering() >= RAW_RENDERING_PROFILED } == true
+
+    /** A RAW kept under an older development, with a newer one to move it to. */
+    val canUpgradeDevelopment: Boolean
+        get() = highPrecisionSource?.linear == true && recipe?.let(RawDevelopmentUpgrade::isAvailable) == true
 
     val hasUnsavedRecipeChanges: Boolean
         get() {
@@ -715,6 +724,10 @@ open class EditorViewModel(
     /** What is being moved right now, so the entry knows what to call itself when it closes. */
     private var pendingChange: PendingChange? = null
     private var loadJob: Job? = null
+    private var redevelopJob: Job? = null
+
+    /** The rendering and engine the pixels on screen were decoded for. */
+    private var developedSource: Pair<Int, String>? = null
     private var conflictsJob: Job? = null
     private var saveJob: Job? = null
     private val geometryMirror = ImmichGeometryMirror(immichApi, configuration)
@@ -856,6 +869,7 @@ open class EditorViewModel(
                 }
             }.onSuccess { (bitmap, recipe, existed) ->
                 shouldPersist = target is PhotoEditTarget.Asset && existed
+                developedSource = recipe.rawRendering() to recipe.rawEngine()
                 // The recipe the photo opens with is the history's zero point, whether or not it has
                 // adjustments from an earlier session: this is where "Delete all" goes back to.
                 history.reset(
@@ -2033,6 +2047,77 @@ open class EditorViewModel(
         editStart = null
         pendingChange = null
         setRecipeAndSave(restored.copy(updatedAt = Instant.now().toString()))
+        redevelopIfNeeded(restored)
+    }
+
+    /**
+     * The original decoded for [recipe]'s development. Undoing an upgrade goes back to a recipe that the
+     * pixels on screen were not decoded for: they are decoded again, as when the photo was opened.
+     */
+    private fun redevelopIfNeeded(recipe: EditRecipe) {
+        val asset = state.value.asset ?: return
+        if (state.value.highPrecisionSource?.linear != true) return
+        val wanted = recipe.rawRendering() to recipe.rawEngine()
+        if (wanted == developedSource) return
+        developedSource = wanted
+        redevelopJob?.cancel()
+        redevelopJob = viewModelScope.launch {
+            runCatching {
+                loadPhoto(asset, recipe.appliesBaselineExposure(), measure = false, highlight = recipe.rawHighlightMode())
+            }.onSuccess { loaded ->
+                mutableState.update {
+                    it.copy(bitmap = loaded.bitmap, highPrecisionSource = loaded.raw ?: it.highPrecisionSource, cameraLight = loaded.light ?: it.cameraLight)
+                }
+            }.onFailure { error ->
+                mutableState.update { it.copy(recipeNotice = error.toUiText(Res.string.editor_open_failed)) }
+            }
+        }
+    }
+
+    /**
+     * Moves a RAW kept under an older development to the current one, with the Exposure moved so that the
+     * grey stays where it was. A step of the history like any other: undoing it brings the old one back.
+     */
+    fun upgradeDevelopment() {
+        val current = state.value.recipe ?: return
+        val asset = state.value.asset ?: return
+        if (!state.value.canUpgradeDevelopment || state.value.isUpgradingDevelopment) return
+        finishAdjustment()
+        editStart = null
+        pendingChange = null
+        mutableState.update { it.copy(isUpgradingDevelopment = true) }
+        viewModelScope.launch {
+            runCatching {
+                // Rendering 1 needs the original measured; from rendering 2 on, the exposure is already kept.
+                loadPhoto(asset, baselineExposure = true, measure = current.rawRendering() == RAW_RENDERING_LINEAR, highlight = CURRENT_RAW_HIGHLIGHT)
+            }.onSuccess { loaded ->
+                val latest = state.value.recipe ?: current
+                val upgraded = RawDevelopmentUpgrade.upgrade(latest, loaded.rawExposure, loaded.baselineExposure)
+                if (upgraded == null || loaded.raw == null) {
+                    mutableState.update { it.copy(isUpgradingDevelopment = false) }
+                    return@onSuccess
+                }
+                val stamped = upgraded.copy(updatedAt = Instant.now().toString())
+                developedSource = stamped.rawRendering() to stamped.rawEngine()
+                mutableState.update {
+                    it.copy(bitmap = loaded.bitmap, highPrecisionSource = loaded.raw, cameraLight = loaded.light ?: it.cameraLight, isUpgradingDevelopment = false)
+                }
+                setRecipeAndSave(stamped)
+                pushHistory(
+                    HistoryEntry(
+                        id = UUID.randomUUID().toString(),
+                        label = uiText(Res.string.editor_development_upgrade),
+                        detail = uiText(Res.string.editor_development_upgraded),
+                        valueText = null,
+                        icon = HistoryIcon.RECIPE,
+                        timestamp = Instant.now().toString(),
+                        recipe = stamped,
+                    ),
+                )
+            }.onFailure { error ->
+                mutableState.update { it.copy(isUpgradingDevelopment = false, recipeNotice = error.toUiText(Res.string.editor_open_failed)) }
+            }
+        }
     }
 
     private fun pushHistory(entry: HistoryEntry) {
@@ -2754,6 +2839,7 @@ open class EditorViewModel(
         val raw: FloatPixelBuffer? = null,
         val rawExposure: Float = 0f,
         val light: CameraLight? = null,
+        val baselineExposure: Float = 0f,
     )
 
     /** [baselineExposure] is the recipe's [appliesBaselineExposure]; a JPEG ignores it. */
@@ -2767,7 +2853,7 @@ open class EditorViewModel(
                 if (raw != null) {
                     // Measured before the original is deleted; only a development made now uses it.
                     val matched = if (measure) CameraExposureMatch.of(original, raw) else 0f
-                    return LoadedPhoto(withContext(Dispatchers.Default) { raw.toPixelBuffer().toPlatformBitmap() }, raw, matched, preview.light)
+                    return LoadedPhoto(withContext(Dispatchers.Default) { raw.toPixelBuffer().toPlatformBitmap() }, raw, matched, preview.light, preview.baselineExposure)
                 }
             } finally { original.delete() }
         }
