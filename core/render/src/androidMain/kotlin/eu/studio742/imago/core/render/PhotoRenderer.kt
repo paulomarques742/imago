@@ -45,6 +45,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private var blur: GlProgram? = null
     private var statistics: GlProgram? = null
     private var composite: GlProgram? = null
+    private var noise: GlProgram? = null
 
     private var sourceTexture = 0
     /** The brush rasters, one layer each; a 1 × 1 empty layer while there are none, so the sampler always has a texture. */
@@ -67,7 +68,14 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private var imageHeight = 1
 
     private var halfFloatTargets = true
-    private val stage = GlRenderTarget()
+    /** The stage; [spare] takes its place when step 10 has written the cleaned one into it. */
+    private var stage = GlRenderTarget()
+    private var spare = GlRenderTarget()
+    private val noiseHalf = GlRenderTarget()
+    private val noiseChromaScratch = GlRenderTarget()
+    private val noiseChromaBlur = GlRenderTarget()
+    private val noiseLumaScratch = GlRenderTarget()
+    private val noiseLumaBlur = GlRenderTarget()
     private val half = GlRenderTarget()
     private val halfScratch = GlRenderTarget()
     private val bandBlur = GlRenderTarget()
@@ -86,7 +94,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private val maskField2 = GlRenderTarget()
     private val allTargets
         get() = listOf(
-            stage, half, halfScratch, bandBlur, quarter,
+            stage, spare, noiseHalf, noiseChromaScratch, noiseChromaBlur, noiseLumaScratch, noiseLumaBlur,
+            half, halfScratch, bandBlur, quarter,
             eighth, eighthScratch, coarseBlur, stats, statsScratch, darkBlur, localBlur, maskField, maskField2,
         )
 
@@ -106,6 +115,9 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private val coarseKernel = BlurKernel(PhotoEffects.CLARITY_SIGMA / 8f)
     private val darkKernel = BlurKernel(PhotoEffects.DEHAZE_REFINE_SIGMA / 8f)
     private val localKernel = BlurKernel(PhotoEffects.LOCAL_TONE_SIGMA / 8f)
+    private val noiseLumaKernel = BlurKernel(NoiseReduction.LUMA_SIGMA)
+    private var noiseChromaKernel = BlurKernel(1f)
+    private var noiseChromaSigma = 1f
     private var sharpKernel = BlurKernel(1f)
     private var sharpKernelSigma = 1f
 
@@ -157,6 +169,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         blur = GlProgram(PhotoShaders.VERTEX, PhotoShaders.BLUR)
         statistics = GlProgram(PhotoShaders.VERTEX, PhotoShaders.STATS)
         composite = GlProgram(PhotoShaders.VERTEX, PhotoShaders.COMPOSITE)
+        // Apart from the others on purpose: if this device cannot build it, only step 10 is lost.
+        noise = runCatching { GlProgram(PhotoShaders.VERTEX, PhotoShaders.NOISE) }.getOrNull()
         // The context is new: the previous handles no longer exist and deleting them now would
         // destroy the objects that inherited the same names.
         allTargets.forEach(GlRenderTarget::forget)
@@ -203,6 +217,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         val maskFields = if (active.needsMaskField) buildMaskField(active) else 0
         val local = active.needsLocalToneMask && buildLocalToneMask(active, maskFields)
         renderTone(active, local, maskFields)
+        if (active.needsNoiseStage) reduceNoise(active)
         val detail = active.needsDetailStage && buildDetailPyramid(active)
         val sharpen = active.needsSharpenStage && buildSharpening(active)
         renderComposite(active, detail, sharpen, maskFields)
@@ -543,6 +558,54 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
             applyBlur(stats, statsScratch, darkBlur, darkKernel)
         }
         return true
+    }
+
+    /**
+     * Step 10: the stage, cleaned. The blurred copies are made from it, the pass writes the cleaned image
+     * into [spare], and [spare] becomes the stage — everything after reads the cleaned one without
+     * knowing there was another. If anything cannot be built, the stage is left as it was.
+     */
+    private fun reduceNoise(active: RenderParameters) {
+        val program = noise ?: return
+        val precision = halfFloatTargets
+        spare.ensure(imageWidth, imageHeight, precision)
+        if (!spare.isComplete) return
+        if (active.noiseLuminance > 0f) {
+            noiseLumaScratch.ensure(imageWidth, imageHeight, precision)
+            noiseLumaBlur.ensure(imageWidth, imageHeight, precision)
+            if (!noiseLumaScratch.isComplete || !noiseLumaBlur.isComplete) return
+            applyBlur(stage, noiseLumaScratch, noiseLumaBlur, noiseLumaKernel)
+        }
+        if (active.noiseColor > 0f) {
+            val halfWidth = (imageWidth / 2).coerceAtLeast(1)
+            val halfHeight = (imageHeight / 2).coerceAtLeast(1)
+            noiseHalf.ensure(halfWidth, halfHeight, precision)
+            noiseChromaScratch.ensure(halfWidth, halfHeight, precision)
+            noiseChromaBlur.ensure(halfWidth, halfHeight, precision)
+            if (!noiseHalf.isComplete || !noiseChromaScratch.isComplete || !noiseChromaBlur.isComplete) return
+            val sigma = NoiseReduction.chromaSigma(active.noiseColorSmoothness) / 2f
+            if (sigma != noiseChromaSigma) {
+                noiseChromaKernel = BlurKernel(sigma)
+                noiseChromaSigma = sigma
+            }
+            reduce(stage, noiseHalf)
+            applyBlur(noiseHalf, noiseChromaScratch, noiseChromaBlur, noiseChromaKernel)
+        }
+        spare.bindAsTarget()
+        program.use()
+        bindQuad()
+        program.sampler("uStage", stage.texture, 0)
+        program.sampler("uLumaBlur", if (active.noiseLuminance > 0f) noiseLumaBlur.texture else stage.texture, 1)
+        program.sampler("uChromaBlur", if (active.noiseColor > 0f) noiseChromaBlur.texture else stage.texture, 2)
+        program.float("uLumaAmount", active.noiseLuminance)
+        program.float("uLumaDetail", active.noiseLuminanceDetail)
+        program.float("uLumaContrast", active.noiseContrast)
+        program.float("uColorAmount", active.noiseColor)
+        program.float("uColorDetail", active.noiseColorDetail)
+        drawQuad()
+        val cleaned = spare
+        spare = stage
+        stage = cleaned
     }
 
     /** Step 11's blurred copy of the stage, at the stage's resolution, with the radius in its pixels. */

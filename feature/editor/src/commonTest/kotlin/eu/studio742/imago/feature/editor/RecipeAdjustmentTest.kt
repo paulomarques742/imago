@@ -33,7 +33,8 @@ class RecipeAdjustmentTest {
 
             assertEquals(adjustment.range.endInclusive / 2f, changed.adjustmentValue(adjustment))
             global.filterNot { it == adjustment }.forEach { untouched ->
-                assertEquals(untouched.neutral, changed.adjustmentValue(untouched))
+                // What the recipe started with: for the colour noise reduction that is 25, and not its neutral 0.
+                assertEquals(neutral.adjustmentValue(untouched), changed.adjustmentValue(untouched))
             }
         }
     }

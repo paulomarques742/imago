@@ -18,6 +18,7 @@ import eu.studio742.imago.core.model.UPRIGHT_OFF
 import eu.studio742.imago.core.model.RAW_PROFILE_MONOCHROME
 import eu.studio742.imago.core.model.RAW_RENDERING_HEADROOM
 import eu.studio742.imago.core.model.Detail
+import eu.studio742.imago.core.model.NOISE_REDUCTION_PROCESS_VERSION
 import eu.studio742.imago.core.model.SHARPENING_PROCESS_VERSION
 import eu.studio742.imago.core.model.WIDE_HIGHLIGHTS_PROCESS_VERSION
 import eu.studio742.imago.core.model.RAW_RENDERING_PROFILED
@@ -88,6 +89,13 @@ fun EditRecipe.toRenderParameters(
     saturation = presence.saturation,
     colorGrade = if (processVersion >= 9) colorGrading.toRenderGrade() else ColorGrade(),
     texture = presence.texture,
+    // Noise reduction: an amount at 0 turns its half off, and what goes with it stays at the defaults.
+    noiseLuminance = if (reducesNoise(processVersion)) detail.noiseReductionLuminance.coerceIn(0f, 100f) else 0f,
+    noiseLuminanceDetail = if (reducesNoise(processVersion) && detail.noiseReductionLuminance > 0f) detail.noiseReductionLuminanceDetail.coerceIn(0f, 100f) else 50f,
+    noiseContrast = if (reducesNoise(processVersion) && detail.noiseReductionLuminance > 0f) detail.noiseReductionContrast.coerceIn(0f, 100f) else 0f,
+    noiseColor = if (reducesNoise(processVersion)) detail.noiseReductionColor.coerceIn(0f, 100f) else 0f,
+    noiseColorDetail = if (reducesNoise(processVersion) && detail.noiseReductionColor > 0f) detail.noiseReductionColorDetail.coerceIn(0f, 100f) else 50f,
+    noiseColorSmoothness = if (reducesNoise(processVersion) && detail.noiseReductionColor > 0f) detail.noiseReductionColorSmoothness.coerceIn(0f, 100f) else 50f,
     // With Amount at 0 the other three say nothing, and they stay at their defaults so that a recipe
     // whose only change is a Radius moved on an off Sharpening is still neutral.
     sharpenAmount = if (processVersion >= SHARPENING_PROCESS_VERSION) detail.sharpenAmount.coerceIn(0f, 150f) else 0f,
@@ -117,7 +125,7 @@ fun EditRecipe.toRenderParameters(
         else -> PerspectiveParameters()
     },
     masks = if (processVersion >= 8) masks.toRenderSpecs(processVersion, showMask) else emptyList(),
-)
+).withoutIdleColourNoise()
 
 fun eu.studio742.imago.core.model.Perspective.toRenderPerspective() = PerspectiveParameters(
     vertical = vertical.coerceIn(-100f, 100f),
@@ -263,6 +271,21 @@ fun EditRecipe.activeGeometry(): Geometry = when {
 /** Whether the recipe changes anything at all. A neutral one justifies processing no thumbnail. */
 fun EditRecipe.changesTheImage(): Boolean = !toRenderParameters().isNeutral
 
+/** What [eu.studio742.imago.core.model.Detail.noiseReductionColor] starts at. */
+private const val STARTING_COLOUR_NOISE_REDUCTION = 25f
+
+/**
+ * The colour noise reduction a new recipe starts with is not an edit, and does not wake up on its own: a
+ * photo with nothing but a crop, a perspective or a colour noise reduction nobody touched goes on through
+ * no colour pipeline and keeps its pixels. It acts with the first edit that has colour, tone or detail in it.
+ */
+private fun RenderParameters.withoutIdleColourNoise(): RenderParameters {
+    val starting = noiseColor == STARTING_COLOUR_NOISE_REDUCTION &&
+        noiseColorDetail == RenderParameters().noiseColorDetail &&
+        noiseColorSmoothness == RenderParameters().noiseColorSmoothness
+    return if (starting && copy(noiseColor = 0f).isColorNeutral) copy(noiseColor = 0f) else this
+}
+
 /**
  * The aspect ratio the photo ends up with after the recipe's geometry.
  *
@@ -282,5 +305,7 @@ internal fun normalizedCropOrigin(value: Float): Float = value.coerceIn(0f, 0.99
 
 internal fun normalizedCropSize(origin: Float, size: Float): Float =
     size.coerceIn(0.0001f, 1f - normalizedCropOrigin(origin))
+
+private fun reducesNoise(processVersion: Int) = processVersion >= NOISE_REDUCTION_PROCESS_VERSION
 
 private fun sharpens(processVersion: Int, detail: Detail) = processVersion >= SHARPENING_PROCESS_VERSION && detail.sharpenAmount > 0f

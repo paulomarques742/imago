@@ -77,6 +77,9 @@
     <string name="editor_feather">Suavização</string>
     <string name="editor_group_grain">Grão</string>
     <string name="editor_group_sharpening">Nitidez</string>
+    <string name="editor_group_noise_reduction">Redução de ruído</string>
+    <string name="editor_nr_luminance">Luminância</string>
+    <string name="editor_nr_smoothness">Suavidade</string>
     <string name="editor_radius">Raio</string>
     <string name="editor_masking">Máscara</string>
     <string name="editor_size">Tamanho</string>
@@ -149,6 +152,12 @@
     <string name="editor_adj_sharpen_radius">Raio da nitidez</string>
     <string name="editor_adj_sharpen_detail">Detalhe da nitidez</string>
     <string name="editor_adj_sharpen_masking">Máscara da nitidez</string>
+    <string name="editor_adj_nr_luminance">Redução de ruído</string>
+    <string name="editor_adj_nr_luminance_detail">Detalhe da redução de ruído</string>
+    <string name="editor_adj_nr_contrast">Contraste da redução de ruído</string>
+    <string name="editor_adj_nr_color">Redução do ruído de cor</string>
+    <string name="editor_adj_nr_color_detail">Detalhe do ruído de cor</string>
+    <string name="editor_adj_nr_color_smoothness">Suavidade do ruído de cor</string>
     <string name="editor_adj_dehaze">Remover neblina</string>
     <string name="editor_adj_vignette">Vinheta</string>
     <string name="editor_adj_vignette_midpoint">Vinheta · ponto médio</string>

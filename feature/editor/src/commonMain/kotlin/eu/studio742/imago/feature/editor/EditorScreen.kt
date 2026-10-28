@@ -2703,6 +2703,17 @@ private fun EditorPanel.adjustmentGroups(): List<AdjustmentGroup> = when (this) 
                 Adjustment.SHARPEN_MASKING to stringResource(Res.string.editor_masking),
             ),
         ),
+        AdjustmentGroup(
+            title = stringResource(Res.string.editor_group_noise_reduction),
+            entries = listOf(
+                Adjustment.NR_LUMINANCE to stringResource(Res.string.editor_nr_luminance),
+                Adjustment.NR_LUMINANCE_DETAIL to stringResource(Res.string.editor_panel_detail),
+                Adjustment.NR_CONTRAST to stringResource(Res.string.editor_adj_contrast),
+                Adjustment.NR_COLOR to stringResource(Res.string.editor_panel_color),
+                Adjustment.NR_COLOR_DETAIL to stringResource(Res.string.editor_panel_detail),
+                Adjustment.NR_COLOR_SMOOTHNESS to stringResource(Res.string.editor_nr_smoothness),
+            ),
+        ),
     )
     EditorPanel.EFFECTS -> listOf(
         AdjustmentGroup(

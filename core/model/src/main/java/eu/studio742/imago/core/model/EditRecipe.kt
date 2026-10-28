@@ -69,6 +69,9 @@ import kotlinx.serialization.Serializable
  */
 const val CURRENT_PROCESS_VERSION = 21
 
+/** Process 21 reads the noise reduction of [Detail]; before it the fields were stored and ignored. */
+const val NOISE_REDUCTION_PROCESS_VERSION = 21
+
 /** Process 21 reads [Detail.sharpenAmount] and its three companions; before it they were stored and ignored. */
 const val SHARPENING_PROCESS_VERSION = 21
 
@@ -298,8 +301,18 @@ data class Detail(
     val sharpenDetail: Float = 25f,
     /** 0 to 100: 0 sharpens everywhere, 100 only on edges. */
     val sharpenMasking: Float = 0f,
+    /** 0 to 100. Read from process 21 ([NOISE_REDUCTION_PROCESS_VERSION]); before it stored and ignored. */
     val noiseReductionLuminance: Float = 0f,
+    /** 0 to 100: how much of the fine detail the luminance reduction keeps. */
+    val noiseReductionLuminanceDetail: Float = 50f,
+    /** 0 to 100: how much of the contrast of what is left it keeps. */
+    val noiseReductionContrast: Float = 0f,
+    /** 0 to 100. A new recipe has 25, in RAW and JPEG, as decided on 27/10/2026. */
     val noiseReductionColor: Float = 25f,
+    /** 0 to 100: how much of the colour edges the colour reduction keeps. */
+    val noiseReductionColorDetail: Float = 50f,
+    /** 0 to 100: how wide a blotch of colour is smoothed. */
+    val noiseReductionColorSmoothness: Float = 50f,
 )
 
 @Serializable

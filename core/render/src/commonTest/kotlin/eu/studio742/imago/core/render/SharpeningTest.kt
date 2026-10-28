@@ -100,7 +100,7 @@ class SharpeningTest {
         assertEquals(60f, now.sharpenAmount, 0f)
         assertEquals(2f, now.sharpenRadius, 0f)
         assertEquals(0f, recipe.copy(processVersion = 20).toRenderParameters().sharpenAmount, 0f)
-        val off = recipe.copy(detail = Detail(sharpenAmount = 0f, sharpenRadius = 3f, sharpenMasking = 80f))
+        val off = recipe.copy(detail = Detail(sharpenAmount = 0f, sharpenRadius = 3f, sharpenMasking = 80f, noiseReductionColor = 0f))
         assertEquals("the radius of an off sharpening is not a change", RenderParameters().sharpenRadius, off.toRenderParameters().sharpenRadius, 0f)
         assertTrue(off.toRenderParameters().isNeutral)
     }

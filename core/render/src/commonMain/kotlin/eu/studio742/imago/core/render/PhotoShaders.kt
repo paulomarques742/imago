@@ -522,6 +522,56 @@ internal object PhotoShaders {
         }
     """
 
+    /**
+     * Step 10 over the stage: luminance and colour noise reduction, `NoiseReduction` in GLSL. It is its own
+     * program, and `PhotoRenderer` builds it apart from the others: a device that cannot compile it keeps
+     * everything else and only shows the photo with its noise.
+     */
+    const val NOISE = """#version 300 es
+        precision highp float;
+        uniform sampler2D uStage;
+        uniform sampler2D uLumaBlur;
+        uniform sampler2D uChromaBlur;
+        uniform float uLumaAmount;
+        uniform float uLumaDetail;
+        uniform float uLumaContrast;
+        uniform float uColorAmount;
+        uniform float uColorDetail;
+        in vec2 vTexCoord;
+        out vec4 fragColor;
+
+        float luminance(vec3 c) {
+            return dot(c, vec3(0.2126, 0.7152, 0.0722));
+        }
+
+        void main() {
+            vec4 staged = texture(uStage, vTexCoord);
+            vec3 rgb = staged.rgb;
+            float value = luminance(rgb);
+            float cleaned = value;
+            if (uLumaAmount > 0.0) {
+                float blurred = luminance(texture(uLumaBlur, vTexCoord).rgb);
+                float residual = value - blurred;
+                float a = clamp(uLumaAmount / 100.0, 0.0, 1.0);
+                float d = clamp(uLumaDetail / 100.0, 0.0, 1.0);
+                float threshold = (0.003 + 0.08 * a) * (1.3 - 0.8 * d);
+                float p = 2.0 + 2.0 * clamp(uLumaContrast / 100.0, 0.0, 1.0);
+                float size = pow(abs(residual), p);
+                cleaned = blurred + residual * (size / (size + pow(threshold, p)));
+            }
+            vec3 chroma = rgb - vec3(value);
+            if (uColorAmount > 0.0) {
+                vec3 around = texture(uChromaBlur, vTexCoord).rgb;
+                vec3 neighbour = around - vec3(luminance(around));
+                vec3 apart = chroma - neighbour;
+                float knee = 0.02 + 0.30 * (1.0 - 0.85 * clamp(uColorDetail / 100.0, 0.0, 1.0));
+                float weight = min(1.0, uColorAmount / 100.0 * 1.6) * (1.0 - smoothstep(0.0, knee, length(apart)));
+                chroma -= apart * weight;
+            }
+            fragColor = vec4(clamp(vec3(cleaned) + chroma, 0.0, 1.0), staged.a);
+        }
+    """
+
     /** Exact 2× reduction, with the four samples at the centres of the source texels. */
     const val DOWNSAMPLE = """#version 300 es
         precision highp float;

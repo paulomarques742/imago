@@ -77,6 +77,9 @@
     <string name="editor_feather">Feather</string>
     <string name="editor_group_grain">Grain</string>
     <string name="editor_group_sharpening">Sharpening</string>
+    <string name="editor_group_noise_reduction">Noise reduction</string>
+    <string name="editor_nr_luminance">Luminance</string>
+    <string name="editor_nr_smoothness">Smoothness</string>
     <string name="editor_radius">Radius</string>
     <string name="editor_masking">Masking</string>
     <string name="editor_size">Size</string>
@@ -149,6 +152,12 @@
     <string name="editor_adj_sharpen_radius">Sharpening radius</string>
     <string name="editor_adj_sharpen_detail">Sharpening detail</string>
     <string name="editor_adj_sharpen_masking">Sharpening masking</string>
+    <string name="editor_adj_nr_luminance">Noise reduction</string>
+    <string name="editor_adj_nr_luminance_detail">Noise reduction detail</string>
+    <string name="editor_adj_nr_contrast">Noise reduction contrast</string>
+    <string name="editor_adj_nr_color">Colour noise reduction</string>
+    <string name="editor_adj_nr_color_detail">Colour noise detail</string>
+    <string name="editor_adj_nr_color_smoothness">Colour noise smoothness</string>
     <string name="editor_adj_dehaze">Dehaze</string>
     <string name="editor_adj_vignette">Vignette</string>
     <string name="editor_adj_vignette_midpoint">Vignette · midpoint</string>

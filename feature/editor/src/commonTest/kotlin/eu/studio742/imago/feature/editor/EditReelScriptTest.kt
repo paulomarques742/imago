@@ -112,7 +112,7 @@ class EditReelScriptTest {
     @Test
     fun `a change with no slider rides along with a neighbouring step`() {
         val recipe = base.copy(
-            detail = base.detail.copy(noiseReductionLuminance = 40f),
+            whiteBalance = base.whiteBalance.copy(auto = true),
             effects = base.effects.copy(vignetteAmount = -20f),
         )
         val script = EditReelScript.fromRecipe(recipe)

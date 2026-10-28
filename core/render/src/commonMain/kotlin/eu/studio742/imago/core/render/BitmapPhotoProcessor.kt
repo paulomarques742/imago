@@ -86,6 +86,7 @@ object BitmapPhotoProcessor {
             null
         }
         applyTonePass(bitmap, parameters, field)
+        if (parameters.needsNoiseStage) applyNoisePass(bitmap, parameters)
         if (parameters.needsDetailStage || parameters.needsSharpenStage || parameters.needsColorGradingStage || parameters.needsEffectsStage) {
             val pyramid = if (parameters.needsDetailStage) {
                 DetailPyramid.build(bitmap, withDehaze = parameters.needsDehazeStats)
@@ -151,6 +152,25 @@ object BitmapPhotoProcessor {
                     row[x] = processPixel(row[x], parameters, tone, base)
                 }
                 bitmap.setPixels(row, 0, width, 0, y, width, 1)
+            }
+        }
+    }
+
+    /**
+     * Step 10, over the toned image and before anything with a neighbourhood. The blurred copies are made
+     * from the image as the tone pass left it, and a pixel needs only itself and them, so the bands
+     * can write over their own rows.
+     */
+    private fun applyNoisePass(bitmap: PixelSurface, parameters: RenderParameters) {
+        val pass = NoiseReductionPass.build(bitmap, parameters)
+        val width = bitmap.width
+        forEachRowBand(bitmap) { fromRow, untilRow ->
+            val row = FloatArray(width * 4)
+            val scratch = IntArray(width)
+            for (y in fromRow until untilRow) {
+                bitmap.readRgbaRow(y, row, scratch)
+                pass.applyRow(y, row)
+                bitmap.writeRgbaRow(y, row, scratch)
             }
         }
     }

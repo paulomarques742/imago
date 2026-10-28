@@ -30,8 +30,7 @@ import kotlin.math.roundToInt
  * named as the person knows it from the editor.
  *
  * Geometry comes first so that the photo does not change shape halfway through the adjustments.
- * Sharpening is inside the Detail step; noise reduction has no sliders yet, and a recipe that differs
- * there still animates, inside it.
+ * Sharpening and noise reduction are inside the Detail step.
  */
 enum class ReelPanel { GEOMETRY, LIGHT, CURVE, COLOR, HSL, COLOR_GRADING, DETAIL, EFFECTS, MASKS }
 
@@ -97,6 +96,7 @@ internal fun Adjustment.reelPanel(): ReelPanel = when (this) {
     Adjustment.TEMPERATURE, Adjustment.TINT, Adjustment.VIBRANCE, Adjustment.SATURATION -> ReelPanel.COLOR
     Adjustment.TEXTURE, Adjustment.CLARITY, Adjustment.DEHAZE,
     Adjustment.SHARPEN_AMOUNT, Adjustment.SHARPEN_RADIUS, Adjustment.SHARPEN_DETAIL, Adjustment.SHARPEN_MASKING,
+    Adjustment.NR_LUMINANCE, Adjustment.NR_LUMINANCE_DETAIL, Adjustment.NR_CONTRAST, Adjustment.NR_COLOR, Adjustment.NR_COLOR_DETAIL, Adjustment.NR_COLOR_SMOOTHNESS,
     -> ReelPanel.DETAIL
     Adjustment.VIGNETTE_AMOUNT, Adjustment.VIGNETTE_MIDPOINT, Adjustment.VIGNETTE_ROUNDNESS,
     Adjustment.VIGNETTE_FEATHER, Adjustment.GRAIN_AMOUNT, Adjustment.GRAIN_SIZE,
@@ -117,6 +117,10 @@ private val LIGHT_ORDER = listOf(
 )
 private val COLOR_ORDER = listOf(Adjustment.TEMPERATURE, Adjustment.TINT, Adjustment.VIBRANCE, Adjustment.SATURATION)
 private val DETAIL_ORDER = listOf(Adjustment.TEXTURE, Adjustment.CLARITY, Adjustment.DEHAZE)
+private val NOISE_ORDER = listOf(
+    Adjustment.NR_LUMINANCE, Adjustment.NR_LUMINANCE_DETAIL, Adjustment.NR_CONTRAST,
+    Adjustment.NR_COLOR, Adjustment.NR_COLOR_DETAIL, Adjustment.NR_COLOR_SMOOTHNESS,
+)
 private val SHARPEN_ORDER = listOf(
     Adjustment.SHARPEN_AMOUNT, Adjustment.SHARPEN_RADIUS, Adjustment.SHARPEN_DETAIL, Adjustment.SHARPEN_MASKING,
 )
@@ -182,7 +186,7 @@ internal fun changedControls(from: EditRecipe, to: EditRecipe): List<ReelControl
         }
     }
     addSliders(from, to, listOf(Adjustment.GRADE_BLENDING, Adjustment.GRADE_BALANCE))
-    addSliders(from, to, DETAIL_ORDER + SHARPEN_ORDER)
+    addSliders(from, to, DETAIL_ORDER + SHARPEN_ORDER + NOISE_ORDER)
     addSliders(from, to, EFFECTS_ORDER)
     for (id in maskIds(from, to)) {
         val maskA = from.mask(id)
@@ -286,7 +290,11 @@ internal fun interpolateRecipe(from: EditRecipe, to: EditRecipe, t: Float): Edit
             sharpenDetail = lerp(from.detail.sharpenDetail, to.detail.sharpenDetail, t),
             sharpenMasking = lerp(from.detail.sharpenMasking, to.detail.sharpenMasking, t),
             noiseReductionLuminance = lerp(from.detail.noiseReductionLuminance, to.detail.noiseReductionLuminance, t),
+            noiseReductionLuminanceDetail = lerp(from.detail.noiseReductionLuminanceDetail, to.detail.noiseReductionLuminanceDetail, t),
+            noiseReductionContrast = lerp(from.detail.noiseReductionContrast, to.detail.noiseReductionContrast, t),
             noiseReductionColor = lerp(from.detail.noiseReductionColor, to.detail.noiseReductionColor, t),
+            noiseReductionColorDetail = lerp(from.detail.noiseReductionColorDetail, to.detail.noiseReductionColorDetail, t),
+            noiseReductionColorSmoothness = lerp(from.detail.noiseReductionColorSmoothness, to.detail.noiseReductionColorSmoothness, t),
         ),
         effects = Effects(
             vignetteAmount = lerp(from.effects.vignetteAmount, to.effects.vignetteAmount, t),

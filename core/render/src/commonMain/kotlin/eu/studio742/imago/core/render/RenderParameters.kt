@@ -51,6 +51,13 @@ data class RenderParameters(
     val colorGrade: ColorGrade = ColorGrade(),
     val texture: Float = 0f,
     /** Step 11, from process 21: [Sharpening]. Amount 0 is off, and the other three then say nothing. */
+    /** Step 10, from process 21: [NoiseReduction]. Amounts at 0 are off, and what goes with them says nothing. */
+    val noiseLuminance: Float = 0f,
+    val noiseLuminanceDetail: Float = 50f,
+    val noiseContrast: Float = 0f,
+    val noiseColor: Float = 0f,
+    val noiseColorDetail: Float = 50f,
+    val noiseColorSmoothness: Float = 50f,
     val sharpenAmount: Float = 0f,
     val sharpenRadius: Float = 1f,
     val sharpenDetail: Float = 25f,
@@ -183,6 +190,10 @@ data class RenderParameters(
     /** True when step 13 has work. Vignette and grain are not local. */
     val needsEffectsStage: Boolean
         get() = vignetteAmount != 0f || grainAmount != 0f
+
+    /** True when step 10 has work. */
+    val needsNoiseStage: Boolean
+        get() = noiseLuminance > 0f || noiseColor > 0f
 
     /** True when step 11 has work: only then are the blurred luminance and the edge field worth their cost. */
     val needsSharpenStage: Boolean
