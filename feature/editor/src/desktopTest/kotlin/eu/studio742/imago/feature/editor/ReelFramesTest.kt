@@ -103,11 +103,16 @@ class ReelFramesTest {
         val maskStep = script.steps.indexOfFirst { it.title == ReelTitle.Mask("sky") } + 1
         val curveStep = script.steps.indexOfFirst { it.title == ReelTitle.Panel(ReelPanel.CURVE) } + 1
         val toneStep = script.steps.indexOfFirst { it.title == ReelTitle.Panel(ReelPanel.LIGHT) } + 1
+        val geometryStep = script.steps.indexOfFirst { it.title == ReelTitle.Panel(ReelPanel.GEOMETRY) } + 1
         val moments = mapOf(
             "1-before" to 500L,
+            "1a-geometry-moving" to script.startOf(geometryStep) + script.moveMs(script.steps[geometryStep - 1]) / 2,
+            "1b-geometry-zooming" to script.startOf(geometryStep) + (script.stepMs * (REEL_CROP_CLOSE_SHARE + REEL_CROP_ZOOM_END_SHARE) / 2).toLong(),
+            "1c-geometry-cropped" to script.startOf(geometryStep) + script.stepMs - 100,
+            "4a-mask-intro" to script.startOf(maskStep) + script.introMs(script.steps[maskStep - 1]) / 2,
             "2-tone-moving" to script.startOf(toneStep) + script.stepMoveMs / 2,
             "3-curve-moving" to script.startOf(curveStep) + script.stepMoveMs / 2,
-            "4-mask-done" to script.startOf(maskStep) + script.stepMoveMs + 100,
+            "4-mask-done" to script.startOf(maskStep) + script.introMs(script.steps[maskStep - 1]) + script.moveMs(script.steps[maskStep - 1]) + 100,
             "5-compare" to script.startOf(script.segments.lastIndex - 1) + REEL_COMPARE_MS / 2,
             "2a-tone-arriving" to script.startOf(toneStep) + 150,
             "6a-closing-bars" to script.startOf(script.segments.lastIndex) + 750,

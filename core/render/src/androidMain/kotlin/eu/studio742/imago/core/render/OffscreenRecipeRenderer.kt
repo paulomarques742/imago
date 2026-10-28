@@ -27,7 +27,11 @@ import kotlin.math.roundToInt
  *
  * @throws IllegalStateException from the constructor when the device gives no OpenGL ES 3 context
  */
-class OffscreenRecipeRenderer(private var source: Bitmap) : AutoCloseable {
+class OffscreenRecipeRenderer(
+    private var source: Bitmap,
+    /** A RAW's developed float image, which the GPU samples instead of [source]'s 8 bits, as the editor does. */
+    private val highPrecisionSource: FloatPixelBuffer? = null,
+) : AutoCloseable {
     private val thread = Executors.newSingleThreadExecutor { Thread(it, "imago-offscreen-gl") }
     private val renderer = PhotoRenderer()
     private var display: EGLDisplay = EGL14.EGL_NO_DISPLAY
@@ -42,6 +46,7 @@ class OffscreenRecipeRenderer(private var source: Bitmap) : AutoCloseable {
             onThread {
                 setUpEgl()
                 renderer.onSurfaceCreated(null, null)
+                renderer.setHighPrecisionSource(highPrecisionSource)
                 renderer.setBitmap(source)
             }
         } catch (failure: Throwable) {
@@ -50,8 +55,13 @@ class OffscreenRecipeRenderer(private var source: Bitmap) : AutoCloseable {
         }
     }
 
-    /** [parameters] over the source, framed, with its longest side at most [maxSide]. */
-    fun render(parameters: RenderParameters, maxSide: Int): Bitmap = onThread { draw(parameters, maxSide) }
+    /**
+     * [parameters] over the source, framed, with its longest side at most [maxSide].
+     *
+     * @param maskOverlay the index in [RenderParameters.masks] of the mask to lay the editor's red over, or -1
+     */
+    fun render(parameters: RenderParameters, maxSide: Int, maskOverlay: Int = -1): Bitmap =
+        onThread { draw(parameters, maxSide, maskOverlay) }
 
     /**
      * [parameters] over another photo, on the same context: what the library's previews use, one photo
@@ -66,11 +76,12 @@ class OffscreenRecipeRenderer(private var source: Bitmap) : AutoCloseable {
     }
 
     /** On the GL thread: one frame of [parameters], read back. */
-    private fun draw(parameters: RenderParameters, maxSide: Int): Bitmap {
+    private fun draw(parameters: RenderParameters, maxSide: Int, maskOverlay: Int = -1): Bitmap {
         val (width, height) = framedSize(parameters, maxSide)
         useSurface(width, height)
         renderer.onSurfaceChanged(null, width, height)
         renderer.setParameters(parameters)
+        renderer.setMaskOverlay(maskOverlay)
         renderer.onDrawFrame(null)
         return readPixels(width, height)
     }

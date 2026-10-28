@@ -473,5 +473,9 @@
     <string name="reel_failed">The video could not be made.</string>
     <string name="reel_ffmpeg_unavailable">FFmpeg unavailable. Set IMAGO_FFMPEG to the executable.</string>
     <string name="reel_preview">Preview of the video</string>
+    <string name="reel_background_hint">You can close this screen or leave the app; the video keeps being made.</string>
+    <string name="reel_notification_channel">Show your edit videos</string>
+    <string name="reel_notification_title">Making your video</string>
+    <string name="reel_notification_done">Your video is ready</string>
     <string name="editor_developing_raw">Developing the RAW…</string>
 </resources>

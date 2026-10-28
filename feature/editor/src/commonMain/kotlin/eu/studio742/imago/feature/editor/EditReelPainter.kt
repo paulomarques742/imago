@@ -40,7 +40,9 @@ import androidx.compose.ui.unit.sp
 import eu.studio742.imago.core.designsystem.ImagoBrand
 import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.drawImagoSlider
+import eu.studio742.imago.core.model.CropRect
 import eu.studio742.imago.core.model.EditRecipe
+import eu.studio742.imago.core.model.UPRIGHT_GUIDED
 import eu.studio742.imago.core.render.PhotoBounds
 import eu.studio742.imago.core.render.PixelBuffer
 import eu.studio742.imago.core.render.toImageBitmap
@@ -147,6 +149,8 @@ class ReelFramePainter(
      * @param backdropPhoto the photo the background is made from: blurred and dark, it hardly shows
      *   the steps change, and building it once instead of every frame halves the cost of a frame
      * @param sourceWidth the width of the image the masks are normalised to
+     * @param reveal while a mask is introduced, the photo with the mask drawn so far and its red,
+     *   laid over [photo] by [ReelMaskReveal.alpha]
      */
     fun paint(
         frame: ReelFrame,
@@ -155,6 +159,7 @@ class ReelFramePainter(
         backdropPhoto: ImageBitmap,
         sourceWidth: Int,
         sourceHeight: Int,
+        reveal: ImageBitmap? = null,
     ): ImageBitmap {
         val image = ImageBitmap(width, height)
         CanvasDrawScope().draw(
@@ -163,7 +168,7 @@ class ReelFramePainter(
             Canvas(image),
             Size(width.toFloat(), height.toFloat()),
         ) {
-            drawFrame(frame, photo, compareBefore, backdropPhoto, sourceWidth, sourceHeight)
+            drawFrame(frame, photo, compareBefore, backdropPhoto, sourceWidth, sourceHeight, reveal)
         }
         return image
     }
@@ -178,10 +183,14 @@ class ReelFramePainter(
             val elapsed = frame.elapsedMs
             val pillsSettled = (segment.step.controls.size - 1) * pillStaggerMs(segment.step) + PILL_IN_MS
             val pillsMoving = style == ReelStyle.PILL &&
-                (elapsed < pillsSettled || elapsed > segment.durationMs - PILL_OUT_MS)
-            val curveFading = segment.step.controls.any { it is ReelControl.Curve } &&
-                (elapsed < CURVE_FADE_MS || elapsed > segment.durationMs - CURVE_FADE_MS)
-            if (pillsMoving || curveFading) elapsed else frame.progress
+                (elapsed < pillsSettled || elapsed > segment.adjustMs - PILL_OUT_MS)
+            val curveFading = segment.step.controls.any { it.drawsOverlay() } &&
+                (elapsed < CURVE_FADE_MS || elapsed > segment.adjustMs - CURVE_FADE_MS)
+            // A mask being drawn, or a crop being framed and zoomed into, changes the frame with every
+            // tick, whatever the sliders do.
+            if (frame.reveal != null) frame.reveal.alpha to frame.reveal.recipe
+            else if (frame.crop != null) frame.crop to frame.progress
+            else if (pillsMoving || curveFading) elapsed else frame.progress
         }
         ReelSegment.Compare -> frame.elapsedMs
         ReelSegment.Closing -> minOf(frame.elapsedMs, CLOSING_SETTLED_MS)
@@ -194,10 +203,13 @@ class ReelFramePainter(
         backdropPhoto: ImageBitmap,
         sourceWidth: Int,
         sourceHeight: Int,
+        reveal: ImageBitmap?,
     ) {
         drawBackdrop(backdropPhoto)
         val box = photoBox()
-        val rect = fit(photo, box)
+        val crop = frame.crop
+        // While a crop is made the photo arrives whole and only the part in view is shown.
+        val rect = if (crop == null) fit(photo, box) else fit(photo.width * crop.view.w, photo.height * crop.view.h, box)
         when (val segment = frame.segment) {
             ReelSegment.Before -> {
                 drawPhoto(photo, rect)
@@ -205,9 +217,12 @@ class ReelFramePainter(
                 if (style == ReelStyle.PANEL) script.steps.firstOrNull()?.let { drawSheet(it, it.from, 0f, 1f) }
             }
             is ReelSegment.Step -> {
-                drawPhoto(photo, rect)
+                if (crop == null) drawPhoto(photo, rect) else drawPhotoPart(photo, crop.view, rect)
+                if (reveal != null && frame.reveal != null) drawPhoto(reveal, rect, frame.reveal.alpha)
                 drawMaskOf(segment.step, frame, rect, sourceWidth, sourceHeight)
                 drawCurvesOf(segment, frame, rect)
+                drawGeometryOf(segment, frame, rect, sourceWidth, sourceHeight)
+                if (crop != null) drawCropFrame(segment.step, crop, rect)
                 when (style) {
                     ReelStyle.PANEL -> drawSheet(segment.step, frame.recipe, frame.progress, 1f)
                     ReelStyle.PILL -> drawPills(segment, frame, rect)
@@ -240,10 +255,12 @@ class ReelFramePainter(
     }
 
     /** The photo as large as it fits in [box], centred, in whole pixels so it is never resampled twice. */
-    private fun fit(photo: ImageBitmap, box: Rect): Rect {
-        val scale = min(box.width / photo.width, box.height / photo.height)
-        val width = (photo.width * scale).roundToInt().toFloat()
-        val height = (photo.height * scale).roundToInt().toFloat()
+    private fun fit(photo: ImageBitmap, box: Rect): Rect = fit(photo.width.toFloat(), photo.height.toFloat(), box)
+
+    private fun fit(photoWidth: Float, photoHeight: Float, box: Rect): Rect {
+        val scale = min(box.width / photoWidth, box.height / photoHeight)
+        val width = (photoWidth * scale).roundToInt().toFloat()
+        val height = (photoHeight * scale).roundToInt().toFloat()
         val left = (box.left + (box.width - width) / 2).roundToInt().toFloat()
         val top = (box.top + (box.height - height) / 2).roundToInt().toFloat()
         return Rect(left, top, left + width, top + height)
@@ -300,24 +317,103 @@ class ReelFramePainter(
         return PixelBuffer(BACKDROP_WIDTH, BACKDROP_HEIGHT, pixels).toImageBitmap()
     }
 
-    private fun DrawScope.drawPhoto(photo: ImageBitmap, rect: Rect) {
+    private fun DrawScope.drawPhoto(photo: ImageBitmap, rect: Rect, alpha: Float = 1f) {
         clipPath(roundedPath(rect, 14.dp.toPx())) {
             drawImage(
                 photo,
                 dstOffset = IntOffset(rect.left.roundToInt(), rect.top.roundToInt()),
                 dstSize = IntSize(rect.width.roundToInt(), rect.height.roundToInt()),
+                alpha = alpha,
                 // The photo arrives at about the size it is drawn; bicubic would only cost time.
                 filterQuality = FilterQuality.Medium,
             )
         }
     }
 
+    /** The part [view] of [photo] — in its own coordinates, from 0 to 1 — filling [rect]: the zoom into a crop. */
+    private fun DrawScope.drawPhotoPart(photo: ImageBitmap, view: CropRect, rect: Rect) {
+        clipPath(roundedPath(rect, 14.dp.toPx())) {
+            drawImage(
+                photo,
+                srcOffset = IntOffset((view.x * photo.width).roundToInt(), (view.y * photo.height).roundToInt()),
+                srcSize = IntSize(
+                    (view.w * photo.width).roundToInt().coerceIn(1, photo.width),
+                    (view.h * photo.height).roundToInt().coerceIn(1, photo.height),
+                ),
+                dstOffset = IntOffset(rect.left.roundToInt(), rect.top.roundToInt()),
+                dstSize = IntSize(rect.width.roundToInt(), rect.height.roundToInt()),
+                filterQuality = FilterQuality.Medium,
+            )
+        }
+    }
+
+    /**
+     * The editor's crop frame over the whole photo: what is cut away dimmed, the border, its handles
+     * and the grid — nine divisions while straightening, as there, thirds otherwise. As the view zooms
+     * into the frame, the frame meets the photo's edges and fades.
+     */
+    private fun DrawScope.drawCropFrame(step: ReelStep, crop: ReelCropView, rect: Rect) {
+        if (crop.alpha <= 0f) return
+        val alpha = crop.alpha
+        val view = crop.view
+        fun x(at: Float) = rect.left + (at - view.x) / view.w * rect.width
+        fun y(at: Float) = rect.top + (at - view.y) / view.h * rect.height
+        val frame = Rect(x(crop.frame.x), y(crop.frame.y), x(crop.frame.x + crop.frame.w), y(crop.frame.y + crop.frame.h))
+        clipPath(roundedPath(rect, 14.dp.toPx())) {
+            val scrim = Color.Black.copy(alpha = 0.62f * alpha)
+            drawRect(scrim, rect.topLeft, Size(rect.width, (frame.top - rect.top).coerceAtLeast(0f)))
+            drawRect(scrim, Offset(rect.left, frame.bottom), Size(rect.width, (rect.bottom - frame.bottom).coerceAtLeast(0f)))
+            drawRect(scrim, Offset(rect.left, frame.top), Size((frame.left - rect.left).coerceAtLeast(0f), frame.height))
+            drawRect(scrim, Offset(frame.right, frame.top), Size((rect.right - frame.right).coerceAtLeast(0f), frame.height))
+        }
+        drawFrameOutline(frame, if (ReelControl.Straighten in step.controls) 9 else 3, alpha)
+    }
+
+    /** The editor's crop frame on [frame]: the border, the grid of [divisions] and the handles. */
+    private fun DrawScope.drawFrameOutline(frame: Rect, divisions: Int, alpha: Float) {
+        val border = 2.dp.toPx()
+        val inner = frame.deflate(border / 2)
+        drawRect(Color.White.copy(alpha = 0.94f * alpha), topLeft = inner.topLeft, size = inner.size, style = Stroke(width = border))
+        for (division in 1 until divisions) {
+            val x = frame.left + frame.width * division / divisions
+            val y = frame.top + frame.height * division / divisions
+            drawLine(Color.White.copy(alpha = 0.48f * alpha), Offset(x, frame.top), Offset(x, frame.bottom), 1.dp.toPx())
+            drawLine(Color.White.copy(alpha = 0.48f * alpha), Offset(frame.left, y), Offset(frame.right, y), 1.dp.toPx())
+        }
+        val handle = Color.White.copy(alpha = alpha)
+        val width = 4.dp.toPx()
+        val length = min(18.dp.toPx(), min(inner.width, inner.height) / 3)
+        fun line(from: Offset, to: Offset) = drawLine(handle, from, to, width, StrokeCap.Square)
+        val centre = frame.center
+        val l = inner.left
+        val t = inner.top
+        val r = inner.right
+        val b = inner.bottom
+        line(Offset(l, t), Offset(l + length, t)); line(Offset(l, t), Offset(l, t + length))
+        line(Offset(r, t), Offset(r - length, t)); line(Offset(r, t), Offset(r, t + length))
+        line(Offset(l, b), Offset(l + length, b)); line(Offset(l, b), Offset(l, b - length))
+        line(Offset(r, b), Offset(r - length, b)); line(Offset(r, b), Offset(r, b - length))
+        line(Offset(centre.x - length / 2, t), Offset(centre.x + length / 2, t))
+        line(Offset(centre.x - length / 2, b), Offset(centre.x + length / 2, b))
+        line(Offset(l, centre.y - length / 2), Offset(l, centre.y + length / 2))
+        line(Offset(r, centre.y - length / 2), Offset(r, centre.y + length / 2))
+    }
+
     private fun DrawScope.drawMaskOf(step: ReelStep, frame: ReelFrame, rect: Rect, sourceWidth: Int, sourceHeight: Int) {
-        val mask = step.maskId()?.let { frame.recipe.mask(it) } ?: return
-        val geometry = frame.recipe.toRenderParameters().frameGeometry(sourceWidth, sourceHeight)
+        // While the mask is introduced its outline comes and goes with the red; for a step that only
+        // moves a mask's sliders it comes in as they start.
+        val recipe = frame.reveal?.recipe ?: frame.recipe
+        val mask = step.maskId()?.let { recipe.mask(it) } ?: return
+        val alpha = when {
+            frame.reveal != null -> frame.reveal.alpha
+            step.revealedMask() != null -> 0f
+            else -> (frame.progress * 4f).coerceIn(0f, 1f)
+        }
+        if (alpha <= 0f) return
+        val geometry = recipe.toRenderParameters().frameGeometry(sourceWidth, sourceHeight)
         val projection = MaskProjection(PhotoBounds(rect.left, rect.top, rect.width, rect.height), geometry)
         clipPath(roundedPath(rect, 14.dp.toPx())) {
-            drawMaskOutline(mask, projection, alpha = (frame.progress * 4f).coerceIn(0f, 1f))
+            drawMaskOutline(mask, projection, alpha)
         }
     }
 
@@ -328,7 +424,7 @@ class ReelFramePainter(
     private fun DrawScope.drawCurvesOf(segment: ReelSegment.Step, frame: ReelFrame, rect: Rect) {
         val channels = segment.step.controls.filterIsInstance<ReelControl.Curve>().map { it.channel }
         if (channels.isEmpty()) return
-        val alpha = fadeInOut(frame.elapsedMs, segment.durationMs, CURVE_FADE_MS)
+        val alpha = fadeInOut(frame.elapsedMs, segment.adjustMs, CURVE_FADE_MS)
         if (alpha <= 0f) return
         val side = min(rect.width, rect.height)
         translate(rect.center.x - side / 2, rect.center.y - side / 2) {
@@ -343,6 +439,54 @@ class ReelFramePainter(
                     alpha = alpha,
                     grid = index == 0,
                 )
+            }
+        }
+    }
+
+    /**
+     * What the editor lays over the photo while the geometry is worked on: the crop frame with its
+     * grid — nine divisions while straightening, as there, thirds otherwise — and, for a guided
+     * Upright, the guides the person drew with their end points, which straighten along with the photo.
+     */
+    private fun DrawScope.drawGeometryOf(segment: ReelSegment.Step, frame: ReelFrame, rect: Rect, sourceWidth: Int, sourceHeight: Int) {
+        val controls = segment.step.controls
+        // A crop draws its own frame, over the whole photo (drawCropFrame); straightening alone gets it
+        // on the photo as it is.
+        val framing = ReelControl.Straighten in controls && frame.crop == null && !segment.step.crops()
+        val guides = if (controls.any { it == ReelControl.Upright }) {
+            segment.step.to.geometry.perspective.takeIf { it.upright == UPRIGHT_GUIDED }?.guides.orEmpty()
+        } else {
+            emptyList()
+        }
+        if (!framing && guides.isEmpty()) return
+        val alpha = fadeInOut(frame.elapsedMs, segment.adjustMs, CURVE_FADE_MS)
+        if (alpha <= 0f) return
+        if (framing) drawFrameOutline(rect, 9, alpha)
+        if (guides.isNotEmpty()) {
+            val geometry = frame.recipe.toRenderParameters().frameGeometry(sourceWidth, sourceHeight)
+            // Under a crop being made the photo on screen is a part of the whole: the guides are placed on the whole.
+            val whole = frame.crop?.view?.let { view ->
+                val width = rect.width / view.w
+                val height = rect.height / view.h
+                PhotoBounds(rect.left - view.x * width, rect.top - view.y * height, width, height)
+            } ?: PhotoBounds(rect.left, rect.top, rect.width, rect.height)
+            val projection = MaskProjection(whole, geometry)
+            val line = 2.dp.toPx()
+            val knob = 7.dp.toPx()
+            clipPath(roundedPath(rect, 14.dp.toPx())) {
+                guides.forEach { guide ->
+                    val start = projection.toScreen(guide.x1, guide.y1)
+                    val end = projection.toScreen(guide.x2, guide.y2)
+                    drawLine(Color.Black.copy(alpha = 0.5f * alpha), start, end, line + 2.dp.toPx())
+                    drawLine(ImagoColors.Gold.copy(alpha = alpha), start, end, line)
+                }
+                guides.forEach { guide ->
+                    for (point in listOf(projection.toScreen(guide.x1, guide.y1), projection.toScreen(guide.x2, guide.y2))) {
+                        drawCircle(Color.Black.copy(alpha = 0.5f * alpha), knob + 1.dp.toPx(), point)
+                        drawCircle(Color.White.copy(alpha = alpha), knob, point)
+                        drawCircle(ImagoColors.Gold.copy(alpha = alpha), knob * 0.55f, point)
+                    }
+                }
             }
         }
     }
@@ -445,7 +589,7 @@ class ReelFramePainter(
     private fun DrawScope.drawPills(segment: ReelSegment.Step, frame: ReelFrame, rect: Rect) {
         val step = segment.step
         val stagger = pillStaggerMs(step)
-        val leaving = easeInOut(((segment.durationMs - frame.elapsedMs).toFloat() / PILL_OUT_MS).coerceIn(0f, 1f))
+        val leaving = easeInOut(((segment.adjustMs - frame.elapsedMs).toFloat() / PILL_OUT_MS).coerceIn(0f, 1f))
         val arrived = step.controls.indices.map { index ->
             easeInOut(((frame.elapsedMs - index * stagger).toFloat() / PILL_IN_MS).coerceIn(0f, 1f))
         }
@@ -456,7 +600,7 @@ class ReelFramePainter(
         // Below the step's name and above the photo's bottom edge.
         val room = ((bottom - rect.top - 48.dp.toPx() + gap) / pitch).toInt().coerceAtLeast(1)
         texts.title(step.title)?.let {
-            drawTag(it, Offset(rect.left + 12.dp.toPx(), rect.top + 12.dp.toPx()), alpha = minOf(arrived.firstOrNull() ?: 1f, leaving))
+            drawTag(it, Offset(rect.left + 12.dp.toPx(), rect.top + 12.dp.toPx()), alpha = if (frame.reveal != null) 1f else minOf(arrived.firstOrNull() ?: 1f, leaving))
         }
         step.controls.forEachIndexed { index, control ->
             val shownIn = arrived[index]
@@ -498,7 +642,7 @@ class ReelFramePainter(
 
     /** The pills of a step arrive spread over most of the time its sliders move. */
     private fun pillStaggerMs(step: ReelStep): Long =
-        (script.stepMoveMs * 3 / 4 / step.controls.size.coerceAtLeast(1)).coerceIn(PILL_STAGGER_MIN_MS, PILL_STAGGER_MAX_MS)
+        (script.moveMs(step) * 3 / 4 / step.controls.size.coerceAtLeast(1)).coerceIn(PILL_STAGGER_MIN_MS, PILL_STAGGER_MAX_MS)
 
     // --- List -------------------------------------------------------------------------------------
 
@@ -726,6 +870,10 @@ class ReelFramePainter(
  */
 /** H.264 counts in macroblocks: an odd side makes encoders refuse the job or stretch the image. */
 private fun evenPixels(value: Float): Int = maxOf(2, (value.roundToInt() / 2) * 2)
+
+/** The controls the painter draws something over the photo for: the curve graph and the geometry's frame. */
+private fun ReelControl.drawsOverlay(): Boolean =
+    this is ReelControl.Curve || this == ReelControl.Crop || this == ReelControl.Straighten || this == ReelControl.Upright
 
 /** In and out over [fade] at the ends of a segment of [duration]. */
 private fun fadeInOut(elapsed: Long, duration: Long, fade: Long): Float =

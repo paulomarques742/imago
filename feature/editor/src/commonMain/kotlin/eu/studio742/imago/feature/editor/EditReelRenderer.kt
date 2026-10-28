@@ -20,8 +20,11 @@ interface ReelPhotoRenderer : AutoCloseable {
     val sourceWidth: Int
     val sourceHeight: Int
 
-    /** The photo with [recipe], framed and cropped, about the size it is shown. */
-    fun render(recipe: EditRecipe): ImageBitmap
+    /**
+     * The photo with [recipe], framed and cropped, about the size it is shown; with [showMask], the
+     * editor's red over that mask's region.
+     */
+    fun render(recipe: EditRecipe, showMask: String? = null): ImageBitmap
 
     override fun close() = Unit
 }
@@ -36,7 +39,9 @@ class CpuReelPhotoRenderer(source: PixelBuffer, maxSide: Int) : ReelPhotoRendere
     override val sourceWidth: Int get() = reduced.width
     override val sourceHeight: Int get() = reduced.height
 
-    override fun render(recipe: EditRecipe): ImageBitmap = RecipePixels.render(reduced, recipe).toImageBitmap()
+    override fun render(recipe: EditRecipe, showMask: String?): ImageBitmap =
+        (if (showMask == null) RecipePixels.render(reduced, recipe) else RecipePixels.renderShowingMask(reduced, recipe, showMask))
+            .toImageBitmap()
 }
 
 /** RAW video frames retain the same camera precision as photo preview and export. */
@@ -44,7 +49,9 @@ class FloatReelPhotoRenderer(source: eu.studio742.imago.core.render.FloatPixelBu
     private val reduced = RecipePixels.reduce(source, (maxSide * REEL_CPU_MARGIN).toInt())
     override val sourceWidth: Int get() = reduced.width
     override val sourceHeight: Int get() = reduced.height
-    override fun render(recipe: EditRecipe): ImageBitmap = RecipePixels.render(reduced, recipe).toImageBitmap()
+    override fun render(recipe: EditRecipe, showMask: String?): ImageBitmap =
+        (if (showMask == null) RecipePixels.render(reduced, recipe) else RecipePixels.renderShowingMask(reduced, recipe, showMask))
+            .toImageBitmap()
 }
 
 /**
@@ -70,6 +77,8 @@ class EditReelRenderer(
     private var lastPhoto: ImageBitmap? = null
     private var comparePhoto: ImageBitmap? = null
     private var afterPhoto: ImageBitmap? = null
+    private var lastRevealRecipe: EditRecipe? = null
+    private var lastRevealPhoto: ImageBitmap? = null
     private var lastLook: Pair<Int, Any>? = null
     private var lastFrame: ImageBitmap? = null
 
@@ -102,7 +111,17 @@ class EditReelRenderer(
         }
         // The untouched photo keeps its own background; from the first step on, the edited one's.
         val backdrop = if (frame.segment == ReelSegment.Before) photo else afterPhoto()
-        return painter.paint(frame, photo, before, backdrop, photos.sourceWidth, photos.sourceHeight)
+        val reveal = frame.reveal?.let { revealPhoto(it) }
+        return painter.paint(frame, photo, before, backdrop, photos.sourceWidth, photos.sourceHeight, reveal)
+    }
+
+    /** The photo with the mask drawn so far and its red; a shape that is not being painted renders once. */
+    private fun revealPhoto(reveal: ReelMaskReveal): ImageBitmap {
+        lastRevealPhoto?.takeIf { reveal.recipe == lastRevealRecipe }?.let { return it }
+        return render(reveal.recipe, reveal.maskId).also {
+            lastRevealRecipe = reveal.recipe
+            lastRevealPhoto = it
+        }
     }
 
     private fun afterPhoto(): ImageBitmap =
@@ -117,8 +136,8 @@ class EditReelRenderer(
         }
     }
 
-    private fun render(recipe: EditRecipe): ImageBitmap {
+    private fun render(recipe: EditRecipe, showMask: String? = null): ImageBitmap {
         photoRenders++
-        return photos.render(recipe)
+        return photos.render(recipe, showMask)
     }
 }

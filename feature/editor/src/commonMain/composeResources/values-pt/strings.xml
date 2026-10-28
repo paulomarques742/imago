@@ -473,5 +473,9 @@
     <string name="reel_failed">Não foi possível fazer o vídeo.</string>
     <string name="reel_ffmpeg_unavailable">FFmpeg indisponível. Configure IMAGO_FFMPEG com o executável.</string>
     <string name="reel_preview">Pré-visualização do vídeo</string>
+    <string name="reel_background_hint">Pode fechar este ecrã ou sair da app; o vídeo continua a ser feito.</string>
+    <string name="reel_notification_channel">Vídeos «Mostrar a edição»</string>
+    <string name="reel_notification_title">A fazer o vídeo</string>
+    <string name="reel_notification_done">O vídeo está pronto</string>
     <string name="editor_developing_raw">A revelar o RAW…</string>
 </resources>

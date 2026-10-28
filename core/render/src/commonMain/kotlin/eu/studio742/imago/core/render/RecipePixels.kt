@@ -4,6 +4,7 @@ import eu.studio742.imago.core.model.UserMessage
 import eu.studio742.imago.core.model.requireUser
 import eu.studio742.imago.core.model.CURRENT_PROCESS_VERSION
 import eu.studio742.imago.core.model.EditRecipe
+import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
 import java.util.concurrent.CancellationException
 import java.util.stream.IntStream
 import kotlin.math.floor
@@ -79,6 +80,37 @@ object RecipePixels {
     fun render(source: PixelBuffer, recipe: EditRecipe): PixelBuffer {
         requireUser(recipe.processVersion <= CURRENT_PROCESS_VERSION, UserMessage.EDIT_NEEDS_NEWER_APP)
         return render(source, recipe.toRenderParameters())
+    }
+
+    /** [recipe] with the red the editor lays over mask [maskId]'s region, whatever its adjustments. */
+    fun renderShowingMask(source: PixelBuffer, recipe: EditRecipe, maskId: String): PixelBuffer {
+        requireUser(recipe.processVersion <= CURRENT_PROCESS_VERSION, UserMessage.EDIT_NEEDS_NEWER_APP)
+        val params = recipe.toRenderParameters(showMask = maskId)
+        val brushes = BrushRasters.of(params, source)
+        val framed = render(source, params, 1f, brushes)
+        tintMaskOf(framed, source.width, source.height, params, maskId, brushes)
+        return framed
+    }
+
+    fun renderShowingMask(source: FloatPixelBuffer, recipe: EditRecipe, maskId: String): PixelBuffer {
+        requireUser(recipe.processVersion <= CURRENT_PROCESS_VERSION, UserMessage.EDIT_NEEDS_NEWER_APP)
+        val params = recipe.toRenderParameters(showMask = maskId)
+        val brushes = BrushRasters.of(params, source)
+        val framed = renderFloat(source, params, 1f, brushes).toPixelBuffer()
+        tintMaskOf(framed, source.width, source.height, params, maskId, brushes)
+        return framed
+    }
+
+    private fun tintMaskOf(
+        framed: PixelBuffer,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        params: RenderParameters,
+        maskId: String,
+        brushes: BrushRasters,
+    ) {
+        val index = params.masks.indexOfFirst { it.id == maskId }
+        if (index in 0 until MAX_LOCAL_MASKS) tintMask(framed, sourceWidth, sourceHeight, params, index, brushes)
     }
 
     /**
@@ -163,5 +195,34 @@ object RecipePixels {
             result = result or ((top * (1 - fy) + bottom * fy).roundToInt().coerceIn(0, 255) shl shift)
         }
         return result
+    }
+}
+
+/** The same blend as the shader: 45% of the mask's weight towards a fixed red. */
+internal fun tintMask(
+    framed: PixelBuffer,
+    sourceWidth: Int,
+    sourceHeight: Int,
+    parameters: RenderParameters,
+    index: Int,
+    brushes: BrushRasters,
+) {
+    val field = LocalMaskField.build(
+        framed.width,
+        framed.height,
+        parameters,
+        parameters.frameGeometry(sourceWidth, sourceHeight),
+        brushes,
+    )
+    val weights = FloatArray(MAX_LOCAL_MASKS)
+    for (y in 0 until framed.height) for (x in 0 until framed.width) {
+        field.at((x + .5f) / framed.width, (y + .5f) / framed.height, weights)
+        val amount = weights[index] * 0.45f
+        if (amount <= 0f) continue
+        val i = y * framed.width + x
+        val p = framed.pixels[i]
+        fun mix(channel: Int, target: Float) = (channel + (target * 255f - channel) * amount).roundToInt().coerceIn(0, 255)
+        framed.pixels[i] = (p and 0xFF000000.toInt()) or (mix(p ushr 16 and 255, 0.90f) shl 16) or
+            (mix(p ushr 8 and 255, 0.20f) shl 8) or mix(p and 255, 0.25f)
     }
 }

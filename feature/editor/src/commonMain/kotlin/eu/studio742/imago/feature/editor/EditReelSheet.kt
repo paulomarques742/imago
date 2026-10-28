@@ -51,12 +51,12 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.i18n.resolve
 import coil3.Bitmap
 import eu.studio742.imago.feature.editor.resources.Res
 import eu.studio742.imago.feature.editor.resources.editor_cancel
+import eu.studio742.imago.feature.editor.resources.reel_background_hint
 import eu.studio742.imago.feature.editor.resources.reel_done
 import eu.studio742.imago.feature.editor.resources.reel_export
 import eu.studio742.imago.feature.editor.resources.reel_order
@@ -95,7 +95,7 @@ internal fun EditReelSheet(
     onDismiss: () -> Unit,
 ) {
     val platform = rememberReelPlatform()
-    val exports = viewModel { ReelExportViewModel() }
+    val exports = ReelExports
     val export by exports.state.collectAsState()
     val busy = export.progress != null
 
@@ -116,7 +116,8 @@ internal fun EditReelSheet(
     val exportMeasurer = rememberTextMeasurer()
 
     Dialog(
-        onDismissRequest = { if (!busy) onDismiss() },
+        // Leaving halfway is fine: the video keeps being made, and the sheet shows it when reopened.
+        onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false),
     ) {
         Surface(modifier = Modifier.fillMaxSize(), color = ImagoColors.Background) {
@@ -173,7 +174,7 @@ internal fun EditReelSheet(
                     )
                 }
                 Column(Modifier.fillMaxSize()) {
-                    ReelTopBar(onClose = onDismiss, enabled = !busy)
+                    ReelTopBar(onClose = onDismiss)
                     if (wide) {
                         Row(
                             modifier = Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
@@ -227,8 +228,7 @@ private fun rememberReelPreview(
         val texts = reelTexts(currentScript, title)
         val painter = ReelFramePainter(currentScript, style, texts, measurer, scale = PREVIEW_SCALE)
         val photos = withContext(Dispatchers.Default) {
-            highPrecisionSource?.let { FloatReelPhotoRenderer(it, painter.photoMaxSide) }
-                ?: platform.photoRenderer(bitmap, painter.photoMaxSide)
+            platform.photoRenderer(bitmap, painter.photoMaxSide, highPrecisionSource)
         }
         try {
             val renderer = EditReelRenderer(currentScript, photos, painter)
@@ -247,12 +247,12 @@ private fun rememberReelPreview(
 }
 
 @Composable
-private fun ReelTopBar(onClose: () -> Unit, enabled: Boolean) {
+private fun ReelTopBar(onClose: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onClose, enabled = enabled) {
+        IconButton(onClick = onClose) {
             Icon(Icons.Outlined.Close, contentDescription = stringResource(Res.string.editor_cancel))
         }
         Text(
@@ -365,6 +365,11 @@ private fun ReelExportArea(
                     color = ImagoColors.TextPrimary,
                 )
                 LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                Text(
+                    stringResource(Res.string.reel_background_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ImagoColors.TextSecondary,
+                )
                 TextButton(onClick = onCancel) { Text(stringResource(Res.string.editor_cancel)) }
             }
             saved != null -> {

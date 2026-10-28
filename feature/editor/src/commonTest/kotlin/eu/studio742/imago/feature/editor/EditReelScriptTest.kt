@@ -6,6 +6,8 @@ import eu.studio742.imago.core.model.CropRect
 import eu.studio742.imago.core.model.CurvePoint
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.LocalAdjustments
+import eu.studio742.imago.core.model.BrushMask
+import eu.studio742.imago.core.model.BrushStroke
 import eu.studio742.imago.core.model.LocalMask
 import eu.studio742.imago.core.model.MaskComponent
 import eu.studio742.imago.core.model.MaskShape
@@ -68,7 +70,8 @@ class EditReelScriptTest {
         assertEquals(edited.neutral(), script.before)
         assertEquals(edited, script.steps.last().to)
         script.steps.zipWithNext { a, b -> assertEquals(a.to, b.from) }
-        assertEquals(edited, stepAt(script, script.steps.lastIndex, script.stepMoveMs).recipe)
+        val last = script.steps.last()
+        assertEquals(edited, stepAt(script, script.steps.lastIndex, script.introMs(last) + script.moveMs(last)).recipe)
         assertEquals(edited, script.frameAt(script.durationMs - 1).recipe)
     }
 
@@ -291,8 +294,66 @@ class EditReelScriptTest {
             listOf(ReelControl.MaskArea("sky"), ReelControl.MaskSlider("sky", Adjustment.EXPOSURE)),
             step.controls,
         )
-        val halfway = stepAt(script, 0, script.stepMoveMs / 2)
+        val halfway = stepAt(script, 0, script.introMs(step) + script.moveMs(step) / 2)
         assertEquals(-0.25f, halfway.recipe.masks.single().adjustments.exposure, 0.0001f)
+    }
+
+    @Test
+    fun `a mask step first shows the mask with its red, and the sliders wait`() {
+        val script = EditReelScript.fromRecipe(edited)
+        val index = script.steps.indexOfFirst { it.title == ReelTitle.Mask("sky") }
+        val step = script.steps[index]
+
+        val intro = stepAt(script, index, script.introMs(step) / 2)
+        assertEquals("sky", intro.reveal?.maskId)
+        assertEquals(1f, intro.reveal?.alpha)
+        assertTrue(intro.recipe.masks.single().adjustments.isNeutral)
+
+        val adjusting = stepAt(script, index, script.introMs(step) + 10)
+        assertEquals(null, adjusting.reveal)
+    }
+
+    @Test
+    fun `a crop shows the whole photo with the frame closing, then zooms into it`() {
+        val script = EditReelScript.fromRecipe(edited)
+        val index = script.steps.indexOfFirst { it.title == ReelTitle.Panel(ReelPanel.GEOMETRY) }
+        val step = script.steps[index]
+
+        val closing = stepAt(script, index, script.moveMs(step) / 2)
+        assertEquals(CropRect(), closing.recipe.geometry.cropRect)
+        assertEquals(CropRect(), closing.crop?.view)
+        assertEquals(0.05f, closing.crop!!.frame.x, 0.01f)
+
+        val framed = stepAt(script, index, script.moveMs(step))
+        assertEquals(CropRect(0.1f, 0.1f, 0.8f, 0.8f), framed.crop?.frame)
+
+        val zoomed = stepAt(script, index, (script.stepMs * REEL_CROP_ZOOM_END_SHARE).toLong() - 1)
+        assertEquals(0.1f, zoomed.crop!!.view.x, 0.01f)
+
+        val holding = stepAt(script, index, (script.stepMs * REEL_CROP_ZOOM_END_SHARE).toLong() + 10)
+        assertEquals(null, holding.crop)
+        assertEquals(step.to.geometry, holding.recipe.geometry)
+    }
+
+    @Test
+    fun `a step that is not about a mask has no introduction`() {
+        val script = EditReelScript.fromRecipe(edited)
+        val tone = script.steps.first { it.title == ReelTitle.Panel(ReelPanel.LIGHT) }
+
+        assertEquals(0L, script.introMs(tone))
+    }
+
+    @Test
+    fun `a brush is painted point by point during the introduction`() {
+        val component = MaskComponent(
+            MaskShape.BRUSH,
+            brush = BrushMask(listOf(BrushStroke(listOf(0f, 0f, 1f, 0f, 1f, 1f, 0f, 1f), 0.05f))),
+        )
+
+        val half = component.paintedTo(0.5f).brush!!.strokes.single().points
+        assertEquals(listOf(0f, 0f, 1f, 0f), half)
+        assertEquals(component, component.paintedTo(1f))
+        assertEquals(listOf(0f, 0f, 0.5f, 0f), component.paintedTo(0.375f).brush!!.strokes.single().points)
     }
 
     @Test

@@ -1,7 +1,12 @@
 package eu.studio742.imago.feature.editor
 
 import eu.studio742.imago.core.designsystem.i18n.UiText
+import eu.studio742.imago.core.model.BrushStroke
+import eu.studio742.imago.core.model.CropRect
 import eu.studio742.imago.core.model.EditRecipe
+import eu.studio742.imago.core.model.LocalAdjustments
+import eu.studio742.imago.core.model.LocalMask
+import eu.studio742.imago.core.model.MaskComponent
 
 /** The photo untouched, before the first step. */
 const val REEL_BEFORE_MS = 1_000L
@@ -20,6 +25,26 @@ const val REEL_STEP_MAX_MS = 3_000L
 
 /** The part of a step in which the sliders move; the rest is a pause to see what they did. */
 const val REEL_STEP_MOVE_SHARE = 0.7f
+
+/**
+ * The part of a step that introduces a mask: its red region appears and, for a brush, the strokes
+ * are painted, before any slider moves. The rest of the step is the sliders and the pause.
+ */
+const val REEL_MASK_INTRO_SHARE = 0.4f
+
+/**
+ * A step that crops: in the first part the whole photo is on screen and the frame closes on what will be
+ * kept, as in the editor's crop; from there until [REEL_CROP_ZOOM_END_SHARE] the view zooms into the
+ * frame; the rest is the cropped photo, holding.
+ */
+const val REEL_CROP_CLOSE_SHARE = 0.5f
+const val REEL_CROP_ZOOM_END_SHARE = 0.8f
+
+/** A step that starts on a crop already made first opens out to the whole photo, over this part of it. */
+private const val REEL_CROP_OPEN_SHARE = 0.15f
+
+/** The crop frame fades in over this. */
+private const val REEL_CROP_FADE_MS = 250L
 
 /**
  * The line that sweeps across the photo, original on one side and edited on the other: all the way
@@ -71,7 +96,14 @@ sealed interface ReelSegment {
         override val durationMs: Long get() = REEL_BEFORE_MS
     }
 
-    data class Step(val step: ReelStep, override val durationMs: Long) : ReelSegment
+    /**
+     * @param introMs how long the mask is shown being drawn before the sliders start; zero for any
+     *   step that is not about drawing a mask
+     */
+    data class Step(val step: ReelStep, override val durationMs: Long, val introMs: Long = 0L) : ReelSegment {
+        /** The time left for the sliders and the pause that follows them. */
+        val adjustMs: Long get() = durationMs - introMs
+    }
 
     data object Compare : ReelSegment {
         override val durationMs: Long get() = REEL_COMPARE_MS
@@ -85,12 +117,34 @@ sealed interface ReelSegment {
 data class ReelControlValue(val control: ReelControl, val value: Float?)
 
 /**
+ * A mask being introduced: the photo as the editor shows it while the mask is drawn.
+ *
+ * @param recipe the recipe with the mask drawn so far, to render with the mask's red over it
+ * @param alpha how much of that red is on the photo
+ */
+data class ReelMaskReveal(val maskId: String, val recipe: EditRecipe, val alpha: Float)
+
+/**
+ * A crop being made, as the editor shows it: the photo rendered whole and the frame over what is kept.
+ * Both rectangles are in the uncropped photo's coordinates, from 0 to 1.
+ *
+ * @param frame the crop frame
+ * @param view the part of the uncropped photo on screen: all of it while the frame closes, then
+ *   narrowing to the frame, which is the zoom into the crop
+ * @param alpha how much of the frame, its grid and the dimming outside it shows
+ */
+data class ReelCropView(val frame: CropRect, val view: CropRect, val alpha: Float)
+
+/**
  * What to draw at one instant.
  *
  * @param progress how far the segment has gone: for a step, the eased progress of its sliders, which
  *   reaches 1 when the hold begins; for the other segments, plain time.
- * @param elapsedMs the time since the segment began, for what animates on its own clock
+ * @param elapsedMs the time since the segment began, for what animates on its own clock; in a step
+ *   with an introduction, since the sliders started
  * @param recipe what to render the photo with. Frames whose recipe is equal can reuse the render.
+ * @param reveal set while a step introduces its mask, before its sliders move
+ * @param crop set while a step's crop is being made; [recipe] is then the photo uncropped
  */
 data class ReelFrame(
     val segment: ReelSegment,
@@ -99,6 +153,8 @@ data class ReelFrame(
     val elapsedMs: Long,
     val recipe: EditRecipe,
     val controls: List<ReelControlValue>,
+    val reveal: ReelMaskReveal? = null,
+    val crop: ReelCropView? = null,
 )
 
 /**
@@ -126,8 +182,15 @@ class EditReelScript private constructor(
     /** How long the sliders of a step take to reach their value. */
     val stepMoveMs: Long = (stepMs * REEL_STEP_MOVE_SHARE).toLong()
 
+    /** How long the mask of [step] takes to be drawn, before its sliders move. */
+    fun introMs(step: ReelStep): Long = if (step.revealedMask() != null) (stepMs * REEL_MASK_INTRO_SHARE).toLong() else 0L
+
+    /** How long the sliders of [step] take to reach their value; a crop leaves time to zoom into it. */
+    fun moveMs(step: ReelStep): Long =
+        if (step.crops()) (stepMs * REEL_CROP_CLOSE_SHARE).toLong() else ((stepMs - introMs(step)) * REEL_STEP_MOVE_SHARE).toLong()
+
     val segments: List<ReelSegment> =
-        listOf<ReelSegment>(ReelSegment.Before) + steps.map { ReelSegment.Step(it, stepMs) } +
+        listOf<ReelSegment>(ReelSegment.Before) + steps.map { ReelSegment.Step(it, stepMs, introMs(it)) } +
             ReelSegment.Compare + ReelSegment.Closing
 
     val durationMs: Long = segments.sumOf { it.durationMs }
@@ -146,15 +209,22 @@ class EditReelScript private constructor(
     private fun frameIn(segment: ReelSegment, index: Int, elapsedMs: Long): ReelFrame = when (segment) {
         is ReelSegment.Step -> {
             val step = segment.step
-            val progress = easeInOut((elapsedMs.toFloat() / stepMoveMs).coerceAtMost(1f))
+            val reveal = step.revealedMask()?.takeIf { elapsedMs < segment.introMs }?.let {
+                revealAt(step, it, elapsedMs.toFloat() / segment.introMs)
+            }
+            val adjusting = (elapsedMs - segment.introMs).coerceAtLeast(0L)
+            val progress = if (reveal != null) 0f else easeInOut((adjusting.toFloat() / moveMs(step)).coerceAtMost(1f))
             val recipe = interpolateRecipe(step.from, step.to, progress)
+            val crop = if (step.crops()) cropViewAt(step, recipe, elapsedMs) else null
             ReelFrame(
                 segment = segment,
                 segmentIndex = index,
                 progress = progress,
-                elapsedMs = elapsedMs,
-                recipe = recipe,
+                elapsedMs = adjusting,
+                recipe = if (crop != null) recipe.uncropped() else recipe,
                 controls = step.controls.map { ReelControlValue(it, it.valueIn(recipe)) },
+                reveal = reveal,
+                crop = crop,
             )
         }
         else -> ReelFrame(
@@ -165,6 +235,39 @@ class EditReelScript private constructor(
             recipe = if (segment == ReelSegment.Before) before else after,
             controls = emptyList(),
         )
+    }
+
+    /**
+     * The crop of [step] at [elapsedMs]: the frame follows the sliders' [recipe] while the whole photo is
+     * on view, then the view zooms into it. Null once the zoom has ended, when the photo is the crop.
+     */
+    private fun cropViewAt(step: ReelStep, recipe: EditRecipe, elapsedMs: Long): ReelCropView? {
+        val zoomStart = moveMs(step)
+        val zoomEnd = (stepMs * REEL_CROP_ZOOM_END_SHARE).toLong()
+        if (elapsedMs >= zoomEnd) return null
+        val whole = CropRect()
+        val fromCrop = step.from.geometry.cropRect
+        val zoom = easeInOut(((elapsedMs - zoomStart).toFloat() / (zoomEnd - zoomStart)).coerceIn(0f, 1f))
+        val view = if (zoom > 0f) {
+            lerpCrop(whole, step.to.geometry.cropRect, zoom)
+        } else {
+            lerpCrop(fromCrop, whole, easeInOut((elapsedMs.toFloat() / (stepMs * REEL_CROP_OPEN_SHARE)).coerceIn(0f, 1f)))
+        }
+        val alpha = minOf((elapsedMs.toFloat() / REEL_CROP_FADE_MS).coerceIn(0f, 1f), 1f - zoom)
+        return ReelCropView(frame = recipe.geometry.cropRect, view = view, alpha = alpha)
+    }
+
+    /** The step's mask as the editor shows it at [t] of its introduction: drawn so far, with its red. */
+    private fun revealAt(step: ReelStep, mask: LocalMask, t: Float): ReelMaskReveal {
+        val before = step.from.mask(mask.id)
+        val painted = easeInOut((t / REEL_MASK_DRAW_SHARE).coerceIn(0f, 1f))
+        val drawn = mask.copy(
+            adjustments = before?.adjustments ?: LocalAdjustments(),
+            components = mask.components.map { it.paintedTo(painted) },
+        )
+        val masks = if (before != null) step.from.masks.map { if (it.id == mask.id) drawn else it } else step.from.masks + drawn
+        val alpha = minOf(t / REEL_MASK_FADE_SHARE, (1f - t) / REEL_MASK_FADE_SHARE, 1f).coerceIn(0f, 1f)
+        return ReelMaskReveal(mask.id, step.from.copy(masks = masks), alpha)
     }
 
     companion object {
@@ -197,6 +300,68 @@ class EditReelScript private constructor(
             return EditReelScript(origin.neutral(), path.last().recipe, fitLength(steps))
         }
     }
+}
+
+/** Whether [this] step makes or changes a crop: it is shown as the editor's crop, frame first and zoom after. */
+internal fun ReelStep.crops(): Boolean = ReelControl.Crop in controls
+
+/** [this] recipe with the whole photo in frame: what the editor's crop shows under the frame. */
+internal fun EditRecipe.uncropped(): EditRecipe = copy(geometry = geometry.copy(cropRect = CropRect()))
+
+private fun lerpCrop(a: CropRect, b: CropRect, t: Float) = CropRect(
+    x = a.x + (b.x - a.x) * t,
+    y = a.y + (b.y - a.y) * t,
+    w = a.w + (b.w - a.w) * t,
+    h = a.h + (b.h - a.h) * t,
+)
+
+/** The part of the introduction in which a brush is painted; the finished mask stays in view after it. */
+private const val REEL_MASK_DRAW_SHARE = 0.7f
+
+/** The part of the introduction the red takes to come in, and again to go out. */
+private const val REEL_MASK_FADE_SHARE = 0.2f
+
+/**
+ * The mask a step brings in, if it does: the one its title names, or one whose shapes the step
+ * changes. A step that only moves the sliders of a mask already on screen has no introduction.
+ */
+internal fun ReelStep.revealedMask(): LocalMask? {
+    val id = (title as? ReelTitle.Mask)?.maskId
+        ?: controls.firstNotNullOfOrNull { (it as? ReelControl.MaskArea)?.maskId }
+        ?: return null
+    return to.mask(id)?.takeIf { it.enabled && it.components.isNotEmpty() }
+}
+
+/** This component with only the first [t] of its brush strokes painted: the finger's path, point by point. */
+internal fun MaskComponent.paintedTo(t: Float): MaskComponent {
+    val brush = brush?.takeIf { it.strokes.isNotEmpty() } ?: return this
+    if (t >= 1f) return this
+    val total = brush.strokes.sumOf { it.points.size / 2 }
+    var budget = t * total
+    val strokes = mutableListOf<BrushStroke>()
+    for (stroke in brush.strokes) {
+        if (budget <= 0f) break
+        val count = stroke.points.size / 2
+        if (budget >= count) {
+            strokes += stroke
+            budget -= count
+            continue
+        }
+        // The last point is part way along its segment, so the stroke grows smoothly.
+        val whole = budget.toInt()
+        val fraction = budget - whole
+        val points = stroke.points.take(whole * 2).toMutableList()
+        if (whole == 0) {
+            points += stroke.points.take(2)
+        } else if (fraction > 0f) {
+            val x = points[whole * 2 - 2]
+            val y = points[whole * 2 - 1]
+            points += listOf(x + (stroke.points[whole * 2] - x) * fraction, y + (stroke.points[whole * 2 + 1] - y) * fraction)
+        }
+        strokes += stroke.copy(points = points)
+        break
+    }
+    return copy(brush = brush.copy(strokes = strokes))
 }
 
 /** The steps from the untouched photo to [target], one per panel and one per mask. */

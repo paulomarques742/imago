@@ -35,8 +35,12 @@ internal class DesktopReelPlatform(
     override fun frameScale(): Float = 1f
 
     /** The computer draws with the CPU render, as its editor does. */
-    override fun photoRenderer(photo: Bitmap, maxSide: Int): ReelPhotoRenderer =
-        CpuReelPhotoRenderer(photo.toPixelBuffer(), maxSide)
+    override fun photoRenderer(
+        photo: Bitmap,
+        maxSide: Int,
+        highPrecisionSource: eu.studio742.imago.core.render.FloatPixelBuffer?,
+    ): ReelPhotoRenderer =
+        highPrecisionSource?.let { FloatReelPhotoRenderer(it, maxSide) } ?: CpuReelPhotoRenderer(photo.toPixelBuffer(), maxSide)
 
     override suspend fun encode(
         width: Int,

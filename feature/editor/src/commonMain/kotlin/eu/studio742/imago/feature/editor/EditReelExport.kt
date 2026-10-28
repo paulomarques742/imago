@@ -3,8 +3,6 @@ package eu.studio742.imago.feature.editor
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.TextMeasurer
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.designsystem.i18n.toUiText
 import coil3.Bitmap
@@ -12,6 +10,8 @@ import eu.studio742.imago.feature.editor.resources.Res
 import eu.studio742.imago.feature.editor.resources.reel_failed
 import java.io.File
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,9 +35,13 @@ interface ReelPlatform {
     /**
      * What draws the photo of each frame from [photo] — the bitmap the editor has open — for a
      * frame that shows it at most [maxSide] on its longest side. Called off the main thread; the
-     * caller closes it.
+     * caller closes it. A RAW comes with [highPrecisionSource], the developed image the editor shows.
      */
-    fun photoRenderer(photo: Bitmap, maxSide: Int): ReelPhotoRenderer
+    fun photoRenderer(
+        photo: Bitmap,
+        maxSide: Int,
+        highPrecisionSource: eu.studio742.imago.core.render.FloatPixelBuffer? = null,
+    ): ReelPhotoRenderer
 
     /**
      * Encodes [frameCount] frames of [width] × [height] at [fps] into a temporary MP4 the caller
@@ -57,6 +61,12 @@ interface ReelPlatform {
 
     /** The system's share menu for a saved video; null where the platform has none. */
     val share: ((SavedReel) -> Unit)?
+
+    /**
+     * An export has begun, on the main thread: the platform keeps the process alive and shows the
+     * progress outside the app, where it has a way to. Reads [ReelExports.state] to follow it.
+     */
+    fun exportStarted() = Unit
 }
 
 @Composable
@@ -74,10 +84,12 @@ data class ReelExportState(
 )
 
 /**
- * Makes the video away from the screen: rotating the tablet or closing the sheet halfway does not
- * throw away a minute of rendering.
+ * Makes the video away from the screen, and from the editor: rotating the tablet, closing the sheet,
+ * leaving the photo or leaving the app halfway does not throw away a minute of rendering. It belongs to
+ * the process, not to a screen; one video at a time.
  */
-class ReelExportViewModel : ViewModel() {
+object ReelExports {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutableState = MutableStateFlow(ReelExportState())
     val state: StateFlow<ReelExportState> = mutableState.asStateFlow()
     private var job: Job? = null
@@ -98,14 +110,14 @@ class ReelExportViewModel : ViewModel() {
     ) {
         if (job?.isActive == true) return
         mutableState.value = ReelExportState(progress = 0f)
-        job = viewModelScope.launch {
+        platform.exportStarted()
+        job = scope.launch {
             var video: File? = null
             try {
                 val texts = reelTexts(script, title)
                 video = withContext(Dispatchers.Default) {
                     val painter = ReelFramePainter(script, style, texts, textMeasurer, scale = platform.frameScale())
-                    (highPrecisionSource?.let { FloatReelPhotoRenderer(it, painter.photoMaxSide) }
-                        ?: platform.photoRenderer(photo, painter.photoMaxSide)).use { photos ->
+                    platform.photoRenderer(photo, painter.photoMaxSide, highPrecisionSource).use { photos ->
                         val renderer = EditReelRenderer(script, photos, painter)
                         platform.encode(painter.width, painter.height, renderer.fps, renderer.frameCount, renderer::frame) { done ->
                             mutableState.update { it.copy(progress = done) }

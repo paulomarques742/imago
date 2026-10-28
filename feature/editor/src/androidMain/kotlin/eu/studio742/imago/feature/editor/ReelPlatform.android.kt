@@ -1,7 +1,13 @@
 package eu.studio742.imago.feature.editor
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import android.graphics.Bitmap
 import android.media.Image
 import android.media.MediaCodec
@@ -46,7 +52,16 @@ import org.jetbrains.compose.resources.stringResource
 actual fun rememberReelPlatform(): ReelPlatform {
     val context = LocalContext.current.applicationContext
     val chooserTitle = stringResource(Res.string.reel_share_title)
-    return remember(context, chooserTitle) { AndroidReelPlatform(context, chooserTitle) }
+    // Asked for when the export starts, which is when the notification has something to say. Refused,
+    // the video is still made; it just does not announce it.
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    return remember(context, chooserTitle) {
+        AndroidReelPlatform(context, chooserTitle) {
+            val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            if (needsPermission) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 }
 
 /**
@@ -57,8 +72,14 @@ actual fun rememberReelPlatform(): ReelPlatform {
 private class AndroidReelPlatform(
     private val context: Context,
     private val chooserTitle: String,
+    private val askForNotifications: () -> Unit,
 ) : ReelPlatform {
     private val gallery = GalleryExporter(context)
+
+    override fun exportStarted() {
+        askForNotifications()
+        ReelExportService.start(context)
+    }
 
     override fun frameScale(): Float =
         if (encoderFor(avcFormat(REEL_WIDTH, REEL_HEIGHT, REEL_FPS, surfaceInput = true)) != null) 1f else 2f / 3f
@@ -68,9 +89,14 @@ private class AndroidReelPlatform(
      * faster than the CPU render on a phone. A device that gives no OpenGL ES 3 context off screen
      * still gets its video, from the CPU.
      */
-    override fun photoRenderer(photo: Bitmap, maxSide: Int): ReelPhotoRenderer =
-        runCatching { GpuReelPhotoRenderer(photo, maxSide) }
-            .getOrElse { CpuReelPhotoRenderer(photo.toPixelBuffer(), maxSide) }
+    override fun photoRenderer(
+        photo: Bitmap,
+        maxSide: Int,
+        highPrecisionSource: eu.studio742.imago.core.render.FloatPixelBuffer?,
+    ): ReelPhotoRenderer =
+        runCatching { GpuReelPhotoRenderer(photo, maxSide, highPrecisionSource) }.getOrElse {
+            highPrecisionSource?.let { FloatReelPhotoRenderer(it, maxSide) } ?: CpuReelPhotoRenderer(photo.toPixelBuffer(), maxSide)
+        }
 
     override suspend fun encode(
         width: Int,
@@ -116,12 +142,20 @@ private class AndroidReelPlatform(
     }
 }
 
-private class GpuReelPhotoRenderer(private val photo: Bitmap, private val maxSide: Int) : ReelPhotoRenderer {
-    private val gpu = OffscreenRecipeRenderer(photo)
+private class GpuReelPhotoRenderer(
+    private val photo: Bitmap,
+    private val maxSide: Int,
+    highPrecisionSource: eu.studio742.imago.core.render.FloatPixelBuffer?,
+) : ReelPhotoRenderer {
+    private val gpu = OffscreenRecipeRenderer(photo, highPrecisionSource)
     override val sourceWidth: Int get() = photo.width
     override val sourceHeight: Int get() = photo.height
 
-    override fun render(recipe: EditRecipe): ImageBitmap = gpu.render(recipe.toRenderParameters(), maxSide).asImageBitmap()
+    override fun render(recipe: EditRecipe, showMask: String?): ImageBitmap {
+        val parameters = recipe.toRenderParameters(showMask = showMask)
+        val overlay = if (showMask == null) -1 else parameters.masks.indexOfFirst { it.id == showMask }
+        return gpu.render(parameters, maxSide, overlay).asImageBitmap()
+    }
 
     override fun close() = gpu.close()
 }

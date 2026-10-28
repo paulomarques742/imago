@@ -2,6 +2,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <application>
+        <!-- Keeps the "Show your edit" video being made after the app is left. -->
+        <service
+            android:name="eu.studio742.imago.feature.editor.ReelExportService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
         <!-- Keeps a photo going to the gallery or to Immich after the app is left. -->
         <service
             android:name="eu.studio742.imago.feature.editor.PhotoExportService"
