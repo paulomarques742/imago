@@ -45,8 +45,8 @@ internal object DevelopedRawBitmaps {
 /** Library thumbnails and detail images use the same development and recipe as the editor. */
 class RawPhotoDecoder private constructor(private val file: File, private val options: Options) : Decoder {
     override suspend fun decode(): DecodeResult? {
-        val side = maxOf((options.size.width as? Dimension.Pixels)?.px ?: 0,
-            (options.size.height as? Dimension.Pixels)?.px ?: 0).takeIf { it > 0 }?.coerceAtMost(2048) ?: 2048
+        val side = rawTileSide(maxOf((options.size.width as? Dimension.Pixels)?.px ?: 0,
+            (options.size.height as? Dimension.Pixels)?.px ?: 0).takeIf { it > 0 } ?: 2048)
         val recipe = options.extras[rawRecipeKey]
         // What the develop makes is kept on disk, as for any other edited photo; a photo read through a
         // grant that can be revoked has its disk cache switched off by the request, and keeps nothing.

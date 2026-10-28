@@ -16,6 +16,7 @@ import eu.studio742.imago.feature.editor.resources.*
 import kotlin.math.exp
 import androidx.compose.ui.input.pointer.PointerEventType
 import eu.studio742.imago.core.render.libraryAuth
+import eu.studio742.imago.core.render.rawQuickPreview
 import coil3.request.crossfade
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -1008,9 +1009,12 @@ private fun EditorScreen(
                 val isActiveAsset = pageAsset.id == assetId
                 Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
                     if (!isActiveAsset || state.bitmap == null) {
+                        // A RAW from the phone takes seconds to develop, and its own full-size develop would queue
+                        // behind the one the editor is already making: the phone's small look of it holds the place.
+                        val quickRaw = isRawOriginal(null, pageAsset.fileName) && pageAsset.previewUrl.startsWith("content:")
                         AsyncImage(
                             model = ImageRequest.Builder(context)
-                                .data(rememberEditorImageData(pageAsset))
+                                .apply { if (quickRaw) rawQuickPreview(pageAsset.previewUrl) else data(rememberEditorImageData(pageAsset)) }
                                 .libraryAuth(pageAsset.apiKey)
                                 .crossfade(false)
                                 .build(),

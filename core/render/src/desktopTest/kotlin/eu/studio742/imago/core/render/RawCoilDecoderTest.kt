@@ -31,7 +31,7 @@ class RawCoilDecoderTest {
         } finally { assertTrue(file.delete()) }
     }
 
-    @Test fun `a small Coil request receives a bounded RAW thumbnail`() = runBlocking {
+    @Test fun `a small Coil request receives the RAW thumbnail at the common tile size`() = runBlocking {
         val file = Files.createTempFile("imago-raw-coil-size-", ".asset").toFile()
         val loader = ImageLoader.Builder(PlatformContext.INSTANCE).components { add(RawPhotoDecoder.Factory()) }.build()
         try {
@@ -40,7 +40,9 @@ class RawCoilDecoderTest {
                 .softwareBitmap().build())
             assertTrue("$result", result is SuccessResult)
             val bitmap = (result as SuccessResult).image.toBitmap()
-            assertEquals(12 to 16, bitmap.width to bitmap.height)
+            // Every small request is developed at one size, so that the grid, the viewer and its strip share a render.
+            assertTrue(maxOf(bitmap.width, bitmap.height) <= RAW_TILE_MIN_SIDE)
+            assertEquals(24 to 32, bitmap.width to bitmap.height)
         } finally { loader.shutdown(); assertTrue(file.delete()) }
     }
 

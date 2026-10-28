@@ -16,6 +16,7 @@ import eu.studio742.imago.core.render.RAW_DEFAULT_DEVELOPMENT_KEY
 import eu.studio742.imago.core.render.RawTileCacheKey
 import eu.studio742.imago.core.render.RecipeRenderCache
 import eu.studio742.imago.core.render.EditRecipeTransformation
+import eu.studio742.imago.core.render.rawTileSide
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
@@ -97,10 +98,10 @@ class LibraryImageInterceptor : Interceptor {
                 )?.use { cursor -> if (cursor.moveToFirst()) "$uri:${cursor.getLong(0)}:${cursor.getLong(1)}" else null }
             }.getOrNull()
         } ?: return null
-        val side = maxOf(
+        val side = rawTileSide(maxOf(
             (size.width as? Dimension.Pixels)?.px ?: 0,
             (size.height as? Dimension.Pixels)?.px ?: 0,
-        ).takeIf { it > 0 }?.coerceAtMost(RAW_TILE_MAX_SIDE) ?: RAW_TILE_MAX_SIDE
+        ).takeIf { it > 0 } ?: RAW_TILE_MAX_SIDE)
         val recipe = request.transformations.firstNotNullOfOrNull { it as? EditRecipeTransformation }?.cacheKey
         return RecipeRenderCache.identityKey(recipe ?: RAW_DEFAULT_DEVELOPMENT_KEY, identity, side)
     }

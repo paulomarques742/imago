@@ -207,4 +207,20 @@ class BrushRasterTest {
         assertTrue(recipe.toRenderParameters().masks.isEmpty())
         assertEquals("m", recipe.toRenderParameters(showMask = "m").masks.single().id)
     }
+
+    @Test fun `the Auto Mask reference of a small photo reads each row of it once and not once per texel`() {
+        val pixels = PixelBuffer(16, 24, IntArray(16 * 24) { 0xFF000000.toInt() or ((it % 16) * 16) })
+        var rowReads = 0
+        val counting = object : PixelSurface by pixels {
+            override fun getPixels(target: IntArray, offset: Int, stride: Int, x: Int, y: Int, w: Int, h: Int) {
+                rowReads++
+                pixels.getPixels(target, offset, stride, x, y, w, h)
+            }
+        }
+        val reference = BrushReference.of(counting)
+        assertTrue("a read per row of the photo and a few more, not millions: $rowReads", rowReads < 24 + reference.height)
+        val colour = FloatArray(3)
+        reference.colour((reference.height / 2) * reference.width + reference.width - 1, colour)
+        assertEquals("the right edge keeps the colour of the photo's last column", 240f / 255f, colour[2], 0.02f)
+    }
 }

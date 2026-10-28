@@ -9,6 +9,7 @@ import eu.studio742.imago.feature.library.AssetUiModel
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.model.AssetReference
 import eu.studio742.imago.core.model.OPENED_LIBRARY_ID
+import eu.studio742.imago.core.model.isRawOriginal
 import eu.studio742.imago.core.designsystem.LocalActionGate
 import eu.studio742.imago.feature.library.AddToAlbumSheet
 import eu.studio742.imago.feature.library.DeleteWhere
@@ -22,7 +23,9 @@ import eu.studio742.imago.core.designsystem.i18n.resolve
 import eu.studio742.imago.core.designsystem.i18n.resolveNow
 import org.jetbrains.compose.resources.stringResource
 import eu.studio742.imago.feature.detail.resources.*
+import eu.studio742.imago.core.render.developedRawTile
 import eu.studio742.imago.core.render.libraryAuth
+import eu.studio742.imago.core.render.rawQuickPreview
 import eu.studio742.imago.core.render.withRecipe
 import coil3.request.crossfade
 import androidx.compose.ui.backhandler.BackHandler
@@ -812,11 +815,17 @@ private fun ZoomablePhoto(
     // `EditRecipeTransformation` has no equality, so a new request is never equal to the previous one
     // in Coil's eyes — and the pinch, which recomposes, restarted the load and the fade on every frame
     // of the gesture.
+    // A RAW from the phone is developed one at a time, and developing is seconds: its renders are kept,
+    // and what the phone already has of it is shown while they are made.
+    val localRaw = remember(asset.fileName, asset.thumbnailUrl) {
+        isRawOriginal(null, asset.fileName) && asset.thumbnailUrl.startsWith("content:")
+    }
     val previewRequest = remember(context, asset.previewUrl, asset.apiKey, recipe) {
         ImageRequest.Builder(context)
             .data(asset.previewUrl)
             .libraryAuth(asset.apiKey)
             .crossfade(true)
+            .apply { if (localRaw) developedRawTile() }
             // The local recipe is what tells what is saved apart from what Immich serves; Coil treats
             // it as part of the key, so the processed version is cached like any other image.
             .withRecipe(recipe)
@@ -829,7 +838,11 @@ private fun ZoomablePhoto(
             .size(PLACEHOLDER_PIXELS)
             .crossfade(false)
             .withRecipe(recipe)
+            .apply { if (localRaw) developedRawTile() }
             .build()
+    }
+    val quickRequest = remember(context, asset.thumbnailUrl, localRaw) {
+        if (localRaw) ImageRequest.Builder(context).rawQuickPreview(asset.thumbnailUrl).build() else null
     }
     val preview = rememberAsyncImagePainter(model = previewRequest)
     // The dimensions of the already processed photo — the recipe decides whether it rotates or
@@ -985,6 +998,14 @@ private fun ZoomablePhoto(
                 },
             contentAlignment = Alignment.Center,
         ) {
+            if (quickRequest != null) {
+                AsyncImage(
+                    model = quickRequest,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             AsyncImage(
                 model = placeholderRequest,
                 // The final one has the description; this is the same photo holding the place, and
@@ -1120,6 +1141,7 @@ private fun Filmstrip(
                 apiKey = item.apiKey,
                 recipe = item.recipe,
                 isVideo = item.isVideo,
+                isLocalRaw = isRawOriginal(null, item.fileName) && item.thumbnailUrl.startsWith("content:"),
                 description = item.fileName,
                 isSelected = index == selectedIndex,
                 onClick = { onSelect(index) },
@@ -1160,6 +1182,7 @@ private fun StackStrip(
                     apiKey = item.apiKey,
                     recipe = item.recipe,
                     isVideo = item.isVideo,
+                    isLocalRaw = isRawOriginal(null, item.fileName) && item.thumbnailUrl.startsWith("content:"),
                     description = if (index == 0) "$coverDescription, ${item.fileName}" else item.fileName,
                     isSelected = item.id == shownId,
                     onClick = { onSelect(item) },
@@ -1176,6 +1199,7 @@ private fun StripThumbnail(
     apiKey: String,
     recipe: EditRecipe?,
     isVideo: Boolean,
+    isLocalRaw: Boolean,
     description: String,
     isSelected: Boolean,
     onClick: () -> Unit,
@@ -1200,6 +1224,7 @@ private fun StripThumbnail(
                 .libraryAuth(apiKey)
                 .crossfade(false)
                 .withRecipe(recipe)
+                .apply { if (isLocalRaw) developedRawTile() }
                 .build(),
             contentDescription = description,
             contentScale = ContentScale.Crop,

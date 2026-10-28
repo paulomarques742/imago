@@ -180,6 +180,10 @@ class BrushReference internal constructor(val width: Int, val height: Int, priva
                 }
             }
             val rgb = FloatArray(width * height * 3)
+            // The texels that no pixel fell in come row after row, and the row of the photo they read is the
+            // same for all of them: read once, and not once per texel — on a small photo that was most of the
+            // raster, millions of row reads.
+            var rowRead = -1
             for (texel in 0 until width * height) {
                 // A photo smaller than the raster leaves texels no pixel fell in; they take the
                 // pixel that covers them.
@@ -191,7 +195,10 @@ class BrushReference internal constructor(val width: Int, val height: Int, priva
                     val ty = texel / width
                     val sx = ((tx + 0.5f) * source.width / width).toInt().coerceIn(0, source.width - 1)
                     val sy = ((ty + 0.5f) * source.height / height).toInt().coerceIn(0, source.height - 1)
-                    source.getPixels(row, 0, source.width, 0, sy, source.width, 1)
+                    if (rowRead != sy) {
+                        source.getPixels(row, 0, source.width, 0, sy, source.width, 1)
+                        rowRead = sy
+                    }
                     val argb = row[sx]
                     rgb[texel * 3] = ((argb ushr 16) and 0xFF) / 255f
                     rgb[texel * 3 + 1] = ((argb ushr 8) and 0xFF) / 255f

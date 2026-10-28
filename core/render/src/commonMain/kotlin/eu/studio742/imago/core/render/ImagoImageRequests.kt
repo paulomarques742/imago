@@ -39,6 +39,18 @@ val DevelopedRawTile = Extras.Key(default = false)
 fun ImageRequest.Builder.developedRawTile(): ImageRequest.Builder = apply { extras[DevelopedRawTile] = true }
 
 /**
+ * The side a developed RAW is made and kept at for a request of [requested] pixels. A handful of sizes
+ * and not every size: the grid, the viewer's placeholder and its strip all ask for something a little
+ * different, and each of those would otherwise be a RAW developed again. None goes under [RAW_TILE_MIN_SIDE],
+ * since one render serves them all and the first one is the slow one.
+ */
+fun rawTileSide(requested: Int): Int =
+    RAW_TILE_SIDES.firstOrNull { it >= requested } ?: RAW_TILE_SIDES.last()
+
+const val RAW_TILE_MIN_SIDE = 384
+private val RAW_TILE_SIDES = listOf(RAW_TILE_MIN_SIDE, 512, 768, 1024, 1536, 2048)
+
+/**
  * Where the developed render of this tile is kept, made by whoever can name the photo without opening
  * it — the phone's interceptor, from MediaStore. The decoder writes under it and [CachedRawTileFetcher] reads it.
  */
