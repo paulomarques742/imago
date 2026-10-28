@@ -23,7 +23,9 @@ import androidx.paging.map
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -234,7 +236,21 @@ open class LibraryViewModel(
 ) : ViewModel() {
     val selectedSource = configuration.selectedLibraryId
     val filter = MutableStateFlow(LibraryFilter.ALL)
+
+    /**
+     * The chip chosen inside an album. It is not the timeline's: an album opens with everything in it,
+     * and leaving it brings the timeline back as it was.
+     */
+    private val albumFilter = MutableStateFlow(LibraryFilter.ALL)
     val uiState = MutableStateFlow(LibraryUiState())
+
+    /** The chip the screen shows lit: the album's while one is open, the timeline's otherwise. */
+    val activeFilter: StateFlow<LibraryFilter> = combine(
+        filter,
+        albumFilter,
+        uiState.map { it.selectedAlbum != null }.distinctUntilChanged(),
+    ) { timeline, inAlbum, albumOpen -> if (albumOpen) inAlbum else timeline }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, LibraryFilter.ALL)
 
     /**
      * What slices the grid.
@@ -252,13 +268,15 @@ open class LibraryViewModel(
     )
 
     val assets: StateFlow<Flow<PagingData<AssetUiModel>>> = combine(
-        combine(filter, configuration.activeSource()) { filter, source -> filter to source },
+        combine(filter, albumFilter, configuration.activeSource()) { timeline, inAlbum, source -> Triple(timeline, inAlbum, source) },
         uiState.map { it.selectedMonth },
         uiState.map { it.selectedAlbum }.distinctAlbumContents(),
         uiState.map { it.query.trim() }.distinctUntilChanged().debounce { if (it.isEmpty()) 0 else SEARCH_DEBOUNCE_MS },
         uiState.map { it.contentSearchAvailable && it.searchMode == SearchMode.CONTENT }.distinctUntilChanged(),
-    ) { activeFilter, month, album, query, byContent ->
-        AssetQuery(activeFilter.first, month, album, query, activeFilter.second, byContent)
+    ) { chips, month, album, query, byContent ->
+        // Only the chip of the view being shown reaches the query, so choosing one in an album does
+        // not reload the timeline behind it, and the reverse.
+        AssetQuery(if (album != null) chips.second else chips.first, month, album, query, chips.third, byContent)
     }
         .distinctUntilChanged()
         .pagingForEachQuery(viewModelScope) { (activeFilter, month, album, query, source, byContent) ->
@@ -439,6 +457,10 @@ open class LibraryViewModel(
     fun clearSelection() = uiState.update { it.copy(selection = emptyMap()) }
 
     fun selectFilter(value: LibraryFilter) {
+        if (uiState.value.selectedAlbum != null) {
+            albumFilter.value = value
+            return
+        }
         filter.value = value
         // A chip is a view of the whole library; leaving the previous month applied underneath would
         // give an empty list with nothing on screen explaining why.
@@ -864,6 +886,7 @@ open class LibraryViewModel(
             val ids = assets.map { it.id }
             val created = if (transfer != null) library.createFolderAlbum(name, ids, transfer, place) else library.createAlbum(name, ids)
             val album = created.toUiModel()
+            albumFilter.value = LibraryFilter.ALL
             uiState.update { it.copy(section = LibrarySection.ALBUMS, selectedAlbum = album, selectedMonth = null) }
             albumChanged(album)
             uiPlural(Res.plurals.library_album_created, assets.size, album.name, assets.size)
@@ -980,7 +1003,12 @@ open class LibraryViewModel(
      * The search that found the album ends here: it was by album name, and kept open it would go on
      * slicing the photos inside by file name — the album "Beach" searched as "beach" opened empty.
      */
-    fun openAlbum(album: AlbumUiModel) = uiState.update {
+    fun openAlbum(album: AlbumUiModel) {
+        albumFilter.value = LibraryFilter.ALL
+        openAlbumState(album)
+    }
+
+    private fun openAlbumState(album: AlbumUiModel) = uiState.update {
         it.copy(section = LibrarySection.ALBUMS, selectedAlbum = album, selectedMonth = null, isSearching = false, query = "")
     }
 

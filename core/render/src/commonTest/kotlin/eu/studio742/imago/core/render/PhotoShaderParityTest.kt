@@ -158,14 +158,15 @@ class PhotoShaderParityTest {
         listOf(
             "a * (a < 0.0 ? 1.8 : 1.3)" to "the two asymmetric gains",
             "if (pixel <= 0.35) return pixel" to "the highlights pivot",
-            "float band = clamp((reference - 0.35) / 0.65, 0.0, 1.0)" to "the neighbourhood's band",
+            "float pixel = clamp(value, 0.0, ceiling)" to "the band's ceiling",
+            "float band = clamp((reference - 0.35) / span, 0.0, 1.0)" to "the neighbourhood's band",
             "float local = band + 0.35 * (t - band)"
                 to "the global part of the adaptation",
             "float flow = exp(selectiveHighlightGain(amount) * local)"
                 to "the logistic flow's time given by the neighbourhood",
-            "0.35 + 0.65 * (t * flow / (1.0 - t + t * flow))"
+            "0.35 + span * (t * flow / (1.0 - t + t * flow))"
                 to "the logistic flow integrated over the band",
-            "1.0 - locallyAdaptedHighlights(1.0 - pixel, mirrored, -amount)"
+            "1.0 - locallyAdaptedHighlights(1.0 - pixel, mirrored, -amount, 1.0)"
                 to "shadows as the mirror of highlights",
         ).forEach { (fragment, what) ->
             assertTrue(
@@ -244,7 +245,7 @@ class PhotoShaderParityTest {
         )
         assertTrue(
             "And the curves have to recognise it.",
-            PhotoShaders.TONE.contains("base < 0.0 ? pixel : clamp(base, 0.0, 1.0)"),
+            PhotoShaders.TONE.contains("base < 0.0 ? pixel : clamp(base, 0.0, ceiling)"),
         )
     }
 

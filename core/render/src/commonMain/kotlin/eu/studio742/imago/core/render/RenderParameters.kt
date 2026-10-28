@@ -26,6 +26,12 @@ data class RenderParameters(
      * kept apart so that "before" still has it. Always 0 for a JPEG.
      */
     val rawExposure: Float = 0f,
+    /**
+     * Where the Highlights band ends: 1 is white, as for a JPEG and the first two RAW renderings; a
+     * RAW of rendering 3 reaches up to [RawProfile.HEADROOM_CEILING], so that the light the sensor
+     * kept above white can be pulled back down.
+     */
+    val highlightCeiling: Float = 1f,
     val exposure: Float = 0f,
     val contrast: Float = 0f,
     val highlights: Float = 0f,
@@ -105,12 +111,13 @@ data class RenderParameters(
         get() = RenderParameters(
             rawProfile = if (rawProfile == RawProfile.NONE) RawProfile.NONE else RawProfile.COLOR,
             rawExposure = rawExposure,
+            highlightCeiling = highlightCeiling,
         )
 
     // Either white balance model does nothing at 0, 0: which one it is says nothing about neutrality.
     // Nor does the profile, which only a linear RAW reads, and a linear source is always processed.
     val isNeutral: Boolean
-        get() = copy(lightWhiteBalance = true, rawProfile = RawProfile.NONE, rawExposure = 0f) == RenderParameters()
+        get() = copy(lightWhiteBalance = true, rawProfile = RawProfile.NONE, rawExposure = 0f, highlightCeiling = 1f) == RenderParameters()
 
     val isColorNeutral: Boolean
         get() = copy(
@@ -126,6 +133,7 @@ data class RenderParameters(
             lightWhiteBalance = true,
             rawProfile = RawProfile.NONE,
             rawExposure = 0f,
+            highlightCeiling = 1f,
         ) == RenderParameters()
 
     /**

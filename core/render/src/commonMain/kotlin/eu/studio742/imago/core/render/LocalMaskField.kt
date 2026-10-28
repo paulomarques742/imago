@@ -244,6 +244,8 @@ internal class EffectiveTone {
     var lightWhiteBalance = true
     /** How a linear RAW reaches the screen; masks never change it. */
     var rawProfile = RawProfile.NONE
+    /** Where the Highlights band ends; masks never change it either. */
+    var highlightCeiling = 1f
 
     private var matrixTemperature = Float.NaN
     private var matrixTint = Float.NaN
@@ -278,5 +280,6 @@ internal class EffectiveTone {
         dehaze = parameters.dehaze
         lightWhiteBalance = parameters.lightWhiteBalance
         rawProfile = parameters.rawProfile
+        highlightCeiling = parameters.highlightCeiling
     }
 }

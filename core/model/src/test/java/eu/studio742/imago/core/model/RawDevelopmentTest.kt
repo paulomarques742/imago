@@ -39,9 +39,13 @@ class RawDevelopmentTest {
         assertEquals(RAW_RENDERING_LINEAR, older.rawRendering())
         assertEquals(RAW_RENDERING_LINEAR, older.developedAsRaw().rawDevelopment!!.rendering)
         val fresh = older.copy(processVersion = CURRENT_PROCESS_VERSION)
-        assertEquals(RAW_RENDERING_PROFILED, fresh.rawRendering())
+        assertEquals(RAW_RENDERING_HEADROOM, fresh.rawRendering())
         assertTrue(fresh.appliesBaselineExposure())
-        assertEquals(RawDevelopment(rendering = RAW_RENDERING_PROFILED), fresh.developedAsRaw().rawDevelopment)
+        assertEquals(RawDevelopment(rendering = RAW_RENDERING_HEADROOM), fresh.developedAsRaw().rawDevelopment)
+        // A photo already developed at rendering 2 stays there: its Highlights end at white, as they did.
+        val kept = fresh.copy(rawDevelopment = RawDevelopment(rendering = RAW_RENDERING_PROFILED))
+        assertEquals(RAW_RENDERING_PROFILED, kept.developedAsRaw().rawRendering())
+        assertFalse(kept.needsNewerRawRendering())
         // The decision made before decoding wins over the process the editor stamps afterwards.
         assertEquals(RAW_RENDERING_LINEAR, fresh.developedAsRaw(RAW_RENDERING_LINEAR).rawRendering())
     }

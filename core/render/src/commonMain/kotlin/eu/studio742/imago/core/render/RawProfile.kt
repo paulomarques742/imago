@@ -33,6 +33,14 @@ object RawProfile {
     const val KNEE = 0.1132f
     private const val WHITE_SLOPE = KNEE / (1f + KNEE)
 
+    /**
+     * Where the Highlights band of rendering 3 ends, as a display value: three stops above white
+     * (eight times the sensor's white). The DNGs of the samples keep a channel up to about two to
+     * three stops above white once the camera's white balance and BaselineExposure are on, and the
+     * curve above white is so flat that this is still a single stop of display.
+     */
+    val HEADROOM_CEILING = 1f + WHITE_SLOPE * 7f
+
     fun curve(value: Float): Float {
         val linear = max(value, 0f)
         return if (linear > 1f) 1f + WHITE_SLOPE * (linear - 1f) else linear * (1f + KNEE) / (linear + KNEE)

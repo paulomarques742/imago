@@ -415,11 +415,12 @@ object BitmapPhotoProcessor {
             blue *= scale
         }
 
-        var tonalLuminance = luminance(red, green, blue).coerceIn(0f, 1f)
-        remapLuminance(locallyAdaptedShadows(tonalLuminance, localBase, tone.shadows / 100f))
-        tonalLuminance = luminance(red, green, blue).coerceIn(0f, 1f)
-        remapLuminance(locallyAdaptedHighlights(tonalLuminance, localBase, tone.highlights / 100f))
-        tonalLuminance = luminance(red, green, blue).coerceIn(0f, 1f)
+        // Only a linear source has anything above white to recover; a JPEG's band ends at 1.
+        val ceiling = if (linearInput && tone.rawProfile != RawProfile.NONE) tone.highlightCeiling else 1f
+        fun tonal() = if (ceiling > 1f) max(luminance(red, green, blue), 0f) else luminance(red, green, blue).coerceIn(0f, 1f)
+        remapLuminance(locallyAdaptedShadows(tonal(), localBase, tone.shadows / 100f, ceiling))
+        remapLuminance(locallyAdaptedHighlights(tonal(), localBase, tone.highlights / 100f, ceiling))
+        val tonalLuminance = luminance(red, green, blue).coerceIn(0f, 1f)
         remapLuminance(midtoneContrastLuminance(tonalLuminance, tone.contrast / 100f))
 
         val curves = parameters.channelToneCurves
@@ -683,15 +684,19 @@ private fun highlightGain(amount: Float): Float {
  *
  * @param base blurred luminance of the neighbourhood at the input of step 8, or [NO_LOCAL_BASE].
  */
-internal fun locallyAdaptedHighlights(value: Float, base: Float, amount: Float): Float {
-    val pixel = value.coerceIn(0f, 1f)
+internal fun locallyAdaptedHighlights(value: Float, base: Float, amount: Float, ceiling: Float = 1f): Float {
+    // Above a ceiling that is not white nothing is left to recover: the curve ends there, fixed, and
+    // what the sensor recorded past it stays as it is.
+    if (ceiling > 1f && value >= ceiling) return value
+    val pixel = value.coerceIn(0f, ceiling)
     if (pixel <= HIGHLIGHT_PIVOT) return pixel
-    val reference = if (base < 0f) pixel else base.coerceIn(0f, 1f)
-    val t = (pixel - HIGHLIGHT_PIVOT) / (1f - HIGHLIGHT_PIVOT)
-    val band = ((reference - HIGHLIGHT_PIVOT) / (1f - HIGHLIGHT_PIVOT)).coerceIn(0f, 1f)
+    val span = ceiling - HIGHLIGHT_PIVOT
+    val reference = if (base < 0f) pixel else base.coerceIn(0f, ceiling)
+    val t = (pixel - HIGHLIGHT_PIVOT) / span
+    val band = ((reference - HIGHLIGHT_PIVOT) / span).coerceIn(0f, 1f)
     val local = band + LOCAL_ADAPTATION_GLOBAL_SHARE * (t - band)
     val flow = exp(highlightGain(amount) * local)
-    return HIGHLIGHT_PIVOT + (1f - HIGHLIGHT_PIVOT) * (t * flow / (1f - t + t * flow))
+    return HIGHLIGHT_PIVOT + span * (t * flow / (1f - t + t * flow))
 }
 
 /**
@@ -709,8 +714,8 @@ internal fun locallyAdaptedHighlights(value: Float, base: Float, amount: Float):
  * brightens — and opposite with respect to the pivot: brightening shadows is, in the mirror,
  * holding back highlights.
  */
-internal fun locallyAdaptedShadows(value: Float, base: Float, amount: Float): Float =
-    1f - locallyAdaptedHighlights(
+internal fun locallyAdaptedShadows(value: Float, base: Float, amount: Float, ceiling: Float = 1f): Float =
+    if (ceiling > 1f && value > 1f) value else 1f - locallyAdaptedHighlights(
         value = 1f - value.coerceIn(0f, 1f),
         base = if (base < 0f) NO_LOCAL_BASE else 1f - base.coerceIn(0f, 1f),
         amount = -amount,

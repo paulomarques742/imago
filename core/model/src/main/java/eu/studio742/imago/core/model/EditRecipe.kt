@@ -73,7 +73,14 @@ const val RAW_RENDERING_LINEAR = 1
 
 /** Process 20's rendering: the DNG's BaselineExposure, and the [EditRecipe.profile] on the way to the screen. */
 const val RAW_RENDERING_PROFILED = 2
-const val CURRENT_RAW_RENDERING = RAW_RENDERING_PROFILED
+
+/**
+ * Rendering 3's Highlights run over everything the sensor recorded above white, and not only up to it
+ * (`RawProfile.HEADROOM_CEILING`). Rendering 2 keeps the band that ends at white, so what it showed
+ * does not move.
+ */
+const val RAW_RENDERING_HEADROOM = 3
+const val CURRENT_RAW_RENDERING = RAW_RENDERING_HEADROOM
 const val PROFILED_RAW_PROCESS_VERSION = 20
 
 /** The base profiles of a RAW, the first choice of Lightroom's Basic panel. A JPEG has none. */

@@ -302,23 +302,26 @@ internal object PhotoShaders {
             return a * (a < 0.0 ? 1.8 : 1.3);
         }
 
-        float locallyAdaptedHighlights(float value, float base, float amount) {
-            float pixel = clamp(value, 0.0, 1.0);
+        float locallyAdaptedHighlights(float value, float base, float amount, float ceiling) {
+            if (ceiling > 1.0 && value >= ceiling) return value;
+            float pixel = clamp(value, 0.0, ceiling);
             if (pixel <= 0.35) return pixel;
-            float reference = base < 0.0 ? pixel : clamp(base, 0.0, 1.0);
-            float t = (pixel - 0.35) / 0.65;
-            float band = clamp((reference - 0.35) / 0.65, 0.0, 1.0);
+            float span = ceiling - 0.35;
+            float reference = base < 0.0 ? pixel : clamp(base, 0.0, ceiling);
+            float t = (pixel - 0.35) / span;
+            float band = clamp((reference - 0.35) / span, 0.0, 1.0);
             // The mix's 0.35 and the pivot's are a coincidence: LOCAL_ADAPTATION_GLOBAL_SHARE and
             // HIGHLIGHT_PIVOT are separate constants there, and changing one is not changing the other.
             float local = band + 0.35 * (t - band);
             float flow = exp(selectiveHighlightGain(amount) * local);
-            return 0.35 + 0.65 * (t * flow / (1.0 - t + t * flow));
+            return 0.35 + span * (t * flow / (1.0 - t + t * flow));
         }
 
-        float locallyAdaptedShadows(float value, float base, float amount) {
+        float locallyAdaptedShadows(float value, float base, float amount, float ceiling) {
+            if (ceiling > 1.0 && value > 1.0) return value;
             float pixel = clamp(value, 0.0, 1.0);
             float mirrored = base < 0.0 ? -1.0 : 1.0 - clamp(base, 0.0, 1.0);
-            return 1.0 - locallyAdaptedHighlights(1.0 - pixel, mirrored, -amount);
+            return 1.0 - locallyAdaptedHighlights(1.0 - pixel, mirrored, -amount, 1.0);
         }
     """
 
@@ -396,6 +399,7 @@ internal object PhotoShaders {
         uniform float uExposure;
         uniform float uContrast;
         uniform float uHighlights;
+        uniform float uHighlightCeiling;
         uniform float uShadows;
         uniform float uWhites;
         uniform float uBlacks;
@@ -495,10 +499,12 @@ internal object PhotoShaders {
             // Negative says "no mask", and in that case the curves fall back to the global behaviour.
             float base = uLocalEnabled == 1 ? texture(uLocalBlur, vTexCoord).r : -1.0;
 
-            float tonalLuminance = clamp(luminance(color), 0.0, 1.0);
-            color = remapLuminance(color, locallyAdaptedShadows(tonalLuminance, base, shadows));
-            tonalLuminance = clamp(luminance(color), 0.0, 1.0);
-            color = remapLuminance(color, locallyAdaptedHighlights(tonalLuminance, base, highlights));
+            // Only a linear source with a profile has anything above white to recover.
+            float ceiling = (uSourceLinear == 1 && uRawProfile != 0) ? uHighlightCeiling : 1.0;
+            float tonalLuminance = ceiling > 1.0 ? max(luminance(color), 0.0) : clamp(luminance(color), 0.0, 1.0);
+            color = remapLuminance(color, locallyAdaptedShadows(tonalLuminance, base, shadows, ceiling));
+            tonalLuminance = ceiling > 1.0 ? max(luminance(color), 0.0) : clamp(luminance(color), 0.0, 1.0);
+            color = remapLuminance(color, locallyAdaptedHighlights(tonalLuminance, base, highlights, ceiling));
             tonalLuminance = clamp(luminance(color), 0.0, 1.0);
             color = remapLuminance(color, applyMidtoneContrast(tonalLuminance, contrast));
             color = curveSample(color);

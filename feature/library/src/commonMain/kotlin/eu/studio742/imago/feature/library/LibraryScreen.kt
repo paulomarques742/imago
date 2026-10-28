@@ -439,7 +439,7 @@ private fun LibraryHost(
     val savedSourceState = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
     val assetPages by viewModel.assets.collectAsStateWithLifecycle()
     val assets = key(assetPages) { assetPages.collectAsLazyPagingItems() }
-    val filter by viewModel.filter.collectAsStateWithLifecycle()
+    val filter by viewModel.activeFilter.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val catalogSync by viewModel.catalogSync.collectAsStateWithLifecycle()
     var retriedDateNavigation by remember { mutableStateOf(false) }
@@ -703,14 +703,17 @@ private fun LibraryScreen(
                         modifier = Modifier.padding(bottom = ImagoSpacing.Sm),
                     )
                 }
-                // The chips slice the timeline. Inside an album, or in the album list, they have
-                // nothing to act on; in the middle of a selection neither, because switching the
+                // The chips slice the timeline, and an album the same way. The album list has nothing
+                // to act on, and neither has an album that is not a list of photos of its own — a
+                // place, the archive; in the middle of a selection neither, because switching the
                 // slice is what undoes it.
-                if ((!selecting || picker != null) && !inAlbum && uiState.section == LibrarySection.TIMELINE) {
-                    val chips = TimelineChip.entries.filter { it != TimelineChip.PEOPLE || uiState.hasPeople }
+                val album = uiState.selectedAlbum
+                val albumTakesChips = album != null && album.placeAssetIds == null && !album.isArchive
+                if ((!selecting || picker != null) && (albumTakesChips || (!inAlbum && uiState.section == LibrarySection.TIMELINE))) {
+                    val chips = TimelineChip.entries.filter { it != TimelineChip.PEOPLE || (uiState.hasPeople && !inAlbum) }
                     ImagoChipRow(
                         options = chips,
-                        selected = if (uiState.showingPeople) TimelineChip.PEOPLE else TimelineChip.of(filter),
+                        selected = if (uiState.showingPeople && !inAlbum) TimelineChip.PEOPLE else TimelineChip.of(filter),
                         label = { it.label() },
                         icon = { if (it == TimelineChip.PEOPLE) Icons.Outlined.Person else null },
                         onSelect = { chip -> chip.filter?.let(onFilterChange) ?: onShowPeople() },

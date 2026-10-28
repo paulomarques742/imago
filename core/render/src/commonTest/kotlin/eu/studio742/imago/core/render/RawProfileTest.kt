@@ -64,12 +64,46 @@ class RawProfileTest {
         // A preset from process 12 shown on a photo of the current rendering, as applying it would show it.
         assertEquals(RawProfile.COLOR, recipe.copy(processVersion = 12).toRenderParameters(rawRendering = RAW_RENDERING_PROFILED).rawProfile)
         assertTrue(CURRENT_PROCESS_VERSION >= 20)
+        assertEquals(RawProfile.HEADROOM_CEILING, recipe.toRenderParameters().highlightCeiling, 0f)
+        assertEquals(1f, recipe.toRenderParameters(rawRendering = RAW_RENDERING_PROFILED).highlightCeiling, 0f)
+        assertTrue(RenderParameters(highlightCeiling = RawProfile.HEADROOM_CEILING).isNeutral)
     }
 
     @Test fun `before shows the photo developed, without the choices made on it`() {
         assertEquals(RenderParameters(rawProfile = RawProfile.COLOR), RenderParameters(exposure = 1f, rawProfile = RawProfile.MONOCHROME).original)
         assertEquals(RenderParameters(), RenderParameters(exposure = 1f).original)
         assertTrue(RenderParameters(rawProfile = RawProfile.COLOR).isNeutral)
+    }
+
+    @Test fun `rendering 3 pulls the light above white back with Highlights, and the others clip as they did`() {
+        // Twice the sensor's white: a sky the camera recorded and the display band of rendering 2 cut.
+        fun develop(ceiling: Float, highlights: Float, linear: Boolean = true, value: Float = 2f) = RecipePixels.renderFloat(
+            FloatPixelBuffer(1, 1, floatArrayOf(value, value, value), linear = linear),
+            RenderParameters(rawProfile = RawProfile.COLOR, highlights = highlights, highlightCeiling = ceiling),
+        ).rgb[0]
+        val ceiling = RawProfile.HEADROOM_CEILING
+        assertEquals("nothing moves at zero", develop(1f, 0f), develop(ceiling, 0f), 1e-6f)
+        assertEquals("rendering 2 cuts it", 1f, develop(1f, -100f), 1e-3f)
+        assertTrue("rendering 3 recovers it", develop(ceiling, -100f) < 0.9f)
+        assertTrue("and only as far as asked", develop(ceiling, -100f) < develop(ceiling, -50f))
+        assertTrue("a pixel at the sensor's top stays clipped", develop(ceiling, -100f, value = 20f) > 0.99f)
+        assertEquals("a JPEG has no light above white", develop(1f, -100f, linear = false, value = .8f), develop(ceiling, -100f, linear = false, value = .8f), 1e-6f)
+    }
+
+    @Test fun `the highlights curve with a ceiling is still monotonic and fixed at both ends of its band`() {
+        val ceiling = RawProfile.HEADROOM_CEILING
+        for (amount in listOf(-1f, -.5f, .5f, 1f)) {
+            var previous = -1f
+            for (step in 0..200) {
+                val value = ceiling * step / 200f
+                val out = locallyAdaptedHighlights(value, NO_LOCAL_BASE, amount, ceiling)
+                assertTrue("rises at $value / $amount", out >= previous)
+                previous = out
+            }
+            assertEquals(ceiling, locallyAdaptedHighlights(ceiling, NO_LOCAL_BASE, amount, ceiling), 1e-6f)
+            assertEquals(.35f, locallyAdaptedHighlights(.35f, NO_LOCAL_BASE, amount, ceiling), 1e-6f)
+            assertEquals(ceiling + .5f, locallyAdaptedHighlights(ceiling + .5f, NO_LOCAL_BASE, amount, ceiling), 0f)
+        }
     }
 
     @Test fun `the development's exposure lies under the slider and stays in before`() {
