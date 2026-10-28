@@ -601,6 +601,8 @@ data class EditorUiState(
     val recipeEdit: RecipeEditState? = null,
     /** The development is being redone for the new rendering. */
     val isUpgradingDevelopment: Boolean = false,
+    /** The saved recipe, read before the photo is: the editor shows the edit as the library does while it develops. */
+    val placeholderRecipe: EditRecipe? = null,
     val error: UiText? = null,
 ) {
     /**
@@ -812,6 +814,12 @@ open class EditorViewModel(
             isRecipeLibraryLoading = retained.isRecipeLibraryLoading,
             recipeNotice = retained.recipeNotice,
         )
+        if (target is PhotoEditTarget.Asset) {
+            viewModelScope.launch {
+                val saved = runCatching { recipes.get(asset.id) }.getOrNull()
+                mutableState.update { if (it.asset?.id == asset.id && it.bitmap == null) it.copy(placeholderRecipe = saved) else it }
+            }
+        }
         loadJob = viewModelScope.launch {
             runCatching {
                 coroutineScope {

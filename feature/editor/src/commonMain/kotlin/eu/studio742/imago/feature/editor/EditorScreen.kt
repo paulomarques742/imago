@@ -17,6 +17,8 @@ import kotlin.math.exp
 import androidx.compose.ui.input.pointer.PointerEventType
 import eu.studio742.imago.core.render.libraryAuth
 import eu.studio742.imago.core.render.rawQuickPreview
+import eu.studio742.imago.core.render.developedRawTile
+import eu.studio742.imago.core.render.withRecipe
 import coil3.request.crossfade
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -1033,6 +1035,24 @@ private fun EditorScreen(
                                 .fillMaxSize()
                                 .background(Color.Black),
                         )
+                        // The edit as the library already shows it, from its kept render: over the camera's own look
+                        // as soon as the saved recipe is read, so that the wait is for the edited photo and not for
+                        // another one. A photo the library has not developed yet has nothing to show here.
+                        val saved = state.placeholderRecipe
+                        if (quickRaw && isActiveAsset && saved != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(pageAsset.previewUrl)
+                                    .size(EDITOR_PLACEHOLDER_PIXELS)
+                                    .crossfade(false)
+                                    .withRecipe(saved)
+                                    .developedRawTile()
+                                    .build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
                     }
                     if (isActiveAsset && state.bitmap != null) {
                         val renderParameters = if (cropMode) {
@@ -4165,6 +4185,9 @@ private val CURVE_TOUCH_INSET = 16.dp
 
 /** How close to a point a finger has to land to take it. */
 private val CURVE_POINT_HIT_RADIUS = 24.dp
+
+/** The size the library's kept RAW render is asked at; any request up to it is the same render. */
+private const val EDITOR_PLACEHOLDER_PIXELS = 360
 
 /** If the stage never says it drew, the placeholder goes anyway after this long. */
 private const val STAGE_FIRST_FRAME_LIMIT_MS = 4_000L
