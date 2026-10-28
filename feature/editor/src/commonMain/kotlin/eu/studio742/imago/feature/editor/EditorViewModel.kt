@@ -2834,7 +2834,7 @@ open class EditorViewModel(
     }
 
     /** [rawExposure] is what matched the camera's JPEG ([CameraExposureMatch]), for a RAW developed now. */
-    private data class LoadedPhoto(
+    internal data class LoadedPhoto(
         val bitmap: Bitmap,
         val raw: FloatPixelBuffer? = null,
         val rawExposure: Float = 0f,
@@ -2842,9 +2842,14 @@ open class EditorViewModel(
         val baselineExposure: Float = 0f,
     )
 
+    /** The RAWs developed lately, for opening the same photo again without developing it again. */
+    private val recentRaws get() = RecentRaws
+
     /** [baselineExposure] is the recipe's [appliesBaselineExposure]; a JPEG ignores it. */
     private suspend fun loadPhoto(asset: EditorAsset, baselineExposure: Boolean, measure: Boolean = baselineExposure, highlight: Int = CURRENT_RAW_HIGHLIGHT): LoadedPhoto {
         if (library != null && shouldInspectRawOriginal(asset.fileName)) {
+            val key = "${asset.id}|${asset.checksum}|$baselineExposure|$highlight|$measure"
+            recentRaws.get(key)?.let { return it }
             val original = createPhotoTempFile(context)
             try {
                 library.downloadOriginal(asset.id, original)
@@ -2854,6 +2859,7 @@ open class EditorViewModel(
                     // Measured before the original is deleted; only a development made now uses it.
                     val matched = if (measure) CameraExposureMatch.of(original, raw) else 0f
                     return LoadedPhoto(withContext(Dispatchers.Default) { raw.toPixelBuffer().toPlatformBitmap() }, raw, matched, preview.light, preview.baselineExposure)
+                        .also { recentRaws.put(key, it) }
                 }
             } finally { original.delete() }
         }
@@ -3292,4 +3298,11 @@ enum class WhiteBalancePreset(
             } ?: CUSTOM
         }
     }
+}
+
+/** Shared by every editor session, since the view model goes away with the screen and the photo may come back. */
+internal object RecentRaws {
+    private val sources = RecentSources<EditorViewModel.LoadedPhoto>()
+    fun get(key: String) = sources.get(key)
+    fun put(key: String, photo: EditorViewModel.LoadedPhoto) = sources.put(key, photo)
 }
