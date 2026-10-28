@@ -77,7 +77,8 @@ object RecipePreviewCache {
         rendering: Int = CURRENT_RAW_RENDERING,
         exposure: Float = 0f,
     ) {
-        if (sourceKey == assetId && source != null) return
+        // A photo moved to another development has the same id and other pixels.
+        if (sourceKey == assetId && source != null && rawRendering == rendering && rawExposure == exposure) return
         rawRendering = rendering
         rawExposure = exposure
         cache.clear()

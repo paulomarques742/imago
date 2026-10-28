@@ -184,24 +184,22 @@ internal fun DevelopmentUpgradeCard(
     onUpgrade: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(top = ImagoSpacing.Sm)
             .clip(RoundedCornerShape(ImagoRadii.Medium))
             .background(ImagoColors.Surface)
             .padding(ImagoSpacing.Sm),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(Res.string.editor_development_card_title), style = MaterialTheme.typography.labelMedium, color = ImagoColors.Gold)
-            Text(stringResource(Res.string.editor_development_card_body), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
-        }
-        if (isWorking) {
-            CircularProgressIndicator(color = ImagoColors.Gold, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-        } else {
-            TextButton(onClick = onUpgrade) { Text(stringResource(Res.string.editor_development_card_action)) }
+        Text(stringResource(Res.string.editor_development_card_title), style = MaterialTheme.typography.labelMedium, color = ImagoColors.Gold)
+        Text(stringResource(Res.string.editor_development_card_body), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            if (isWorking) {
+                CircularProgressIndicator(color = ImagoColors.Gold, modifier = Modifier.padding(ImagoSpacing.Sm).size(24.dp), strokeWidth = 2.dp)
+            } else {
+                TextButton(onClick = onUpgrade) { Text(stringResource(Res.string.editor_development_card_action), color = ImagoColors.Gold) }
+            }
         }
     }
 }
