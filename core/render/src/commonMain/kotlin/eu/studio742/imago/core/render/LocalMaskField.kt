@@ -246,6 +246,8 @@ internal class EffectiveTone {
     var rawProfile = RawProfile.NONE
     /** Where the Highlights band ends; masks never change it either. */
     var highlightCeiling = 1f
+    /** Process 21's wider and stronger highlights band. */
+    var wideHighlights = false
 
     private var matrixTemperature = Float.NaN
     private var matrixTint = Float.NaN
@@ -281,5 +283,6 @@ internal class EffectiveTone {
         lightWhiteBalance = parameters.lightWhiteBalance
         rawProfile = parameters.rawProfile
         highlightCeiling = parameters.highlightCeiling
+        wideHighlights = parameters.wideHighlights
     }
 }

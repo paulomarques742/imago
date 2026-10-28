@@ -33,6 +33,9 @@ class RawDecodeException(val code: Int) : RuntimeException("LibRaw decode failed
 
 data class RawInfo(val width: Int, val height: Int, val cameraMake: String, val cameraModel: String)
 
+/** LibRaw's `highlight` of engine 1: unclipped, gains normalised by their maximum. */
+const val LEGACY_HIGHLIGHT = 1
+
 /** No extension or brand allowlist: LibRaw identifies the bytes of the original. */
 object RawDecoder {
     val version: String get() = NativeRaw.version()
@@ -52,8 +55,8 @@ object RawDecoder {
      * [baselineExposure] scales the developed values by the DNG's BaselineExposure, which LibRaw only
      * reads; whether to is the recipe's choice, not the decoder's.
      */
-    fun decode(file: File, halfSize: Boolean = false, baselineExposure: Boolean = false): RawImage? {
-        return RawDecodeQueue.run { NativeRaw.decode(file.absolutePath, halfSize, 0, baselineExposure) }
+    fun decode(file: File, halfSize: Boolean = false, baselineExposure: Boolean = false, highlight: Int = LEGACY_HIGHLIGHT): RawImage? {
+        return RawDecodeQueue.run { NativeRaw.decode(file.absolutePath, halfSize, 0, baselineExposure, highlight) }
     }
 
     /**
@@ -66,9 +69,9 @@ object RawDecoder {
     }
 
     /** Bounds the JVM buffer before allocation, retaining linear precision and highlight headroom. */
-    fun decodePreview(file: File, maxSide: Int, baselineExposure: Boolean = false): RawImage? {
+    fun decodePreview(file: File, maxSide: Int, baselineExposure: Boolean = false, highlight: Int = LEGACY_HIGHLIGHT): RawImage? {
         require(maxSide > 0)
-        return RawDecodeQueue.run { NativeRaw.decode(file.absolutePath, true, maxSide, baselineExposure) }
+        return RawDecodeQueue.run { NativeRaw.decode(file.absolutePath, true, maxSide, baselineExposure, highlight) }
     }
 }
 
@@ -97,7 +100,7 @@ internal object NativeRaw {
     external fun cameras(): Array<String>
     external fun identify(path: String): RawInfo?
     external fun embeddedJpeg(path: String): ByteArray?
-    external fun decode(path: String, halfSize: Boolean, maxSide: Int, baselineExposure: Boolean): RawImage?
+    external fun decode(path: String, halfSize: Boolean, maxSide: Int, baselineExposure: Boolean, highlight: Int): RawImage?
 }
 
 internal expect fun loadRawLibrary()

@@ -9,7 +9,7 @@ import org.junit.Test
 class RawDevelopmentTest {
     @Test fun `RAW development engine survives recipe synchronization JSON`() {
         val recipe = EditRecipe(assetId = "raw", originalChecksum = "original", createdAt = "", updatedAt = "",
-            tone = Tone(exposure = -2f), rawDevelopment = RawDevelopment())
+            tone = Tone(exposure = -2f), rawDevelopment = RawDevelopment(engine = CURRENT_RAW_ENGINE))
         val restored = Json.decodeFromString<EditRecipe>(Json.encodeToString(recipe))
         assertEquals(recipe, restored)
         assertEquals(CURRENT_RAW_ENGINE, restored.rawDevelopment?.engine)
@@ -41,13 +41,32 @@ class RawDevelopmentTest {
         val fresh = older.copy(processVersion = CURRENT_PROCESS_VERSION)
         assertEquals(RAW_RENDERING_HEADROOM, fresh.rawRendering())
         assertTrue(fresh.appliesBaselineExposure())
-        assertEquals(RawDevelopment(rendering = RAW_RENDERING_HEADROOM), fresh.developedAsRaw().rawDevelopment)
+        assertEquals(RawDevelopment(engine = CURRENT_RAW_ENGINE, rendering = RAW_RENDERING_HEADROOM), fresh.developedAsRaw().rawDevelopment)
         // A photo already developed at rendering 2 stays there: its Highlights end at white, as they did.
         val kept = fresh.copy(rawDevelopment = RawDevelopment(rendering = RAW_RENDERING_PROFILED))
         assertEquals(RAW_RENDERING_PROFILED, kept.developedAsRaw().rawRendering())
         assertFalse(kept.needsNewerRawRendering())
         // The decision made before decoding wins over the process the editor stamps afterwards.
         assertEquals(RAW_RENDERING_LINEAR, fresh.developedAsRaw(RAW_RENDERING_LINEAR).rawRendering())
+    }
+
+    @Test fun `engine 1 keeps its highlight mode and a new development gets engine 2`() {
+        val older = EditRecipe(assetId = "raw", originalChecksum = "", createdAt = "", updatedAt = "", processVersion = 19)
+        assertEquals(RAW_ENGINE_1, older.rawEngine())
+        assertEquals(1, older.rawHighlightMode())
+        val stored = Json.decodeFromString<EditRecipe>(
+            """{"assetId":"raw","originalChecksum":"","createdAt":"","updatedAt":"","processVersion":20,
+               "rawDevelopment":{"rendering":2}}""")
+        assertEquals("a missing engine is always engine 1", RAW_ENGINE_1, stored.rawEngine())
+        assertEquals(1, stored.rawHighlightMode())
+        assertFalse(stored.needsNewerRawRendering())
+        val fresh = EditRecipe(assetId = "raw", originalChecksum = "", createdAt = "", updatedAt = "")
+        assertEquals(RAW_ENGINE_2, fresh.rawEngine())
+        assertEquals(2, fresh.rawHighlightMode())
+        assertEquals(RAW_ENGINE_2, fresh.developedAsRaw().rawDevelopment?.engine)
+        assertEquals("a development kept is not redone", RAW_ENGINE_1, stored.developedAsRaw().rawDevelopment?.engine)
+        assertEquals(RAW_ENGINE_1, older.developedAsRaw().rawDevelopment?.engine)
+        assertTrue(fresh.copy(rawDevelopment = RawDevelopment(engine = "libraw-0.22.2-imago-3")).needsNewerRawRendering())
     }
 
     @Test fun `the rendering and the profile survive synchronization JSON`() {

@@ -174,7 +174,7 @@ Java_eu_studio742_imago_core_raw_NativeRaw_embeddedJpeg(JNIEnv *env, jobject, js
 
 extern "C" JNIEXPORT jobject JNICALL
 Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring path, jboolean halfSize, jint maxSide,
-    jboolean baselineExposure) {
+    jboolean baselineExposure, jint highlight) {
     try {
         LibRaw decoder;
         auto threadClass = env->FindClass("java/lang/Thread");
@@ -189,9 +189,11 @@ Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring 
         auto &params = decoder.imgdata.params;
         params.output_bps = 16;
         // Keep balanced camera channels until the final matrix can run in floating point.
-        // highlight=1 normalizes gains by their maximum, avoiding clipping during white balance.
+        // highlight=1 normalizes gains by their maximum, avoiding clipping during white balance, but
+        // leaves a channel that clipped above the others: a pink or violet sky. Engine 2 asks for 2,
+        // which blends the clipped channels towards white; the mode is the recipe's engine, never a default.
         params.output_color = 0;
-        params.highlight = 1;
+        params.highlight = std::clamp<int>(highlight, 0, 9);
         params.gamm[0] = params.gamm[1] = 1.0;
         params.no_auto_bright = 1;
         params.use_camera_wb = 1;

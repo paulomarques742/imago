@@ -20,7 +20,7 @@ class RawCoilDecoderTest {
         val file = Files.createTempFile("imago-raw-preview-", ".asset").toFile()
         try {
             file.writeBytes(syntheticDng(6, warmWhiteBalance = true))
-            val half = requireNotNull(RawDecoder.decode(file, halfSize = true))
+            val half = requireNotNull(RawDecoder.decode(file, halfSize = true, highlight = CURRENT_RAW_HIGHLIGHT))
             val reference = RecipePixels.reduce(FloatPixelBuffer(half.width, half.height, half.rgb), 17)
             val preview = requireNotNull(decodeRawPreview(file, maxSide = 17, baselineExposure = false))
             assertEquals(reference.width to reference.height, preview.width to preview.height)

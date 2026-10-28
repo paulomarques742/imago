@@ -485,6 +485,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         program.float("uContrast", active.contrast / 100f)
         program.float("uHighlights", active.highlights / 100f)
         program.float("uHighlightCeiling", active.highlightCeiling)
+        program.boolean("uWideHighlights", active.wideHighlights)
         program.float("uShadows", active.shadows / 100f)
         program.float("uWhites", active.whites / 100f)
         program.float("uBlacks", active.blacks / 100f)

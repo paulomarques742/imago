@@ -1,6 +1,7 @@
 package eu.studio742.imago.core.render
 
-import eu.studio742.imago.core.model.CURRENT_RAW_ENGINE
+import eu.studio742.imago.core.model.KNOWN_RAW_ENGINES
+import eu.studio742.imago.core.model.rawHighlightMode
 import eu.studio742.imago.core.model.CURRENT_PROCESS_VERSION
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.UserMessage
@@ -16,31 +17,34 @@ import kotlinx.coroutines.runInterruptible
  * Recognize the original's contents; an unsupported RAW never falls back to its embedded JPEG.
  * [baselineExposure] is the recipe's [appliesBaselineExposure], or true for a photo without one.
  */
-suspend fun decodeRawPhoto(file: File, baselineExposure: Boolean, halfSize: Boolean = false): FloatPixelBuffer? =
+suspend fun decodeRawPhoto(file: File, baselineExposure: Boolean, halfSize: Boolean = false, highlight: Int = CURRENT_RAW_HIGHLIGHT): FloatPixelBuffer? =
     runInterruptible(Dispatchers.IO) {
-        RawDecoder.decode(file, halfSize, baselineExposure)?.let { FloatPixelBuffer(it.width, it.height, it.rgb) }
+        RawDecoder.decode(file, halfSize, baselineExposure, highlight)?.let { FloatPixelBuffer(it.width, it.height, it.rgb) }
     }
 
 /** Reduces inside the native bridge so a thumbnail never allocates a sensor-sized JVM array. */
-suspend fun decodeRawPreview(file: File, maxSide: Int, baselineExposure: Boolean): FloatPixelBuffer? =
+suspend fun decodeRawPreview(file: File, maxSide: Int, baselineExposure: Boolean, highlight: Int = CURRENT_RAW_HIGHLIGHT): FloatPixelBuffer? =
     runInterruptible(Dispatchers.IO) {
-        RawDecoder.decodePreview(file, maxSide, baselineExposure)?.let { FloatPixelBuffer(it.width, it.height, it.rgb) }
+        RawDecoder.decodePreview(file, maxSide, baselineExposure, highlight)?.let { FloatPixelBuffer(it.width, it.height, it.rgb) }
     }
 
 /** The editor's preview of a RAW: the pixels, and the camera's colour for white balance in kelvin. */
 class RawPreview(val pixels: FloatPixelBuffer, val light: CameraLight?)
 
 /** As [decodeRawPreview], with the camera's colour the editor needs. */
-suspend fun decodeRawEditorPreview(file: File, maxSide: Int, baselineExposure: Boolean): RawPreview? =
+suspend fun decodeRawEditorPreview(file: File, maxSide: Int, baselineExposure: Boolean, highlight: Int = CURRENT_RAW_HIGHLIGHT): RawPreview? =
     runInterruptible(Dispatchers.IO) {
-        RawDecoder.decodePreview(file, maxSide, baselineExposure)?.let {
+        RawDecoder.decodePreview(file, maxSide, baselineExposure, highlight)?.let {
             RawPreview(FloatPixelBuffer(it.width, it.height, it.rgb), CameraLight.of(it.xyzToDeveloped))
         }
     }
 
+/** LibRaw's highlight mode of a photo not developed yet: the current engine's. */
+const val CURRENT_RAW_HIGHLIGHT = 2
+
 fun requireRawEngine(recipe: EditRecipe) {
     requireUser(recipe.processVersion <= CURRENT_PROCESS_VERSION, UserMessage.EDIT_NEEDS_NEWER_APP)
-    requireUser(recipe.rawDevelopment?.engine?.let { it == CURRENT_RAW_ENGINE } != false, UserMessage.EDIT_NEEDS_NEWER_APP)
+    requireUser(recipe.rawDevelopment?.engine?.let { it in KNOWN_RAW_ENGINES } != false, UserMessage.EDIT_NEEDS_NEWER_APP)
     requireUser(!recipe.needsNewerRawRendering(), UserMessage.EDIT_NEEDS_NEWER_APP)
 }
 

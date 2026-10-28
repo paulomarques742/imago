@@ -97,6 +97,7 @@ import eu.studio742.imago.core.render.toRenderParameters
 import kotlin.math.floor
 import java.io.File
 import eu.studio742.imago.core.render.FloatPixelBuffer
+import eu.studio742.imago.core.render.CURRENT_RAW_HIGHLIGHT
 import eu.studio742.imago.core.render.decodeRawEditorPreview
 import eu.studio742.imago.core.render.CameraLight
 import eu.studio742.imago.core.render.KelvinTint
@@ -110,9 +111,10 @@ import eu.studio742.imago.core.model.RAW_PROFILE_COLOR
 import eu.studio742.imago.core.model.RAW_PROFILE_MONOCHROME
 import eu.studio742.imago.core.model.RAW_RENDERING_PROFILED
 import eu.studio742.imago.core.model.needsNewerRawRendering
+import eu.studio742.imago.core.model.rawHighlightMode
 import eu.studio742.imago.core.model.rawRendering
 import eu.studio742.imago.core.model.developedAsRaw
-import eu.studio742.imago.core.model.CURRENT_RAW_ENGINE
+import eu.studio742.imago.core.model.KNOWN_RAW_ENGINES
 import java.time.Instant
 import java.util.UUID
 
@@ -757,7 +759,8 @@ open class EditorViewModel(
                     val bitmap = async {
                         val profiled = rendering.await() >= RAW_RENDERING_PROFILED
                         // A development already recorded keeps its exposure: nothing to measure.
-                        loadPhoto(asset, profiled, measure = profiled && development.await()?.rawDevelopment == null)
+                        loadPhoto(asset, profiled, measure = profiled && development.await()?.rawDevelopment == null,
+                            highlight = development.await()?.rawHighlightMode() ?: CURRENT_RAW_HIGHLIGHT)
                     }
                     val appliedParts = (target as? PhotoEditTarget.Recipe)?.source?.appliedParts ?: RecipePart.entries.toSet()
                     val now = Instant.now().toString()
@@ -2682,12 +2685,12 @@ open class EditorViewModel(
     )
 
     /** [baselineExposure] is the recipe's [appliesBaselineExposure]; a JPEG ignores it. */
-    private suspend fun loadPhoto(asset: EditorAsset, baselineExposure: Boolean, measure: Boolean = baselineExposure): LoadedPhoto {
+    private suspend fun loadPhoto(asset: EditorAsset, baselineExposure: Boolean, measure: Boolean = baselineExposure, highlight: Int = CURRENT_RAW_HIGHLIGHT): LoadedPhoto {
         if (library != null && shouldInspectRawOriginal(asset.fileName)) {
             val original = createPhotoTempFile(context)
             try {
                 library.downloadOriginal(asset.id, original)
-                val preview = decodeRawEditorPreview(original, maxSide = 2048, baselineExposure = baselineExposure)
+                val preview = decodeRawEditorPreview(original, maxSide = 2048, baselineExposure = baselineExposure, highlight = highlight)
                 val raw = preview?.pixels
                 if (raw != null) {
                     // Measured before the original is deleted; only a development made now uses it.
@@ -2714,7 +2717,7 @@ open class EditorViewModel(
 
 /** A recipe from a newer app never goes through the old pipeline: the original opens, and nothing is saved over it. */
 private fun EditRecipe.needsNewerApp(): Boolean =
-    processVersion > CURRENT_PROCESS_VERSION || rawDevelopment?.engine?.let { it != CURRENT_RAW_ENGINE } == true ||
+    processVersion > CURRENT_PROCESS_VERSION || rawDevelopment?.engine?.let { it !in KNOWN_RAW_ENGINES } == true ||
         needsNewerRawRendering()
 
 /** A recipe stored for another version of the file is not this photo's. */

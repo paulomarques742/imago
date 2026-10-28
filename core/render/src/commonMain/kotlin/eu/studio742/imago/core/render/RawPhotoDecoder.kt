@@ -10,6 +10,7 @@ import coil3.request.Options
 import coil3.size.Dimension
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.CURRENT_RAW_RENDERING
+import eu.studio742.imago.core.model.rawHighlightMode
 import eu.studio742.imago.core.model.RAW_RENDERING_PROFILED
 import eu.studio742.imago.core.model.appliesBaselineExposure
 import eu.studio742.imago.core.model.rawRendering
@@ -34,7 +35,7 @@ class RawPhotoDecoder private constructor(private val file: File, private val op
         val side = maxOf((options.size.width as? Dimension.Pixels)?.px ?: 0,
             (options.size.height as? Dimension.Pixels)?.px ?: 0).takeIf { it > 0 }?.coerceAtMost(2048) ?: 2048
         val recipe = options.extras[rawRecipeKey]
-        val raw = decodeRawPreview(file, side, recipe?.appliesBaselineExposure() ?: true) ?: return null
+        val raw = decodeRawPreview(file, side, recipe?.appliesBaselineExposure() ?: true, recipe?.rawHighlightMode() ?: CURRENT_RAW_HIGHLIGHT) ?: return null
         // A photo the editor has not developed yet is matched to its camera's JPEG here, as the editor
         // will when it opens it; a developed one keeps the exposure its recipe recorded.
         val matched = if (recipe?.rawDevelopment == null && (recipe?.rawRendering() ?: CURRENT_RAW_RENDERING) >= RAW_RENDERING_PROFILED) {

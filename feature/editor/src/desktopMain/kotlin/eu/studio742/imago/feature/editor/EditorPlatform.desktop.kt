@@ -20,6 +20,7 @@ import eu.studio742.imago.core.data.LocalDesktopDataGraph
 import eu.studio742.imago.core.designsystem.NativeDialogs
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.appliesBaselineExposure
+import eu.studio742.imago.core.model.rawHighlightMode
 import eu.studio742.imago.core.render.PixelBuffer
 import eu.studio742.imago.core.render.RecipePixels
 import eu.studio742.imago.core.render.decodePixels
@@ -42,7 +43,7 @@ class DesktopEditorExporter(private val library: LibraryRepository) : EditorExpo
         try {
             library.downloadOriginal(asset.id, original)
             requireRawEngine(recipe)
-            var raw = decodeRawPhoto(original, recipe.appliesBaselineExposure())
+            var raw = decodeRawPhoto(original, recipe.appliesBaselineExposure(), highlight = recipe.rawHighlightMode())
             onPhase(uiText(Res.string.editor_phase_applying))
             val rendered = if (raw != null) RecipePixels.render(raw, recipe, consumeSource = true) else {
                 val pixels = decodePixels(original.readBytes()) ?: readWithImageIo(original)

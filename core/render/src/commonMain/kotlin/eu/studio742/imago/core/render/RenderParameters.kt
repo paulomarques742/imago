@@ -32,6 +32,8 @@ data class RenderParameters(
      * kept above white can be pulled back down.
      */
     val highlightCeiling: Float = 1f,
+    /** From process 21 the highlights band starts lower and pushes harder (WIDE_HIGHLIGHT_PIVOT). */
+    val wideHighlights: Boolean = false,
     val exposure: Float = 0f,
     val contrast: Float = 0f,
     val highlights: Float = 0f,
@@ -112,12 +114,13 @@ data class RenderParameters(
             rawProfile = if (rawProfile == RawProfile.NONE) RawProfile.NONE else RawProfile.COLOR,
             rawExposure = rawExposure,
             highlightCeiling = highlightCeiling,
+            wideHighlights = wideHighlights,
         )
 
     // Either white balance model does nothing at 0, 0: which one it is says nothing about neutrality.
     // Nor does the profile, which only a linear RAW reads, and a linear source is always processed.
     val isNeutral: Boolean
-        get() = copy(lightWhiteBalance = true, rawProfile = RawProfile.NONE, rawExposure = 0f, highlightCeiling = 1f) == RenderParameters()
+        get() = copy(lightWhiteBalance = true, rawProfile = RawProfile.NONE, rawExposure = 0f, highlightCeiling = 1f, wideHighlights = false) == RenderParameters()
 
     val isColorNeutral: Boolean
         get() = copy(
@@ -134,6 +137,7 @@ data class RenderParameters(
             rawProfile = RawProfile.NONE,
             rawExposure = 0f,
             highlightCeiling = 1f,
+            wideHighlights = false,
         ) == RenderParameters()
 
     /**

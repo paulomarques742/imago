@@ -419,7 +419,7 @@ object BitmapPhotoProcessor {
         val ceiling = if (linearInput && tone.rawProfile != RawProfile.NONE) tone.highlightCeiling else 1f
         fun tonal() = if (ceiling > 1f) max(luminance(red, green, blue), 0f) else luminance(red, green, blue).coerceIn(0f, 1f)
         remapLuminance(locallyAdaptedShadows(tonal(), localBase, tone.shadows / 100f, ceiling))
-        remapLuminance(locallyAdaptedHighlights(tonal(), localBase, tone.highlights / 100f, ceiling))
+        remapLuminance(locallyAdaptedHighlights(tonal(), localBase, tone.highlights / 100f, ceiling, tone.wideHighlights))
         val tonalLuminance = luminance(red, green, blue).coerceIn(0f, 1f)
         remapLuminance(midtoneContrastLuminance(tonalLuminance, tone.contrast / 100f))
 
@@ -574,6 +574,19 @@ internal const val GRAIN_AMPLITUDE = 0.34f
 internal const val HIGHLIGHT_PIVOT = 0.35f
 
 /**
+ * Process 21's highlights band starts lower and pushes harder. The first band acted on too little of
+ * the photo: at -100 a tone of 0.5 moved by 0.04 and one of 0.6 by 0.10, and the most it ever moved
+ * anything was 0.20, so the slider felt like it did nothing until the very brightest part. With these
+ * values the same -100 moves 0.5 by 0.17, 0.7 by 0.34 and a sky at 0.9 by 0.43. The values are
+ * IMAGO's, chosen on that table and not measured on any other editor. The shape of the curve is the
+ * same, and so is everything proved about it: the ends stay, and it rises for any gain. A recipe from
+ * before process 21 keeps the band it was edited with.
+ */
+internal const val WIDE_HIGHLIGHT_PIVOT = 0.20f
+private const val WIDE_HIGHLIGHT_RECOVERY_GAIN = 3.0f
+private const val WIDE_HIGHLIGHT_LIFT_GAIN = 2.2f
+
+/**
  * How much of the adaptation is global, that is, how much the pixel itself gets to say about
  * whether it is a highlight, against the neighbourhood's word.
  *
@@ -614,9 +627,12 @@ private const val HIGHLIGHT_RECOVERY_GAIN = 1.8f
 /** The other side of the slider: brightening highlights, or deepening shadows. See [HIGHLIGHT_RECOVERY_GAIN]. */
 private const val HIGHLIGHT_LIFT_GAIN = 1.3f
 
-private fun highlightGain(amount: Float): Float {
+private fun highlightGain(amount: Float, wide: Boolean): Float {
     val clamped = amount.coerceIn(-1f, 1f)
-    return clamped * if (clamped < 0f) HIGHLIGHT_RECOVERY_GAIN else HIGHLIGHT_LIFT_GAIN
+    return clamped * when {
+        clamped < 0f -> if (wide) WIDE_HIGHLIGHT_RECOVERY_GAIN else HIGHLIGHT_RECOVERY_GAIN
+        else -> if (wide) WIDE_HIGHLIGHT_LIFT_GAIN else HIGHLIGHT_LIFT_GAIN
+    }
 }
 
 /**
@@ -684,19 +700,20 @@ private fun highlightGain(amount: Float): Float {
  *
  * @param base blurred luminance of the neighbourhood at the input of step 8, or [NO_LOCAL_BASE].
  */
-internal fun locallyAdaptedHighlights(value: Float, base: Float, amount: Float, ceiling: Float = 1f): Float {
+internal fun locallyAdaptedHighlights(value: Float, base: Float, amount: Float, ceiling: Float = 1f, wide: Boolean = false): Float {
     // Above a ceiling that is not white nothing is left to recover: the curve ends there, fixed, and
     // what the sensor recorded past it stays as it is.
     if (ceiling > 1f && value >= ceiling) return value
     val pixel = value.coerceIn(0f, ceiling)
-    if (pixel <= HIGHLIGHT_PIVOT) return pixel
-    val span = ceiling - HIGHLIGHT_PIVOT
+    val pivot = if (wide) WIDE_HIGHLIGHT_PIVOT else HIGHLIGHT_PIVOT
+    if (pixel <= pivot) return pixel
+    val span = ceiling - pivot
     val reference = if (base < 0f) pixel else base.coerceIn(0f, ceiling)
-    val t = (pixel - HIGHLIGHT_PIVOT) / span
-    val band = ((reference - HIGHLIGHT_PIVOT) / span).coerceIn(0f, 1f)
+    val t = (pixel - pivot) / span
+    val band = ((reference - pivot) / span).coerceIn(0f, 1f)
     val local = band + LOCAL_ADAPTATION_GLOBAL_SHARE * (t - band)
-    val flow = exp(highlightGain(amount) * local)
-    return HIGHLIGHT_PIVOT + span * (t * flow / (1f - t + t * flow))
+    val flow = exp(highlightGain(amount, wide) * local)
+    return pivot + span * (t * flow / (1f - t + t * flow))
 }
 
 /**

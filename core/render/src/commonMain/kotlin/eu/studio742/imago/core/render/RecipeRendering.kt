@@ -17,6 +17,7 @@ import eu.studio742.imago.core.model.MaskShape
 import eu.studio742.imago.core.model.UPRIGHT_OFF
 import eu.studio742.imago.core.model.RAW_PROFILE_MONOCHROME
 import eu.studio742.imago.core.model.RAW_RENDERING_HEADROOM
+import eu.studio742.imago.core.model.WIDE_HIGHLIGHTS_PROCESS_VERSION
 import eu.studio742.imago.core.model.RAW_RENDERING_PROFILED
 import eu.studio742.imago.core.model.rawExposure
 import eu.studio742.imago.core.model.rawRendering
@@ -68,6 +69,7 @@ fun EditRecipe.toRenderParameters(
     },
     rawExposure = if (rawRendering < RAW_RENDERING_PROFILED) 0f else rawExposure,
     highlightCeiling = if (rawRendering >= RAW_RENDERING_HEADROOM) RawProfile.HEADROOM_CEILING else 1f,
+    wideHighlights = processVersion >= WIDE_HIGHLIGHTS_PROCESS_VERSION,
     exposure = tone.exposure,
     contrast = tone.contrast,
     highlights = tone.highlights,

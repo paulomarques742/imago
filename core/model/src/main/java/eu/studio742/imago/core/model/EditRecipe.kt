@@ -5,6 +5,11 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 21 widens and strengthens the Highlights band (WIDE_HIGHLIGHTS_PROCESS_VERSION): it starts at 0.20
+ * and not at 0.35, with a bigger gain, because at -100 the first one moved a light midtone by a few
+ * hundredths. A recipe saved before keeps the band it was edited with; an app at 20 asks to be updated
+ * for one saved now, since it would draw its Highlights weaker.
+ *
  * 20 is the second RAW rendering ([RAW_RENDERING_PROFILED]): a DNG at its BaselineExposure, the
  * exposure its maker wants it seen at (+2 EV on a Samsung 50 MP DNG), and the linear development
  * brought to the screen through a base profile ([profile]) instead of the plain sRGB transfer. Recipes
@@ -62,11 +67,19 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 20
+const val CURRENT_PROCESS_VERSION = 21
+
+/** Process 21's Highlights act on a wider band, and harder. Before it the band is the first one. */
+const val WIDE_HIGHLIGHTS_PROCESS_VERSION = 21
 
 /** Process 19 adds a versioned RAW development stage before the existing editing pipeline. */
 const val RAW_PROCESS_VERSION = 19
-const val CURRENT_RAW_ENGINE = "libraw-0.22.2-imago-1"
+const val RAW_ENGINE_1 = "libraw-0.22.2-imago-1"
+
+/** Engine 2 develops with LibRaw's highlight mode 2, which blends a clipped channel towards white. */
+const val RAW_ENGINE_2 = "libraw-0.22.2-imago-2"
+const val CURRENT_RAW_ENGINE = RAW_ENGINE_2
+val KNOWN_RAW_ENGINES = listOf(RAW_ENGINE_1, RAW_ENGINE_2)
 
 /** Process 19's rendering: the camera's linear development shown through the sRGB transfer alone. */
 const val RAW_RENDERING_LINEAR = 1
@@ -101,7 +114,7 @@ val RAW_PROFILES = listOf(RAW_PROFILE_COLOR, RAW_PROFILE_MONOCHROME)
  */
 @Serializable
 data class RawDevelopment(
-    val engine: String = "libraw-0.22.2-imago-1",
+    val engine: String = RAW_ENGINE_1,
     val rendering: Int = RAW_RENDERING_LINEAR,
     val exposure: Float = 0f,
 )
@@ -113,12 +126,20 @@ data class RawDevelopment(
 fun EditRecipe.rawRendering(): Int =
     rawDevelopment?.rendering ?: if (processVersion >= PROFILED_RAW_PROCESS_VERSION) CURRENT_RAW_RENDERING else RAW_RENDERING_LINEAR
 
+/** The engine that develops this recipe's original: a development not made yet gets the current one. */
+fun EditRecipe.rawEngine(): String =
+    rawDevelopment?.engine ?: if (rawRendering() >= RAW_RENDERING_HEADROOM) CURRENT_RAW_ENGINE else RAW_ENGINE_1
+
+/** LibRaw's `highlight` for [rawEngine]: 1 for engine 1, as it was, and 2 from engine 2. */
+fun EditRecipe.rawHighlightMode(): Int = if (rawEngine() == RAW_ENGINE_1) 1 else 2
+
 /** Whether the original is developed at its DNG BaselineExposure, which the decoder has to know. */
 fun EditRecipe.appliesBaselineExposure(): Boolean = rawRendering() >= RAW_RENDERING_PROFILED
 
 /** A rendering or a profile this app does not know: the recipe was written by a newer one. */
 fun EditRecipe.needsNewerRawRendering(): Boolean =
-    (rawDevelopment?.rendering ?: RAW_RENDERING_LINEAR) > CURRENT_RAW_RENDERING || profile !in RAW_PROFILES
+    (rawDevelopment?.rendering ?: RAW_RENDERING_LINEAR) > CURRENT_RAW_RENDERING || profile !in RAW_PROFILES ||
+        (rawDevelopment?.engine ?: RAW_ENGINE_1) !in KNOWN_RAW_ENGINES
 
 /**
  * The recipe as the editor holds it for a RAW original: at the current process, its development kept.
@@ -128,6 +149,7 @@ fun EditRecipe.needsNewerRawRendering(): Boolean =
 fun EditRecipe.developedAsRaw(rendering: Int = rawRendering(), exposure: Float = 0f): EditRecipe = copy(
     processVersion = CURRENT_PROCESS_VERSION,
     rawDevelopment = rawDevelopment ?: RawDevelopment(
+        engine = if (rendering >= RAW_RENDERING_HEADROOM) CURRENT_RAW_ENGINE else RAW_ENGINE_1,
         rendering = rendering,
         exposure = if (rendering >= RAW_RENDERING_PROFILED) exposure else 0f,
     ),

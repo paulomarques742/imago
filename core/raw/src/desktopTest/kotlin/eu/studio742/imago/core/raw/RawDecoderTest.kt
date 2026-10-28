@@ -118,6 +118,16 @@ class RawDecoderTest {
         }
     }
 
+    @Test fun `the highlight mode is the caller's and never raises the highlights`() {
+        withDng { file ->
+            file.writeBytes(syntheticDng(orientation = 1, warmWhiteBalance = true))
+            fun peak(mode: Int) = requireNotNull(RawDecoder.decode(file, highlight = mode)).let { image -> image.rgb.indices.maxOf { image.sample(it) } }
+            val legacy = peak(LEGACY_HIGHLIGHT)
+            assertEquals("the default is engine 1's", legacy, peak(LEGACY_HIGHLIGHT), 0f)
+            assertTrue("blending clipped channels cannot add light", peak(2) <= legacy + 1e-3f)
+        }
+    }
+
     @Test fun `a DNG BaselineExposure is reported and applied only on request`() {
         val file = Files.createTempFile("imago-raw-baseline-", ".asset").toFile()
         try {

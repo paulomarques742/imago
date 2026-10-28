@@ -156,17 +156,20 @@ class PhotoShaderParityTest {
     fun selectiveToneConstantsMatchTheKotlinImplementation() {
         val tone = PhotoShaders.TONE
         listOf(
-            "a * (a < 0.0 ? 1.8 : 1.3)" to "the two asymmetric gains",
-            "if (pixel <= 0.35) return pixel" to "the highlights pivot",
+            "a * (a < 0.0 ? recovery : lift)" to "the two asymmetric gains",
+            "uWideHighlights == 1 ? 3.0 : 1.8" to "the recovery gain of both bands",
+            "uWideHighlights == 1 ? 2.2 : 1.3" to "the lift gain of both bands",
+            "uWideHighlights == 1 ? 0.2 : 0.35" to "the pivot of both bands",
+            "if (pixel <= pivot) return pixel" to "the highlights pivot",
             "float pixel = clamp(value, 0.0, ceiling)" to "the band's ceiling",
-            "float band = clamp((reference - 0.35) / span, 0.0, 1.0)" to "the neighbourhood's band",
+            "float band = clamp((reference - pivot) / span, 0.0, 1.0)" to "the neighbourhood's band",
             "float local = band + 0.35 * (t - band)"
                 to "the global part of the adaptation",
-            "float flow = exp(selectiveHighlightGain(amount) * local)"
+            "float flow = exp(selectiveHighlightGain(amount, recovery, lift) * local)"
                 to "the logistic flow's time given by the neighbourhood",
-            "0.35 + span * (t * flow / (1.0 - t + t * flow))"
+            "pivot + span * (t * flow / (1.0 - t + t * flow))"
                 to "the logistic flow integrated over the band",
-            "1.0 - locallyAdaptedHighlights(1.0 - pixel, mirrored, -amount, 1.0)"
+            "1.0 - locallyAdaptedHighlights(1.0 - pixel, mirrored, -amount, 1.0, 0.35, 1.8, 1.3)"
                 to "shadows as the mirror of highlights",
         ).forEach { (fragment, what) ->
             assertTrue(

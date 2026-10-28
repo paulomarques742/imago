@@ -297,31 +297,31 @@ internal object PhotoShaders {
      * the constants and the shape match.
      */
     private const val SELECTIVE_TONE = """
-        float selectiveHighlightGain(float amount) {
+        float selectiveHighlightGain(float amount, float recovery, float lift) {
             float a = clamp(amount, -1.0, 1.0);
-            return a * (a < 0.0 ? 1.8 : 1.3);
+            return a * (a < 0.0 ? recovery : lift);
         }
 
-        float locallyAdaptedHighlights(float value, float base, float amount, float ceiling) {
+        float locallyAdaptedHighlights(float value, float base, float amount, float ceiling, float pivot, float recovery, float lift) {
             if (ceiling > 1.0 && value >= ceiling) return value;
             float pixel = clamp(value, 0.0, ceiling);
-            if (pixel <= 0.35) return pixel;
-            float span = ceiling - 0.35;
+            if (pixel <= pivot) return pixel;
+            float span = ceiling - pivot;
             float reference = base < 0.0 ? pixel : clamp(base, 0.0, ceiling);
-            float t = (pixel - 0.35) / span;
-            float band = clamp((reference - 0.35) / span, 0.0, 1.0);
-            // The mix's 0.35 and the pivot's are a coincidence: LOCAL_ADAPTATION_GLOBAL_SHARE and
-            // HIGHLIGHT_PIVOT are separate constants there, and changing one is not changing the other.
+            float t = (pixel - pivot) / span;
+            float band = clamp((reference - pivot) / span, 0.0, 1.0);
+            // The mix's 0.35 is LOCAL_ADAPTATION_GLOBAL_SHARE there, a separate constant from the pivot.
             float local = band + 0.35 * (t - band);
-            float flow = exp(selectiveHighlightGain(amount) * local);
-            return 0.35 + span * (t * flow / (1.0 - t + t * flow));
+            float flow = exp(selectiveHighlightGain(amount, recovery, lift) * local);
+            return pivot + span * (t * flow / (1.0 - t + t * flow));
         }
 
+        // Shadows keep the first band: only the Highlights were widened in process 21.
         float locallyAdaptedShadows(float value, float base, float amount, float ceiling) {
             if (ceiling > 1.0 && value > 1.0) return value;
             float pixel = clamp(value, 0.0, 1.0);
             float mirrored = base < 0.0 ? -1.0 : 1.0 - clamp(base, 0.0, 1.0);
-            return 1.0 - locallyAdaptedHighlights(1.0 - pixel, mirrored, -amount, 1.0);
+            return 1.0 - locallyAdaptedHighlights(1.0 - pixel, mirrored, -amount, 1.0, 0.35, 1.8, 1.3);
         }
     """
 
@@ -400,6 +400,7 @@ internal object PhotoShaders {
         uniform float uContrast;
         uniform float uHighlights;
         uniform float uHighlightCeiling;
+        uniform int uWideHighlights;
         uniform float uShadows;
         uniform float uWhites;
         uniform float uBlacks;
@@ -504,7 +505,10 @@ internal object PhotoShaders {
             float tonalLuminance = ceiling > 1.0 ? max(luminance(color), 0.0) : clamp(luminance(color), 0.0, 1.0);
             color = remapLuminance(color, locallyAdaptedShadows(tonalLuminance, base, shadows, ceiling));
             tonalLuminance = ceiling > 1.0 ? max(luminance(color), 0.0) : clamp(luminance(color), 0.0, 1.0);
-            color = remapLuminance(color, locallyAdaptedHighlights(tonalLuminance, base, highlights, ceiling));
+            float pivot = uWideHighlights == 1 ? 0.2 : 0.35;
+            float recovery = uWideHighlights == 1 ? 3.0 : 1.8;
+            float lift = uWideHighlights == 1 ? 2.2 : 1.3;
+            color = remapLuminance(color, locallyAdaptedHighlights(tonalLuminance, base, highlights, ceiling, pivot, recovery, lift));
             tonalLuminance = clamp(luminance(color), 0.0, 1.0);
             color = remapLuminance(color, applyMidtoneContrast(tonalLuminance, contrast));
             color = curveSample(color);
