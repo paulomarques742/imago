@@ -204,12 +204,11 @@ internal fun EditRecipe.sameLookAs(other: EditRecipe): Boolean = copy(updatedAt 
 /**
  * The categories of the panel's bar.
  *
- * There are five, not six: the design system fixes the list as Light, Colour, Detail, Optics, Effects
- * and Masks, and of these the app can do five already — Optics is missing. The curve and HSL, which
- * used to be categories, became tools opened from inside Light and Colour — they are precision
+ * The design system fixes the list as Light, Colour, Detail, Optics, Effects and Masks. The curve and HSL,
+ * which used to be categories, became tools opened from inside Light and Colour — they are precision
  * instruments, not families of adjustments.
  */
-enum class EditorPanel { LIGHT, COLOR, DETAIL, EFFECTS, MASKS }
+enum class EditorPanel { LIGHT, COLOR, DETAIL, OPTICS, EFFECTS, MASKS }
 
 /**
  * What the bottom panel is showing.

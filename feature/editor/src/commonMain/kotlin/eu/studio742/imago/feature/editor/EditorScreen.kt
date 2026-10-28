@@ -82,6 +82,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Adjust
 import androidx.compose.material.icons.outlined.Deblur
+import androidx.compose.material.icons.outlined.Camera
 import androidx.compose.material.icons.outlined.Grain
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Palette
@@ -2750,6 +2751,24 @@ private fun EditorPanel.adjustmentGroups(isRaw: Boolean = false): List<Adjustmen
             ),
         ),
     )
+    EditorPanel.OPTICS -> listOf(
+        AdjustmentGroup(
+            title = stringResource(Res.string.editor_group_lens_vignette),
+            entries = listOf(
+                Adjustment.LENS_VIGNETTE_AMOUNT to stringResource(Res.string.editor_amount),
+                Adjustment.LENS_VIGNETTE_MIDPOINT to stringResource(Res.string.editor_midpoint),
+            ),
+        ),
+        AdjustmentGroup(
+            title = stringResource(Res.string.editor_group_defringe),
+            entries = listOf(
+                Adjustment.LENS_PURPLE_AMOUNT to stringResource(Res.string.editor_defringe_purple),
+                Adjustment.LENS_PURPLE_RANGE to stringResource(Res.string.editor_defringe_range),
+                Adjustment.LENS_GREEN_AMOUNT to stringResource(Res.string.editor_defringe_green),
+                Adjustment.LENS_GREEN_RANGE to stringResource(Res.string.editor_defringe_range),
+            ),
+        ),
+    )
     EditorPanel.EFFECTS -> listOf(
         AdjustmentGroup(
             title = stringResource(Res.string.editor_group_vignette),
@@ -3135,6 +3154,7 @@ internal fun EditorPanel.label() = when (this) {
     EditorPanel.LIGHT -> stringResource(Res.string.editor_panel_light)
     EditorPanel.COLOR -> stringResource(Res.string.editor_panel_color)
     EditorPanel.DETAIL -> stringResource(Res.string.editor_panel_detail)
+    EditorPanel.OPTICS -> stringResource(Res.string.editor_panel_optics)
     EditorPanel.EFFECTS -> stringResource(Res.string.editor_panel_effects)
     EditorPanel.MASKS -> stringResource(Res.string.editor_panel_masks)
 }
@@ -3143,6 +3163,7 @@ private fun EditorPanel.vector() = when (this) {
     EditorPanel.LIGHT -> Icons.Outlined.WbSunny
     EditorPanel.COLOR -> Icons.Outlined.Palette
     EditorPanel.DETAIL -> Icons.Outlined.Deblur
+    EditorPanel.OPTICS -> Icons.Outlined.Camera
     EditorPanel.EFFECTS -> Icons.Outlined.Grain
     EditorPanel.MASKS -> Icons.Outlined.Adjust
 }

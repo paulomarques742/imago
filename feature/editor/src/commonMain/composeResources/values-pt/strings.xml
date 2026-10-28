@@ -100,6 +100,12 @@
     <string name="editor_adj_lens_purple_range">Intervalo das franjas roxas</string>
     <string name="editor_adj_lens_green">Franjas verdes</string>
     <string name="editor_adj_lens_green_range">Intervalo das franjas verdes</string>
+    <string name="editor_panel_optics">Óptica</string>
+    <string name="editor_group_lens_vignette">Vinhetagem da lente</string>
+    <string name="editor_group_defringe">Franjas</string>
+    <string name="editor_defringe_purple">Intensidade do roxo</string>
+    <string name="editor_defringe_green">Intensidade do verde</string>
+    <string name="editor_defringe_range">Intervalo de matiz</string>
     <string name="editor_group_sharpening">Nitidez</string>
     <string name="editor_group_noise_reduction">Redução de ruído</string>
     <string name="editor_nr_luminance">Luminância</string>

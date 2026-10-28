@@ -85,7 +85,8 @@ object BitmapPhotoProcessor {
         } else {
             null
         }
-        applyTonePass(bitmap, parameters, field)
+        applyTonePass(bitmap, parameters, field, geometry)
+        if (parameters.needsDefringe) applyRowPass(bitmap, DefringePass.build(bitmap, parameters)::applyRow)
         if (parameters.needsNoiseStage) applyNoisePass(bitmap, parameters)
         if (parameters.needsDetailStage || parameters.needsSharpenStage || parameters.needsColorGradingStage || parameters.needsEffectsStage) {
             val pyramid = if (parameters.needsDetailStage) {
@@ -109,9 +110,10 @@ object BitmapPhotoProcessor {
         bitmap: PixelSurface,
         parameters: RenderParameters,
         field: LocalMaskField?,
+        geometry: FrameGeometry?,
     ) {
         val mask = if (parameters.needsLocalToneMask) {
-            LocalToneMask.build(bitmap, parameters, field)
+            LocalToneMask.build(bitmap, parameters, field, geometry)
         } else {
             null
         }
@@ -123,10 +125,17 @@ object BitmapPhotoProcessor {
                 val base = FloatArray(3)
                 val weights = FloatArray(MAX_LOCAL_MASKS)
                 val tone = parameters.effectiveTone()
+                val globalExposure = tone.exposure
+                val point = FloatArray(2)
                 for (y in from until until) for (x in 0 until width) {
                     val u = (x + .5f) / width
                     val v = (y + .5f) / height
                     if (field != null) field.resolve(parameters, u, v, weights, tone)
+                    // The lens' vignette is a gain of the exposure, measured over the whole frame.
+                    if (parameters.needsLensVignette) {
+                        val lens = LensVignette.evFramed(parameters, geometry, width, height, u, v, point)
+                        tone.exposure = (if (field != null) tone.exposure else globalExposure) + lens
+                    }
                     val index = (y * width + x) * 3
                     bitmap.rgb.copyInto(base, 0, index, index + 3)
                     processColor(base, parameters, tone, mask?.at(u, v) ?: NO_LOCAL_BASE, linearInput)
@@ -142,12 +151,18 @@ object BitmapPhotoProcessor {
             val row = IntArray(width)
             val weights = FloatArray(MAX_LOCAL_MASKS)
             val tone = parameters.effectiveTone()
+            val globalExposure = tone.exposure
+            val point = FloatArray(2)
             for (y in fromRow until untilRow) {
                 val v = (y + 0.5f) / height
                 bitmap.getPixels(row, 0, width, 0, y, width, 1)
                 for (x in 0 until width) {
                     val u = (x + 0.5f) / width
                     if (field != null) field.resolve(parameters, u, v, weights, tone)
+                    if (parameters.needsLensVignette) {
+                        val lens = LensVignette.evFramed(parameters, geometry, width, height, u, v, point)
+                        tone.exposure = (if (field != null) tone.exposure else globalExposure) + lens
+                    }
                     val base = mask?.at(u, v) ?: NO_LOCAL_BASE
                     row[x] = processPixel(row[x], parameters, tone, base)
                 }
@@ -161,15 +176,18 @@ object BitmapPhotoProcessor {
      * from the image as the tone pass left it, and a pixel needs only itself and them, so the bands
      * can write over their own rows.
      */
-    private fun applyNoisePass(bitmap: PixelSurface, parameters: RenderParameters) {
-        val pass = NoiseReductionPass.build(bitmap, parameters)
+    private fun applyNoisePass(bitmap: PixelSurface, parameters: RenderParameters) =
+        applyRowPass(bitmap, NoiseReductionPass.build(bitmap, parameters)::applyRow)
+
+    /** A pass that needs only a pixel and what was made from the image before it: one row at a time, in bands. */
+    private fun applyRowPass(bitmap: PixelSurface, pass: (y: Int, row: FloatArray) -> Unit) {
         val width = bitmap.width
         forEachRowBand(bitmap) { fromRow, untilRow ->
             val row = FloatArray(width * 4)
             val scratch = IntArray(width)
             for (y in fromRow until untilRow) {
                 bitmap.readRgbaRow(y, row, scratch)
-                pass.applyRow(y, row)
+                pass(y, row)
                 bitmap.writeRgbaRow(y, row, scratch)
             }
         }

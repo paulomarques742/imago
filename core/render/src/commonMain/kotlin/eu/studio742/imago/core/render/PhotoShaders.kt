@@ -295,6 +295,16 @@ internal object PhotoShaders {
             return m * (1.0 / grey);
         }
 
+        // LensVignette.ev: stops to add at a point of the original image; the corner is at a radius of 1.
+        float lensEv(vec2 uv) {
+            if (uLensVignetteAmount == 0.0) return 0.0;
+            vec2 d = vec2((uv.x - 0.5) * uLensAspect, uv.y - 0.5);
+            float radius = sqrt(dot(d, d) / (0.25 * (uLensAspect * uLensAspect + 1.0)));
+            float start = 0.1 + 0.8 * clamp(uLensVignetteMidpoint / 100.0, 0.0, 1.0);
+            float weight = smoothstep(start, 1.0, radius);
+            return uLensVignetteAmount / 100.0 * 1.5 * weight * weight;
+        }
+
         // CalibrationModel.apply, for a linear RAW: the primaries' matrix, then the shadows' tint.
         vec3 calibrate(vec3 linear) {
             float grey = min(linear.r, min(linear.g, linear.b));
@@ -372,6 +382,9 @@ internal object PhotoShaders {
         uniform mat3 uCalibration;
         uniform float uCalibrationTint;
         uniform int uCalibrationOn;
+        uniform float uLensVignetteAmount;
+        uniform float uLensVignetteMidpoint;
+        uniform float uLensAspect;
         uniform vec2 uSourceTexel;
         uniform float uTemperature;
         uniform float uTint;
@@ -403,7 +416,7 @@ internal object PhotoShaders {
             vec4 w2 = maskWeightsHigh(vTexCoord);
             float temperature = uTemperature + maskDelta(w, w2, uMaskTemperature);
             float tint = uTint + maskDelta(w, w2, uMaskTint);
-            float exposure = clamp(uExposure + maskDelta(w, w2, uMaskExposure), -5.0, 5.0);
+            float exposure = clamp(uExposure + maskDelta(w, w2, uMaskExposure), -5.0, 5.0) + lensEv(vTexCoord);
             float whites = uWhites + maskDelta(w, w2, uMaskWhites);
             float blacks = uBlacks + maskDelta(w, w2, uMaskBlacks);
             vec3 based = applyBaseTone(averaged, temperature, tint, exposure, whites, blacks);
@@ -421,6 +434,9 @@ internal object PhotoShaders {
         uniform mat3 uCalibration;
         uniform float uCalibrationTint;
         uniform int uCalibrationOn;
+        uniform float uLensVignetteAmount;
+        uniform float uLensVignetteMidpoint;
+        uniform float uLensAspect;
         uniform sampler2D uLocalBlur;
         uniform int uLocalEnabled;
         uniform float uTemperature;
@@ -520,7 +536,7 @@ internal object PhotoShaders {
             // order-dependent result.
             vec4 w = maskWeightsLow(vTexCoord);
             vec4 w2 = maskWeightsHigh(vTexCoord);
-            float exposure = clamp(uExposure + maskDelta(w, w2, uMaskExposure), -5.0, 5.0);
+            float exposure = clamp(uExposure + maskDelta(w, w2, uMaskExposure), -5.0, 5.0) + lensEv(vTexCoord);
             float contrast = uContrast + maskDelta(w, w2, uMaskContrast);
             float highlights = uHighlights + maskDelta(w, w2, uMaskHighlights);
             float shadows = uShadows + maskDelta(w, w2, uMaskShadows);
@@ -555,6 +571,67 @@ internal object PhotoShaders {
             color = mix(vec3(perceived), color, 1.0 + vibrance * (1.0 - clamp(chroma, 0.0, 1.0)));
 
             fragColor = vec4(clamp(color, 0.0, 1.0), source.a);
+        }
+    """
+
+    /**
+     * The defringe over the stage, `Defringe` in GLSL. Like [NOISE] it is a program of its own: a device that
+     * cannot build it keeps everything else and only shows the fringes.
+     */
+    const val DEFRINGE = """#version 300 es
+        precision highp float;
+        uniform sampler2D uStage;
+        uniform sampler2D uBlur;
+        uniform vec2 uTexel;
+        uniform float uPurpleAmount;
+        uniform float uPurpleRange;
+        uniform float uGreenAmount;
+        uniform float uGreenRange;
+        in vec2 vTexCoord;
+        out vec4 fragColor;
+
+        float luminance(vec3 c) {
+            return dot(c, vec3(0.2126, 0.7152, 0.0722));
+        }
+
+        float hueDegrees(vec3 c) {
+            float high = max(c.r, max(c.g, c.b));
+            float low = min(c.r, min(c.g, c.b));
+            float spread = high - low;
+            if (spread < 0.00001) return 0.0;
+            float sector;
+            if (high == c.r) {
+                sector = (c.g - c.b) / spread;
+                if (sector < 0.0) sector += 6.0;
+            } else if (high == c.g) {
+                sector = (c.b - c.r) / spread + 2.0;
+            } else {
+                sector = (c.r - c.g) / spread + 4.0;
+            }
+            return sector * 60.0;
+        }
+
+        float membership(float hue, float centre, float range) {
+            float apart = abs(hue - centre);
+            if (apart > 180.0) apart = 360.0 - apart;
+            float reach = 10.0 + 50.0 * clamp(range / 100.0, 0.0, 1.0);
+            return 1.0 - smoothstep(reach * 0.6, reach, apart);
+        }
+
+        void main() {
+            vec4 staged = texture(uStage, vTexCoord);
+            vec3 rgb = staged.rgb;
+            float slopeX = luminance(texture(uBlur, vTexCoord + vec2(uTexel.x, 0.0)).rgb) - luminance(texture(uBlur, vTexCoord - vec2(uTexel.x, 0.0)).rgb);
+            float slopeY = luminance(texture(uBlur, vTexCoord + vec2(0.0, uTexel.y)).rgb) - luminance(texture(uBlur, vTexCoord - vec2(0.0, uTexel.y)).rgb);
+            float edge = smoothstep(0.02, 0.08, 0.5 * sqrt(slopeX * slopeX + slopeY * slopeY));
+            float high = max(rgb.r, max(rgb.g, rgb.b));
+            float saturation = high > 0.0 ? (high - min(rgb.r, min(rgb.g, rgb.b))) / high : 0.0;
+            float colour = smoothstep(0.05, 0.25, saturation);
+            float hue = hueDegrees(rgb);
+            float purple = uPurpleAmount / 100.0 * membership(hue, 285.0, uPurpleRange);
+            float green = uGreenAmount / 100.0 * membership(hue, 115.0, uGreenRange);
+            float lost = max(purple, green) * edge * colour;
+            fragColor = vec4(mix(rgb, vec3(luminance(rgb)), lost), staged.a);
         }
     """
 

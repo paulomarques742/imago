@@ -66,6 +66,13 @@ data class RenderParameters(
     val calibrationGreenSaturation: Float = 0f,
     val calibrationBlueHue: Float = 0f,
     val calibrationBlueSaturation: Float = 0f,
+    /** The lens' own corrections, from process 21: a vignette over the whole frame, and the defringe. */
+    val lensVignetteAmount: Float = 0f,
+    val lensVignetteMidpoint: Float = 50f,
+    val lensPurpleAmount: Float = 0f,
+    val lensPurpleRange: Float = 50f,
+    val lensGreenAmount: Float = 0f,
+    val lensGreenRange: Float = 50f,
     val sharpenAmount: Float = 0f,
     val sharpenRadius: Float = 1f,
     val sharpenDetail: Float = 25f,
@@ -208,6 +215,14 @@ data class RenderParameters(
     /** True when step 13 has work. Vignette and grain are not local. */
     val needsEffectsStage: Boolean
         get() = vignetteAmount != 0f || grainAmount != 0f
+
+    /** True when the lens vignette has work. */
+    val needsLensVignette: Boolean
+        get() = lensVignetteAmount != 0f
+
+    /** True when the defringe has work. */
+    val needsDefringe: Boolean
+        get() = lensPurpleAmount > 0f || lensGreenAmount > 0f
 
     /** True when step 10 has work. */
     val needsNoiseStage: Boolean

@@ -21,6 +21,7 @@ import eu.studio742.imago.core.model.RAW_PROFILE_VIVID
 import eu.studio742.imago.core.model.RAW_RENDERING_HEADROOM
 import eu.studio742.imago.core.model.Detail
 import eu.studio742.imago.core.model.CALIBRATION_PROCESS_VERSION
+import eu.studio742.imago.core.model.LENS_CORRECTION_PROCESS_VERSION
 import eu.studio742.imago.core.model.NOISE_REDUCTION_PROCESS_VERSION
 import eu.studio742.imago.core.model.SHARPENING_PROCESS_VERSION
 import eu.studio742.imago.core.model.WIDE_HIGHLIGHTS_PROCESS_VERSION
@@ -94,6 +95,13 @@ fun EditRecipe.toRenderParameters(
     saturation = presence.saturation,
     colorGrade = if (processVersion >= 9) colorGrading.toRenderGrade() else ColorGrade(),
     texture = presence.texture,
+    // The lens' corrections: a half that is off keeps its companion at the default, as the others do.
+    lensVignetteAmount = if (correctsLens(processVersion)) lens.vignetteAmount.coerceIn(-100f, 100f) else 0f,
+    lensVignetteMidpoint = if (correctsLens(processVersion) && lens.vignetteAmount != 0f) lens.vignetteMidpoint.coerceIn(0f, 100f) else 50f,
+    lensPurpleAmount = if (correctsLens(processVersion)) lens.purpleAmount.coerceIn(0f, 100f) else 0f,
+    lensPurpleRange = if (correctsLens(processVersion) && lens.purpleAmount > 0f) lens.purpleRange.coerceIn(0f, 100f) else 50f,
+    lensGreenAmount = if (correctsLens(processVersion)) lens.greenAmount.coerceIn(0f, 100f) else 0f,
+    lensGreenRange = if (correctsLens(processVersion) && lens.greenAmount > 0f) lens.greenRange.coerceIn(0f, 100f) else 50f,
     // Noise reduction: an amount at 0 turns its half off, and what goes with it stays at the defaults.
     noiseLuminance = if (reducesNoise(processVersion)) detail.noiseReductionLuminance.coerceIn(0f, 100f) else 0f,
     noiseLuminanceDetail = if (reducesNoise(processVersion) && detail.noiseReductionLuminance > 0f) detail.noiseReductionLuminanceDetail.coerceIn(0f, 100f) else 50f,
@@ -321,6 +329,8 @@ internal fun normalizedCropSize(origin: Float, size: Float): Float =
 
 private fun calibrates(processVersion: Int, rawRendering: Int) =
     processVersion >= CALIBRATION_PROCESS_VERSION && rawRendering >= RAW_RENDERING_PROFILED
+
+private fun correctsLens(processVersion: Int) = processVersion >= LENS_CORRECTION_PROCESS_VERSION
 
 private fun reducesNoise(processVersion: Int) = processVersion >= NOISE_REDUCTION_PROCESS_VERSION
 

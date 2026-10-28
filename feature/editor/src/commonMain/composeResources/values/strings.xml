@@ -100,6 +100,12 @@
     <string name="editor_adj_lens_purple_range">Purple defringe range</string>
     <string name="editor_adj_lens_green">Green defringe</string>
     <string name="editor_adj_lens_green_range">Green defringe range</string>
+    <string name="editor_panel_optics">Optics</string>
+    <string name="editor_group_lens_vignette">Lens vignetting</string>
+    <string name="editor_group_defringe">Defringe</string>
+    <string name="editor_defringe_purple">Purple amount</string>
+    <string name="editor_defringe_green">Green amount</string>
+    <string name="editor_defringe_range">Hue range</string>
     <string name="editor_group_sharpening">Sharpening</string>
     <string name="editor_group_noise_reduction">Noise reduction</string>
     <string name="editor_nr_luminance">Luminance</string>

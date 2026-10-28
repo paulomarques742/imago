@@ -47,6 +47,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private var statistics: GlProgram? = null
     private var composite: GlProgram? = null
     private var noise: GlProgram? = null
+    private var defringe: GlProgram? = null
 
     private var sourceTexture = 0
     /** The brush rasters, one layer each; a 1 × 1 empty layer while there are none, so the sampler always has a texture. */
@@ -117,6 +118,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private val darkKernel = BlurKernel(PhotoEffects.DEHAZE_REFINE_SIGMA / 8f)
     private val localKernel = BlurKernel(PhotoEffects.LOCAL_TONE_SIGMA / 8f)
     private val noiseLumaKernel = BlurKernel(NoiseReduction.LUMA_SIGMA)
+    private val fringeKernel = BlurKernel(Defringe.BLUR_SIGMA / 2f)
     private var noiseChromaKernel = BlurKernel(1f)
     private var noiseChromaSigma = 1f
     private var sharpKernel = BlurKernel(1f)
@@ -173,6 +175,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         composite = GlProgram(PhotoShaders.VERTEX, PhotoShaders.COMPOSITE)
         // Apart from the others on purpose: if this device cannot build it, only step 10 is lost.
         noise = runCatching { GlProgram(PhotoShaders.VERTEX, PhotoShaders.NOISE) }.getOrNull()
+        defringe = runCatching { GlProgram(PhotoShaders.VERTEX, PhotoShaders.DEFRINGE) }.getOrNull()
         // The context is new: the previous handles no longer exist and deleting them now would
         // destroy the objects that inherited the same names.
         allTargets.forEach(GlRenderTarget::forget)
@@ -219,6 +222,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         val maskFields = if (active.needsMaskField) buildMaskField(active) else 0
         val local = active.needsLocalToneMask && buildLocalToneMask(active, maskFields)
         renderTone(active, local, maskFields)
+        if (active.needsDefringe) removeFringes(active)
         if (active.needsNoiseStage) reduceNoise(active)
         val detail = active.needsDetailStage && buildDetailPyramid(active)
         val sharpen = active.needsSharpenStage && buildSharpening(active)
@@ -563,6 +567,39 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     }
 
     /**
+     * The defringe: the stage blurred at half resolution, whose slope says where the edges are, and a pass
+     * that draws the purple and green near them towards grey. Like [reduceNoise] it writes into [spare] and
+     * swaps; the blur targets are the noise reduction's, and each is done with them before the next starts.
+     */
+    private fun removeFringes(active: RenderParameters) {
+        val program = defringe ?: return
+        val precision = halfFloatTargets
+        val halfWidth = (imageWidth / 2).coerceAtLeast(1)
+        val halfHeight = (imageHeight / 2).coerceAtLeast(1)
+        spare.ensure(imageWidth, imageHeight, precision)
+        noiseHalf.ensure(halfWidth, halfHeight, precision)
+        noiseChromaScratch.ensure(halfWidth, halfHeight, precision)
+        noiseChromaBlur.ensure(halfWidth, halfHeight, precision)
+        if (!spare.isComplete || !noiseHalf.isComplete || !noiseChromaScratch.isComplete || !noiseChromaBlur.isComplete) return
+        reduce(stage, noiseHalf)
+        applyBlur(noiseHalf, noiseChromaScratch, noiseChromaBlur, fringeKernel)
+        spare.bindAsTarget()
+        program.use()
+        bindQuad()
+        program.sampler("uStage", stage.texture, 0)
+        program.sampler("uBlur", noiseChromaBlur.texture, 1)
+        program.vec2("uTexel", noiseChromaBlur.texelWidth, noiseChromaBlur.texelHeight)
+        program.float("uPurpleAmount", active.lensPurpleAmount)
+        program.float("uPurpleRange", active.lensPurpleRange)
+        program.float("uGreenAmount", active.lensGreenAmount)
+        program.float("uGreenRange", active.lensGreenRange)
+        drawQuad()
+        val cleaned = spare
+        spare = stage
+        stage = cleaned
+    }
+
+    /**
      * Step 10: the stage, cleaned. The blurred copies are made from it, the pass writes the cleaned image
      * into [spare], and [spare] becomes the stage — everything after reads the cleaned one without
      * knowing there was another. If anything cannot be built, the stage is left as it was.
@@ -827,6 +864,9 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         program.boolean("uSourceLinear", highPrecisionSource?.linear == true)
         program.int("uRawProfile", active.rawProfile)
         program.boolean("uCalibrationOn", active.needsCalibration)
+        program.float("uLensVignetteAmount", active.lensVignetteAmount)
+        program.float("uLensVignetteMidpoint", active.lensVignetteMidpoint)
+        program.float("uLensAspect", imageWidth.toFloat() / imageHeight.coerceAtLeast(1))
         program.mat3("uCalibration", active.calibrationMatrix ?: IDENTITY_3X3)
         program.float("uCalibrationTint", active.calibrationShadowsTint)
         program.float("uRawProfileKnee", RawProfile.KNEE)

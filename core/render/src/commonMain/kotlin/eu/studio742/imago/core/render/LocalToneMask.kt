@@ -43,6 +43,7 @@ internal class LocalToneMask private constructor(
             bitmap: PixelSurface,
             parameters: RenderParameters,
             field: LocalMaskField? = null,
+            geometry: FrameGeometry? = null,
         ): LocalToneMask {
             val width = bitmap.width
             val height = bitmap.height
@@ -56,6 +57,8 @@ internal class LocalToneMask private constructor(
             val rgb = FloatArray(3)
             val weights = FloatArray(MAX_LOCAL_MASKS)
             val tone = parameters.effectiveTone()
+            val globalExposure = tone.exposure
+            val point = FloatArray(2)
             for (row in 0 until halfHeight) {
                 val topRow = min(row * 2, height - 1)
                 val bottomRow = min(topRow + 1, height - 1)
@@ -70,6 +73,10 @@ internal class LocalToneMask private constructor(
                     rgb[1] = averageChannel(top, bottom, left, right, 1)
                     rgb[2] = averageChannel(top, bottom, left, right, 2)
                     if (field != null) field.resolve(parameters, (x + 0.5f) / halfWidth, v, weights, tone)
+                    if (parameters.needsLensVignette) {
+                        val lens = LensVignette.evFramed(parameters, geometry, width, height, (x + 0.5f) / halfWidth, v, point)
+                        tone.exposure = (if (field != null) tone.exposure else globalExposure) + lens
+                    }
                     BitmapPhotoProcessor.applyBaseTone(rgb, tone, bitmap is FloatPixelBuffer && bitmap.linear)
                     half[base + x] = PhotoEffects.luminance(rgb[0], rgb[1], rgb[2])
                 }
