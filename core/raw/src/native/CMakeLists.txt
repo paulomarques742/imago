@@ -38,11 +38,28 @@ if(MSVC)
     target_compile_definitions(imago_libraw PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
     target_compile_options(imago_libraw PRIVATE /w)
 else()
-    target_compile_options(imago_libraw PRIVATE -w)
+    # Optimised in every build type: nobody steps through LibRaw, and unoptimised it develops a RAW
+    # several times slower, so a debug build measured the wrong thing. The flag comes after the build
+    # type's own, and the last -O wins.
+    target_compile_options(imago_libraw PRIVATE -w -O3)
+    target_compile_options(zlibstatic PRIVATE -O3)
+endif()
+if(ANDROID)
+    # LibRaw's Fuji and CR3 decoders, its X-Trans demosaic and raw2image run their loops in parallel
+    # with OpenMP; without -fopenmp the pragmas are ignored and a phone develops on one core. The
+    # parallel loops only poll LibRaw's own cancel flag, never the JNI progress callback, so no other
+    # thread touches the JVM. The runtime is linked in statically: there is no libomp on the device.
+    target_compile_options(imago_libraw PRIVATE -fopenmp)
 endif()
 
 add_library(imago_raw SHARED RawBridge.cpp)
 target_link_libraries(imago_raw PRIVATE imago_libraw)
+if(NOT MSVC)
+    target_compile_options(imago_raw PRIVATE -O3)
+endif()
+if(ANDROID)
+    target_link_options(imago_raw PRIVATE -fopenmp -static-openmp)
+endif()
 if(NOT ANDROID)
     find_package(JNI REQUIRED)
     target_include_directories(imago_raw PRIVATE ${JNI_INCLUDE_DIRS})
