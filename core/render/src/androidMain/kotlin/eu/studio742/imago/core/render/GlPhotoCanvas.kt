@@ -5,6 +5,7 @@ import android.view.TextureView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 
@@ -27,11 +28,15 @@ fun GlPhotoCanvas(
     highPrecisionSource: FloatPixelBuffer? = null,
     /** Paints over what touches the ends of the scale; an aid of the editor, like [maskOverlay], and not a parameter. */
     clipping: ClippingWarning = ClippingWarning.NONE,
+    /** The photo is on screen: whatever held its place can go. */
+    onFirstFrame: () -> Unit = {},
 ) {
     val renderer = remember { PhotoRenderer() }
     // Drawn inside the window, not behind it: see [GlTextureStage] for the black stage this ended.
     val stage = remember { GlTextureStage(renderer) }
     DisposableEffect(stage) { onDispose { stage.release() } }
+    val shown = rememberUpdatedState(onFirstFrame)
+    remember(stage) { stage.onFirstFrame = { shown.value() } }
 
     AndroidView(
         modifier = modifier,

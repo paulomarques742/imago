@@ -174,8 +174,10 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         statistics = GlProgram(PhotoShaders.VERTEX, PhotoShaders.STATS)
         composite = GlProgram(PhotoShaders.VERTEX, PhotoShaders.COMPOSITE)
         // Apart from the others on purpose: if this device cannot build it, only step 10 is lost.
-        noise = runCatching { GlProgram(PhotoShaders.VERTEX, PhotoShaders.NOISE) }.getOrNull()
-        defringe = runCatching { GlProgram(PhotoShaders.VERTEX, PhotoShaders.DEFRINGE) }.getOrNull()
+        noise = runCatching { GlProgram(PhotoShaders.VERTEX, PhotoShaders.NOISE) }
+            .onFailure { android.util.Log.w("imago-gl", "The noise reduction program did not build", it) }.getOrNull()
+        defringe = runCatching { GlProgram(PhotoShaders.VERTEX, PhotoShaders.DEFRINGE) }
+            .onFailure { android.util.Log.w("imago-gl", "The defringe program did not build", it) }.getOrNull()
         // The context is new: the previous handles no longer exist and deleting them now would
         // destroy the objects that inherited the same names.
         allTargets.forEach(GlRenderTarget::forget)

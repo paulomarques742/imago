@@ -25,6 +25,8 @@ expect fun PhotoCanvas(
     highPrecisionSource: FloatPixelBuffer? = null,
     /** Paints over what touches the ends of the scale; only where [photoCanvasShowsClipping]. */
     clipping: ClippingWarning = ClippingWarning.NONE,
+    /** Called once the photo is on screen, so that what held its place while it developed can be taken away. */
+    onFirstFrame: () -> Unit = {},
 )
 
 /** Whether this platform's [PhotoCanvas] can paint the clipping warning: the editor offers it only there. */

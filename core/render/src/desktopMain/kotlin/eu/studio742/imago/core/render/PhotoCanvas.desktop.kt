@@ -39,6 +39,7 @@ actual fun PhotoCanvas(
     modifier: Modifier,
     highPrecisionSource: FloatPixelBuffer?,
     clipping: ClippingWarning,
+    onFirstFrame: () -> Unit,
 ) {
     val source = remember(bitmap) { bitmap.toPixelBuffer() }
     val draft = remember(source) { RecipePixels.reduce(source, DRAFT_SIDE) }
@@ -61,6 +62,9 @@ actual fun PhotoCanvas(
         }
         frame = withContext(Dispatchers.Default) { renderFrame(source, active, maskOverlay, brushCache.of(active, source), floatSource = highPrecisionSource) }
     }
+
+    val hasFrame = frame != null
+    LaunchedEffect(hasFrame) { if (hasFrame) onFirstFrame() }
 
     Canvas(modifier) {
         val image = frame ?: return@Canvas
@@ -107,30 +111,10 @@ private fun renderFrame(
 ): ImageBitmap {
     val framed = if (floatSource == null) RecipePixels.render(source, parameters, renderScale, brushes) else
         RecipePixels.renderFloat(floatSource, parameters, renderScale, brushes).toPixelBuffer()
-    if (maskOverlay in 0 until minOf(parameters.masks.size, MAX_LOCAL_MASKS)) tintMask(framed, source, parameters, maskOverlay, brushes)
-    return framed.toSkiaBitmap().asComposeImageBitmap()
-}
-
-/** The same blend as the shader: 45% of the mask's weight towards a fixed red. */
-private fun tintMask(framed: PixelBuffer, source: PixelBuffer, parameters: RenderParameters, index: Int, brushes: BrushRasters) {
-    val field = LocalMaskField.build(
-        framed.width,
-        framed.height,
-        parameters,
-        parameters.frameGeometry(source.width, source.height),
-        brushes,
-    )
-    val weights = FloatArray(MAX_LOCAL_MASKS)
-    for (y in 0 until framed.height) for (x in 0 until framed.width) {
-        field.at((x + .5f) / framed.width, (y + .5f) / framed.height, weights)
-        val amount = weights[index] * 0.45f
-        if (amount <= 0f) continue
-        val i = y * framed.width + x
-        val p = framed.pixels[i]
-        fun mix(channel: Int, target: Float) = (channel + (target * 255f - channel) * amount).roundToInt().coerceIn(0, 255)
-        framed.pixels[i] = (p and 0xFF000000.toInt()) or (mix(p ushr 16 and 255, 0.90f) shl 16) or
-            (mix(p ushr 8 and 255, 0.20f) shl 8) or mix(p and 255, 0.25f)
+    if (maskOverlay in 0 until minOf(parameters.masks.size, MAX_LOCAL_MASKS)) {
+        tintMask(framed, source.width, source.height, parameters, maskOverlay, brushes)
     }
+    return framed.toSkiaBitmap().asComposeImageBitmap()
 }
 
 /** The draft's longer side: about 50 ms on an eight-core laptop. */

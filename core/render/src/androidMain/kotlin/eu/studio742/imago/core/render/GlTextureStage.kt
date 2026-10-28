@@ -83,7 +83,15 @@ internal class GlTextureStage(private val renderer: PhotoRenderer) : TextureView
         return true
     }
 
-    override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
+    /** Called once, the first time the view has a frame to show. */
+    @Volatile var onFirstFrame: (() -> Unit)? = null
+
+    override fun onSurfaceTextureUpdated(texture: SurfaceTexture) {
+        onFirstFrame?.let { first ->
+            onFirstFrame = null
+            first()
+        }
+    }
 
     /** Ends the context and the thread; the view is going away. */
     fun release() {

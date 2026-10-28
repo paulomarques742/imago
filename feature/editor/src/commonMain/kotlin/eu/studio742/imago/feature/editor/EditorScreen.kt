@@ -1008,7 +1008,16 @@ private fun EditorScreen(
                 val pageAsset = assets.getOrNull(page) ?: return@HorizontalPager
                 val isActiveAsset = pageAsset.id == assetId
                 Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-                    if (!isActiveAsset || state.bitmap == null) {
+                    // What holds the photo's place stays until the stage has drawn it: the stage is opaque, and for
+                    // the seconds between the photo being ready and its first frame it was a black screen.
+                    var stageShown by remember(pageAsset.id, state.bitmap) { mutableStateOf(false) }
+                    LaunchedEffect(pageAsset.id, state.bitmap) {
+                        if (state.bitmap != null) {
+                            delay(STAGE_FIRST_FRAME_LIMIT_MS)
+                            stageShown = true
+                        }
+                    }
+                    if (!isActiveAsset || state.bitmap == null || !stageShown) {
                         // A RAW from the phone takes seconds to develop, and its own full-size develop would queue
                         // behind the one the editor is already making: the phone's small look of it holds the place.
                         val quickRaw = isRawOriginal(null, pageAsset.fileName) && pageAsset.previewUrl.startsWith("content:")
@@ -1064,6 +1073,7 @@ private fun EditorScreen(
                                 },
                                 clipping = if (cropMode) ClippingWarning.NONE else state.clipping,
                                 modifier = Modifier.fillMaxSize(),
+                                onFirstFrame = { stageShown = true },
                             )
                             val guidesGeometry = maskFrameGeometry
                             if (guidingNow && !cropMode && guidesGeometry != null && stageSize != IntSize.Zero) {
@@ -4155,3 +4165,6 @@ private val CURVE_TOUCH_INSET = 16.dp
 
 /** How close to a point a finger has to land to take it. */
 private val CURVE_POINT_HIT_RADIUS = 24.dp
+
+/** If the stage never says it drew, the placeholder goes anyway after this long. */
+private const val STAGE_FIRST_FRAME_LIMIT_MS = 4_000L
