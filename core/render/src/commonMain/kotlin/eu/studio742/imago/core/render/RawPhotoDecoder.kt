@@ -27,7 +27,7 @@ internal val rawRecipeKey = Extras.Key<EditRecipe?>(null)
  * The develop of a RAW with no recipe, for [RecipeRenderCache]. Raised whenever what that develop does
  * changes — the engine's highlight mode, the profile, the first sharpening — so that old entries miss.
  */
-private const val DEFAULT_DEVELOPMENT_KEY = "default3"
+const val RAW_DEFAULT_DEVELOPMENT_KEY = "default3"
 
 /** A render read back from [RecipeRenderCache]; null when the bytes do not decode. */
 internal expect fun decodeRenderCacheBytes(bytes: ByteArray): coil3.Bitmap?
@@ -50,13 +50,16 @@ class RawPhotoDecoder private constructor(private val file: File, private val op
         val recipe = options.extras[rawRecipeKey]
         // What the develop makes is kept on disk, as for any other edited photo; a photo read through a
         // grant that can be revoked has its disk cache switched off by the request, and keeps nothing.
-        val transformationKey = recipe?.let { recipeTransformation(it).cacheKey } ?: DEFAULT_DEVELOPMENT_KEY
-        val cacheKey = if (options.diskCachePolicy.readEnabled || options.diskCachePolicy.writeEnabled) {
+        val transformationKey = recipe?.let { recipeTransformation(it).cacheKey } ?: RAW_DEFAULT_DEVELOPMENT_KEY
+        // A tile from the phone arrives with its key already made from MediaStore, and was looked up
+        // before this file was copied; the others are named by their own bytes.
+        val namedByThePhone = options.extras[RawTileCacheKey]
+        val cacheKey = namedByThePhone ?: if (options.diskCachePolicy.readEnabled || options.diskCachePolicy.writeEnabled) {
             withContext(Dispatchers.IO) { runCatching { RecipeRenderCache.rawKey(transformationKey, file, side) }.getOrNull() }
         } else {
             null
         }
-        if (cacheKey != null && options.diskCachePolicy.readEnabled) {
+        if (cacheKey != null && namedByThePhone == null && options.diskCachePolicy.readEnabled) {
             RecipeRenderCache.read(cacheKey)?.let(::decodeRenderCacheBytes)?.let { cached ->
                 if (recipe != null) DevelopedRawBitmaps.mark(cached, recipeTransformation(recipe).cacheKey)
                 return DecodeResult(cached.asImage(), isSampled = true)
@@ -86,7 +89,7 @@ class RawPhotoDecoder private constructor(private val file: File, private val op
                 if (recipe != null) DevelopedRawBitmaps.mark(image, recipeTransformation(recipe).cacheKey)
             }
         }
-        if (cacheKey != null && options.diskCachePolicy.writeEnabled) {
+        if (cacheKey != null && (namedByThePhone != null || options.diskCachePolicy.writeEnabled)) {
             RecipeRenderCache.write(cacheKey) { bitmap.encodeForRenderCache() }
         }
         return DecodeResult(bitmap.asImage(), isSampled = true)

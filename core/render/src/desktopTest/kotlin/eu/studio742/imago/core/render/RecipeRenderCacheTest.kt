@@ -50,6 +50,15 @@ class RecipeRenderCacheTest {
     }
 
     @Test
+    fun `a phone's RAW is named without opening it, by what the phone says of it`() {
+        val key = RecipeRenderCache.identityKey("recipe:a:21:t1", "content://media/external/file/7:28000000:1761600000", 512)
+        assertEquals(key, RecipeRenderCache.identityKey("recipe:a:21:t1", "content://media/external/file/7:28000000:1761600000", 512))
+        assertNotEquals("saved again", key, RecipeRenderCache.identityKey("recipe:a:21:t2", "content://media/external/file/7:28000000:1761600000", 512))
+        assertNotEquals("changed on the phone", key, RecipeRenderCache.identityKey("recipe:a:21:t1", "content://media/external/file/7:28000000:1761600999", 512))
+        assertNotEquals("another size", key, RecipeRenderCache.identityKey("recipe:a:21:t1", "content://media/external/file/7:28000000:1761600000", 2048))
+    }
+
+    @Test
     fun `a developed RAW goes through the cache as bytes and comes back as an image`() {
         install()
         val original = folder.newFile("d.raf").apply { writeBytes(ByteArray(10_000) { it.toByte() }) }

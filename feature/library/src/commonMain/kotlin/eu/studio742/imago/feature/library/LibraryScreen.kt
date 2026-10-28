@@ -13,6 +13,7 @@ import eu.studio742.imago.core.designsystem.i18n.UiText
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import eu.studio742.imago.feature.library.resources.*
+import eu.studio742.imago.core.render.developedRawTile
 import eu.studio742.imago.core.render.libraryAuth
 import eu.studio742.imago.core.render.rawQuickPreview
 import eu.studio742.imago.core.render.withRecipe
@@ -1940,6 +1941,7 @@ private fun AssetTile(
                 .libraryAuth(asset.apiKey)
                 .crossfade(true)
                 .withRecipe(asset.recipe)
+                .apply { if (asset.isRaw) developedRawTile() }
                 .build(),
             // The tile's description becomes the selection's while it lasts; two in a row would make
             // the screen reader say "open" for a thumbnail that no longer opens anything.

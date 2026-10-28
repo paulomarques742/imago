@@ -48,6 +48,8 @@ class ImmichRoomApplication : Application(), SingletonImageLoader.Factory {
             // The shared client, not Coil's own: what the connection needs (headers, certificates)
             // is configured on it.
             add(coil3.network.okhttp.OkHttpNetworkFetcherFactory(callFactory = { eu.studio742.imago.core.immich.ImmichHttp.client }))
+            // Before the one that reads the RAW: a tile that was developed already is answered from the cache.
+            add(eu.studio742.imago.core.render.CachedRawTileFetcher.Factory())
             add(LocalThumbnailFetcher.Factory(this@ImmichRoomApplication))
         }
         // Coil's default share was too small to outlive a visit to the detail: a few full-screen

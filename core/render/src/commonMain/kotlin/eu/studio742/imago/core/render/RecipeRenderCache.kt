@@ -77,6 +77,14 @@ object RecipeRenderCache {
         }
     }
 
+    /**
+     * The entry for a RAW the phone names by [identity] — its URI, size and last change — developed with
+     * [transformationKey] at [side] pixels. Made without opening the file, which is what a tile from the
+     * phone would otherwise copy into a temporary file just to find out.
+     */
+    fun identityKey(transformationKey: String, identity: String, side: Int): String =
+        "$FORMAT_VERSION:raw:$transformationKey:$side:$identity"
+
     /** The encoded render under [key], or null when there is none or it cannot be read. */
     fun read(key: String): ByteArray? {
         val disk = cache ?: return null

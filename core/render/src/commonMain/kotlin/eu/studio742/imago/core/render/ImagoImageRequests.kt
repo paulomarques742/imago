@@ -33,6 +33,17 @@ fun ImageRequest.Builder.withRecipe(recipe: EditRecipe?): ImageRequest.Builder =
  */
 val RawQuickPreview = Extras.Key(default = false)
 
+/** Marks a request as the tile of a RAW from the phone, whose developed render is kept in [RecipeRenderCache]. */
+val DevelopedRawTile = Extras.Key(default = false)
+
+fun ImageRequest.Builder.developedRawTile(): ImageRequest.Builder = apply { extras[DevelopedRawTile] = true }
+
+/**
+ * Where the developed render of this tile is kept, made by whoever can name the photo without opening
+ * it — the phone's interceptor, from MediaStore. The decoder writes under it and [CachedRawTileFetcher] reads it.
+ */
+val RawTileCacheKey = Extras.Key<String?>(default = null)
+
 /**
  * The quick look of a RAW, for a tile to show while the developed one is still being made. It has its
  * own memory cache key, so that it is never taken for the developed photo of the same data, and no

@@ -24,7 +24,7 @@ class CacheSweeperTest {
         setLastModified(now - ageMillis)
     }
 
-    private fun sweep() = CacheSweeper(cache, maxAgeMillis = DAY, now = { now }).sweep()
+    private fun sweep() = CacheSweeper(cache, maxAgeMillis = DAY, copyMaxAgeMillis = 15L * 60_000L, now = { now }).sweep()
 
     @Test
     fun staleWorkingFilesLeaveAndRecentOnesStay() {
@@ -39,6 +39,18 @@ class CacheSweeperTest {
         assertTrue(beingWritten.exists())
         // The folders the FileProvider serves are kept; only their contents went.
         assertTrue(File(cache, "share").isDirectory)
+    }
+
+    @Test
+    fun theCopiesCoilMakesOfAPhotoGoAfterAFewMinutesNotADay() {
+        val old = file("tmp_8817259115023724470", 30 * 60_000L)
+        val reading = file("tmp_4439838587401230958", 60_000L)
+        val notCoils = file("tmp.db", 30 * 60_000L)
+
+        assertEquals(1, sweep())
+        assertFalse(old.exists())
+        assertTrue("still being read", reading.exists())
+        assertTrue(notCoils.exists())
     }
 
     @Test
