@@ -109,6 +109,8 @@ import eu.studio742.imago.core.model.appliesBaselineExposure
 import eu.studio742.imago.core.model.CURRENT_RAW_RENDERING
 import eu.studio742.imago.core.model.RAW_PROFILE_COLOR
 import eu.studio742.imago.core.model.RAW_PROFILE_MONOCHROME
+import eu.studio742.imago.core.model.RAW_PROFILE_NEUTRAL
+import eu.studio742.imago.core.model.RAW_PROFILE_VIVID
 import eu.studio742.imago.core.model.RAW_RENDERING_PROFILED
 import eu.studio742.imago.core.model.needsNewerRawRendering
 import eu.studio742.imago.core.model.rawHighlightMode
@@ -3089,6 +3091,8 @@ fun EditRecipe.adjustmentValue(adjustment: Adjustment): Float = when (adjustment
 /** The base profiles the editor offers for a RAW, in the menu's order. */
 enum class RawProfileChoice(val id: String, val labelRes: org.jetbrains.compose.resources.StringResource) {
     COLOR(RAW_PROFILE_COLOR, Res.string.editor_profile_color),
+    NEUTRAL(RAW_PROFILE_NEUTRAL, Res.string.editor_profile_neutral),
+    VIVID(RAW_PROFILE_VIVID, Res.string.editor_profile_vivid),
     MONOCHROME(RAW_PROFILE_MONOCHROME, Res.string.editor_profile_monochrome),
     ;
 

@@ -30,6 +30,21 @@ object RawProfile {
     const val COLOR = 1
     const val MONOCHROME = 2
 
+    /** Colour with less contrast, to start flat. */
+    const val NEUTRAL = 3
+
+    /** Colour with more contrast and a livelier colour. */
+    const val VIVID = 4
+
+    /**
+     * What the two variants do after the base curve, IMAGO's values chosen on the samples: a contrast
+     * `y = x + s·x(1 − x)(2x − 1)` on 0..1 — it keeps black, white and the middle, and rises for
+     * |s| up to 2 — and for Vivid the chroma times [VIVID_SATURATION]. Light above white goes through.
+     */
+    private const val NEUTRAL_CONTRAST = -0.45f
+    private const val VIVID_CONTRAST = 0.40f
+    private const val VIVID_SATURATION = 1.2f
+
     const val KNEE = 0.1132f
     private const val WHITE_SLOPE = KNEE / (1f + KNEE)
 
@@ -72,12 +87,25 @@ object RawProfile {
             out[0] = top
             out[1] = top
             out[2] = top
-            return
+        } else {
+            val bottom = curve(low)
+            val scale = (top - bottom) / (high - low)
+            out[0] = bottom + (r - low) * scale
+            out[1] = bottom + (g - low) * scale
+            out[2] = bottom + (b - low) * scale
         }
-        val bottom = curve(low)
-        val scale = (top - bottom) / (high - low)
-        out[0] = bottom + (r - low) * scale
-        out[1] = bottom + (g - low) * scale
-        out[2] = bottom + (b - low) * scale
+        if (profile == NEUTRAL || profile == VIVID) shape(profile, out)
+    }
+
+    private fun contrast(value: Float, amount: Float): Float =
+        if (value <= 0f || value >= 1f) value else value + amount * value * (1f - value) * (2f * value - 1f)
+
+    private fun shape(profile: Int, out: FloatArray) {
+        val amount = if (profile == NEUTRAL) NEUTRAL_CONTRAST else VIVID_CONTRAST
+        for (channel in 0..2) out[channel] = contrast(out[channel], amount)
+        if (profile == VIVID) {
+            val grey = out[0] * 0.2126f + out[1] * 0.7152f + out[2] * 0.0722f
+            for (channel in 0..2) out[channel] = max(grey + (out[channel] - grey) * VIVID_SATURATION, 0f)
+        }
     }
 }

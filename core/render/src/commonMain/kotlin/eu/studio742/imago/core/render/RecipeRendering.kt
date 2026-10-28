@@ -16,6 +16,8 @@ import eu.studio742.imago.core.model.MaskComponent
 import eu.studio742.imago.core.model.MaskShape
 import eu.studio742.imago.core.model.UPRIGHT_OFF
 import eu.studio742.imago.core.model.RAW_PROFILE_MONOCHROME
+import eu.studio742.imago.core.model.RAW_PROFILE_NEUTRAL
+import eu.studio742.imago.core.model.RAW_PROFILE_VIVID
 import eu.studio742.imago.core.model.RAW_RENDERING_HEADROOM
 import eu.studio742.imago.core.model.Detail
 import eu.studio742.imago.core.model.NOISE_REDUCTION_PROCESS_VERSION
@@ -68,6 +70,8 @@ fun EditRecipe.toRenderParameters(
     rawProfile = when {
         rawRendering < RAW_RENDERING_PROFILED -> RawProfile.NONE
         profile == RAW_PROFILE_MONOCHROME -> RawProfile.MONOCHROME
+        profile == RAW_PROFILE_NEUTRAL -> RawProfile.NEUTRAL
+        profile == RAW_PROFILE_VIVID -> RawProfile.VIVID
         else -> RawProfile.COLOR
     },
     rawExposure = if (rawRendering < RAW_RENDERING_PROFILED) 0f else rawExposure,

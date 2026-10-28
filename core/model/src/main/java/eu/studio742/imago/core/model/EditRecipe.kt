@@ -111,7 +111,11 @@ const val PROFILED_RAW_PROCESS_VERSION = 20
 /** The base profiles of a RAW, the first choice of Lightroom's Basic panel. A JPEG has none. */
 const val RAW_PROFILE_COLOR = "color"
 const val RAW_PROFILE_MONOCHROME = "monochrome"
-val RAW_PROFILES = listOf(RAW_PROFILE_COLOR, RAW_PROFILE_MONOCHROME)
+const val RAW_PROFILE_NEUTRAL = "neutral"
+const val RAW_PROFILE_VIVID = "vivid"
+
+/** An app that does not list a profile asks to be updated for a recipe that has it: `needsNewerRawRendering`. */
+val RAW_PROFILES = listOf(RAW_PROFILE_COLOR, RAW_PROFILE_NEUTRAL, RAW_PROFILE_VIVID, RAW_PROFILE_MONOCHROME)
 
 /**
  * How the original is developed, which belongs to the photo: applying a recipe from another photo

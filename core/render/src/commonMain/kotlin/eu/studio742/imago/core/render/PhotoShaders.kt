@@ -226,7 +226,27 @@ internal object PhotoShaders {
                 : x * (1.0 + uRawProfileKnee) / (x + uRawProfileKnee);
         }
 
+        // RawProfile.shape: the two colour variants, after the base curve. Neutral is 3 and Vivid 4.
+        vec3 profileShape(vec3 c) {
+            float amount = uRawProfile == 3 ? -0.45 : 0.40;
+            vec3 shaped = c + amount * c * (1.0 - c) * (2.0 * c - 1.0);
+            bvec3 inside = bvec3(c.r > 0.0 && c.r < 1.0, c.g > 0.0 && c.g < 1.0, c.b > 0.0 && c.b < 1.0);
+            c = mix(c, shaped, vec3(inside));
+            if (uRawProfile == 4) {
+                float grey = luminance(c);
+                c = max(vec3(grey) + (c - vec3(grey)) * 1.2, vec3(0.0));
+            }
+            return c;
+        }
+
+        vec3 toDisplayBase(vec3 linear);
+
         vec3 toDisplay(vec3 linear) {
+            vec3 base = toDisplayBase(linear);
+            return (uSourceLinear == 1 && uRawProfile >= 3) ? profileShape(base) : base;
+        }
+
+        vec3 toDisplayBase(vec3 linear) {
             if (uSourceLinear == 0 || uRawProfile == 0) return toSrgb(linear);
             vec3 c = max(linear, vec3(0.0));
             if (uRawProfile == 2) return vec3(rawProfileCurve(luminance(c)));

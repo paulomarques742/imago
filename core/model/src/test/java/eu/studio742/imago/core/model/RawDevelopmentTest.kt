@@ -80,7 +80,7 @@ class RawDevelopmentTest {
     @Test fun `a rendering or a profile this app does not know asks for a newer one`() {
         val recipe = EditRecipe(assetId = "raw", originalChecksum = "", createdAt = "", updatedAt = "")
         assertFalse(recipe.needsNewerRawRendering())
-        assertTrue(recipe.copy(profile = "vivid").needsNewerRawRendering())
+        assertTrue(recipe.copy(profile = "sepia").needsNewerRawRendering())
         assertTrue(recipe.copy(rawDevelopment = RawDevelopment(rendering = CURRENT_RAW_RENDERING + 1)).needsNewerRawRendering())
     }
 

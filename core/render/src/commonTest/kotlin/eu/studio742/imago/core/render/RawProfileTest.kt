@@ -123,3 +123,43 @@ class RawProfileTest {
         )
     }
 }
+
+class RawProfileVariantsTest {
+    private fun shown(profile: Int, red: Float, green: Float, blue: Float): FloatArray =
+        FloatArray(3).also { RawProfile.toDisplay(red, green, blue, profile, it) }
+
+    @Test fun `the four profiles keep black, white and the light above white`() {
+        for (profile in listOf(RawProfile.COLOR, RawProfile.NEUTRAL, RawProfile.VIVID, RawProfile.MONOCHROME)) {
+            assertEquals(0f, shown(profile, 0f, 0f, 0f)[0], 1e-6f)
+            assertEquals(1f, shown(profile, 1f, 1f, 1f)[1], 1e-5f)
+            assertTrue("above white is kept ($profile)", shown(profile, 3f, 3f, 3f)[2] > 1f)
+        }
+    }
+
+    @Test fun `neutral is flatter than colour and vivid is livelier`() {
+        // Two greys, a dark and a light one, in the middle of the scale where contrast lives.
+        fun spread(profile: Int) = shown(profile, 0.45f, 0.45f, 0.45f)[0] - shown(profile, 0.05f, 0.05f, 0.05f)[0]
+        val dark = shown(RawProfile.COLOR, 0.02f, 0.02f, 0.02f)[0]
+        assertTrue("a dark grey is lifted by neutral and crushed by vivid", shown(RawProfile.NEUTRAL, 0.02f, 0.02f, 0.02f)[0] > dark &&
+            shown(RawProfile.VIVID, 0.02f, 0.02f, 0.02f)[0] < dark)
+        val light = shown(RawProfile.COLOR, 0.6f, 0.6f, 0.6f)[0]
+        assertTrue("and a light one is held down by neutral and lifted by vivid", shown(RawProfile.NEUTRAL, 0.6f, 0.6f, 0.6f)[0] < light &&
+            shown(RawProfile.VIVID, 0.6f, 0.6f, 0.6f)[0] > light)
+        assertTrue(spread(RawProfile.NEUTRAL) < spread(RawProfile.COLOR) && spread(RawProfile.COLOR) < spread(RawProfile.VIVID) + 0.2f)
+        fun chroma(profile: Int): Float {
+            val c = shown(profile, 0.30f, 0.12f, 0.06f)
+            return c.max() - c.min()
+        }
+        assertTrue("vivid has more colour than colour", chroma(RawProfile.VIVID) > chroma(RawProfile.COLOR) * 1.1f)
+        assertTrue("neutral does not add colour", chroma(RawProfile.NEUTRAL) < chroma(RawProfile.VIVID))
+    }
+
+    @Test fun `the recipe's profile picks the variant, and one this app does not know asks for an update`() {
+        val recipe = eu.studio742.imago.core.model.EditRecipe(assetId = "raw", originalChecksum = "", createdAt = "", updatedAt = "")
+        assertEquals(RawProfile.NEUTRAL, recipe.copy(profile = eu.studio742.imago.core.model.RAW_PROFILE_NEUTRAL).toRenderParameters().rawProfile)
+        assertEquals(RawProfile.VIVID, recipe.copy(profile = eu.studio742.imago.core.model.RAW_PROFILE_VIVID).toRenderParameters().rawProfile)
+        assertTrue(eu.studio742.imago.core.model.RAW_PROFILES.size == 4)
+        // The recipe still reads the first one the way it did.
+        assertEquals(RawProfile.COLOR, recipe.toRenderParameters().rawProfile)
+    }
+}

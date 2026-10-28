@@ -101,6 +101,8 @@
     <string name="editor_profiles">Profiles</string>
     <string name="editor_profile_choose">Choose the profile</string>
     <string name="editor_profile_color">Color</string>
+    <string name="editor_profile_neutral">Neutral</string>
+    <string name="editor_profile_vivid">Vivid</string>
     <string name="editor_profile_monochrome">Monochrome</string>
     <string name="editor_white_balance">White Balance</string>
     <string name="editor_white_balance_picker">White Balance Selector</string>

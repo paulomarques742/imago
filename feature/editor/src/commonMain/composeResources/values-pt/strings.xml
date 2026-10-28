@@ -101,6 +101,8 @@
     <string name="editor_profiles">Perfis</string>
     <string name="editor_profile_choose">Escolher o perfil</string>
     <string name="editor_profile_color">Cor</string>
+    <string name="editor_profile_neutral">Neutro</string>
+    <string name="editor_profile_vivid">Vívido</string>
     <string name="editor_profile_monochrome">Monocromático</string>
     <string name="editor_white_balance">Equilíbrio de brancos</string>
     <string name="editor_white_balance_picker">Seletor do equilíbrio de brancos</string>
