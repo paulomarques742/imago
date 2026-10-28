@@ -38,6 +38,8 @@ fun Adjustment.isLocal(): Boolean = when (this) {
     Adjustment.VIBRANCE, Adjustment.SATURATION, Adjustment.TEXTURE, Adjustment.CLARITY,
     Adjustment.DEHAZE,
     -> true
+    Adjustment.SHARPEN_AMOUNT, Adjustment.SHARPEN_RADIUS, Adjustment.SHARPEN_DETAIL, Adjustment.SHARPEN_MASKING,
+    -> false
     Adjustment.VIGNETTE_AMOUNT, Adjustment.VIGNETTE_MIDPOINT, Adjustment.VIGNETTE_ROUNDNESS,
     Adjustment.VIGNETTE_FEATHER, Adjustment.GRAIN_AMOUNT, Adjustment.GRAIN_SIZE,
     Adjustment.GRAIN_ROUGHNESS, Adjustment.GRADE_BLENDING, Adjustment.GRADE_BALANCE,

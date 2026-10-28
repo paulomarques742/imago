@@ -292,6 +292,10 @@ enum class Adjustment(val neutral: Float, val range: ClosedFloatingPointRange<Fl
     TEXTURE(0f, -100f..100f),
     CLARITY(0f, -100f..100f),
     DEHAZE(0f, -100f..100f),
+    SHARPEN_AMOUNT(0f, 0f..150f),
+    SHARPEN_RADIUS(1f, 0.5f..3f),
+    SHARPEN_DETAIL(25f, 0f..100f),
+    SHARPEN_MASKING(0f, 0f..100f),
     VIGNETTE_AMOUNT(0f, -100f..100f),
     VIGNETTE_MIDPOINT(50f, 0f..100f),
     VIGNETTE_ROUNDNESS(0f, -100f..100f),
@@ -335,6 +339,8 @@ fun Adjustment.parent(): Adjustment? = when (this) {
     Adjustment.VIGNETTE_FEATHER,
     -> Adjustment.VIGNETTE_AMOUNT
     Adjustment.GRAIN_SIZE, Adjustment.GRAIN_ROUGHNESS -> Adjustment.GRAIN_AMOUNT
+    // Radius, Detail and Masking say nothing while the Amount is at 0.
+    Adjustment.SHARPEN_RADIUS, Adjustment.SHARPEN_DETAIL, Adjustment.SHARPEN_MASKING -> Adjustment.SHARPEN_AMOUNT
     else -> null
 }
 
@@ -359,6 +365,10 @@ val Adjustment.labelRes: StringResource
     Adjustment.TEXTURE -> Res.string.editor_adj_texture
     Adjustment.CLARITY -> Res.string.editor_adj_clarity
     Adjustment.DEHAZE -> Res.string.editor_adj_dehaze
+    Adjustment.SHARPEN_AMOUNT -> Res.string.editor_adj_sharpen_amount
+    Adjustment.SHARPEN_RADIUS -> Res.string.editor_adj_sharpen_radius
+    Adjustment.SHARPEN_DETAIL -> Res.string.editor_adj_sharpen_detail
+    Adjustment.SHARPEN_MASKING -> Res.string.editor_adj_sharpen_masking
     Adjustment.VIGNETTE_AMOUNT -> Res.string.editor_adj_vignette
     Adjustment.VIGNETTE_MIDPOINT -> Res.string.editor_adj_vignette_midpoint
     Adjustment.VIGNETTE_ROUNDNESS -> Res.string.editor_adj_vignette_roundness
@@ -389,7 +399,9 @@ private fun Adjustment.historyIcon(): HistoryIcon = when (this) {
     Adjustment.WHITES -> HistoryIcon.WHITES
     Adjustment.BLACKS -> HistoryIcon.BLACKS
     Adjustment.TEMPERATURE, Adjustment.TINT, Adjustment.VIBRANCE, Adjustment.SATURATION -> HistoryIcon.COLOR
-    Adjustment.TEXTURE, Adjustment.CLARITY, Adjustment.DEHAZE -> HistoryIcon.DETAIL
+    Adjustment.TEXTURE, Adjustment.CLARITY, Adjustment.DEHAZE,
+    Adjustment.SHARPEN_AMOUNT, Adjustment.SHARPEN_RADIUS, Adjustment.SHARPEN_DETAIL, Adjustment.SHARPEN_MASKING,
+    -> HistoryIcon.DETAIL
     Adjustment.GRADE_BLENDING, Adjustment.GRADE_BALANCE -> HistoryIcon.GRADE
     in PERSPECTIVE_ADJUSTMENTS -> HistoryIcon.CROP
     Adjustment.MASK_AMOUNT -> HistoryIcon.MASK
@@ -470,6 +482,7 @@ internal fun formatKelvin(kelvin: Float): String = "%d K".format((kelvin / 10f).
 
 fun formatAdjustmentValue(adjustment: Adjustment, value: Float): String = when {
     adjustment == Adjustment.EXPOSURE -> "%+.2f EV".format(value)
+    adjustment == Adjustment.SHARPEN_RADIUS -> "%.1f".format(value)
     // A range that never goes below zero is a quantity, not a deviation: showing it a sign would only
     // suggest there is a negative side.
     adjustment.range.start >= 0f -> "%.0f".format(value)
@@ -2981,6 +2994,10 @@ internal fun EditRecipe.withAdjustment(adjustment: Adjustment, value: Float): Ed
     Adjustment.TEXTURE -> copy(presence = presence.copy(texture = value))
     Adjustment.CLARITY -> copy(presence = presence.copy(clarity = value))
     Adjustment.DEHAZE -> copy(presence = presence.copy(dehaze = value))
+    Adjustment.SHARPEN_AMOUNT -> copy(detail = detail.copy(sharpenAmount = value))
+    Adjustment.SHARPEN_RADIUS -> copy(detail = detail.copy(sharpenRadius = value))
+    Adjustment.SHARPEN_DETAIL -> copy(detail = detail.copy(sharpenDetail = value))
+    Adjustment.SHARPEN_MASKING -> copy(detail = detail.copy(sharpenMasking = value))
     Adjustment.VIGNETTE_AMOUNT -> copy(effects = effects.copy(vignetteAmount = value))
     Adjustment.VIGNETTE_MIDPOINT -> copy(effects = effects.copy(vignetteMidpoint = value))
     Adjustment.VIGNETTE_ROUNDNESS -> copy(effects = effects.copy(vignetteRoundness = value))
@@ -3018,6 +3035,10 @@ fun EditRecipe.adjustmentValue(adjustment: Adjustment): Float = when (adjustment
     Adjustment.TEXTURE -> presence.texture
     Adjustment.CLARITY -> presence.clarity
     Adjustment.DEHAZE -> presence.dehaze
+    Adjustment.SHARPEN_AMOUNT -> detail.sharpenAmount
+    Adjustment.SHARPEN_RADIUS -> detail.sharpenRadius
+    Adjustment.SHARPEN_DETAIL -> detail.sharpenDetail
+    Adjustment.SHARPEN_MASKING -> detail.sharpenMasking
     Adjustment.VIGNETTE_AMOUNT -> effects.vignetteAmount
     Adjustment.VIGNETTE_MIDPOINT -> effects.vignetteMidpoint
     Adjustment.VIGNETTE_ROUNDNESS -> effects.vignetteRoundness

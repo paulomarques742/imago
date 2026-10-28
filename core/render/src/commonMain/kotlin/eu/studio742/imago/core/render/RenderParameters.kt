@@ -50,6 +50,11 @@ data class RenderParameters(
     val saturation: Float = 0f,
     val colorGrade: ColorGrade = ColorGrade(),
     val texture: Float = 0f,
+    /** Step 11, from process 21: [Sharpening]. Amount 0 is off, and the other three then say nothing. */
+    val sharpenAmount: Float = 0f,
+    val sharpenRadius: Float = 1f,
+    val sharpenDetail: Float = 25f,
+    val sharpenMasking: Float = 0f,
     val clarity: Float = 0f,
     val dehaze: Float = 0f,
     val vignetteAmount: Float = 0f,
@@ -178,6 +183,10 @@ data class RenderParameters(
     /** True when step 13 has work. Vignette and grain are not local. */
     val needsEffectsStage: Boolean
         get() = vignetteAmount != 0f || grainAmount != 0f
+
+    /** True when step 11 has work: only then are the blurred luminance and the edge field worth their cost. */
+    val needsSharpenStage: Boolean
+        get() = sharpenAmount > 0f
 
     val needsClarityBlur: Boolean
         get() = clarity != 0f || texture != 0f || anyMask { it.clarity } || anyMask { it.texture }

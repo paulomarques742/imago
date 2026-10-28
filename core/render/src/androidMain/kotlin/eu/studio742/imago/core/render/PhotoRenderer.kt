@@ -78,6 +78,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private val stats = GlRenderTarget()
     private val statsScratch = GlRenderTarget()
     private val darkBlur = GlRenderTarget()
+    private val sharpScratch = GlRenderTarget()
+    private val sharpBlur = GlRenderTarget()
     private val localBlur = GlRenderTarget()
     private val maskField = GlRenderTarget()
     /** Masks five to eight. Allocated the first time a photo has a fifth mask, and kept from then on. */
@@ -104,6 +106,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private val coarseKernel = BlurKernel(PhotoEffects.CLARITY_SIGMA / 8f)
     private val darkKernel = BlurKernel(PhotoEffects.DEHAZE_REFINE_SIGMA / 8f)
     private val localKernel = BlurKernel(PhotoEffects.LOCAL_TONE_SIGMA / 8f)
+    private var sharpKernel = BlurKernel(1f)
+    private var sharpKernelSigma = 1f
 
     private val vertices: FloatBuffer = ByteBuffer
         .allocateDirect(PhotoShaders.QUAD.size * Float.SIZE_BYTES)
@@ -200,7 +204,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         val local = active.needsLocalToneMask && buildLocalToneMask(active, maskFields)
         renderTone(active, local, maskFields)
         val detail = active.needsDetailStage && buildDetailPyramid(active)
-        renderComposite(active, detail, maskFields)
+        val sharpen = active.needsSharpenStage && buildSharpening(active)
+        renderComposite(active, detail, sharpen, maskFields)
     }
 
     /**
@@ -540,6 +545,20 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         return true
     }
 
+    /** Step 11's blurred copy of the stage, at the stage's resolution, with the radius in its pixels. */
+    private fun buildSharpening(active: RenderParameters): Boolean {
+        val precision = halfFloatTargets
+        sharpScratch.ensure(imageWidth, imageHeight, precision)
+        sharpBlur.ensure(imageWidth, imageHeight, precision)
+        if (!sharpScratch.isComplete || !sharpBlur.isComplete) return false
+        if (active.sharpenRadius != sharpKernelSigma) {
+            sharpKernel = BlurKernel(active.sharpenRadius)
+            sharpKernelSigma = active.sharpenRadius
+        }
+        applyBlur(stage, sharpScratch, sharpBlur, sharpKernel)
+        return true
+    }
+
     private fun reduce(from: GlRenderTarget, to: GlRenderTarget) {
         val program = downsample ?: return
         to.bindAsTarget()
@@ -585,7 +604,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         stats.generateMipmaps()
     }
 
-    private fun renderComposite(active: RenderParameters, detailEnabled: Boolean, maskFields: Int) {
+    private fun renderComposite(active: RenderParameters, detailEnabled: Boolean, sharpenEnabled: Boolean, maskFields: Int) {
         val program = composite ?: return
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         val viewport = applyFitViewport(active)
@@ -597,6 +616,11 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         program.sampler("uCoarseBlur", fallbackTexture(coarseBlur), 2)
         program.sampler("uDarkBlur", fallbackTexture(darkBlur), 3)
         program.sampler("uStats", fallbackTexture(stats), 4)
+        program.sampler("uSharpBlur", if (sharpenEnabled) sharpBlur.texture else fallbackTexture(stats), SHARP_BLUR_UNIT)
+        program.boolean("uSharpEnabled", sharpenEnabled)
+        program.float("uSharpAmount", active.sharpenAmount)
+        program.float("uSharpDetail", active.sharpenDetail)
+        program.float("uSharpMasking", active.sharpenMasking)
 
         program.vec2("uStageTexel", stage.texelWidth, stage.texelHeight)
         program.float("uTexture", if (detailEnabled) active.texture / 100f else 0f)
@@ -800,6 +824,9 @@ private const val MASK_FIELD_2_UNIT = 7
 
 /** The brush rasters, read only by the field pass. */
 private const val BRUSH_UNIT = 8
+
+/** The stage blurred with the sharpening radius; units 0 to 8 are taken. */
+private const val SHARP_BLUR_UNIT = 9
 
 /** A raster's sixteen-bit level as the half float the texture holds, computed once for all 65 536. */
 private val halfOfLevel = ShortArray(65536) { android.util.Half.toHalf(it / 65535f) }

@@ -86,13 +86,14 @@ object BitmapPhotoProcessor {
             null
         }
         applyTonePass(bitmap, parameters, field)
-        if (parameters.needsDetailStage || parameters.needsColorGradingStage || parameters.needsEffectsStage) {
+        if (parameters.needsDetailStage || parameters.needsSharpenStage || parameters.needsColorGradingStage || parameters.needsEffectsStage) {
             val pyramid = if (parameters.needsDetailStage) {
                 DetailPyramid.build(bitmap, withDehaze = parameters.needsDehazeStats)
             } else {
                 null
             }
-            applyFinishPass(bitmap, parameters, pyramid, field, renderScale)
+            val sharpening = if (parameters.needsSharpenStage) SharpenField.build(bitmap, parameters) else null
+            applyFinishPass(bitmap, parameters, pyramid, sharpening, field, renderScale)
         }
     }
 
@@ -164,6 +165,7 @@ object BitmapPhotoProcessor {
         bitmap: PixelSurface,
         parameters: RenderParameters,
         pyramid: DetailPyramid?,
+        sharpening: SharpenField?,
         field: LocalMaskField?,
         renderScale: Float,
     ) {
@@ -237,6 +239,18 @@ object BitmapPhotoProcessor {
                             red = PhotoEffects.dehazeChannel(red, airlight, transmission, dehaze)
                             green = PhotoEffects.dehazeChannel(green, airlight, transmission, dehaze)
                             blue = PhotoEffects.dehazeChannel(blue, airlight, transmission, dehaze)
+                        }
+                    }
+
+                    // Step 11 adds what the toned image's own neighbourhood said, after step 9 has had its say.
+                    if (sharpening != null) {
+                        val delta = sharpening.at(x, y)
+                        val value = PhotoEffects.luminance(red, green, blue)
+                        if (delta != 0f && value > 0.00001f) {
+                            val scale = (value + delta) / value
+                            red = (red * scale).coerceIn(0f, 1f)
+                            green = (green * scale).coerceIn(0f, 1f)
+                            blue = (blue * scale).coerceIn(0f, 1f)
                         }
                     }
 

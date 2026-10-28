@@ -148,6 +148,24 @@ class PhotoShaderParityTest {
         )
     }
 
+    /** Step 11 lives twice too: [Sharpening] on the export and `sharpenDelta` in the composite. */
+    @Test
+    fun sharpeningConstantsMatchTheKotlinImplementation() {
+        val composite = PhotoShaders.COMPOSITE
+        listOf(
+            "float limit = 0.04 + 0.96 * d * d;" to "the limiter of Detail",
+            "float limited = signal / (1.0 + abs(signal) / limit);" to "the soft limit of the signal",
+            "smoothstep(0.0, 0.012 + 0.05 * t, gradient)" to "the edge knee of Masking",
+            "float gradient = 0.5 * sqrt(dx * dx + dy * dy);" to "the gradient of the blurred copy",
+            "return uSharpAmount / 100.0 * limited * mask;" to "the amount",
+        ).forEach { (fragment, what) ->
+            assertTrue("The composite should contain $what — \"$fragment\".", composite.contains(fragment))
+        }
+        assertEquals(0.04f, Sharpening.limit(0f), 1e-6f)
+        assertEquals(0.012f, Sharpening.edgeKnee(0f), 1e-6f)
+        assertEquals(0.062f, Sharpening.edgeKnee(100f), 1e-6f)
+    }
+
     /**
      * Step 8 also lives twice, and highlights and shadows are the part of it where a swapped constant
      * does not give a subtle difference: it gives a preview that blows out where the export does not.

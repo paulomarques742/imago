@@ -10,6 +10,7 @@ import coil3.request.Options
 import coil3.size.Dimension
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.CURRENT_RAW_RENDERING
+import eu.studio742.imago.core.model.RAW_INITIAL_SHARPEN_AMOUNT
 import eu.studio742.imago.core.model.rawHighlightMode
 import eu.studio742.imago.core.model.RAW_RENDERING_PROFILED
 import eu.studio742.imago.core.model.appliesBaselineExposure
@@ -46,7 +47,14 @@ class RawPhotoDecoder private constructor(private val file: File, private val op
         val bitmap = withContext(Dispatchers.Default) {
             if (recipe != null) requireRawEngine(recipe)
             val parameters = recipe?.toRenderParameters(rawExposure = recipe.rawDevelopment?.exposure ?: matched)
-                ?: RenderParameters(rawProfile = RawProfile.COLOR, rawExposure = matched)
+                ?: RenderParameters(
+                    rawProfile = RawProfile.COLOR,
+                    rawExposure = matched,
+                    highlightCeiling = RawProfile.HEADROOM_CEILING,
+                    // What the editor will give a RAW it develops for the first time, so that the grid and the editor agree.
+                    sharpenAmount = RAW_INITIAL_SHARPEN_AMOUNT,
+                    wideHighlights = true,
+                )
             val rendered = RecipePixels.renderFloat(raw, parameters, consumeSource = true)
             rendered.toPixelBuffer().toPlatformBitmap().also { image ->
                 if (recipe != null) DevelopedRawBitmaps.mark(image, recipeTransformation(recipe).cacheKey)

@@ -2694,6 +2694,15 @@ private fun EditorPanel.adjustmentGroups(): List<AdjustmentGroup> = when (this) 
                 Adjustment.DEHAZE,
             ).withLabels(),
         ),
+        AdjustmentGroup(
+            title = stringResource(Res.string.editor_group_sharpening),
+            entries = listOf(
+                Adjustment.SHARPEN_AMOUNT to stringResource(Res.string.editor_amount),
+                Adjustment.SHARPEN_RADIUS to stringResource(Res.string.editor_radius),
+                Adjustment.SHARPEN_DETAIL to stringResource(Res.string.editor_panel_detail),
+                Adjustment.SHARPEN_MASKING to stringResource(Res.string.editor_masking),
+            ),
+        ),
     )
     EditorPanel.EFFECTS -> listOf(
         AdjustmentGroup(

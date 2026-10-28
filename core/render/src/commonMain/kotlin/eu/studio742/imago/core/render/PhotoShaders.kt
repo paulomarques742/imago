@@ -603,6 +603,12 @@ internal object PhotoShaders {
         uniform sampler2D uCoarseBlur;
         uniform sampler2D uDarkBlur;
         uniform sampler2D uStats;
+        // Step 11: the stage blurred with the radius, and the three sliders; see `Sharpening`.
+        uniform sampler2D uSharpBlur;
+        uniform float uSharpAmount;
+        uniform float uSharpDetail;
+        uniform float uSharpMasking;
+        uniform int uSharpEnabled;
         uniform vec2 uStageTexel;
         uniform float uTexture;
         uniform float uClarity;
@@ -671,6 +677,24 @@ internal object PhotoShaders {
             float current = luminance(color);
             if (current <= 0.00001) return color;
             return clamp(color * (target / current), 0.0, 1.0);
+        }
+
+        // Sharpening.delta, with the gradient taken from the blurred copy a texel to each side.
+        float sharpenDelta(float value, vec2 source) {
+            float blurred = luminance(texture(uSharpBlur, source).rgb);
+            float dx = luminance(texture(uSharpBlur, source + vec2(uStageTexel.x, 0.0)).rgb)
+                - luminance(texture(uSharpBlur, source - vec2(uStageTexel.x, 0.0)).rgb);
+            float dy = luminance(texture(uSharpBlur, source + vec2(0.0, uStageTexel.y)).rgb)
+                - luminance(texture(uSharpBlur, source - vec2(0.0, uStageTexel.y)).rgb);
+            float gradient = 0.5 * sqrt(dx * dx + dy * dy);
+            float signal = value - blurred;
+            float d = clamp(uSharpDetail / 100.0, 0.0, 1.0);
+            float limit = 0.04 + 0.96 * d * d;
+            float limited = signal / (1.0 + abs(signal) / limit);
+            float t = clamp(uSharpMasking / 100.0, 0.0, 1.0);
+            float edge = smoothstep(0.0, 0.012 + 0.05 * t, gradient);
+            float mask = t <= 0.0 ? 1.0 : 1.0 + (edge - 1.0) * t;
+            return uSharpAmount / 100.0 * limited * mask;
         }
 
         // This function is what defines the geometry: the two CPU paths (`applyRecipeGeometry` and
@@ -963,6 +987,10 @@ internal object PhotoShaders {
                     uClarity + maskDelta(w, w2, uMaskClarity),
                     uDehaze + maskDelta(w, w2, uMaskDehaze)
                 );
+            }
+            // Step 11 reads the stage, and not the colour step 9 left, and adds what it finds to it.
+            if (uSharpEnabled == 1) {
+                color = remapLuminance(color, luminance(color) + sharpenDelta(luminance(staged.rgb), source));
             }
             // Step 12 has no neighbourhood or coordinate: it is per pixel, and sits between detail and
             // the vignette, where the pipeline places it.

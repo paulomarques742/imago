@@ -69,6 +69,15 @@ import kotlinx.serialization.Serializable
  */
 const val CURRENT_PROCESS_VERSION = 21
 
+/** Process 21 reads [Detail.sharpenAmount] and its three companions; before it they were stored and ignored. */
+const val SHARPENING_PROCESS_VERSION = 21
+
+/**
+ * What a RAW starts with, because a development with no sharpening opens soft: IMAGO's own choice,
+ * made once when the photo is first developed and then the photo's like any other value.
+ */
+const val RAW_INITIAL_SHARPEN_AMOUNT = 40f
+
 /** Process 21's Highlights act on a wider band, and harder. Before it the band is the first one. */
 const val WIDE_HIGHLIGHTS_PROCESS_VERSION = 21
 
@@ -148,6 +157,11 @@ fun EditRecipe.needsNewerRawRendering(): Boolean =
  */
 fun EditRecipe.developedAsRaw(rendering: Int = rawRendering(), exposure: Float = 0f): EditRecipe = copy(
     processVersion = CURRENT_PROCESS_VERSION,
+    detail = if (rawDevelopment == null && rendering >= RAW_RENDERING_HEADROOM && detail == Detail()) {
+        detail.copy(sharpenAmount = RAW_INITIAL_SHARPEN_AMOUNT)
+    } else {
+        detail
+    },
     rawDevelopment = rawDevelopment ?: RawDevelopment(
         engine = if (rendering >= RAW_RENDERING_HEADROOM) CURRENT_RAW_ENGINE else RAW_ENGINE_1,
         rendering = rendering,
@@ -276,8 +290,14 @@ data class ColorGrading(
 
 @Serializable
 data class Detail(
+    /** 0 to 150. Sharpening is read from process 21 ([SHARPENING_PROCESS_VERSION]); before it the field was dormant. */
     val sharpenAmount: Float = 0f,
+    /** In pixels, 0.5 to 3. */
     val sharpenRadius: Float = 1f,
+    /** 0 to 100: low keeps the halos of strong edges in check, high sharpens everything the radius sees. */
+    val sharpenDetail: Float = 25f,
+    /** 0 to 100: 0 sharpens everywhere, 100 only on edges. */
+    val sharpenMasking: Float = 0f,
     val noiseReductionLuminance: Float = 0f,
     val noiseReductionColor: Float = 25f,
 )

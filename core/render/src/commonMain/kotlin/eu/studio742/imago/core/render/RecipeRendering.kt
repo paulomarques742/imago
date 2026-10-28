@@ -17,6 +17,8 @@ import eu.studio742.imago.core.model.MaskShape
 import eu.studio742.imago.core.model.UPRIGHT_OFF
 import eu.studio742.imago.core.model.RAW_PROFILE_MONOCHROME
 import eu.studio742.imago.core.model.RAW_RENDERING_HEADROOM
+import eu.studio742.imago.core.model.Detail
+import eu.studio742.imago.core.model.SHARPENING_PROCESS_VERSION
 import eu.studio742.imago.core.model.WIDE_HIGHLIGHTS_PROCESS_VERSION
 import eu.studio742.imago.core.model.RAW_RENDERING_PROFILED
 import eu.studio742.imago.core.model.rawExposure
@@ -86,6 +88,12 @@ fun EditRecipe.toRenderParameters(
     saturation = presence.saturation,
     colorGrade = if (processVersion >= 9) colorGrading.toRenderGrade() else ColorGrade(),
     texture = presence.texture,
+    // With Amount at 0 the other three say nothing, and they stay at their defaults so that a recipe
+    // whose only change is a Radius moved on an off Sharpening is still neutral.
+    sharpenAmount = if (processVersion >= SHARPENING_PROCESS_VERSION) detail.sharpenAmount.coerceIn(0f, 150f) else 0f,
+    sharpenRadius = if (sharpens(processVersion, detail)) detail.sharpenRadius.coerceIn(Sharpening.MIN_RADIUS, Sharpening.MAX_RADIUS) else 1f,
+    sharpenDetail = if (sharpens(processVersion, detail)) detail.sharpenDetail.coerceIn(0f, 100f) else 25f,
+    sharpenMasking = if (sharpens(processVersion, detail)) detail.sharpenMasking.coerceIn(0f, 100f) else 0f,
     clarity = presence.clarity,
     dehaze = presence.dehaze,
     vignetteAmount = effects.vignetteAmount,
@@ -274,3 +282,5 @@ internal fun normalizedCropOrigin(value: Float): Float = value.coerceIn(0f, 0.99
 
 internal fun normalizedCropSize(origin: Float, size: Float): Float =
     size.coerceIn(0.0001f, 1f - normalizedCropOrigin(origin))
+
+private fun sharpens(processVersion: Int, detail: Detail) = processVersion >= SHARPENING_PROCESS_VERSION && detail.sharpenAmount > 0f

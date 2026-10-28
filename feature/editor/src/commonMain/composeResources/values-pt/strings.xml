@@ -76,6 +76,9 @@
     <string name="editor_roundness">Arredondamento</string>
     <string name="editor_feather">Suavização</string>
     <string name="editor_group_grain">Grão</string>
+    <string name="editor_group_sharpening">Nitidez</string>
+    <string name="editor_radius">Raio</string>
+    <string name="editor_masking">Máscara</string>
     <string name="editor_size">Tamanho</string>
     <string name="editor_roughness">Aspereza</string>
     <string name="editor_panel_light">Luz</string>
@@ -142,6 +145,10 @@
     <string name="editor_adj_saturation">Saturação</string>
     <string name="editor_adj_texture">Textura</string>
     <string name="editor_adj_clarity">Clareza</string>
+    <string name="editor_adj_sharpen_amount">Nitidez</string>
+    <string name="editor_adj_sharpen_radius">Raio da nitidez</string>
+    <string name="editor_adj_sharpen_detail">Detalhe da nitidez</string>
+    <string name="editor_adj_sharpen_masking">Máscara da nitidez</string>
     <string name="editor_adj_dehaze">Remover neblina</string>
     <string name="editor_adj_vignette">Vinheta</string>
     <string name="editor_adj_vignette_midpoint">Vinheta · ponto médio</string>
