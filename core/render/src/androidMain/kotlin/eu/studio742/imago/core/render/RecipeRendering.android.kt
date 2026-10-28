@@ -184,6 +184,10 @@ class EditRecipeTransformation(
         }
 }
 
+internal actual fun decodeRenderCacheBytes(bytes: ByteArray): Bitmap? = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+
+internal actual fun Bitmap.encodeForRenderCache(): ByteArray? = encodedForCache()
+
 /** Lossy WebP: the render only goes back on screen, at the size it was made; it is never exported. */
 private fun Bitmap.encodedForCache(): ByteArray? = ByteArrayOutputStream().use { bytes ->
     if (compress(Bitmap.CompressFormat.WEBP_LOSSY, RENDER_CACHE_QUALITY, bytes)) bytes.toByteArray() else null

@@ -44,6 +44,15 @@ private fun decodeCachedRender(bytes: ByteArray): Bitmap? = runCatching {
 
 private const val RENDER_CACHE_QUALITY = 90
 
+internal actual fun decodeRenderCacheBytes(bytes: ByteArray): Bitmap? = decodeCachedRender(bytes)
+
+internal actual fun Bitmap.encodeForRenderCache(): ByteArray? {
+    val image = Image.makeFromBitmap(this)
+    // JPEG only where this Skia was built without the WebP encoder.
+    return (image.encodeToData(EncodedImageFormat.WEBP, RENDER_CACHE_QUALITY)
+        ?: image.encodeToData(EncodedImageFormat.JPEG, RENDER_CACHE_QUALITY))?.bytes
+}
+
 actual fun recipeTransformation(recipe: EditRecipe): Transformation = SkiaRecipeTransformation(recipe)
 
 private val Bitmap.unpremultipliedInfo get() = ImageInfo(width, height, ColorType.BGRA_8888, ColorAlphaType.UNPREMUL)

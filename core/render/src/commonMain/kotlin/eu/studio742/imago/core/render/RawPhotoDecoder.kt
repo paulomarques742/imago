@@ -23,6 +23,18 @@ import kotlinx.coroutines.withContext
 
 internal val rawRecipeKey = Extras.Key<EditRecipe?>(null)
 
+/**
+ * The develop of a RAW with no recipe, for [RecipeRenderCache]. Raised whenever what that develop does
+ * changes — the engine's highlight mode, the profile, the first sharpening — so that old entries miss.
+ */
+private const val DEFAULT_DEVELOPMENT_KEY = "default3"
+
+/** A render read back from [RecipeRenderCache]; null when the bytes do not decode. */
+internal expect fun decodeRenderCacheBytes(bytes: ByteArray): coil3.Bitmap?
+
+/** The render as the cache keeps it: lossy WebP, since it only goes back on screen at the size it was made. */
+internal expect fun coil3.Bitmap.encodeForRenderCache(): ByteArray?
+
 /** Small markers let Coil keep its usual transformation cache key without developing RAW twice. */
 internal object DevelopedRawBitmaps {
     private val recipes = WeakHashMap<coil3.Bitmap, String>()
@@ -36,6 +48,20 @@ class RawPhotoDecoder private constructor(private val file: File, private val op
         val side = maxOf((options.size.width as? Dimension.Pixels)?.px ?: 0,
             (options.size.height as? Dimension.Pixels)?.px ?: 0).takeIf { it > 0 }?.coerceAtMost(2048) ?: 2048
         val recipe = options.extras[rawRecipeKey]
+        // What the develop makes is kept on disk, as for any other edited photo; a photo read through a
+        // grant that can be revoked has its disk cache switched off by the request, and keeps nothing.
+        val transformationKey = recipe?.let { recipeTransformation(it).cacheKey } ?: DEFAULT_DEVELOPMENT_KEY
+        val cacheKey = if (options.diskCachePolicy.readEnabled || options.diskCachePolicy.writeEnabled) {
+            withContext(Dispatchers.IO) { runCatching { RecipeRenderCache.rawKey(transformationKey, file, side) }.getOrNull() }
+        } else {
+            null
+        }
+        if (cacheKey != null && options.diskCachePolicy.readEnabled) {
+            RecipeRenderCache.read(cacheKey)?.let(::decodeRenderCacheBytes)?.let { cached ->
+                if (recipe != null) DevelopedRawBitmaps.mark(cached, recipeTransformation(recipe).cacheKey)
+                return DecodeResult(cached.asImage(), isSampled = true)
+            }
+        }
         val raw = decodeRawPreview(file, side, recipe?.appliesBaselineExposure() ?: true, recipe?.rawHighlightMode() ?: CURRENT_RAW_HIGHLIGHT) ?: return null
         // A photo the editor has not developed yet is matched to its camera's JPEG here, as the editor
         // will when it opens it; a developed one keeps the exposure its recipe recorded.
@@ -59,6 +85,9 @@ class RawPhotoDecoder private constructor(private val file: File, private val op
             rendered.toPixelBuffer().toPlatformBitmap().also { image ->
                 if (recipe != null) DevelopedRawBitmaps.mark(image, recipeTransformation(recipe).cacheKey)
             }
+        }
+        if (cacheKey != null && options.diskCachePolicy.writeEnabled) {
+            RecipeRenderCache.write(cacheKey) { bitmap.encodeForRenderCache() }
         }
         return DecodeResult(bitmap.asImage(), isSampled = true)
     }

@@ -37,6 +37,31 @@ class RecipeRenderCacheTest {
         tone = Tone(exposure = 0.5f))
 
     @Test
+    fun `a RAW's key is known without developing it, and follows its file, its save and its size`() {
+        val original = folder.newFile("a.raf").apply { writeBytes(ByteArray(40_000) { (it * 31).toByte() }) }
+        val same = RecipeRenderCache.rawKey("recipe:a:21:t1", original, 512)
+        assertEquals(same, RecipeRenderCache.rawKey("recipe:a:21:t1", original, 512))
+        assertNotEquals("another save", same, RecipeRenderCache.rawKey("recipe:a:21:t2", original, 512))
+        assertNotEquals("another size", same, RecipeRenderCache.rawKey("recipe:a:21:t1", original, 2048))
+        val longer = folder.newFile("b.raf").apply { writeBytes(original.readBytes() + 1) }
+        assertNotEquals("another length", same, RecipeRenderCache.rawKey("recipe:a:21:t1", longer, 512))
+        val edited = folder.newFile("c.raf").apply { writeBytes(original.readBytes().also { it[20_000] = 99 }) }
+        assertNotEquals("a different middle", same, RecipeRenderCache.rawKey("recipe:a:21:t1", edited, 512))
+    }
+
+    @Test
+    fun `a developed RAW goes through the cache as bytes and comes back as an image`() {
+        install()
+        val original = folder.newFile("d.raf").apply { writeBytes(ByteArray(10_000) { it.toByte() }) }
+        val key = RecipeRenderCache.rawKey("default3", original, 256)
+        assertNull(RecipeRenderCache.read(key))
+        val rendered = gradient(64, 48).toSkiaBitmap()
+        runBlocking { withTimeout(10_000) { RecipeRenderCache.write(key) { rendered.encodeForRenderCache() }?.join() } }
+        val back = decodeRenderCacheBytes(requireNotNull(RecipeRenderCache.read(key)))
+        assertEquals(64 to 48, requireNotNull(back).let { it.width to it.height })
+    }
+
+    @Test
     fun `the key follows the save, the size and the pixels`() {
         val grey = { _: Int, _: Int -> 0xFF808080.toInt() }
         val key = RecipeRenderCache.key("recipe:a:3:t1", 100, 80, grey)
