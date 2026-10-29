@@ -28,6 +28,8 @@ fun GlPhotoCanvas(
     highPrecisionSource: FloatPixelBuffer? = null,
     /** Paints over what touches the ends of the scale; an aid of the editor, like [maskOverlay], and not a parameter. */
     clipping: ClippingWarning = ClippingWarning.NONE,
+    /** Visualize Spots at this sensitivity; another aid of the editor, like [maskOverlay]. */
+    spots: Float? = null,
     /** The photo is on screen: whatever held its place can go. */
     onFirstFrame: () -> Unit = {},
 ) {
@@ -54,6 +56,7 @@ fun GlPhotoCanvas(
             renderer.setShowOriginal(showOriginal)
             renderer.setMaskOverlay(maskOverlay)
             renderer.setClipping(clipping)
+            renderer.setSpots(spots)
             renderer.setTransform(transform, minZoom)
             stage.requestRender()
         },

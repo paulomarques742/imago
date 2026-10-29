@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -22,6 +24,8 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -36,10 +40,12 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.ImagoParameterSlider
 import eu.studio742.imago.core.designsystem.ImagoRadii
+import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.i18n.resolve
 import eu.studio742.imago.core.model.BrushStroke
@@ -71,6 +77,8 @@ data class RetouchActions(
     val onRefresh: (String) -> Unit = {},
     /** The eye: the pins and areas on the photo, or the photo whole. */
     val onShowRetouches: (Boolean) -> Unit = {},
+    /** Visualize Spots on or off; its sensitivity is a [RetouchSetting]. */
+    val onVisualizeSpots: (Boolean) -> Unit = {},
 )
 
 /**
@@ -149,6 +157,30 @@ internal fun RemoveToolPanel(
                 },
             )
         }
+        VisualizeSpotsRow(
+            on = state.visualizesSpots,
+            onChange = actions.onVisualizeSpots,
+            modifier = Modifier.alpha(chromeAlpha),
+        )
+        if (state.visualizesSpots) {
+            val setting = RetouchSetting.SPOTS
+            ImagoParameterSlider(
+                label = stringResource(Res.string.editor_remove_spots_sensitivity),
+                value = state.retouchValue(setting),
+                neutral = setting.neutral,
+                range = setting.range,
+                pointerKey = setting,
+                editingKey = editingKey,
+                onEditing = onEditing,
+                valueText = { "%.0f".format(it) },
+                onValueChange = { actions.onSetting(setting, it) },
+                onValueChangeFinished = actions.onSettingFinished,
+                onReset = {
+                    actions.onSetting(setting, setting.neutral)
+                    actions.onSettingFinished()
+                },
+            )
+        }
         val message = when {
             state.isSolvingRetouch -> stringResource(Res.string.editor_remove_solving)
             state.retouchNotice != null -> state.retouchNotice.resolve()
@@ -184,6 +216,31 @@ internal fun RemoveToolPanel(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun VisualizeSpotsRow(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(ImagoRadii.Small))
+            .toggleable(value = on, role = Role.Switch, onValueChange = onChange)
+            .sizeIn(minHeight = ImagoSizes.TouchTarget),
+        horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(Res.string.editor_remove_visualize_spots),
+            style = MaterialTheme.typography.bodyMedium,
+            color = ImagoColors.TextPrimary,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            checked = on,
+            onCheckedChange = null,
+            colors = SwitchDefaults.colors(checkedTrackColor = ImagoColors.Gold),
+        )
     }
 }
 

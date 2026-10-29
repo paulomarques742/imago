@@ -334,4 +334,30 @@ class RetouchEditingTest {
         viewModel.undo()
         assertEquals(1, retouches.size)
     }
+
+    @Test
+    fun `the spots' sensitivity is the device's and leaves the selected correction and the history alone`() {
+        open()
+        paint(RetouchMode.HEAL, 0.5f, 0.5f)
+        val before = state.recipe
+        val history = state.history.size
+        viewModel.setVisualizesSpots(true)
+        viewModel.setRetouchSetting(RetouchSetting.SPOTS, 80f)
+        viewModel.finishRetouchSetting()
+
+        assertTrue(state.visualizesSpots)
+        assertEquals(80f, state.retouchValue(RetouchSetting.SPOTS))
+        assertEquals(before, state.recipe)
+        assertEquals(history, state.history.size)
+        assertEquals(80f, RetouchTool.decode(storedTool).spots)
+    }
+
+    @Test
+    fun `a tool stored before the spots reads back with their default sensitivity`() {
+        val older = RetouchTool.decode("CLONE,30.0,20.0,70.0")
+        assertEquals(RetouchTool(mode = RetouchMode.CLONE, size = 30f, feather = 20f, opacity = 70f), older)
+        assertEquals(RetouchSetting.SPOTS.neutral, older.spots)
+        val tool = RetouchTool(mode = RetouchMode.HEAL, spots = 12f)
+        assertEquals(tool, RetouchTool.decode(tool.encode()))
+    }
 }

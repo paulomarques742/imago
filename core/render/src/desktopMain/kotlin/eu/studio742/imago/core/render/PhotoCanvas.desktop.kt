@@ -39,6 +39,7 @@ actual fun PhotoCanvas(
     modifier: Modifier,
     highPrecisionSource: FloatPixelBuffer?,
     clipping: ClippingWarning,
+    spots: Float?,
     onFirstFrame: () -> Unit,
 ) {
     val source = remember(bitmap) { bitmap.toPixelBuffer() }
@@ -50,10 +51,19 @@ actual fun PhotoCanvas(
     // Each size and precision of the photo with its corrections, worked out when they change and not
     // on every frame of a slider.
     val retouched = remember(source) { RetouchedSources(capacity = 4) }
+    val spotsView = remember(source) { SpotsView() }
     val active = if (showOriginal) parameters.original else parameters
     var frame by remember(source) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(source, highPrecisionSource, active, maskOverlay) {
+    LaunchedEffect(source, highPrecisionSource, active, maskOverlay, spots) {
+        if (spots != null) {
+            // No draft: the map is worked out once per set of corrections, and framing it is quick.
+            frame = withContext(Dispatchers.Default) {
+                val map = spotsView.render(retouched.of(source, active.retouches), spots)
+                RecipePixels.render(map, active.framing).toSkiaBitmap().asComposeImageBitmap()
+            }
+            return@LaunchedEffect
+        }
         if (draft !== source) {
             // The draft says it is a draft: without that, the grain would come out with the granularity
             // of its eight hundred pixels and change look when full resolution replaced it.

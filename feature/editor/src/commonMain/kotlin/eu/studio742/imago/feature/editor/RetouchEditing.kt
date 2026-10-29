@@ -4,17 +4,22 @@ import eu.studio742.imago.core.model.BrushStroke
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.Retouch
 import eu.studio742.imago.core.model.RetouchMode
+import eu.studio742.imago.core.render.SpotsView
 import eu.studio742.imago.feature.editor.resources.Res
 import eu.studio742.imago.feature.editor.resources.editor_remove_mode_clone
 import eu.studio742.imago.feature.editor.resources.editor_remove_mode_heal
 import eu.studio742.imago.feature.editor.resources.editor_remove_mode_remove
 import org.jetbrains.compose.resources.StringResource
 
-/** A slider of the Remove tool. Size and Feather are the brush's; Opacity belongs to the correction. */
+/**
+ * A slider of the Remove tool. Size and Feather are the brush's; Opacity belongs to the correction;
+ * Spots is how much of the photo Visualize Spots shows.
+ */
 enum class RetouchSetting(val neutral: Float, val range: ClosedFloatingPointRange<Float>) {
     SIZE(25f, 1f..100f),
     FEATHER(50f, 0f..100f),
     OPACITY(100f, 1f..100f),
+    SPOTS(SpotsView.DEFAULT_SENSITIVITY, 0f..100f),
 }
 
 /**
@@ -27,11 +32,13 @@ data class RetouchTool(
     val size: Float = RetouchSetting.SIZE.neutral,
     val feather: Float = RetouchSetting.FEATHER.neutral,
     val opacity: Float = RetouchSetting.OPACITY.neutral,
+    val spots: Float = RetouchSetting.SPOTS.neutral,
 ) {
     fun value(setting: RetouchSetting): Float = when (setting) {
         RetouchSetting.SIZE -> size
         RetouchSetting.FEATHER -> feather
         RetouchSetting.OPACITY -> opacity
+        RetouchSetting.SPOTS -> spots
     }
 
     fun with(setting: RetouchSetting, value: Float): RetouchTool {
@@ -40,17 +47,19 @@ data class RetouchTool(
             RetouchSetting.SIZE -> copy(size = clamped)
             RetouchSetting.FEATHER -> copy(feather = clamped)
             RetouchSetting.OPACITY -> copy(opacity = clamped)
+            RetouchSetting.SPOTS -> copy(spots = clamped)
         }
     }
 
-    /** `mode,size,feather,opacity` — read back by [decode]. */
-    fun encode(): String = "${mode.name},$size,$feather,$opacity"
+    /** `mode,size,feather,opacity,spots` — read back by [decode]. */
+    fun encode(): String = "${mode.name},$size,$feather,$opacity,$spots"
 
     companion object {
         /** What was stored, or the defaults; a value this version cannot read is forgotten, not an error. */
         fun decode(stored: String?): RetouchTool {
             val parts = stored.orEmpty().split(',')
-            if (parts.size != 4) return RetouchTool()
+            // Four parts is what was stored before Visualize Spots.
+            if (parts.size != 4 && parts.size != 5) return RetouchTool()
             fun number(index: Int, setting: RetouchSetting) =
                 (parts[index].toFloatOrNull() ?: setting.neutral).coerceIn(setting.range.start, setting.range.endInclusive)
             return RetouchTool(
@@ -58,6 +67,7 @@ data class RetouchTool(
                 size = number(1, RetouchSetting.SIZE),
                 feather = number(2, RetouchSetting.FEATHER),
                 opacity = number(3, RetouchSetting.OPACITY),
+                spots = if (parts.size == 5) number(4, RetouchSetting.SPOTS) else RetouchSetting.SPOTS.neutral,
             )
         }
     }

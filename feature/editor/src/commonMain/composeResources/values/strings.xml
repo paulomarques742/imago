@@ -493,6 +493,8 @@
     <string name="editor_history_retouch_deleted">Correction deleted</string>
     <string name="editor_history_retouch_refreshed">Filled again</string>
     <string name="editor_remove_hide_overlay">Hide the corrections</string>
+    <string name="editor_remove_visualize_spots">Visualize spots</string>
+    <string name="editor_remove_spots_sensitivity">Sensitivity</string>
     <string name="editor_remove_show_overlay">Show the corrections</string>
     <string name="editor_history_retouch_extended">Area extended</string>
 </resources>

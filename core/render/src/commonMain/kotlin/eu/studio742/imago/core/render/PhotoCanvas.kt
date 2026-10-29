@@ -25,6 +25,8 @@ expect fun PhotoCanvas(
     highPrecisionSource: FloatPixelBuffer? = null,
     /** Paints over what touches the ends of the scale; only where [photoCanvasShowsClipping]. */
     clipping: ClippingWarning = ClippingWarning.NONE,
+    /** Visualize Spots at this sensitivity, 0 to 100: the photo's [SpotsView] map, framed as the photo is; null shows the photo. */
+    spots: Float? = null,
     /** Called once the photo is on screen, so that what held its place while it developed can be taken away. */
     onFirstFrame: () -> Unit = {},
 )

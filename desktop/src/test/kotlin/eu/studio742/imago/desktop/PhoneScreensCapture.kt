@@ -677,7 +677,8 @@ class PhoneScreensCapture {
                 shot("90-list")
                 tree("90-list")
             }
-            // The Remove tool: a Heal and a Remove painted on the photo, each worked out when the finger lifts.
+            // The Remove tool: a Heal and a Remove painted on the photo, each worked out when the finger lifts,
+            // and then Visualize Spots.
             if (wants("remove")) {
                 onNodeWithContentDescription("Open DSCF9039.jpg").performClick()
                 settle(3_000)
@@ -701,6 +702,11 @@ class PhoneScreensCapture {
                 settle(4_000)
                 shot("97-removed")
                 tree("97-removed")
+                // Visualize Spots: the same photo as the map of what stands out, the corrections already in it.
+                onNodeWithText("Visualize spots").performScrollTo().performClick()
+                settle(3_000)
+                shot("98-spots")
+                tree("98-spots")
             }
             // The tablet: the same photo, before and after the phone edited it (run with
             // -Pimago.capture.device=tablet on the profile the phone's run used).

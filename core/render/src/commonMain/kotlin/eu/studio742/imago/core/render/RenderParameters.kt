@@ -162,6 +162,23 @@ data class RenderParameters(
             wideHighlights = wideHighlights,
         )
 
+    /**
+     * Only how the photo is framed: crop, straighten, rotation, mirror and perspective. What an aid of the
+     * editor that stands in for the photo's pixels ([SpotsView]) is drawn with, so it lands where they would.
+     */
+    val framing: RenderParameters
+        get() = RenderParameters(
+            cropX = cropX,
+            cropY = cropY,
+            cropWidth = cropWidth,
+            cropHeight = cropHeight,
+            straighten = straighten,
+            rotation = rotation,
+            mirrorH = mirrorH,
+            mirrorV = mirrorV,
+            perspective = perspective,
+        )
+
     // Either white balance model does nothing at 0, 0: which one it is says nothing about neutrality.
     // Nor does the profile, which only a linear RAW reads, and a linear source is always processed.
     val isNeutral: Boolean

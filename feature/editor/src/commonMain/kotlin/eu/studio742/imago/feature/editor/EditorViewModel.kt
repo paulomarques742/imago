@@ -586,6 +586,8 @@ data class EditorUiState(
     val retouchNotice: UiText? = null,
     /** The corrections' pins and areas are drawn over the photo; off, the photo is seen whole, as the masks' eye does. */
     val showsRetouches: Boolean = true,
+    /** Visualize Spots: while the Remove tool is open, the photo as a map of what stands out, at the tool's sensitivity. */
+    val visualizesSpots: Boolean = false,
     /**
      * The Heal or Clone a new stroke still widens, for [RETOUCH_EXTEND_MILLIS] after a gesture on it.
      * Meanwhile its pin is small and stays put, so a stroke that starts beside it paints.
@@ -676,6 +678,7 @@ data class EditorUiState(
             RetouchSetting.SIZE -> retouchTool.size
             RetouchSetting.FEATHER -> selected.strokes.firstOrNull()?.feather ?: retouchTool.feather
             RetouchSetting.OPACITY -> selected.opacity
+            RetouchSetting.SPOTS -> retouchTool.spots
         }
     }
 
@@ -2681,13 +2684,13 @@ open class EditorViewModel(
     fun setRetouchMode(mode: RetouchMode) = updateRetouchTool { it.copy(mode = mode) }
 
     /**
-     * A slider being dragged. Size is the brush's, for the next stroke; Feather and Opacity also move the
-     * selected correction, in one history entry per drag.
+     * A slider being dragged. Size is the brush's, for the next stroke, and Spots the view's; Feather and
+     * Opacity also move the selected correction, in one history entry per drag.
      */
     fun setRetouchSetting(setting: RetouchSetting, value: Float) {
         mutableState.update { it.copy(retouchTool = it.retouchTool.with(setting, value)) }
         val id = state.value.selectedRetouchId ?: return
-        if (setting == RetouchSetting.SIZE || state.value.isSolvingRetouch) return
+        if (setting == RetouchSetting.SIZE || setting == RetouchSetting.SPOTS || state.value.isSolvingRetouch) return
         val clamped = value.coerceIn(setting.range.start, setting.range.endInclusive)
         beginRetouchGesture(uiText(Res.string.editor_history_retouch_changed))
         editRetouches { recipe ->
@@ -2716,6 +2719,8 @@ open class EditorViewModel(
     }
 
     fun setShowsRetouches(shown: Boolean) = mutableState.update { it.copy(showsRetouches = shown) }
+
+    fun setVisualizesSpots(on: Boolean) = mutableState.update { it.copy(visualizesSpots = on) }
 
     /**
      * A finger lands on the photo away from every pin: a new correction starts, in the tool's mode.

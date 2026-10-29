@@ -35,6 +35,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     @Volatile private var showOriginal = false
     @Volatile private var maskOverlay = -1
     @Volatile private var clipping = ClippingWarning.NONE
+    @Volatile private var spots: Float? = null
     @Volatile private var minZoom = MIN_PHOTO_ZOOM
     @Volatile private var zoom = MIN_PHOTO_ZOOM
     @Volatile private var panX = 0f
@@ -69,6 +70,9 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private var plainOf: Bitmap? = null
     /** The corrections now in [sourceTexture]; null before the first upload. */
     private var uploadedRetouches: List<Retouch>? = null
+    /** Visualize Spots: the map that takes the photo's place in [sourceTexture], and the sensitivity it was drawn at. */
+    private val spotsView = SpotsView()
+    private var uploadedSpots: Float? = null
     private var toneCurveTexture = 0
     /** The tables now in [toneCurveTexture]; uploaded again only when the curves change. */
     private var uploadedToneCurves: FloatArray? = null
@@ -164,6 +168,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
      */
     fun setMaskOverlay(value: Int) { maskOverlay = value }
     fun setClipping(value: ClippingWarning) { clipping = value }
+    /** Visualize Spots at this sensitivity, or null for the photo; an aid of the editor, like [setMaskOverlay]. */
+    fun setSpots(value: Float?) { spots = value }
     /**
      * @param minZoom the minimum this mode accepts. Crop passes [MIN_CROP_ZOOM] so it can zoom the
      *   photo out; viewing leaves the default and nothing changes for it.
@@ -212,13 +218,20 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     override fun onDrawFrame(gl: GL10?) {
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
         val source = bitmap ?: return
-        val active = if (showOriginal) parameters.original else parameters
+        val edited = if (showOriginal) parameters.original else parameters
+        val spotsNow = spots
         // "Before" has no corrections: the texture goes back to the bare photo, and forward again after.
-        if (pendingUpload || active.retouches != uploadedRetouches) {
+        if (pendingUpload || edited.retouches != uploadedRetouches || spotsNow != uploadedSpots) {
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, sourceTexture)
-            val raw = highPrecisionSource?.let { retouched.of(it, active.retouches) }
-            if (raw == null) {
-                val corrected = if (active.retouches.isEmpty()) source else correctedBitmap(source, active.retouches)
+            val raw = if (spotsNow == null) highPrecisionSource?.let { retouched.of(it, edited.retouches) } else null
+            if (spotsNow != null) {
+                // The map is worked out on the GL thread, as the corrections are, and kept between sensitivities.
+                val map = spotsView.render(retouched.of(plainPixels(source), edited.retouches), spotsNow)
+                val mapBitmap = map.toPlatformBitmap()
+                GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, mapBitmap, 0)
+                mapBitmap.recycle()
+            } else if (raw == null) {
+                val corrected = if (edited.retouches.isEmpty()) source else correctedBitmap(source, edited.retouches)
                 GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, corrected, 0)
                 if (corrected !== source) corrected.recycle()
             } else {
@@ -231,11 +244,14 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
                 GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA16F, raw.width, raw.height, 0,
                     GLES30.GL_RGBA, GLES30.GL_FLOAT, pixels)
             }
-            imageWidth = source.width.coerceAtLeast(1)
-            imageHeight = source.height.coerceAtLeast(1)
-            uploadedRetouches = active.retouches
+            imageWidth = (if (spotsNow != null) spotsView.width else source.width).coerceAtLeast(1)
+            imageHeight = (if (spotsNow != null) spotsView.height else source.height).coerceAtLeast(1)
+            uploadedRetouches = edited.retouches
+            uploadedSpots = spotsNow
             pendingUpload = false
         }
+        // The map is drawn as it is, only framed: the photo's tones have nothing to say about it.
+        val active = if (spotsNow != null) edited.framing else edited
 
         if (!ensureStage()) return
         val maskFields = if (active.needsMaskField) buildMaskField(active) else 0

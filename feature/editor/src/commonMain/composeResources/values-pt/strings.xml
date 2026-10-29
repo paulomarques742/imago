@@ -493,6 +493,8 @@
     <string name="editor_history_retouch_deleted">Correcção apagada</string>
     <string name="editor_history_retouch_refreshed">Preenchida de novo</string>
     <string name="editor_remove_hide_overlay">Esconder as correcções</string>
+    <string name="editor_remove_visualize_spots">Visualizar manchas</string>
+    <string name="editor_remove_spots_sensitivity">Sensibilidade</string>
     <string name="editor_remove_show_overlay">Mostrar as correcções</string>
     <string name="editor_history_retouch_extended">Área aumentada</string>
 </resources>
