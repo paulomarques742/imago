@@ -103,6 +103,17 @@ class ImmichGeometryMirrorTest {
         assertEquals(0, api.writes)
     }
 
+    /** Immich refuses edits on a Live Photo: nothing is asked of it, and the recipe stays local. */
+    @Test
+    fun aLivePhotoIsNotEditedOnTheServer() = runBlocking {
+        api.livePhotoVideoId = "movement"
+
+        mirror.mirror(recipe(Geometry(rotation = 90)))
+
+        assertEquals(0, api.writes)
+        assertTrue(logged.single().startsWith("skipped"))
+    }
+
     /** A key without the edit permissions leaves the editor working: it is logged, never thrown. */
     @Test
     fun aRefusedWriteDoesNotFailTheEditor() = runBlocking {
@@ -140,6 +151,7 @@ class ImmichGeometryMirrorTest {
         var edits: List<ImmichEdit> = emptyList()
         var exif = AssetExif(imageWidth = 4000, imageHeight = 3000, orientation = "1")
         var type = AssetType.IMAGE
+        var livePhotoVideoId: String? = null
         var refuseWrites = false
         var reads = 0
         var writes = 0
@@ -147,7 +159,8 @@ class ImmichGeometryMirrorTest {
         override suspend fun getAssetDetail(connection: ImmichConnection, assetId: String): ImmichAssetDetail {
             reads++
             return ImmichAssetDetail(
-                asset = ImmichAsset(assetId, "", "a.jpg", "", "", null, null, isFavorite = false, isEdited = false, type = type),
+                asset = ImmichAsset(assetId, "", "a.jpg", "", "", null, null, isFavorite = false, isEdited = false, type = type,
+                    livePhotoVideoId = livePhotoVideoId, livePhotoKnown = true),
                 exif = exif,
             )
         }

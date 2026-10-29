@@ -80,4 +80,8 @@
     <string name="detail_stack_cover_changed">Esta é agora a capa da pilha</string>
     <string name="detail_stack_removed">Tirada da pilha</string>
     <string name="detail_stack_undone">Pilha desfeita</string>
+    <string name="detail_motion_play">Reproduzir movimento</string>
+    <string name="detail_motion_stop">Parar movimento</string>
+    <string name="detail_motion_failed">Não foi possível reproduzir o movimento.</string>
+    <string name="detail_motion_original">Original</string>
 </resources>

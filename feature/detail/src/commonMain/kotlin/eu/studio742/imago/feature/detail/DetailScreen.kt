@@ -5,6 +5,8 @@ package eu.studio742.imago.feature.detail
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.LayersClear
 import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.MotionPhotosOn
+import androidx.compose.material.icons.outlined.MotionPhotosPause
 import eu.studio742.imago.feature.library.AssetUiModel
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.model.AssetReference
@@ -107,6 +109,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -337,6 +340,10 @@ private fun DetailScreen(
         url = settledAsset?.takeIf { it.isVideo }?.videoUrl,
         apiKey = settledAsset?.apiKey.orEmpty(),
     )
+    // The settled photo's movement, while it is held or after the bar's button; another photo starts still.
+    var motionPlaying by remember(settledAsset?.id) { mutableStateOf(false) }
+    val motionFailed = stringResource(Res.string.detail_motion_failed)
+    val messages = rememberCoroutineScope()
 
     Scaffold(
         modifier = modifier,
@@ -365,6 +372,9 @@ private fun DetailScreen(
                     // decoder open for every video the finger passes by.
                     isCurrent = isCurrent,
                     playback = if (isCurrent) playback else null,
+                    motionPlaying = isCurrent && motionPlaying,
+                    onMotionPlayingChange = { if (isCurrent) motionPlaying = it },
+                    onMotionFailed = { messages.launch { snackbarHostState.showSnackbar(motionFailed) } },
                     onZoomedChange = { if (isCurrent) zoomed = it },
                     onFavorite = { if (!isOpenedFile) gate.run(onFavorite) },
                     onToggleChrome = { chromeVisible = !chromeVisible },
@@ -391,6 +401,16 @@ private fun DetailScreen(
                         onClick = onBack,
                     )
                     Spacer(Modifier.weight(1f))
+                    // The long press is the phone's way; this is the one TalkBack and a mouse reach.
+                    if (asset.motionUrl != null && asset.id == settledAsset?.id) {
+                        Box(Modifier.padding(end = ImagoSpacing.Sm)) {
+                            GlassIconButton(
+                                icon = if (motionPlaying) Icons.Outlined.MotionPhotosPause else Icons.Outlined.MotionPhotosOn,
+                                contentDescription = stringResource(if (motionPlaying) Res.string.detail_motion_stop else Res.string.detail_motion_play),
+                                onClick = { motionPlaying = !motionPlaying },
+                            )
+                        }
+                    }
                     if (!isOpenedFile) {
                         GlassIconButton(
                             icon = if (state.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
@@ -738,6 +758,9 @@ private fun DetailPage(
     recipe: EditRecipe?,
     isCurrent: Boolean,
     playback: VideoPlayback?,
+    motionPlaying: Boolean,
+    onMotionPlayingChange: (Boolean) -> Unit,
+    onMotionFailed: () -> Unit,
     onZoomedChange: (Boolean) -> Unit,
     onFavorite: () -> Unit,
     onToggleChrome: () -> Unit,
@@ -764,6 +787,10 @@ private fun DetailPage(
         }
         return
     }
+    val motionUrl = asset.motionUrl?.takeIf { isCurrent }
+    // The player is made at the first press, and stays for the page: the next hold replays at once.
+    var motionRequested by remember(asset.id) { mutableStateOf(false) }
+    val holdsMotion = motionUrl != null && PlaysMotionInApp
     Box(modifier.background(Color.Black), contentAlignment = Alignment.Center) {
         ZoomablePhoto(
             asset = asset,
@@ -772,7 +799,36 @@ private fun DetailPage(
             onZoomedChange = onZoomedChange,
             onFavorite = onFavorite,
             onToggleChrome = onToggleChrome,
+            onMotionPress = if (holdsMotion) ({ motionRequested = true }) else null,
+            onMotionHold = onMotionPlayingChange,
         )
+        if (motionUrl != null && (motionRequested || motionPlaying)) {
+            MotionPlayer(
+                url = motionUrl,
+                apiKey = asset.motionApiKey,
+                playing = motionPlaying,
+                onEnded = { onMotionPlayingChange(false) },
+                onFailed = {
+                    onMotionPlayingChange(false)
+                    onMotionFailed()
+                },
+                modifier = Modifier.matchParentSize(),
+            )
+            // The recipe edits the photo, not its movement: what moves is the original, and says so.
+            if (motionPlaying && recipe != null && PlaysMotionInApp) {
+                Text(
+                    stringResource(Res.string.detail_motion_original),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ImagoColors.BrandWhite,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(ImagoSpacing.Lg)
+                        .clip(RoundedCornerShape(ImagoRadii.Small))
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = ImagoSpacing.Sm, vertical = ImagoSpacing.Xs),
+                )
+            }
+        }
         if (asset.isVideo) {
             Icon(
                 Icons.Filled.PlayArrow,
@@ -805,8 +861,13 @@ private fun ZoomablePhoto(
     onZoomedChange: (Boolean) -> Unit,
     onFavorite: () -> Unit,
     onToggleChrome: () -> Unit,
+    /** Null for a photo without a movement to hold, or where it does not play in the app. */
+    onMotionPress: (() -> Unit)? = null,
+    onMotionHold: (Boolean) -> Unit = {},
 ) {
     val context = LocalPlatformContext.current
+    val motionPress by rememberUpdatedState(onMotionPress)
+    val motionHold by rememberUpdatedState(onMotionHold)
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     var transform by remember(asset.id) { mutableStateOf(PhotoTransform()) }
@@ -969,6 +1030,20 @@ private fun ZoomablePhoto(
             }
             .pointerInput(asset.id) {
                 detectTapGestures(
+                    // Held, the photo moves; let go, it is the photo again. Only fitted: zoomed in, the
+                    // finger that stays down is looking at a detail, or about to drag.
+                    onPress = {
+                        val press = motionPress?.takeIf { transform.isFit } ?: return@detectTapGestures
+                        press()
+                        tryAwaitRelease()
+                        motionHold(false)
+                    },
+                    onLongPress = {
+                        if (motionPress != null && transform.isFit) {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            motionHold(true)
+                        }
+                    },
                     // It waits out the double tap's window first, so a favourite does not also flash
                     // the controls away.
                     onTap = { onToggleChrome() },

@@ -101,6 +101,40 @@ actual fun DetailVideoPlayer(playback: VideoPlayback?, url: String, apiKey: Stri
     }
 }
 
+actual val PlaysMotionInApp: Boolean = false
+
+/**
+ * The movement opens in the Windows player, as the videos do, until the desktop has a player of its
+ * own. It is downloaded with the key of the library it lives in, which in the unified library may be
+ * the server's and not the photo's.
+ */
+@Composable
+actual fun MotionPlayer(
+    url: String,
+    apiKey: String,
+    playing: Boolean,
+    onEnded: () -> Unit,
+    onFailed: (Throwable) -> Unit,
+    modifier: Modifier,
+) {
+    val ended by rememberUpdatedState(onEnded)
+    val failed by rememberUpdatedState(onFailed)
+    LaunchedEffect(url, playing) {
+        if (!playing) return@LaunchedEffect
+        runCatching { withContext(Dispatchers.IO) { java.awt.Desktop.getDesktop().open(localVideo(url, apiKey)) } }
+            .onFailure { error ->
+                eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticArea.VIDEO, error,
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.LIVE_PHOTO)
+                failed(error)
+            }
+        ended()
+    }
+    if (playing) {
+        Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ImagoColors.Ivory) }
+    }
+}
+
 private val http get() = eu.studio742.imago.core.immich.ImmichHttp.client
 
 private fun localVideo(url: String, apiKey: String): File {

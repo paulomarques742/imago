@@ -49,6 +49,9 @@ data class DetailAsset(
      * edit, unlike the thumbnail that preceded it in the grid.
      */
     val recipe: EditRecipe? = null,
+    /** A Live Photo's or Motion Photo's movement and the key of its library; see [AssetUiModel.motionUrl]. */
+    val motionUrl: String? = null,
+    val motionApiKey: String = "",
 )
 
 /** What saving to the device offers for the open asset. */

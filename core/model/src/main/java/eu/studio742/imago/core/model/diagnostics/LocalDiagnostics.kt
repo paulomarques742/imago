@@ -78,6 +78,8 @@ enum class DiagnosticOperation {
     OTHER, SERVER_VERSION, PING, CURRENT_USER, SEARCH, ALBUMS, TIME_BUCKETS, TIME_BUCKET,
     THUMBNAIL, VIDEO, DOWNLOAD, UPLOAD, STACK, ASSET, FAVORITE, DELETE, RESTORE, TRASH,
     SERVER_CONFIG, SMART_SEARCH, SERVER_FEATURES, KEY_PERMISSIONS, EDITS, PEOPLE, MAP, MEMORIES,
+    /** The movement of a Live Photo or Motion Photo, played from the detail. */
+    LIVE_PHOTO,
 }
 
 fun diagnosticOutcome(error: Throwable): DiagnosticOutcome {

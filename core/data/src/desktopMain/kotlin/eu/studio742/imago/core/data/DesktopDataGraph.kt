@@ -70,6 +70,14 @@ class DesktopDataGraph(
             override fun migrate(connection: androidx.sqlite.SQLiteConnection) {
                 connection.execSQL(ALBUM_MEMBERS_SQL)
             }
+        }, object : androidx.room.migration.Migration(20, 21) {
+            override fun migrate(connection: androidx.sqlite.SQLiteConnection) {
+                LIVE_PHOTO_SQL.forEach { connection.execSQL(it) }
+            }
+        }, object : androidx.room.migration.Migration(21, 22) {
+            override fun migrate(connection: androidx.sqlite.SQLiteConnection) {
+                connection.execSQL(LOCAL_MOTIONS_SQL)
+            }
         })
         .setQueryCoroutineContext(Dispatchers.IO)
         .build()

@@ -36,6 +36,17 @@ data class ImmichAsset(
     val stackCount: Int? = null,
     /** The server's external library, distinct from the source configured in IMAGO. */
     val externalLibraryId: String? = null,
+    /**
+     * The hidden video Immich keeps the movement of a Live Photo or Motion Photo in. The photo keeps
+     * its own thumbnail and preview; only playing the movement asks for this id.
+     */
+    val livePhotoVideoId: String? = null,
+    /**
+     * Whether the answer said anything about the movement. A null [livePhotoVideoId] from an answer
+     * that carried the field means "no movement"; from one that did not, it means "not known yet",
+     * and a cached relation must not be erased by it.
+     */
+    val livePhotoKnown: Boolean = false,
 )
 
 @Serializable

@@ -389,6 +389,7 @@ class RoomLibraryRepository @Inject constructor(
         database.withTransaction {
             database.assetDao().deleteMonth(libraryKey, month)
             database.assetDao().upsertAll(rows)
+            database.forgetMovementsOf(libraryKey, rows)
             database.assetDao().restoreLocalRecipeFlags(libraryKey)
             database.catalogMonthDao().upsert(
                 CatalogMonthEntity(
@@ -643,6 +644,15 @@ class RoomLibraryRepository @Inject constructor(
         val connection = requireConnection()
         val detail = api.getAssetDetail(connection, assetId)
         val asset = detail.asset
+        if (asset.livePhotoKnown) {
+            runCatching {
+                val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+                database.withTransaction {
+                    database.assetDao().setMovement(libraryKey, assetId, asset.livePhotoVideoId)
+                    database.forgetMovementsOf(libraryKey, listOfNotNull(asset.livePhotoVideoId))
+                }
+            }
+        }
         if (asset.originalFileName.isNotBlank()) {
             runCatching {
                 database.assetDao().enrich(
@@ -755,13 +765,32 @@ internal suspend fun ImmichRoomDatabase.upsertFromSearch(
         .flatMap { stackMemberDao().sizes(libraryKey, it) }
         .associate { it.stackId to it.assetCount }
     val rows = shown.map { asset ->
-        val row = AssetEntity.fromDomain(libraryKey, asset).keepingStackOf(known[asset.id])
+        val row = AssetEntity.fromDomain(libraryKey, asset).keepingStackOf(known[asset.id]).keepingMovementOf(known[asset.id])
         val member = membership[asset.id]
         val size = member?.let { sizes[it.stackId] }
         if (row.stackId == null && size != null && size >= 2) row.copy(stackId = member.stackId, stackCount = size) else row
     }
     assetDao().upsertAll(rows)
-    return shown.zip(rows) { asset, row -> asset.copy(stackId = row.stackId, stackCount = row.stackCount) }
+    forgetMovementsOf(libraryKey, rows)
+    return shown.zip(rows) { asset, row ->
+        asset.copy(stackId = row.stackId, stackCount = row.stackCount, livePhotoVideoId = row.livePhotoVideoId, livePhotoKnown = row.livePhotoKnown)
+    }
+}
+
+/**
+ * Deletes, as photos of their own, the movements [rows] point at. The searches no longer bring them,
+ * but the catalogue of an earlier version has them, and a month whose count did not change is never
+ * read again to clear them out.
+ */
+internal suspend fun ImmichRoomDatabase.forgetMovementsOf(libraryKey: String, rows: List<AssetEntity>) =
+    forgetMovementsOf(libraryKey, rows.mapNotNull { it.livePhotoVideoId })
+
+@JvmName("forgetMovementIds")
+internal suspend fun ImmichRoomDatabase.forgetMovementsOf(libraryKey: String, movementIds: List<String>) {
+    movementIds.distinct().chunked(SQL_VARIABLES_PER_QUERY).forEach { ids ->
+        assetDao().deleteVideos(libraryKey, ids)
+        albumMemberDao().removeAssets(libraryKey, ids)
+    }
 }
 
 /** Under SQLite's limit on the variables of one statement, which older Androids keep at 999. */

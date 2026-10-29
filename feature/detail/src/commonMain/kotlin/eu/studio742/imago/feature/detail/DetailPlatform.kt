@@ -36,6 +36,27 @@ expect fun rememberVideoPlayback(url: String?, apiKey: String): VideoPlayback?
 expect fun DetailVideoPlayer(playback: VideoPlayback?, url: String, apiKey: String, modifier: Modifier = Modifier)
 
 /**
+ * Whether a photo's movement plays in the app, held on the photo. Where it does not (desktop, for
+ * now), the detail's button hands it to the system's player.
+ */
+expect val PlaysMotionInApp: Boolean
+
+/**
+ * The movement of a Live Photo or Motion Photo, without sound, while [playing]; [onEnded] when it
+ * stops by itself, [onFailed] when it cannot be played. Where [PlaysMotionInApp] is false, turning
+ * [playing] on opens it in the system's player and ends at once.
+ */
+@Composable
+expect fun MotionPlayer(
+    url: String,
+    apiKey: String,
+    playing: Boolean,
+    onEnded: () -> Unit,
+    onFailed: (Throwable) -> Unit,
+    modifier: Modifier = Modifier,
+)
+
+/**
  * Hides the system bars while [hidden], and gives them back when it stops or the screen leaves. A
  * swipe from the edge still shows them for a moment. Nothing to hide on desktop.
  */

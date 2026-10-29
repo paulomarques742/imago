@@ -199,6 +199,17 @@ val generateImmichContract by tasks.registering {
             ),
         )
         check(propertiesOf("TimeBucketsResponseDto").containsAll(setOf("timeBucket", "count")))
+        // Live Photos and Motion Photos: the photo points at its hidden movement, in the asset and in
+        // the month's columns, and every search can be told which visibility it wants.
+        (listOf(document) + validatedDocuments).forEach { spec ->
+            @Suppress("UNCHECKED_CAST")
+            val specSchemas = componentsOf(spec)["schemas"] as Map<String, Map<String, Any?>>
+            fun properties(schema: String) = (specSchemas.getValue(schema).getValue("properties") as Map<String, Any?>).keys
+            check("livePhotoVideoId" in properties("AssetResponseDto"))
+            check(properties("TimeBucketAssetResponseDto").containsAll(setOf("id", "livePhotoVideoId", "visibility")))
+            check("visibility" in properties("MetadataSearchDto") && "visibility" in properties("SmartSearchDto"))
+            check((specSchemas.getValue("AssetVisibility")["enum"] as List<*>).containsAll(listOf("timeline", "archive", "hidden", "locked")))
+        }
         // The geometry mirrored to Immich's own edits. The crop is in pixels of the image already
         // turned by its EXIF orientation, and the server only accepts it when it fits in
         // exifImageWidth x exifImageHeight swapped by that orientation: those three fields are how

@@ -554,6 +554,8 @@ private fun AssetUiModel.toDetailAsset() = DetailAsset(
     durationMs = durationMs,
     videoUrl = videoUrl,
     recipe = recipe,
+    motionUrl = motionUrl,
+    motionApiKey = motionApiKey,
 )
 
 /** Where each destination of the bottom bar takes the app. */

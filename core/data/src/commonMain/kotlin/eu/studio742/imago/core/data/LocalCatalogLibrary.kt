@@ -17,6 +17,7 @@ import java.time.LocalDate
  * MediaStore on Android, the chosen folders on desktop.
  */
 abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) : DeviceLibrary {
+
     private val lock = Mutex()
     private val sync = MutableStateFlow(CatalogSyncState())
     override val catalogSync: StateFlow<CatalogSyncState> = sync.asStateFlow()
@@ -34,9 +35,54 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
             database.assetDao().upsertAll(rows)
             database.assetDao().restoreLocalRecipeFlags(DEVICE_LIBRARY_ID)
             database.assetDao().restoreArchivedFlags(DEVICE_LIBRARY_ID)
+            database.localMotionDao().forgetGone(DEVICE_LIBRARY_ID)
+            database.localMotionDao().restore(DEVICE_LIBRARY_ID)
         }
         val present = rows.map { it.id }.toSet()
         settleStacks(gone = database.stackMemberDao().all(DEVICE_LIBRARY_ID).map { it.assetId }.filterNot(present::contains).toSet())
+    }
+
+    /**
+     * The bytes of a photo, to look for a movement inside it: its size and a way to read it, or null
+     * where this library does not look (desktop folders, for now) or the file cannot be opened.
+     */
+    protected open fun openForMotion(assetId: String): MotionFile? = null
+
+    /** An open file: closed once the look is done. */
+    protected class MotionFile(val size: Long, val reader: ByteReader, private val onClose: () -> Unit) : AutoCloseable {
+        override fun close() = onClose()
+    }
+
+    private val motionLook = Mutex()
+
+    /**
+     * Looks inside the photos not looked at yet for a Motion Photo's video, a batch at a time, the
+     * newest first; each batch shows in the grid as it is written. One look at a time: a sync that
+     * comes while one runs leaves the new photos to it, since it reads what is pending until nothing is.
+     */
+    protected suspend fun lookForMotions() {
+        if (!motionLook.tryLock()) return
+        try {
+            while (true) {
+                val batch = database.localMotionDao().pending(DEVICE_LIBRARY_ID, MOTION_BATCH)
+                if (batch.isEmpty()) return
+                val found = batch.mapNotNull { row ->
+                    // A file that cannot be opened now (access just revoked, a card taken out) is left
+                    // for the next look instead of being written down as a photo without movement.
+                    val file = runCatching { openForMotion(row.id) }.getOrNull() ?: return@mapNotNull null
+                    val movement = file.use { runCatching { MotionPhotos.find(it.size, it.reader) }.getOrNull() }
+                        ?.let { EmbeddedMotion(row.id, it.start, it.length).encode() }
+                    LocalMotionEntity(DEVICE_LIBRARY_ID, row.id, row.checksum, movement)
+                }
+                if (found.isEmpty()) return
+                database.withTransaction {
+                    database.localMotionDao().upsertAll(found)
+                    database.localMotionDao().restore(DEVICE_LIBRARY_ID, found.map { it.assetId })
+                }
+            }
+        } finally {
+            motionLook.unlock()
+        }
     }
 
     /**
@@ -175,6 +221,7 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
             database.assetDao().upsertAll(rows)
             database.assetDao().restoreLocalRecipeFlags(DEVICE_LIBRARY_ID)
             database.assetDao().restoreArchivedFlags(DEVICE_LIBRARY_ID)
+            database.localMotionDao().restore(DEVICE_LIBRARY_ID, ids.toList())
         }
         settleStacks(gone = ids.filterNot(found::contains).toSet())
     }
@@ -324,5 +371,7 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
 
     private companion object {
         const val LOCATION_BATCH = 300
+        /** Photos looked inside per write: each write refreshes the grid, so not one at a time. */
+        const val MOTION_BATCH = 200
     }
 }

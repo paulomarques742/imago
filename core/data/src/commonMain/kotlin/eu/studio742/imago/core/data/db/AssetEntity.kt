@@ -48,6 +48,10 @@ data class AssetEntity(
     /** The stack this row is the cover of, as the timeline says; see [ImmichAsset.stackId]. */
     val stackId: String? = null,
     val stackCount: Int? = null,
+    /** The hidden video of a Live Photo or Motion Photo; see [ImmichAsset.livePhotoVideoId]. */
+    val livePhotoVideoId: String? = null,
+    /** Whether a read has said if this photo has a movement; see [ImmichAsset.livePhotoKnown]. */
+    @ColumnInfo(defaultValue = "0") val livePhotoKnown: Boolean = false,
 ) {
     fun toDomain() = ImmichAsset(
         id = id,
@@ -66,6 +70,8 @@ data class AssetEntity(
         isArchived = isArchived,
         stackId = stackId,
         stackCount = stackCount,
+        livePhotoVideoId = livePhotoVideoId,
+        livePhotoKnown = livePhotoKnown,
     )
 
     /**
@@ -91,8 +97,17 @@ data class AssetEntity(
             mimeType = mimeType ?: previous.mimeType,
             durationMs = durationMs ?: previous.durationMs,
             sizeBytes = sizeBytes ?: previous.sizeBytes,
-        )
+        ).keepingMovementOf(previous)
     }
+
+    /**
+     * This row, with the movement [previous] knew when this read did not say. A read that said
+     * rules, whether it found a movement or found none: that is how a relation undone on the server
+     * goes away here.
+     */
+    fun keepingMovementOf(previous: AssetEntity?): AssetEntity =
+        if (previous == null || livePhotoKnown) this
+        else copy(livePhotoVideoId = previous.livePhotoVideoId, livePhotoKnown = previous.livePhotoKnown)
 
     /**
      * This row from a search, with the stack the timeline gave the same photo.
@@ -123,6 +138,8 @@ data class AssetEntity(
             isArchived = asset.isArchived,
             stackId = asset.stackId,
             stackCount = asset.stackCount,
+            livePhotoVideoId = asset.livePhotoVideoId,
+            livePhotoKnown = asset.livePhotoKnown,
         )
     }
 }

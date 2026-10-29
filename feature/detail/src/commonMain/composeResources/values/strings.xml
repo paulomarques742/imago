@@ -80,4 +80,8 @@
     <string name="detail_stack_cover_changed">This is the stack’s cover now</string>
     <string name="detail_stack_removed">Taken out of the stack</string>
     <string name="detail_stack_undone">Stack undone</string>
+    <string name="detail_motion_play">Play motion</string>
+    <string name="detail_motion_stop">Stop motion</string>
+    <string name="detail_motion_failed">Couldn’t play the motion.</string>
+    <string name="detail_motion_original">Original</string>
 </resources>

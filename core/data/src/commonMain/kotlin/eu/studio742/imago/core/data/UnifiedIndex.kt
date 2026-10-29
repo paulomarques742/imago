@@ -55,6 +55,22 @@ const val ALBUM_MEMBERS_SQL =
     "CREATE TABLE IF NOT EXISTS `album_members` (`libraryKey` TEXT NOT NULL, `albumId` TEXT NOT NULL, `assetId` TEXT NOT NULL, " +
         "`position` INTEGER NOT NULL, `refreshedAt` INTEGER NOT NULL, PRIMARY KEY(`libraryKey`, `albumId`, `assetId`))"
 
+/**
+ * Version 21: the movement of each Live Photo. The months are forgotten, as in version 15, so that
+ * each one is read again once with the relation — and so that the hidden movements a search let in
+ * before, which no month gives, are deleted with the month they fall in.
+ */
+val LIVE_PHOTO_SQL = listOf(
+    "ALTER TABLE `assets` ADD COLUMN `livePhotoVideoId` TEXT",
+    "ALTER TABLE `assets` ADD COLUMN `livePhotoKnown` INTEGER NOT NULL DEFAULT 0",
+    "DELETE FROM `catalog_months`",
+)
+
+/** Version 22: what a look inside each device photo found about its movement. */
+const val LOCAL_MOTIONS_SQL =
+    "CREATE TABLE IF NOT EXISTS `local_motions` (`libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `identity` TEXT NOT NULL, " +
+        "`movement` TEXT, PRIMARY KEY(`libraryKey`, `assetId`))"
+
 /** The index of version 12, as Room names it; the same statement on both apps. */
 const val UNIFIED_INDEX_SQL =
     "CREATE INDEX IF NOT EXISTS index_assets_libraryKey_originalFileName ON assets (libraryKey, originalFileName)"

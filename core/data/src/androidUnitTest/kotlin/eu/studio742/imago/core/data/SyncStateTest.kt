@@ -75,7 +75,7 @@ class SyncStateTest {
         old.version = 10
         old.close()
         val upgraded = Room.databaseBuilder(context, ImmichRoomDatabase::class.java, name)
-            .addMigrations(SyncMigration.MIGRATION_10_11, UnifiedMigration.MIGRATION_11_12, UnifiedMigration.MIGRATION_12_13, UnifiedMigration.MIGRATION_13_14, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_14_15, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_15_16, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_16_17, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_17_18, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_18_19, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_19_20).allowMainThreadQueries().build()
+            .addMigrations(SyncMigration.MIGRATION_10_11, UnifiedMigration.MIGRATION_11_12, UnifiedMigration.MIGRATION_12_13, UnifiedMigration.MIGRATION_13_14, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_14_15, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_15_16, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_16_17, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_17_18, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_18_19, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_19_20, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_20_21, eu.studio742.imago.core.data.UnifiedMigration.MIGRATION_21_22).allowMainThreadQueries().build()
         try {
             val sql = upgraded.openHelper.writableDatabase // Room validates the whole schema here.
             val recipe = upgraded.recipeDao().get("lib", "photo")!!

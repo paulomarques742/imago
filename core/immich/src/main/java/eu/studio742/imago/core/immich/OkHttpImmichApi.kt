@@ -142,6 +142,10 @@ class OkHttpImmichApi(
         // The library shows photos and videos; the request does not filter by type so that
         // Immich's `nextPage` keeps counting the same pages the grid goes through.
         requestedType = null, allowedTypes = setOf(AssetType.IMAGE, AssetType.VIDEO), personId = personId,
+        // Left unsaid, the visibility is "timeline" up to v2 and "not locked" from v3, which brings
+        // in the archive and the hidden movement of every Live Photo. An album keeps what it holds,
+        // archive included, so it is the one search that does not narrow it.
+        visibility = VISIBILITY_TIMELINE.takeIf { albumId == null },
     )
 
     override suspend fun searchMedia(
@@ -152,7 +156,7 @@ class OkHttpImmichApi(
         query: String?,
     ): AssetPage = search(
         connection, page, pageSize, LibraryFilter.ALL, null, null, query,
-        requestedType = null, allowedTypes = types,
+        requestedType = null, allowedTypes = types, visibility = VISIBILITY_TIMELINE,
     )
 
     private suspend fun search(
@@ -195,7 +199,9 @@ class OkHttpImmichApi(
             permission = ImmichKeyPermissions.SEARCH_ASSETS,
         )
         AssetPage(
-            items = response.assets.items.map(AssetResponseDto::toDomain).filter { it.type in allowedTypes },
+            // Filtered after the request, never in it: the page still counts what was left out, and
+            // `nextPage` stays the server's.
+            items = response.assets.items.filter { it.isPresentable() }.map(AssetResponseDto::toDomain).filter { it.type in allowedTypes },
             nextPage = response.assets.nextPage?.toIntOrNull(),
         )
     }
@@ -218,7 +224,8 @@ class OkHttpImmichApi(
             permission = ImmichKeyPermissions.SEARCH_ASSETS,
         )
         AssetPage(
-            items = response.assets.items.map(AssetResponseDto::toDomain).filter { it.type == AssetType.IMAGE || it.type == AssetType.VIDEO },
+            items = response.assets.items.filter { it.isPresentable() }.map(AssetResponseDto::toDomain)
+                .filter { it.type == AssetType.IMAGE || it.type == AssetType.VIDEO },
             nextPage = response.assets.nextPage?.toIntOrNull(),
         )
     }
@@ -243,6 +250,7 @@ class OkHttpImmichApi(
             takenAfter = takenAfter,
             takenBefore = takenBefore,
             language = language,
+            visibility = VISIBILITY_TIMELINE.takeIf { albumId == null },
         )
         val response = executeJson<SearchResponseDto>(
             request = Request.Builder()
@@ -253,7 +261,8 @@ class OkHttpImmichApi(
             permission = ImmichKeyPermissions.SEARCH_SMART,
         )
         AssetPage(
-            items = response.assets.items.map(AssetResponseDto::toDomain).filter { it.type == AssetType.IMAGE || it.type == AssetType.VIDEO },
+            items = response.assets.items.filter { it.isPresentable() }.map(AssetResponseDto::toDomain)
+                .filter { it.type == AssetType.IMAGE || it.type == AssetType.VIDEO },
             nextPage = response.assets.nextPage?.toIntOrNull(),
         )
     }
@@ -340,7 +349,8 @@ class OkHttpImmichApi(
             }
             .mapNotNull { memory ->
                 val year = memory.data?.year ?: return@mapNotNull null
-                val assets = memory.assets.map(AssetResponseDto::toDomain).filter { it.type == AssetType.IMAGE || it.type == AssetType.VIDEO }
+                val assets = memory.assets.filter { it.isPresentable() }.map(AssetResponseDto::toDomain)
+                    .filter { it.type == AssetType.IMAGE || it.type == AssetType.VIDEO }
                 ServerDayMemory(year, assets).takeIf { assets.isNotEmpty() }
             }
             .groupBy { it.year }
@@ -1119,6 +1129,7 @@ private data class SmartSearchDto(
     val takenBefore: String? = null,
     val language: String? = null,
     val withExif: Boolean? = null,
+    val visibility: String? = null,
 )
 
 @Serializable
@@ -1200,6 +1211,7 @@ private data class AssetDetailResponseDto(
     val isArchived: Boolean? = null,
     val people: List<PersonResponseDto> = emptyList(),
     val libraryId: String? = null,
+    val livePhotoVideoId: JsonElement = UNSAID,
 ) {
     fun toDomain() = ImmichAssetDetail(
         people = people.filterNot { it.isHidden }.sortedBy { it.name.isBlank() }.map { ImmichPerson(it.id, it.name.trim()) },
@@ -1223,6 +1235,8 @@ private data class AssetDetailResponseDto(
             durationMs = duration.toDurationMs(),
             isArchived = visibility.equals("archive", ignoreCase = true) || isArchived == true,
             externalLibraryId = libraryId?.takeIf(String::isNotBlank),
+            livePhotoVideoId = livePhotoVideoId.assetIdOrNull(),
+            livePhotoKnown = livePhotoVideoId !== UNSAID,
         ),
         exif = exifInfo?.toDomain() ?: AssetExif(),
     )
@@ -1307,6 +1321,11 @@ private data class TimeBucketAssetsDto(
      * only the covers come; the count is how many the stack holds, the cover included.
      */
     val stack: List<List<JsonElement>?> = emptyList(),
+    /**
+     * The hidden video of each Live Photo, null for the others. Absent, or out of step with [id], it
+     * says nothing: the relation then stays unknown rather than being read as "no movement".
+     */
+    val livePhotoVideoId: List<String?>? = null,
 ) {
     fun toDomain(): List<ImmichAsset> = id.indices.mapNotNull { index ->
         // Trash and archive do not go into the grid; letting them in here would put them there
@@ -1334,6 +1353,8 @@ private data class TimeBucketAssetsDto(
             stackId = stack.getOrNull(index)?.getOrNull(0)?.let { (it as? JsonPrimitive)?.contentOrNull },
             // The contract declares both as text; read as a number either way.
             stackCount = stack.getOrNull(index)?.getOrNull(1)?.let { (it as? JsonPrimitive)?.contentOrNull?.toIntOrNull() },
+            livePhotoVideoId = livePhotoVideoId?.takeIf { it.size == id.size }?.get(index)?.takeIf(String::isNotBlank),
+            livePhotoKnown = livePhotoVideoId?.size == id.size,
         )
     }
 }
@@ -1405,7 +1426,15 @@ private data class AssetResponseDto(
     val visibility: String? = null,
     val isArchived: Boolean? = null,
     val libraryId: String? = null,
+    val livePhotoVideoId: JsonElement = UNSAID,
 ) {
+    /**
+     * Whether the asset is one the library shows on its own. A hidden one is the movement of a Live
+     * Photo, reached through the photo; a locked one is in the locked folder, which a key does not open.
+     */
+    fun isPresentable() = !visibility.equals(VISIBILITY_HIDDEN, ignoreCase = true) &&
+        !visibility.equals(VISIBILITY_LOCKED, ignoreCase = true)
+
     fun toDomain() = ImmichAsset(
         id = id,
         checksum = checksum,
@@ -1426,8 +1455,25 @@ private data class AssetResponseDto(
         durationMs = duration.toDurationMs(),
         isArchived = visibility.equals("archive", ignoreCase = true) || isArchived == true,
         externalLibraryId = libraryId?.takeIf(String::isNotBlank),
+        livePhotoVideoId = livePhotoVideoId.assetIdOrNull(),
+        livePhotoKnown = livePhotoVideoId !== UNSAID,
     )
 }
+
+private const val VISIBILITY_TIMELINE = "timeline"
+private const val VISIBILITY_HIDDEN = "hidden"
+private const val VISIBILITY_LOCKED = "locked"
+
+/**
+ * A field the answer left out, told apart from one it sent as null. Decoded as a nullable element,
+ * both would be null; the movement needs the difference, since only the second says "no movement".
+ *
+ * `internal` for the same reason as [toDurationMs]: it is read from the DTOs' generated code.
+ */
+internal val UNSAID: JsonElement = JsonObject(emptyMap())
+
+internal fun JsonElement.assetIdOrNull(): String? =
+    (this as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
 
 /**
  * A video's duration in milliseconds, whether it comes as a number or as "0:00:12.000".

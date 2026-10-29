@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -130,6 +131,86 @@ actual fun rememberVideoPlayback(url: String?, apiKey: String): VideoPlayback? {
 
 private const val POSITION_REFRESH_MS = 100L
 
+actual val PlaysMotionInApp: Boolean = true
+
+/**
+ * The movement, on top of the photo it belongs to.
+ *
+ * The player is made when the finger first presses (the long press is the time it has to start the
+ * stream) and lives while the page does: holding again replays it without asking for it again. The
+ * view draws on a texture with a clear shutter (`motion_player`), so until the first frame arrives
+ * what shows is still the photo and not a black rectangle.
+ */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@Composable
+actual fun MotionPlayer(
+    url: String,
+    apiKey: String,
+    playing: Boolean,
+    onEnded: () -> Unit,
+    onFailed: (Throwable) -> Unit,
+    modifier: Modifier,
+) {
+    val context = LocalContext.current
+    val ended by rememberUpdatedState(onEnded)
+    val failed by rememberUpdatedState(onFailed)
+    val player = remember(url, apiKey) {
+        val http = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(eu.studio742.imago.core.immich.ImmichHttp.client)
+            .setDefaultRequestProperties(if (apiKey.isBlank()) emptyMap() else mapOf(eu.studio742.imago.core.immich.IMMICH_API_KEY_HEADER to apiKey))
+        val source = EmbeddedMotionDataSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(context, http))
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(source))
+            .build()
+            .apply {
+                setMediaItem(MediaItem.fromUri(url))
+                // Always silent: it is the photo moving, not a video being watched.
+                volume = 0f
+                repeatMode = Player.REPEAT_MODE_OFF
+                prepare()
+            }
+    }
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticArea.VIDEO, error,
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.LIVE_PHOTO)
+                failed(error)
+            }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED) ended()
+            }
+        }
+        player.addListener(listener)
+        onDispose {
+            player.removeListener(listener)
+            player.release()
+        }
+    }
+    LaunchedEffect(player, playing) {
+        if (playing) {
+            // A player that failed before is asked again: holding once more is the way to retry.
+            if (player.playbackState == Player.STATE_IDLE) player.prepare()
+            player.seekTo(0L)
+            player.play()
+        } else {
+            player.pause()
+        }
+    }
+    if (playing) {
+        AndroidView(
+            factory = {
+                (android.view.LayoutInflater.from(it).inflate(R.layout.motion_player, null) as PlayerView).apply {
+                    this.player = player
+                }
+            },
+            update = { it.player = player },
+            onRelease = { it.player = null },
+            modifier = modifier,
+        )
+    }
+}
+
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 actual fun DetailVideoPlayer(playback: VideoPlayback?, url: String, apiKey: String, modifier: Modifier) {
@@ -154,6 +235,32 @@ actual fun DetailVideoPlayer(playback: VideoPlayback?, url: String, apiKey: Stri
         },
         modifier = modifier,
     )
+}
+
+/**
+ * Reads a Motion Photo's video from inside the photo's file: an [EmbeddedMotion] url becomes the
+ * photo's own url, shifted to where the video starts and cut where it ends, so the MP4 extractor sees
+ * a file of its own. Any other url goes through untouched.
+ */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+private class EmbeddedMotionDataSource(private val upstream: androidx.media3.datasource.DataSource) :
+    androidx.media3.datasource.DataSource by upstream {
+    override fun open(dataSpec: androidx.media3.datasource.DataSpec): Long {
+        val motion = eu.studio742.imago.core.model.EmbeddedMotion.parse(dataSpec.uri.toString()) ?: return upstream.open(dataSpec)
+        val left = motion.length - dataSpec.position
+        val length = if (dataSpec.length == C.LENGTH_UNSET.toLong()) left else minOf(dataSpec.length, left)
+        return upstream.open(
+            dataSpec.buildUpon()
+                .setUri(android.net.Uri.parse(motion.fileUrl))
+                .setPosition(motion.start + dataSpec.position)
+                .setLength(length)
+                .build(),
+        )
+    }
+
+    class Factory(private val upstream: androidx.media3.datasource.DataSource.Factory) : androidx.media3.datasource.DataSource.Factory {
+        override fun createDataSource(): androidx.media3.datasource.DataSource = EmbeddedMotionDataSource(upstream.createDataSource())
+    }
 }
 
 private class ExoVideoPlayback(val player: ExoPlayer) : VideoPlayback {

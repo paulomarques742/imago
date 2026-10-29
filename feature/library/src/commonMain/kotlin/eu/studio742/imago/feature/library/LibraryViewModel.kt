@@ -81,6 +81,13 @@ data class AssetUiModel(
     val stackCount: Int? = null,
     /** A camera RAW: it takes longer to open, and the tile says why ([isRawOriginal]). */
     val isRaw: Boolean = false,
+    /**
+     * The stream of a Live Photo's or Motion Photo's movement, and the key of the library it lives
+     * in — in the unified library a phone copy plays its server copy's. Null for a photo without one
+     * and for videos.
+     */
+    val motionUrl: String? = null,
+    val motionApiKey: String = "",
 )
 
 data class AlbumUiModel(
@@ -138,6 +145,10 @@ fun ImmichAsset.toAssetUiModel(library: LibraryRepository, recipe: EditRecipe?):
         isArchived = isArchived,
         stackCount = stackCount?.takeIf { stackId != null && it > 1 },
         isRaw = !isVideo && isRawOriginal(mimeType, originalFileName),
+        // The photo's own id for every image; the movement's only to play it. Its thumbnail is never
+        // asked for: Immich does not make one for a hidden asset.
+        motionUrl = livePhotoVideoId?.takeIf { !isVideo }?.let { runCatching { library.videoPlaybackUrl(it) }.getOrNull() },
+        motionApiKey = livePhotoVideoId?.takeIf { !isVideo }?.let { runCatching { library.apiKey(it) }.getOrNull() }.orEmpty(),
     )
 }
 

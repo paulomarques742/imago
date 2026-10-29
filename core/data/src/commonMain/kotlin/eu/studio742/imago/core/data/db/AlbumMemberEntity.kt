@@ -35,6 +35,9 @@ interface AlbumMemberDao {
     @Query("DELETE FROM album_members WHERE libraryKey = :libraryKey AND albumId = :albumId AND refreshedAt != :refreshedAt")
     suspend fun removeUnseen(libraryKey: String, albumId: String, refreshedAt: Long)
 
+    @Query("DELETE FROM album_members WHERE libraryKey = :libraryKey AND assetId IN (:assetIds)")
+    suspend fun removeAssets(libraryKey: String, assetIds: List<String>)
+
     /**
      * The album's grid, in the server's order. The same chips and search as the timeline, applied here
      * because the album is read whole; a photo under a stack's cover stays under it, as in the timeline.

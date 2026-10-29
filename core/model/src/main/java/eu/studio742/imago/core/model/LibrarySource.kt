@@ -57,6 +57,15 @@ data class LibrarySource(
     )
 }
 
+/**
+ * [this] with its id qualified by [libraryId], and its movement with it. A movement already qualified
+ * stays as it is: in the unified library a phone copy plays the server's movement, from the server.
+ */
+fun ImmichAsset.inLibrary(libraryId: String): ImmichAsset = copy(
+    id = AssetReference(libraryId, id).encode(),
+    livePhotoVideoId = livePhotoVideoId?.let { AssetReference.qualify(libraryId, it) },
+)
+
 /** An opaque, source-qualified ID travels through UI, recipes and persisted media references. */
 @Serializable
 data class AssetReference(val libraryId: String, val localId: String) {

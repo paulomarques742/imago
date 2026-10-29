@@ -54,7 +54,7 @@ class SourceLibraryRepository @Inject constructor(
         val id = configuration.selectedLibraryId.value
         if (id == UNIFIED_LIBRARY_ID) return unified().assets(filter, month, albumId, query)
         return provider(id).assets(filter, month, albumId?.let { AssetReference.parse(it).localId }, query)
-            .map { page -> page.map { it.copy(id = AssetReference(id, it.id).encode()) } }
+            .map { page -> page.map { it.inLibrary(id) } }
     }
     override suspend fun albums(): List<ImmichAlbum> = albumsOf(configuration.selectedLibraryId.value)
 
@@ -108,7 +108,7 @@ class SourceLibraryRepository @Inject constructor(
         val id = configuration.selectedLibraryId.value
         if (id == UNIFIED_LIBRARY_ID) return unified().searchByContent(query, filter, month, albumId)
         return provider(id).searchByContent(query, filter, month, albumId?.let { AssetReference.parse(it).localId })
-            .map { page -> page.map { it.copy(id = AssetReference(id, it.id).encode()) } }
+            .map { page -> page.map { it.inLibrary(id) } }
     }
 
     override suspend fun onThisDay(today: LocalDate): List<DayMemory> {
@@ -128,7 +128,7 @@ class SourceLibraryRepository @Inject constructor(
     override fun archivedAssets(): Flow<PagingData<ImmichAsset>> {
         val id = configuration.selectedLibraryId.value
         if (id == UNIFIED_LIBRARY_ID) return unified().archivedAssets()
-        return provider(id).archivedAssets().map { page -> page.map { it.copy(id = AssetReference(id, it.id).encode()) } }
+        return provider(id).archivedAssets().map { page -> page.map { it.inLibrary(id) } }
     }
 
     override val hasMap: Boolean
@@ -162,7 +162,7 @@ class SourceLibraryRepository @Inject constructor(
         if (unifiedSelected) return unified().personAssets(personId, filter)
         val person = AssetReference.parse(personId)
         return provider(person.libraryId).personAssets(person.localId, filter)
-            .map { page -> page.map { it.copy(id = AssetReference(person.libraryId, it.id).encode()) } }
+            .map { page -> page.map { it.inLibrary(person.libraryId) } }
     }
 
     override val hasTrash: Boolean
@@ -171,7 +171,7 @@ class SourceLibraryRepository @Inject constructor(
     override suspend fun trash(): TrashContents {
         val id = configuration.selectedLibraryId.value
         val contents = provider(id).trash()
-        return contents.copy(items = contents.items.map { it.copy(asset = it.asset.copy(id = AssetReference(id, it.asset.id).encode())) })
+        return contents.copy(items = contents.items.map { it.copy(asset = it.asset.inLibrary(id)) })
     }
 
     override suspend fun restoreFromTrash(assetIds: List<String>) = byLibrary(assetIds) { ids -> restoreFromTrash(ids) }
@@ -269,14 +269,14 @@ class SourceLibraryRepository @Inject constructor(
 
     override suspend fun stackMembers(assetId: String): List<ImmichAsset> {
         val ref = AssetReference.parse(assetId)
-        return provider(ref.libraryId).stackMembers(ref.localId).map { it.copy(id = AssetReference(ref.libraryId, it.id).encode()) }
+        return provider(ref.libraryId).stackMembers(ref.localId).map { it.inLibrary(ref.libraryId) }
     }
 
     override suspend fun assetDetail(assetId: String): ImmichAssetDetail {
         val ref = AssetReference.parse(assetId)
         val detail = provider(ref.libraryId).assetDetail(ref.localId)
         return detail.copy(
-            asset = detail.asset.copy(id = assetId),
+            asset = detail.asset.inLibrary(ref.libraryId),
             people = detail.people.map { it.copy(id = AssetReference(ref.libraryId, it.id).encode()) },
         )
     }

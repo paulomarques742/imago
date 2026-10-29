@@ -1041,6 +1041,183 @@ class OkHttpImmichApiTest {
         assertEquals(listOf("person.read"), (error as ImmichApiException.MissingPermission).permissions)
     }
 
+    @Test
+    fun theLibrarySearchAsksForTheTimelineAndKeepsEachPhotosMovement() = runTest {
+        server.enqueue(
+            searchResponse(
+                nextPage = "2",
+                asset("p1", "IMAGE", """"visibility":"timeline","livePhotoVideoId":"m1""""),
+                asset("m1", "VIDEO", """"visibility":"hidden""""),
+                asset("p2", "IMAGE", """"visibility":"timeline","livePhotoVideoId":null"""),
+                asset("v1", "VIDEO", """"visibility":"timeline""""),
+                asset("l1", "IMAGE", """"visibility":"locked""""),
+            ),
+        )
+
+        val page = api.searchAssets(connection(), 1, 100, LibraryFilter.ALL)
+
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body, body.contains("\"visibility\":\"timeline\""))
+        // Never `isMotion: false`: the hidden movement does not point at anything, so it would stay.
+        assertFalse(body, body.contains("isMotion"))
+        // The movement and the locked photo go; an ordinary video stays; the page is still the server's.
+        assertEquals(listOf("p1", "p2", "v1"), page.items.map { it.id })
+        assertEquals(2, page.nextPage)
+        assertEquals(listOf("m1", null, null), page.items.map { it.livePhotoVideoId })
+        // p2 said "no movement"; v1 said nothing, and that is not the same answer.
+        assertEquals(listOf(true, true, false), page.items.map { it.livePhotoKnown })
+    }
+
+    @Test
+    fun aPageWithOnlyHiddenMovementsKeepsTheNextPage() = runTest {
+        server.enqueue(searchResponse(nextPage = "3", asset("m1", "VIDEO", """"visibility":"hidden"""")))
+
+        val page = api.searchAssets(connection(), 2, 100, LibraryFilter.FAVORITES)
+
+        assertTrue(page.items.isEmpty())
+        assertEquals(3, page.nextPage)
+    }
+
+    @Test
+    fun anAlbumKeepsItsArchivedPhotosButNotTheHiddenMovements() = runTest {
+        server.enqueue(
+            searchResponse(
+                nextPage = null,
+                asset("a1", "IMAGE", """"visibility":"archive""""),
+                asset("m1", "VIDEO", """"visibility":"hidden""""),
+            ),
+        )
+
+        val page = api.searchAssets(connection(), 1, 100, LibraryFilter.ALL, albumId = "album-1")
+
+        assertFalse(server.takeRequest().body.readUtf8().contains("\"visibility\""))
+        assertEquals(listOf("a1"), page.items.map { it.id })
+    }
+
+    @Test
+    fun aPersonAndAFileNameAreSearchedInTheTimeline() = runTest {
+        server.enqueue(MockResponse().setBody(EMPTY_SEARCH_RESPONSE))
+        server.enqueue(MockResponse().setBody(EMPTY_SEARCH_RESPONSE))
+        server.enqueue(MockResponse().setBody(EMPTY_SEARCH_RESPONSE))
+
+        api.searchAssets(connection(), 1, 100, LibraryFilter.ALL, personId = "p2")
+        api.searchAssets(connection(), 1, 100, LibraryFilter.ALL, query = "IMG_1")
+        api.searchMedia(connection(), 1, 100, setOf(AssetType.IMAGE))
+
+        repeat(3) {
+            val body = server.takeRequest().body.readUtf8()
+            assertTrue(body, body.contains("\"visibility\":\"timeline\""))
+        }
+    }
+
+    @Test
+    fun theArchiveAndTheTrashKeepTheirOwnVisibilityWithoutTheHiddenMovements() = runTest {
+        server.enqueue(searchResponse(nextPage = null, asset("a1", "IMAGE", """"visibility":"archive"""")))
+        server.enqueue(
+            searchResponse(
+                nextPage = null,
+                asset("t1", "IMAGE", """"visibility":"timeline","livePhotoVideoId":"m1""""),
+                asset("m1", "VIDEO", """"visibility":"hidden""""),
+            ),
+        )
+
+        api.archivedAssets(connection(), 1, 100)
+        val trash = api.trashedAssets(connection(), 1, 100)
+
+        val archive = server.takeRequest().body.readUtf8()
+        assertTrue(archive, archive.contains("\"visibility\":\"archive\""))
+        assertFalse(server.takeRequest().body.readUtf8().contains("\"visibility\""))
+        assertEquals(listOf("t1"), trash.items.map { it.id })
+        assertEquals("m1", trash.items.single().livePhotoVideoId)
+    }
+
+    @Test
+    fun theContentSearchAsksForTheTimelineOutsideAnAlbum() = runTest {
+        server.enqueue(searchResponse(nextPage = null, asset("m1", "VIDEO", """"visibility":"hidden"""")))
+
+        val page = api.smartSearch(connection(), page = 1, pageSize = 100, query = "praia")
+
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body, body.contains("\"visibility\":\"timeline\""))
+        assertTrue(page.items.isEmpty())
+    }
+
+    @Test
+    fun theMemoriesLeaveTheHiddenMovementsOut() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """[{"type":"on_this_day","data":{"year":2025},"assets":[""" +
+                    asset("p1", "IMAGE", """"livePhotoVideoId":"m1"""") + "," + asset("m1", "VIDEO", """"visibility":"hidden"""") +
+                    "]}]",
+            ),
+        )
+
+        val memories = api.onThisDay(connection(), LocalDate.of(2026, 10, 8))
+
+        assertEquals(listOf("p1"), memories.single().assets.map { it.id })
+        assertEquals("m1", memories.single().assets.single().livePhotoVideoId)
+    }
+
+    @Test
+    fun theDetailSaysWhetherThePhotoHasAMovement() = runTest {
+        server.enqueue(MockResponse().setBody(asset("p1", "IMAGE", """"livePhotoVideoId":"m1"""")))
+        server.enqueue(MockResponse().setBody(asset("p2", "IMAGE", """"livePhotoVideoId":null""")))
+        server.enqueue(MockResponse().setBody(asset("p3", "IMAGE", """"visibility":"timeline"""")))
+
+        val withMovement = api.getAssetDetail(connection(), "p1").asset
+        val without = api.getAssetDetail(connection(), "p2").asset
+        val unsaid = api.getAssetDetail(connection(), "p3").asset
+
+        assertEquals("m1" to true, withMovement.livePhotoVideoId to withMovement.livePhotoKnown)
+        assertEquals(null to true, without.livePhotoVideoId to without.livePhotoKnown)
+        assertEquals(null to false, unsaid.livePhotoVideoId to unsaid.livePhotoKnown)
+    }
+
+    @Test
+    fun aMonthsColumnsCarryEachPhotosMovementByIndex() = runTest {
+        val columns = """"id":["p1","p2","v1"],"fileCreatedAt":["2026-08-03T10:00:00.000Z","2026-08-02T10:00:00.000Z","2026-08-01T10:00:00.000Z"],
+            "isFavorite":[false,false,false],"isImage":[true,true,false],"isTrashed":[false,false,false],
+            "duration":[null,null,1000],"ratio":[1.0,1.0,1.0],"localOffsetHours":[0,0,0],
+            "visibility":["timeline","timeline","timeline"]"""
+        server.enqueue(MockResponse().setBody("""{$columns,"livePhotoVideoId":["m1",null,null]}"""))
+        server.enqueue(MockResponse().setBody("""{$columns}"""))
+        server.enqueue(MockResponse().setBody("""{$columns,"livePhotoVideoId":["m1"]}"""))
+
+        val aligned = api.getTimeBucketAssets(connection(), "2026-08-01")
+        val absent = api.getTimeBucketAssets(connection(), "2026-08-01")
+        val shorter = api.getTimeBucketAssets(connection(), "2026-08-01")
+
+        assertEquals(listOf("m1", null, null), aligned.map { it.livePhotoVideoId })
+        assertTrue(aligned.all { it.livePhotoKnown })
+        // Without the column, or with one that does not line up with the ids, nothing is known —
+        // a movement read at the wrong index would play another photo's video.
+        assertTrue((absent + shorter).none { it.livePhotoKnown || it.livePhotoVideoId != null })
+    }
+
+    @Test
+    fun aMonthLeavesTheHiddenMovementOut() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"id":["p1","m1"],"fileCreatedAt":["2026-08-03T10:00:00.000Z","2026-08-03T10:00:00.000Z"],
+                   "isFavorite":[false,false],"isImage":[true,false],"isTrashed":[false,false],
+                   "duration":[null,1500],"ratio":[1.0,1.0],"localOffsetHours":[0,0],
+                   "visibility":["timeline","hidden"],"livePhotoVideoId":["m1",null]}""".trimIndent(),
+            ),
+        )
+
+        assertEquals(listOf("p1"), api.getTimeBucketAssets(connection(), "2026-08-01").map { it.id })
+    }
+
+    private fun asset(id: String, type: String, extra: String = "") =
+        """{"id":"$id","originalFileName":"$id.jpg","fileCreatedAt":"2026-01-01T10:00:00Z","localDateTime":"2026-01-01T10:00:00Z",""" +
+            """"width":1,"height":1,"isFavorite":false,"isEdited":false,"type":"$type"${if (extra.isEmpty()) "" else ",$extra"}}"""
+
+    private fun searchResponse(nextPage: String?, vararg items: String) = MockResponse().setBody(
+        """{"albums":{"count":0,"facets":[],"items":[],"nextPage":null,"total":0},""" +
+            """"assets":{"count":${items.size},"facets":[],"items":[${items.joinToString(",")}],""" +
+            """"nextPage":${nextPage?.let { "\"$it\"" } ?: "null"},"total":${items.size}}}""",
+    )
+
     private fun connection() = ImmichConnection(
         serverUrl = server.url("/").toString(),
         apiKey = "secret",

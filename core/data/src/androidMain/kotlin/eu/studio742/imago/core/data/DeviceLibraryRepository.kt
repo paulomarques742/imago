@@ -76,6 +76,7 @@ class DeviceLibraryRepository @Inject constructor(
                 replaceCatalog(rows)
                 // The whole picture: a folder no longer listed has emptied.
                 folderPathCache = paths
+                scope.launch { lookForMotions() }
             } catch (error: SecurityException) {
                 // A revoked grant must never leave inaccessible cached items in the grid.
                 database.assetDao().deleteLibrary(DEVICE_LIBRARY_ID)
@@ -103,6 +104,20 @@ class DeviceLibraryRepository @Inject constructor(
         }
         replaceRows(assetIds, rows)
         folderPathCache = folderPathCache + paths
+    }
+
+    override fun openForMotion(assetId: String): MotionFile? {
+        val descriptor = resolver.openFileDescriptor(Uri.parse(assetId), "r") ?: return null
+        val channel = java.io.FileInputStream(descriptor.fileDescriptor).channel
+        val reader = ByteReader { position, length ->
+            val buffer = java.nio.ByteBuffer.allocate(length.coerceAtMost((descriptor.statSize - position).coerceAtLeast(0).toInt()))
+            while (buffer.hasRemaining() && channel.read(buffer, position + buffer.position()) > 0) Unit
+            buffer.array().copyOf(buffer.position())
+        }
+        return MotionFile(descriptor.statSize, reader) {
+            channel.close()
+            descriptor.close()
+        }
     }
 
     override suspend fun rowsOf(ids: Collection<String>): List<AssetEntity> = withContext(Dispatchers.IO) {

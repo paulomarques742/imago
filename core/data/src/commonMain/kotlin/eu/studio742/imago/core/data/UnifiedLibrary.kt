@@ -8,7 +8,9 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.map
 import eu.studio742.imago.core.data.db.ImmichRoomDatabase
+import eu.studio742.imago.core.data.db.AssetEntity
 import eu.studio742.imago.core.model.AssetReference
+import eu.studio742.imago.core.model.inLibrary
 import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.ImmichAsset
@@ -76,7 +78,7 @@ class UnifiedLibrary(
         if (albumId != null) {
             val album = AssetReference.parse(albumId)
             return libraryOf(album.libraryId).assets(filter, month, album.localId, query)
-                .map { page -> page.map { it.copy(id = AssetReference(album.libraryId, it.id).encode()) } }
+                .map { page -> page.map { it.inLibrary(album.libraryId) } }
         }
         val range = range(filter, month)
         return Pager(PagingConfig(pageSize = 100, initialLoadSize = 100, enablePlaceholders = true, jumpThreshold = 300)) {
@@ -194,8 +196,7 @@ class UnifiedLibrary(
      */
     private fun UnifiedAssetRow.toUnified(): ImmichAsset {
         val ownStack = asset.libraryKey != DEVICE_LIBRARY_ID
-        return asset.toDomain().copy(
-            id = AssetReference(asset.libraryKey, asset.id).encode(),
+        return asset.withServerMovement(serverId, serverLivePhotoVideoId).toDomain().inLibrary(asset.libraryKey).copy(
             isOnServer = alsoOnServer,
             stackId = unifiedStackId ?: asset.stackId.takeIf { ownStack },
             stackCount = unifiedStackSize ?: asset.stackCount.takeIf { ownStack },
@@ -253,7 +254,7 @@ class UnifiedLibrary(
         val album = albumId?.let(AssetReference::parse)
         if (album != null && album.libraryId != serverId) return emptyFlow()
         return server.searchByContent(query, filter, month, album?.localId)
-            .map { page -> page.map { it.copy(id = AssetReference(serverId, it.id).encode(), isOnServer = true) } }
+            .map { page -> page.map { it.inLibrary(serverId).copy(isOnServer = true) } }
     }
 
     override val hasMap: Boolean get() = true
@@ -278,7 +279,7 @@ class UnifiedLibrary(
         emitAll(
             Pager(PagingConfig(pageSize = 100, enablePlaceholders = false)) { database.assetDao().unifiedArchivedPagingSource(DEVICE_LIBRARY_ID, serverId) }
                 .flow.map { page ->
-                    page.map { row -> row.asset.toDomain().copy(id = AssetReference(row.asset.libraryKey, row.asset.id).encode(), isOnServer = row.alsoOnServer) }
+                    page.map { row -> row.asset.withServerMovement(serverId, row.serverLivePhotoVideoId).toDomain().inLibrary(row.asset.libraryKey).copy(isOnServer = row.alsoOnServer) }
                 },
         )
     }
@@ -319,7 +320,7 @@ class UnifiedLibrary(
 
     override fun personAssets(personId: String, filter: LibraryFilter): Flow<PagingData<ImmichAsset>> =
         server.personAssets(AssetReference.parse(personId).localId, filter)
-            .map { page -> page.map { it.copy(id = AssetReference(serverId, it.id).encode(), isOnServer = true) } }
+            .map { page -> page.map { it.inLibrary(serverId).copy(isOnServer = true) } }
 
     // Everything below is reached with a photo's own reference, and goes to its library.
     private fun <T> routed(assetId: String, block: LibraryRepository.(String) -> T): T {
@@ -416,13 +417,10 @@ class UnifiedLibrary(
             .associateBy { it.id }
         return group.mapNotNull { photo ->
             if (photo.libraryKey == DEVICE_LIBRARY_ID) {
-                onPhone[photo.assetId]?.toDomain()?.copy(
-                    id = AssetReference(DEVICE_LIBRARY_ID, photo.assetId).encode(),
-                    isOnServer = photo.serverAssetId != null,
-                )
+                onPhone[photo.assetId]?.toDomain()?.inLibrary(DEVICE_LIBRARY_ID)?.copy(isOnServer = photo.serverAssetId != null)
             } else {
                 (catalogued[photo.assetId]?.toDomain() ?: asked[photo.assetId])
-                    ?.copy(id = AssetReference(serverId, photo.assetId).encode(), isOnServer = true)
+                    ?.copy(id = photo.assetId)?.inLibrary(serverId)?.copy(isOnServer = true)
             }
         }
     }
@@ -444,3 +442,11 @@ class UnifiedLibrary(
         libraryOf(reference.libraryId).downloadOriginal(reference.localId, destination)
     }
 }
+
+/**
+ * A phone copy without a movement of its own plays the one of its server copy, qualified by the
+ * server so that it is asked for there, with the server's key.
+ */
+internal fun AssetEntity.withServerMovement(serverId: String, serverMovement: String?): AssetEntity =
+    if (libraryKey != DEVICE_LIBRARY_ID || livePhotoVideoId != null || serverMovement == null) this
+    else copy(livePhotoVideoId = AssetReference(serverId, serverMovement).encode(), livePhotoKnown = true)

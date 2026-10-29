@@ -39,7 +39,8 @@ interface AssetDao {
         """
         SELECT a.*, (a.libraryKey = :server OR EXISTS (SELECT 1 FROM assets s WHERE s.libraryKey = :server AND s.originalFileName = a.originalFileName AND ABS(julianday(s.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)) AS alsoOnServer,
                (SELECT u.groupId FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 1) AS unifiedStackId,
-               (SELECT u.groupSize FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 1) AS unifiedStackSize
+               (SELECT u.groupSize FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 1) AS unifiedStackSize,
+               (SELECT s.livePhotoVideoId FROM assets s WHERE s.libraryKey = :server AND s.originalFileName = a.originalFileName AND ABS(julianday(s.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1 AND s.livePhotoVideoId IS NOT NULL LIMIT 1) AS serverLivePhotoVideoId
         FROM assets a
         WHERE (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
           AND a.isArchived = 0 AND NOT EXISTS (SELECT 1 FROM unified_stacks u WHERE u.serverKey = :server AND u.libraryKey = a.libraryKey AND u.assetId = a.id AND u.isCover = 0)
@@ -167,7 +168,8 @@ interface AssetDao {
     /** Both sides' archives; a photo archived on both is the phone's, as in the timeline. */
     @Query(
         """
-        SELECT a.*, (a.libraryKey = :server) AS alsoOnServer, NULL AS unifiedStackId, NULL AS unifiedStackSize FROM assets a
+        SELECT a.*, (a.libraryKey = :server) AS alsoOnServer, NULL AS unifiedStackId, NULL AS unifiedStackSize,
+               (SELECT s.livePhotoVideoId FROM assets s WHERE s.libraryKey = :server AND s.originalFileName = a.originalFileName AND ABS(julianday(s.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1 AND s.livePhotoVideoId IS NOT NULL LIMIT 1) AS serverLivePhotoVideoId FROM assets a
         WHERE a.isArchived = 1
           AND (a.libraryKey = :device OR (a.libraryKey = :server AND NOT EXISTS (SELECT 1 FROM assets d WHERE d.libraryKey = :device AND d.isArchived = 1 AND d.originalFileName = a.originalFileName AND ABS(julianday(d.fileCreatedAt) - julianday(a.fileCreatedAt)) < 1)))
         ORDER BY a.fileCreatedAt DESC, a.id DESC
@@ -177,6 +179,17 @@ interface AssetDao {
 
     @Query("SELECT * FROM assets WHERE libraryKey = :libraryKey AND id IN (:ids)")
     suspend fun byIds(libraryKey: String, ids: List<String>): List<AssetEntity>
+
+    /**
+     * The movements of Live Photos the catalogue holds as videos of their own — let in by a search
+     * before the app knew them. Only videos: an id that names a photo is not a movement.
+     */
+    @Query("DELETE FROM assets WHERE libraryKey = :libraryKey AND type = 'VIDEO' AND id IN (:ids)")
+    suspend fun deleteVideos(libraryKey: String, ids: List<String>)
+
+    /** What the detail said about the photo's movement. */
+    @Query("UPDATE assets SET livePhotoVideoId = :livePhotoVideoId, livePhotoKnown = 1 WHERE libraryKey = :libraryKey AND id = :id")
+    suspend fun setMovement(libraryKey: String, id: String, livePhotoVideoId: String?)
 
     /** The server's photos that are on the phone too, by the unified library's rule. */
     @Query(
@@ -471,4 +484,6 @@ data class UnifiedAssetRow(
     /** The stack this row is the cover of in the unified library, and how many photos it holds. */
     val unifiedStackId: String? = null,
     val unifiedStackSize: Int? = null,
+    /** The movement of the server's copy of the same photo, which a phone copy shows in its place. */
+    val serverLivePhotoVideoId: String? = null,
 )

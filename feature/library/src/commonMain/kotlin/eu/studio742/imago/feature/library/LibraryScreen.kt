@@ -53,6 +53,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.MotionPhotosOn
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
@@ -1958,12 +1959,13 @@ private fun AssetTile(
         if (checked) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.38f)))
         }
-        if (asset.isVideo || asset.stackCount != null || asset.isRaw) {
+        if (asset.isVideo || asset.stackCount != null || asset.isRaw || asset.motionUrl != null) {
             Row(
                 modifier = Modifier.align(Alignment.TopEnd).padding(ImagoSpacing.Sm),
                 horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs),
             ) {
                 if (asset.isRaw) RawBadge()
+                if (asset.motionUrl != null) MotionBadge()
                 asset.stackCount?.let { StackBadge(it) }
                 if (asset.isVideo) VideoBadge(durationMs = asset.durationMs)
             }
@@ -2130,6 +2132,21 @@ private fun StackBadge(count: Int, modifier: Modifier = Modifier) {
             modifier = Modifier.padding(start = 2.dp),
         )
     }
+}
+
+/** A photo with a movement — a Live Photo or a Motion Photo — which the detail plays while held. */
+@Composable
+private fun MotionBadge(modifier: Modifier = Modifier) {
+    Icon(
+        Icons.Outlined.MotionPhotosOn,
+        contentDescription = null,
+        tint = ImagoColors.BrandWhite,
+        modifier = modifier
+            .clip(RoundedCornerShape(ImagoRadii.Small))
+            .background(Color.Black.copy(alpha = 0.55f))
+            .padding(horizontal = ImagoSpacing.Xs, vertical = 2.dp)
+            .size(ImagoSizes.IconSmall),
+    )
 }
 
 /**

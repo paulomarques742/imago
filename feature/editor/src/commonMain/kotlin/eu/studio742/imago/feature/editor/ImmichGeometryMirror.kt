@@ -37,6 +37,12 @@ internal class ImmichGeometryMirror(
             val connection = configuration.source(reference.libraryId).connection()
             val detail = immichApi.getAssetDetail(connection, reference.localId)
             if (detail.asset.type != AssetType.IMAGE) return
+            // Immich refuses edits on a photo with a movement, and undoing the pairing to get past
+            // that would break the Live Photo: the recipe keeps the geometry, the server stays as it is.
+            if (detail.asset.livePhotoVideoId != null) {
+                log("skipped ${reference.localId}: Immich does not edit Live Photos")
+                return
+            }
             val size = detail.exif.serverImageSize()
             if (size == null) {
                 log("skipped ${reference.localId}: Immich does not know its dimensions")

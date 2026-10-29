@@ -60,4 +60,14 @@ object UnifiedMigration {
             db.execSQL(ALBUM_MEMBERS_SQL)
         }
     }
+    val MIGRATION_20_21 = object : Migration(20, 21) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            LIVE_PHOTO_SQL.forEach(db::execSQL)
+        }
+    }
+    val MIGRATION_21_22 = object : Migration(21, 22) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(LOCAL_MOTIONS_SQL)
+        }
+    }
 }
