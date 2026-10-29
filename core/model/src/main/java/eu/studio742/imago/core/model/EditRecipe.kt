@@ -5,6 +5,11 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 22 activates [retouches], the Remove tool's corrections, step 1a of the pipeline. An app at 21
+ * decodes them and draws the photo as if they were not there, so it has to ask to be updated instead.
+ * 18 was meant for them and never shipped: the corrections were written before 19 to 21 and only
+ * wired to the render after them.
+ *
  * 21 widens and strengthens the Highlights band (WIDE_HIGHLIGHTS_PROCESS_VERSION): it starts at 0.20
  * and not at 0.35, with a bigger gain, because at -100 the first one moved a light midtone by a few
  * hundredths. A recipe saved before keeps the band it was edited with; an app at 20 asks to be updated
@@ -67,7 +72,7 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 21
+const val CURRENT_PROCESS_VERSION = 22
 
 /** Process 21 reads [Calibration]; an app before it would draw the photo without it, and asks to be updated. */
 const val CALIBRATION_PROCESS_VERSION = 21

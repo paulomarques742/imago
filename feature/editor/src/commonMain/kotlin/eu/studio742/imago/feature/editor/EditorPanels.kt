@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.outlined.Adjust
+import androidx.compose.material.icons.outlined.Healing
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Save
@@ -327,6 +328,7 @@ private fun HistoryIcon.vector(): ImageVector = when (this) {
     HistoryIcon.CROP -> Icons.Outlined.Crop
     HistoryIcon.RECIPE -> Icons.Outlined.AutoAwesome
     HistoryIcon.MASK -> Icons.Outlined.Adjust
+    HistoryIcon.REMOVE -> Icons.Outlined.Healing
 }
 
 /** "Today, 18:42" while it is today; from then on, the day too. The day and the time come from the language. */
@@ -475,6 +477,7 @@ private fun EditorToolButton(
 private fun EditorTool.label() = when (this) {
     EditorTool.ADJUSTMENTS -> stringResource(Res.string.editor_tool_adjust)
     EditorTool.CROP -> stringResource(Res.string.editor_tool_crop)
+    EditorTool.REMOVE -> stringResource(Res.string.editor_tool_remove)
     EditorTool.RECIPES -> stringResource(Res.string.editor_tool_recipes)
     EditorTool.HISTORY -> stringResource(Res.string.editor_history)
 }
@@ -482,6 +485,7 @@ private fun EditorTool.label() = when (this) {
 private fun EditorTool.vector(): ImageVector = when (this) {
     EditorTool.ADJUSTMENTS -> Icons.Outlined.Tune
     EditorTool.CROP -> Icons.Outlined.Crop
+    EditorTool.REMOVE -> Icons.Outlined.Healing
     EditorTool.RECIPES -> Icons.Outlined.AutoAwesome
     EditorTool.HISTORY -> Icons.Outlined.History
 }

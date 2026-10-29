@@ -29,6 +29,7 @@
     <string name="editor_reset">Reset</string>
     <string name="editor_tool_adjust">Adjust</string>
     <string name="editor_tool_crop">Crop</string>
+    <string name="editor_tool_remove">Remove</string>
     <string name="editor_tool_recipes">Recipes</string>
     <string name="editor_tool_export">Export</string>
     <string name="editor_tool_save">Save</string>
@@ -478,4 +479,20 @@
     <string name="reel_notification_title">Making your video</string>
     <string name="reel_notification_done">Your video is ready</string>
     <string name="editor_developing_raw">Developing the RAW…</string>
+    <string name="editor_remove_mode_remove">Remove</string>
+    <string name="editor_remove_mode_heal">Heal</string>
+    <string name="editor_remove_mode_clone">Clone</string>
+    <string name="editor_remove_opacity">Opacity</string>
+    <string name="editor_remove_hint">Paint over what you want to take out of the photo.</string>
+    <string name="editor_remove_solving">Working out the correction…</string>
+    <string name="editor_remove_nothing_to_take">There is nothing in the photo to fill this area with. Try a smaller one.</string>
+    <string name="editor_remove_refresh">Refresh</string>
+    <string name="editor_history_retouch_source_moved">Source moved</string>
+    <string name="editor_history_retouch_moved">Correction moved</string>
+    <string name="editor_history_retouch_changed">Correction changed</string>
+    <string name="editor_history_retouch_deleted">Correction deleted</string>
+    <string name="editor_history_retouch_refreshed">Filled again</string>
+    <string name="editor_remove_hide_overlay">Hide the corrections</string>
+    <string name="editor_remove_show_overlay">Show the corrections</string>
+    <string name="editor_history_retouch_extended">Area extended</string>
 </resources>

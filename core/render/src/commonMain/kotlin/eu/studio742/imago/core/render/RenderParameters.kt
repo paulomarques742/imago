@@ -10,6 +10,7 @@ import eu.studio742.imago.core.model.ColorRange
 import eu.studio742.imago.core.model.LuminanceRange
 import eu.studio742.imago.core.model.MaskOp
 import eu.studio742.imago.core.model.MaskShape
+import eu.studio742.imago.core.model.Retouch
 
 data class RenderParameters(
     val temperature: Float = 0f,
@@ -104,6 +105,13 @@ data class RenderParameters(
      * without them, with no error along the way.
      */
     val masks: List<MaskRenderSpec> = emptyList(),
+    /**
+     * The Remove tool's corrections, step 1a, already gated by the recipe's process. They are not drawn
+     * by the processor or the shader: whoever holds the photo applies them to it first
+     * ([RetouchedSources]), and the rest of the pipeline starts from the corrected pixels. A constructor
+     * property for the same reason as [masks]: a photo whose only edit is a correction is not neutral.
+     */
+    val retouches: List<Retouch> = emptyList(),
 ) {
     init {
         require(toneCurveRgb.size == CURVE_SAMPLE_COUNT)
@@ -175,6 +183,8 @@ data class RenderParameters(
             rawExposure = 0f,
             highlightCeiling = 1f,
             wideHighlights = false,
+            // Already in the pixels the processor is given.
+            retouches = emptyList(),
         ) == RenderParameters()
 
     /**

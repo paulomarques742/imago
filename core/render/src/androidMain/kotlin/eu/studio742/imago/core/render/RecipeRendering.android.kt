@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.Geometry
+import eu.studio742.imago.core.model.Retouch
 import java.io.ByteArrayOutputStream
 import kotlin.math.roundToInt
 
@@ -23,10 +24,15 @@ import kotlin.math.roundToInt
  */
 fun renderRecipePreview(source: Bitmap, recipe: EditRecipe): Bitmap {
     val parameters = recipe.toRenderParameters()
+    // Step 1a, on the photo as it was shot; a copy, since [source] is not ours to write on.
+    val corrected = if (parameters.retouches.isEmpty()) source else source.toPixelBuffer().also {
+        Retouching.applyInPlace(it, parameters.retouches)
+    }.toPlatformBitmap()
     // Before the crop, which is when the original image's dimensions still exist.
-    val geometry = parameters.frameGeometry(source.width, source.height)
-    val brushes = BrushRasters.of(parameters, BitmapSurface(source))
-    val cropped = applyRecipeGeometry(source, recipe.activeGeometry())
+    val geometry = parameters.frameGeometry(corrected.width, corrected.height)
+    val brushes = BrushRasters.of(parameters, BitmapSurface(corrected))
+    val cropped = applyRecipeGeometry(corrected, recipe.activeGeometry())
+    if (corrected !== source && cropped !== corrected) corrected.recycle()
     // The processor writes pixels directly: it needs a mutable ARGB_8888 bitmap. A crop may return an
     // immutable one, and Coil may hand over a hardware bitmap — in either case the copy is what serves
     // as the canvas.
@@ -36,6 +42,17 @@ fun renderRecipePreview(source: Bitmap, recipe: EditRecipe): Bitmap {
             .also { if (cropped !== source) cropped.recycle() }
     }
     return BitmapPhotoProcessor.renderInPlace(working, parameters, geometry, brushes)
+}
+
+/**
+ * Step 1a written over [bitmap], which has to be mutable and in image space: oriented as shot, before
+ * any of the recipe's geometry. What the export does to its only copy of the full photo.
+ */
+fun applyRetouchesInPlace(bitmap: Bitmap, retouches: List<Retouch>) {
+    if (retouches.isEmpty()) return
+    val pixels = bitmap.toPixelBuffer()
+    Retouching.applyInPlace(pixels, retouches)
+    bitmap.setPixels(pixels.pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
 }
 
 /**

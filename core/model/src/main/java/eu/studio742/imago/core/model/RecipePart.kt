@@ -15,6 +15,8 @@ enum class RecipePart {
     TEXTURE, CLARITY, DEHAZE,
     VIGNETTE, GRAIN,
     MASKS,
+    /** The Remove tool's corrections: off unless asked for, as the dust on a sensor is the one reason to copy them. */
+    REMOVE,
     CROP, STRAIGHTEN, ROTATE_AND_FLIP, PERSPECTIVE,
     ;
 
@@ -25,14 +27,14 @@ enum class RecipePart {
          * What does not depend on where things are in the frame. A crop, a straightened horizon or a
          * gradient placed over a sky belong to the photo they were made on.
          */
-        val LOOK: Set<RecipePart> = entries.toSet() - GEOMETRY - MASKS
+        val LOOK: Set<RecipePart> = entries.toSet() - GEOMETRY - MASKS - REMOVE
 
         /**
          * What a recipe saved before the choice existed carries. Its geometry came along by accident,
          * and applying it cropped and tilted every photo it touched; its masks were there on purpose.
          * It never chose a profile: there were none.
          */
-        val LEGACY: Set<RecipePart> = entries.toSet() - GEOMETRY - PROFILE
+        val LEGACY: Set<RecipePart> = entries.toSet() - GEOMETRY - PROFILE - REMOVE
 
         /** What the app's filters write: a look made on top of whichever profile the photo has. */
         val BUILT_IN: Set<RecipePart> = LOOK - PROFILE
@@ -94,5 +96,6 @@ fun EditRecipe.withPartsFrom(source: EditRecipe, parts: Set<RecipePart>): EditRe
         effects = effects,
         geometry = geometry,
         masks = pick(RecipePart.MASKS, source.masks, masks),
+        retouches = pick(RecipePart.REMOVE, source.retouches, retouches),
     )
 }

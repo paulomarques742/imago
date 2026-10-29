@@ -23,6 +23,7 @@ import eu.studio742.imago.core.render.BitmapSurface
 import eu.studio742.imago.core.render.BrushRasters
 import eu.studio742.imago.core.render.renderInPlace
 import eu.studio742.imago.core.render.activeGeometry
+import eu.studio742.imago.core.render.applyRetouchesInPlace
 import eu.studio742.imago.core.render.toRenderParameters
 import eu.studio742.imago.core.render.decodeRawPhoto
 import eu.studio742.imago.core.render.requireRawEngine
@@ -79,6 +80,11 @@ class FullResolutionExporter @Inject constructor(
             // them away: this is the space the masks are defined in, and after the crop there is no
             // way to rebuild it.
             val oriented = checkNotNull(bitmap)
+            // Step 1a, in that same space and before anything else.
+            if (parameters.retouches.isNotEmpty()) {
+                onPhase(uiText(Res.string.editor_phase_processing, oriented.width, oriented.height))
+                withContext(Dispatchers.Default) { applyRetouchesInPlace(oriented, parameters.retouches) }
+            }
             val geometry = parameters.frameGeometry(oriented.width, oriented.height)
             // Painted now, over the photo as it was shot: after the geometry it no longer exists.
             val brushes = BrushRasters.of(parameters, BitmapSurface(oriented))

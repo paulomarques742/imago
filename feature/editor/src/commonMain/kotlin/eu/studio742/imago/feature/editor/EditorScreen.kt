@@ -429,6 +429,23 @@ fun EditorRoute(
                 onRangeSettingFinished = viewModel::finishAdjustment,
             )
         },
+        retouchActions = remember(viewModel) {
+            RetouchActions(
+                onMode = viewModel::setRetouchMode,
+                onSetting = viewModel::setRetouchSetting,
+                onSettingFinished = viewModel::finishRetouchSetting,
+                onSelect = viewModel::selectRetouch,
+                onStrokeStart = viewModel::beginRetouchStroke,
+                onStrokeTo = viewModel::extendRetouchStroke,
+                onStrokeCancel = viewModel::cancelRetouchStroke,
+                onMoveSource = viewModel::moveRetouchSource,
+                onMove = viewModel::moveRetouch,
+                onGestureFinished = viewModel::finishRetouchGesture,
+                onDelete = viewModel::deleteRetouch,
+                onRefresh = viewModel::refreshRetouch,
+                onShowRetouches = viewModel::setShowsRetouches,
+            )
+        },
         whiteBalanceActions = remember(viewModel) {
             WhiteBalancePickActions(
                 onStart = viewModel::startWhiteBalancePick,
@@ -620,6 +637,7 @@ private fun EditorScreen(
     perspectiveActions: PerspectiveActions,
     whiteBalanceActions: WhiteBalancePickActions,
     recipeActions: RecipeEditActions?,
+    retouchActions: RetouchActions = RetouchActions(),
 ) {
     val recipeMode = recipeActions != null
     // `rememberSaveable` for the ones that open over the photo: a dialog that disappears halfway
@@ -763,6 +781,17 @@ private fun EditorScreen(
     // A brush selected: one finger paints. The radius is the screen's, in pixels — Lightroom's brush,
     // which covers less of the photo the closer one zooms in.
     val paintingNow by rememberUpdatedState(state.isPainting)
+    val retouchingNow by rememberUpdatedState(state.isRetouching)
+    val retouchesNow by rememberUpdatedState(state.recipe?.retouches.orEmpty())
+    val selectedRetouchNow by rememberUpdatedState(state.selectedRetouchId)
+    val showsRetouchesNow by rememberUpdatedState(state.showsRetouches)
+    val extendableRetouchNow by rememberUpdatedState(state.extendableRetouchId)
+    // A touch the Remove tool took (a dab, a pin) is not also the tap that hides the interface, the
+    // double tap that zooms or the long press that shows the original. The tap detector sees the touch
+    // before the gesture block can consume it, so the block leaves word here instead.
+    val retouchClaimedTouch = remember { booleanArrayOf(false) }
+    val retouchActionsNow by rememberUpdatedState(retouchActions)
+    val retouchRadiusPx by rememberUpdatedState(with(chromeDensity) { brushRadiusDp(state.retouchTool.size).dp.toPx() })
     val brushRadiusPx by rememberUpdatedState(with(chromeDensity) { brushRadiusDp(state.brushTool.active.size).dp.toPx() })
     var brushFinger by remember(assetId) { mutableStateOf<Offset?>(null) }
     // A range selected: one finger samples it — a tap a point, a drag an area, drawn while it is dragged.
@@ -1158,6 +1187,32 @@ private fun EditorScreen(
                                     samplingArea = samplingArea,
                                 )
                             }
+                            val retouchGeometry = maskFrameGeometry
+                            if (state.isRetouching && state.showsRetouches && !cropMode && retouchGeometry != null && stageSize != IntSize.Zero) {
+                                RetouchOverlay(
+                                    retouches = state.recipe?.retouches.orEmpty(),
+                                    selectedId = state.selectedRetouchId,
+                                    extendable = state.extendableRetouchId != null && state.extendableRetouchId == state.selectedRetouchId,
+                                    bounds = photoBounds(
+                                        surfaceWidth = stageSize.width,
+                                        surfaceHeight = stageSize.height,
+                                        imageWidth = imageSize.first,
+                                        imageHeight = imageSize.second,
+                                        transform = transform,
+                                        quarterTurns = quarterTurns,
+                                    ),
+                                    geometry = retouchGeometry,
+                                    modifier = Modifier.fillMaxSize(),
+                                    // As the masks' brush: in the middle while Size or Feather is dragged.
+                                    brushCursor = (
+                                        brushFinger ?: brushHover ?: if (editingKey == RetouchSetting.SIZE || editingKey == RetouchSetting.FEATHER) {
+                                            Offset(stageSize.width / 2f, stageSize.height / 2f)
+                                        } else {
+                                            null
+                                        }
+                                        )?.let { BrushCursor(it, retouchRadiusPx, state.retouchTool.feather) },
+                                )
+                            }
                             if (cropMode && state.recipe != null) {
                                 CropOverlay(
                                     imageWidth = state.bitmap.pixelWidth,
@@ -1333,6 +1388,50 @@ private fun EditorScreen(
                                                 }
                                             }
 
+                                            // The Remove tool, the brush's way: a pin under the finger
+                                            // is taken (the selected correction's source first), and
+                                            // anywhere else on the photo a new correction is painted.
+                                            var retouchPainting = false
+                                            var retouchGrip: Pair<String, RetouchGrip>? = null
+                                            var retouchGripMoved = false
+                                            var retouchTouched = false
+                                            var lastRetouchImage: Offset? = null
+                                            var lastRetouchPoint = down.position
+                                            retouchClaimedTouch[0] = false
+                                            if (retouchingNow && !cropping && maskGeometry != null) {
+                                                val projection = MaskProjection(bounds(current), maskGeometry)
+                                                val onPhoto = bounds(current).let { photo ->
+                                                    down.position.x in photo.left..photo.right &&
+                                                        down.position.y in photo.top..photo.bottom
+                                                }
+                                                retouchGrip = if (showsRetouchesNow) {
+                                                    hitRetouch(
+                                                        retouchesNow,
+                                                        selectedRetouchNow,
+                                                        projection,
+                                                        down.position,
+                                                        maskHitRadius,
+                                                        areaGrabbable = extendableRetouchNow == null || extendableRetouchNow != selectedRetouchNow,
+                                                    )
+                                                } else {
+                                                    null
+                                                }
+                                                val grip = retouchGrip
+                                                if (grip != null || onPhoto) retouchClaimedTouch[0] = true
+                                                if (grip != null) {
+                                                    if (grip.first != selectedRetouchNow) retouchActionsNow.onSelect(grip.first)
+                                                    lastRetouchImage = projection.toImage(down.position)
+                                                    down.consume()
+                                                } else if (onPhoto) {
+                                                    val start = projection.toImage(down.position)
+                                                    retouchActionsNow.onStrokeStart(start.x, start.y, projection.imageRadius(down.position, retouchRadiusPx))
+                                                    retouchPainting = true
+                                                    retouchTouched = true
+                                                    brushFinger = down.position
+                                                    down.consume()
+                                                }
+                                            }
+
                                             // The guided Upright's guides, the masks' way: in image
                                             // coordinates, an end under the finger is dragged, and
                                             // elsewhere — with room for another — the finger draws a
@@ -1414,6 +1513,52 @@ private fun EditorScreen(
                                                         }
                                                     }
                                                     brushFinger = change.position
+                                                    continue
+                                                }
+                                                if (retouchPainting || retouchGrip != null) event.changes.forEach { it.consume() }
+                                                if (pressed.size >= 2 && retouchPainting) {
+                                                    // Two fingers move the photo: the correction they
+                                                    // interrupted goes away, as a brush stroke does.
+                                                    retouchActionsNow.onStrokeCancel()
+                                                    retouchPainting = false
+                                                    brushFinger = null
+                                                }
+                                                if (pressed.size >= 2) retouchGrip = null
+                                                if (retouchPainting && maskGeometry != null) {
+                                                    val change = event.changes.firstOrNull() ?: continue
+                                                    val projection = MaskProjection(bounds(current), maskGeometry)
+                                                    val positions = change.historical.map { it.position } + change.position
+                                                    positions.forEach { position ->
+                                                        val travelled = (position - lastRetouchPoint).getDistance()
+                                                        if (travelled >= retouchRadiusPx * BRUSH_POINT_SPACING || (!change.pressed && travelled > 0f)) {
+                                                            val point = projection.toImage(position)
+                                                            retouchActionsNow.onStrokeTo(point.x, point.y)
+                                                            lastRetouchPoint = position
+                                                        }
+                                                    }
+                                                    brushFinger = change.position
+                                                    continue
+                                                }
+                                                val grip = retouchGrip
+                                                if (grip != null && maskGeometry != null) {
+                                                    val change = pressed.firstOrNull() ?: continue
+                                                    // A tap on a pin only selects: the correction moves
+                                                    // once the finger has really travelled.
+                                                    if (!retouchGripMoved && (change.position - down.position).getDistance() < viewConfiguration.touchSlop) continue
+                                                    retouchGripMoved = true
+                                                    retouchTouched = true
+                                                    val projection = MaskProjection(bounds(current), maskGeometry)
+                                                    val now = projection.toImage(change.position)
+                                                    val retouch = retouchesNow.firstOrNull { it.id == grip.first } ?: continue
+                                                    when (grip.second) {
+                                                        RetouchGrip.SOURCE -> retouch.pin()?.let { (x, y) ->
+                                                            retouchActionsNow.onMoveSource(retouch.id, now.x - x, now.y - y)
+                                                        }
+                                                        RetouchGrip.AREA -> lastRetouchImage?.let { last ->
+                                                            retouchActionsNow.onMove(retouch.id, now.x - last.x, now.y - last.y)
+                                                        }
+                                                    }
+                                                    lastRetouchImage = now
                                                     continue
                                                 }
                                                 if (pressed.size >= 2) {
@@ -1632,6 +1777,10 @@ private fun EditorScreen(
                                                 guideFinger = null
                                                 perspectiveActions.onGuideGestureEnd()
                                             }
+                                            if (retouchTouched) {
+                                                brushFinger = null
+                                                retouchActionsNow.onGestureFinished()
+                                            }
                                             if (moved) {
                                                 val settled = current.settle(
                                                     surfaceWidth = size.width,
@@ -1706,9 +1855,12 @@ private fun EditorScreen(
                                                 // While cropping, a tap cannot hide the interface:
                                                 // the frame is being worked on, and its way out is
                                                 // in the panel.
-                                                if (!croppingNow) chromeHidden = !chromeHidden
+                                                if (!croppingNow && !retouchClaimedTouch[0]) chromeHidden = !chromeHidden
                                             },
                                             onDoubleTap = { position ->
+                                                // Two dabs, not a zoom: in the Remove tool the photo
+                                                // zooms with two fingers.
+                                                if (retouchClaimedTouch[0]) return@detectTapGestures
                                                 if (croppingNow) {
                                                     reframeRequest++
                                                 } else {
@@ -1728,7 +1880,7 @@ private fun EditorScreen(
                                                 gestureHaptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             },
                                             onLongPress = {
-                                                if (croppingNow) return@detectTapGestures
+                                                if (croppingNow || retouchClaimedTouch[0]) return@detectTapGestures
                                                 gestureHaptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 onShowOriginal(true)
                                             },
@@ -1945,6 +2097,7 @@ private fun EditorScreen(
                         onToggleMirrorVertical = onToggleMirrorVertical,
                         onResetGeometry = onResetGeometry,
                         maskActions = placedMaskActions,
+                        retouchActions = retouchActions,
                         colorGradeActions = colorGradeActions,
                         perspectiveActions = perspectiveActions,
                         whiteBalanceActions = whiteBalanceActions,
@@ -1952,6 +2105,7 @@ private fun EditorScreen(
                     val openTool = when (state.sheet) {
                         EditorSheet.CROP, EditorSheet.PERSPECTIVE -> EditorTool.CROP
                         EditorSheet.HISTORY -> EditorTool.HISTORY
+                        EditorSheet.REMOVE -> EditorTool.REMOVE
                         else -> EditorTool.ADJUSTMENTS
                     }
                     EditorToolBar(
@@ -2487,6 +2641,7 @@ private fun AdjustmentPanel(
     colorGradeActions: ColorGradeActions,
     perspectiveActions: PerspectiveActions,
     whiteBalanceActions: WhiteBalancePickActions,
+    retouchActions: RetouchActions = RetouchActions(),
 ) {
     // Dragging a value fades the panel to let the photo show underneath. In a rail there is nothing
     // underneath — the photo is beside it, always in view — and fading it would make the column the
@@ -2638,6 +2793,12 @@ private fun AdjustmentPanel(
                     onResetAdjustment = onResetAdjustment,
                     actions = perspectiveActions,
                     onClose = { onSelectSheet(EditorSheet.CROP) },
+                )
+                EditorSheet.REMOVE -> RemoveToolPanel(
+                    state = state,
+                    editingKey = editingKey,
+                    onEditing = onEditing,
+                    actions = retouchActions,
                 )
                 EditorSheet.HISTORY -> HistoryPanel(
                     entries = state.history,
@@ -4116,6 +4277,7 @@ internal fun toolTap(tool: EditorTool, openTool: EditorTool, drawer: DrawerDeten
         EditorTool.ADJUSTMENTS -> EditorSheet.ADJUSTMENTS
         EditorTool.CROP -> EditorSheet.CROP
         EditorTool.HISTORY -> EditorSheet.HISTORY
+        EditorTool.REMOVE -> EditorSheet.REMOVE
         EditorTool.RECIPES -> return ToolTap.OpenLibrary
     }
     return if (!rail && drawer != DrawerDetent.CLOSED && tool == openTool) ToolTap.Close else ToolTap.Open(sheet)

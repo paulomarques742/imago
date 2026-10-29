@@ -29,6 +29,7 @@
     <string name="editor_reset">Repor</string>
     <string name="editor_tool_adjust">Ajustes</string>
     <string name="editor_tool_crop">Cortar</string>
+    <string name="editor_tool_remove">Remover</string>
     <string name="editor_tool_recipes">Receitas</string>
     <string name="editor_tool_export">Exportar</string>
     <string name="editor_tool_save">Guardar</string>
@@ -478,4 +479,20 @@
     <string name="reel_notification_title">A fazer o vídeo</string>
     <string name="reel_notification_done">O vídeo está pronto</string>
     <string name="editor_developing_raw">A revelar o RAW…</string>
+    <string name="editor_remove_mode_remove">Remover</string>
+    <string name="editor_remove_mode_heal">Corrigir</string>
+    <string name="editor_remove_mode_clone">Clonar</string>
+    <string name="editor_remove_opacity">Opacidade</string>
+    <string name="editor_remove_hint">Pinte por cima do que quer tirar da fotografia.</string>
+    <string name="editor_remove_solving">A calcular a correcção…</string>
+    <string name="editor_remove_nothing_to_take">Não há na fotografia de onde preencher esta zona. Experimente uma mais pequena.</string>
+    <string name="editor_remove_refresh">Refazer</string>
+    <string name="editor_history_retouch_source_moved">Origem movida</string>
+    <string name="editor_history_retouch_moved">Correcção movida</string>
+    <string name="editor_history_retouch_changed">Correcção alterada</string>
+    <string name="editor_history_retouch_deleted">Correcção apagada</string>
+    <string name="editor_history_retouch_refreshed">Preenchida de novo</string>
+    <string name="editor_remove_hide_overlay">Esconder as correcções</string>
+    <string name="editor_remove_show_overlay">Mostrar as correcções</string>
+    <string name="editor_history_retouch_extended">Área aumentada</string>
 </resources>

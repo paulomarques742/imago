@@ -26,18 +26,27 @@ object RecipePixels {
         return renderFloat(source, recipe.toRenderParameters(), consumeSource = consumeSource).toPixelBuffer()
     }
 
+    /**
+     * @param retouched where the editor keeps [source] with its corrections between frames; without
+     *   it they are worked out on every call, which is what an export wants.
+     */
     fun renderFloat(
-        source: FloatPixelBuffer,
+        original: FloatPixelBuffer,
         params: RenderParameters,
         renderScale: Float = 1f,
-        brushes: BrushRasters = BrushRasters.of(params, source),
+        brushes: BrushRasters? = null,
         consumeSource: Boolean = false,
+        retouched: RetouchedSources? = null,
     ): FloatPixelBuffer {
+        val source = retouched?.of(original, params.retouches) ?: Retouching.apply(original, params.retouches)
+        // A copy made here for the corrections is this call's to consume; one the cache keeps is not.
+        val consume = if (source === original) consumeSource else retouched == null
+        val rasters = brushes ?: BrushRasters.of(params, source)
         val frame = params.frameGeometry(source.width, source.height)
         val turns = params.normalizedQuarterTurns()
         val width = ((if (turns % 2 == 1) source.height else source.width) * params.cropWidth).roundToInt().coerceAtLeast(1)
         val height = ((if (turns % 2 == 1) source.width else source.height) * params.cropHeight).roundToInt().coerceAtLeast(1)
-        val framed = if (consumeSource && frame == FrameGeometry(source.width, source.height)) source else {
+        val framed = if (consume && frame == FrameGeometry(source.width, source.height)) source else {
             FloatPixelBuffer(width, height, linear = source.linear).also { output ->
                 IntStream.range(0, height).parallel().forEach { y ->
                     if (Thread.currentThread().isInterrupted) throw CancellationException()
@@ -49,7 +58,7 @@ object RecipePixels {
                 }
             }
         }
-        return BitmapPhotoProcessor.renderInPlace(framed, params, frame, renderScale, brushes)
+        return BitmapPhotoProcessor.renderInPlace(framed, params, frame, renderScale, rasters)
     }
 
     fun reduce(source: FloatPixelBuffer, maxSide: Int): FloatPixelBuffer {
@@ -86,8 +95,9 @@ object RecipePixels {
     fun renderShowingMask(source: PixelBuffer, recipe: EditRecipe, maskId: String): PixelBuffer {
         requireUser(recipe.processVersion <= CURRENT_PROCESS_VERSION, UserMessage.EDIT_NEEDS_NEWER_APP)
         val params = recipe.toRenderParameters(showMask = maskId)
-        val brushes = BrushRasters.of(params, source)
-        val framed = render(source, params, 1f, brushes)
+        val retouched = RetouchedSources(capacity = 1)
+        val brushes = BrushRasters.of(params, retouched.of(source, params.retouches))
+        val framed = render(source, params, 1f, brushes, retouched)
         tintMaskOf(framed, source.width, source.height, params, maskId, brushes)
         return framed
     }
@@ -95,8 +105,9 @@ object RecipePixels {
     fun renderShowingMask(source: FloatPixelBuffer, recipe: EditRecipe, maskId: String): PixelBuffer {
         requireUser(recipe.processVersion <= CURRENT_PROCESS_VERSION, UserMessage.EDIT_NEEDS_NEWER_APP)
         val params = recipe.toRenderParameters(showMask = maskId)
-        val brushes = BrushRasters.of(params, source)
-        val framed = renderFloat(source, params, 1f, brushes).toPixelBuffer()
+        val retouched = RetouchedSources(capacity = 1)
+        val brushes = BrushRasters.of(params, retouched.of(source, params.retouches))
+        val framed = renderFloat(source, params, 1f, brushes, retouched = retouched).toPixelBuffer()
         tintMaskOf(framed, source.width, source.height, params, maskId, brushes)
         return framed
     }
@@ -119,15 +130,19 @@ object RecipePixels {
      * @param renderScale how big [source] is relative to the image it came from. A preview draft
      *   passes its reduction so that grain, which lives in image pixels, appears with the file's
      *   granularity and not the draft's.
-     * @param brushes the masks' brush rasters. They do not depend on [source]'s size, so a draft can
-     *   take the ones painted over the full photo; by default they are painted over [source].
+     * @param brushes the masks' brush rasters. They do not depend on [original]'s size, so a draft can
+     *   take the ones painted over the full photo; by default they are painted over the corrected photo.
+     * @param retouched as in [renderFloat].
      */
     fun render(
-        source: PixelBuffer,
+        original: PixelBuffer,
         params: RenderParameters,
         renderScale: Float = 1f,
-        brushes: BrushRasters = BrushRasters.of(params, source),
+        brushes: BrushRasters? = null,
+        retouched: RetouchedSources? = null,
     ): PixelBuffer {
+        val source = retouched?.of(original, params.retouches) ?: Retouching.apply(original, params.retouches)
+        val rasters = brushes ?: BrushRasters.of(params, source)
         val frame = params.frameGeometry(source.width, source.height)
         val turns = params.normalizedQuarterTurns()
         val width = ((if (turns % 2 == 1) source.height else source.width) * params.cropWidth).roundToInt().coerceAtLeast(1)
@@ -141,7 +156,7 @@ object RecipePixels {
                 framed.pixels[y * width + x] = bilinear(source, uv[0] * source.width - .5f, uv[1] * source.height - .5f)
             }
         }
-        return BitmapPhotoProcessor.renderInPlace(framed, params, frame, renderScale, brushes)
+        return BitmapPhotoProcessor.renderInPlace(framed, params, frame, renderScale, rasters)
     }
 
     /**

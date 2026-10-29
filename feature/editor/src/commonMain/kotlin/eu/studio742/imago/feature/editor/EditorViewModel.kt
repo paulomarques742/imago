@@ -54,6 +54,9 @@ import eu.studio742.imago.core.model.LocalMask
 import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
 import eu.studio742.imago.core.model.MAX_MASK_COMPONENTS
 import eu.studio742.imago.core.model.BrushStroke
+import eu.studio742.imago.core.model.Retouch
+import eu.studio742.imago.core.model.RetouchMode
+import eu.studio742.imago.core.render.Retouching
 import eu.studio742.imago.core.model.MaskOp
 import eu.studio742.imago.core.model.MaskShape
 import eu.studio742.imago.core.model.CropRect
@@ -123,6 +126,7 @@ import eu.studio742.imago.core.model.developedAsRaw
 import eu.studio742.imago.core.model.KNOWN_RAW_ENGINES
 import java.time.Instant
 import java.util.UUID
+import kotlin.random.Random
 
 data class EditorAsset(
     val id: String,
@@ -219,7 +223,7 @@ enum class EditorPanel { LIGHT, COLOR, DETAIL, OPTICS, EFFECTS, MASKS }
  * [ADJUSTMENTS] is the normal state — the categories and their sliders. The others are modes with
  * their own interface, which replace the panel's content without changing screen.
  */
-enum class EditorSheet { ADJUSTMENTS, CURVE, HSL, COLOR_GRADING, CROP, PERSPECTIVE, HISTORY, MASKS, MASK_ADJUSTMENTS }
+enum class EditorSheet { ADJUSTMENTS, CURVE, HSL, COLOR_GRADING, CROP, PERSPECTIVE, HISTORY, MASKS, MASK_ADJUSTMENTS, REMOVE }
 
 /**
  * The buttons of the bar under the photo, in its order.
@@ -230,13 +234,17 @@ enum class EditorSheet { ADJUSTMENTS, CURVE, HSL, COLOR_GRADING, CROP, PERSPECTI
 enum class EditorTool {
     ADJUSTMENTS,
     CROP,
+    REMOVE,
     RECIPES,
     HISTORY,
 }
 
-/** The bar's tools. Editing a recipe there is no crop — a frame belongs to one photo, not to a look meant for any. */
+/**
+ * The bar's tools. Editing a recipe there is no crop and no Remove — a frame or a speck of dust belongs
+ * to one photo, not to a look meant for any.
+ */
 internal fun editorTools(recipeMode: Boolean): List<EditorTool> =
-    if (recipeMode) EditorTool.entries - EditorTool.CROP else EditorTool.entries
+    if (recipeMode) EditorTool.entries - EditorTool.CROP - EditorTool.REMOVE else EditorTool.entries
 
 enum class HslColorBand { RED, ORANGE, YELLOW, GREEN, AQUA, BLUE, PURPLE, MAGENTA }
 
@@ -264,7 +272,7 @@ enum class ColorGradeComponent { HUE, SATURATION, LUMINANCE }
 /** The icon of a history entry. Only the name here; the drawing is on the UI side. */
 enum class HistoryIcon {
     ORIGINAL, EXPOSURE, CONTRAST, HIGHLIGHTS, SHADOWS, WHITES, BLACKS,
-    COLOR, CURVE, HSL, GRADE, DETAIL, EFFECTS, CROP, RECIPE, MASK,
+    COLOR, CURVE, HSL, GRADE, DETAIL, EFFECTS, CROP, RECIPE, MASK, REMOVE,
 }
 
 /**
@@ -568,6 +576,21 @@ data class EditorUiState(
     val brushTool: BrushTool = BrushTool(),
     /** Lightroom's Shift on a Color Range: a new sample joins the others instead of replacing them. */
     val rangeAddsSamples: Boolean = false,
+    /** The Remove tool in the hand: the mode and the brush of a new correction. Remembered on the device. */
+    val retouchTool: RetouchTool = RetouchTool(),
+    /** The correction whose pins are lit, and the one the panel's sliders and buttons act on. */
+    val selectedRetouchId: String? = null,
+    /** A correction's content is being worked out: a Remove's fill, or where a Heal or a Clone takes from. */
+    val isSolvingRetouch: Boolean = false,
+    /** Said when the last correction found nothing to take its content from, and was dropped. */
+    val retouchNotice: UiText? = null,
+    /** The corrections' pins and areas are drawn over the photo; off, the photo is seen whole, as the masks' eye does. */
+    val showsRetouches: Boolean = true,
+    /**
+     * The Heal or Clone a new stroke still widens, for [RETOUCH_EXTEND_MILLIS] after a gesture on it.
+     * Meanwhile its pin is small and stays put, so a stroke that starts beside it paints.
+     */
+    val extendableRetouchId: String? = null,
     val maskNotice: UiText? = null,
     /** An automatic Upright mode is looking for the photo's lines. */
     val isDetectingUpright: Boolean = false,
@@ -641,6 +664,21 @@ data class EditorUiState(
     /** Crop is the only mode that needs to turn off zoom and the pager. */
     val isCropping: Boolean get() = sheet == EditorSheet.CROP
 
+    /** The Remove tool is open: one finger on the photo paints a correction or moves one. */
+    val isRetouching: Boolean get() = sheet == EditorSheet.REMOVE && recipe != null
+
+    val selectedRetouch: Retouch? get() = selectedRetouchId?.let { id -> recipe?.retouch(id) }
+
+    /** A slider of the Remove tool as it reads: the selected correction's Feather and Opacity, else the tool's. */
+    fun retouchValue(setting: RetouchSetting): Float {
+        val selected = selectedRetouch ?: return retouchTool.value(setting)
+        return when (setting) {
+            RetouchSetting.SIZE -> retouchTool.size
+            RetouchSetting.FEATHER -> selected.strokes.firstOrNull()?.feather ?: retouchTool.feather
+            RetouchSetting.OPACITY -> selected.opacity
+        }
+    }
+
     /** Editing a mask: one is selected and the panel is on one of its sheets. */
     val isMaskEditing: Boolean
         get() = selectedMaskId != null &&
@@ -709,7 +747,9 @@ open class EditorViewModel(
     /** Told when an export changes a stack, so the grid shows the new cover; tests leave it out. */
     private val library: eu.studio742.imago.core.data.LibraryRepository? = null,
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(EditorUiState(brushTool = BrushTool.decode(configuration.brushTool)))
+    private val mutableState = MutableStateFlow(
+        EditorUiState(brushTool = BrushTool.decode(configuration.brushTool), retouchTool = RetouchTool.decode(configuration.retouchTool)),
+    )
     val state = mutableState.asStateFlow()
     private val exportOriginChecker = ExportOriginChecker(viewModelScope) { assetId ->
         checkNotNull(library).assetDetail(assetId).asset.externalLibraryId
@@ -747,6 +787,45 @@ open class EditorViewModel(
 
     /** The photo's colours as the range masks read them, built once per photo. */
     private var rangeReference: Pair<Bitmap, BrushReference>? = null
+
+    /**
+     * The photo as a new correction reads it — with the corrections before it applied, at the raster's
+     * size — kept while those stay the same: a second stroke in a row reads the same photo.
+     */
+    private var retouchReference: Triple<Bitmap, List<Retouch>, BrushReference>? = null
+    /**
+     * The corrections being worked out, one job each: a second stroke can be painted while the first
+     * is still being solved, and must not cancel it.
+     */
+    private val retouchJobs = mutableMapOf<String, Job>()
+
+    /**
+     * Content that arrived while a finger was still on the photo. Written into the recipe then, it would
+     * close the history entry of a gesture still going on; it waits for the finger to lift.
+     */
+    private val deferredRetouches = LinkedHashMap<String, () -> Unit>()
+
+    /**
+     * The Heal or Clone a new stroke still joins, and until when: a finger that paints again within
+     * [RETOUCH_EXTEND_MILLIS] of the last gesture on it (a stroke, its source dragged) is widening the
+     * same area, not starting another correction.
+     */
+    private var extendable: Pair<String, Long>? = null
+
+    /** The stroke being painted adds to a correction that already was; a pinch then only takes it away. */
+    private var extendingRetouch = false
+
+    /** The time, in milliseconds; a test moves it on by hand. */
+    internal var clock: () -> Long = { System.currentTimeMillis() }
+
+    /** Shrinks the pin back to its size when the window closes. */
+    private var extendWindowJob: Job? = null
+
+    private fun closeExtendWindow() {
+        extendable = null
+        extendWindowJob?.cancel()
+        if (state.value.extendableRetouchId != null) mutableState.update { it.copy(extendableRetouchId = null) }
+    }
     private var mirrorJob: Job? = null
     /** The recipe whose geometry is waiting to go to Immich, so leaving the photo does not lose it. */
     private var pendingMirror: EditRecipe? = null
@@ -813,6 +892,9 @@ open class EditorViewModel(
             recipeParts = retained.recipeParts,
             isRecipeLibraryLoading = retained.isRecipeLibraryLoading,
             recipeNotice = retained.recipeNotice,
+            // The brushes are the device's, not the photo's: the next photo finds them as they were left.
+            brushTool = retained.brushTool,
+            retouchTool = retained.retouchTool,
         )
         if (target is PhotoEditTarget.Asset) {
             viewModelScope.launch {
@@ -958,6 +1040,8 @@ open class EditorViewModel(
                 builtInMarks = it.builtInMarks,
                 canPasteRecipe = it.canPasteRecipe,
                 recipeParts = it.recipeParts,
+                brushTool = it.brushTool,
+                retouchTool = it.retouchTool,
             )
         }
     }
@@ -2588,6 +2672,291 @@ open class EditorViewModel(
         }
     }
 
+    // --- remove ---------------------------------------------------------------------------------
+
+    /**
+     * The mode the next stroke is painted in. A correction already made keeps its own: with the one just
+     * painted still selected, choosing the next mode would otherwise turn it into something else.
+     */
+    fun setRetouchMode(mode: RetouchMode) = updateRetouchTool { it.copy(mode = mode) }
+
+    /**
+     * A slider being dragged. Size is the brush's, for the next stroke; Feather and Opacity also move the
+     * selected correction, in one history entry per drag.
+     */
+    fun setRetouchSetting(setting: RetouchSetting, value: Float) {
+        mutableState.update { it.copy(retouchTool = it.retouchTool.with(setting, value)) }
+        val id = state.value.selectedRetouchId ?: return
+        if (setting == RetouchSetting.SIZE || state.value.isSolvingRetouch) return
+        val clamped = value.coerceIn(setting.range.start, setting.range.endInclusive)
+        beginRetouchGesture(uiText(Res.string.editor_history_retouch_changed))
+        editRetouches { recipe ->
+            recipe.withRetouchChanged(id) { retouch ->
+                when (setting) {
+                    RetouchSetting.OPACITY -> retouch.copy(opacity = clamped)
+                    else -> retouch.copy(strokes = retouch.strokes.map { it.copy(feather = clamped) })
+                }
+            }
+        }
+    }
+
+    fun finishRetouchSetting() {
+        configuration.setRetouchTool(state.value.retouchTool.encode())
+        finishAdjustment()
+    }
+
+    private fun updateRetouchTool(change: (RetouchTool) -> RetouchTool) {
+        mutableState.update { it.copy(retouchTool = change(it.retouchTool)) }
+        configuration.setRetouchTool(state.value.retouchTool.encode())
+    }
+
+    fun selectRetouch(id: String?) {
+        if (id != state.value.selectedRetouchId) closeExtendWindow()
+        mutableState.update { it.copy(selectedRetouchId = id, retouchNotice = null) }
+    }
+
+    fun setShowsRetouches(shown: Boolean) = mutableState.update { it.copy(showsRetouches = shown) }
+
+    /**
+     * A finger lands on the photo away from every pin: a new correction starts, in the tool's mode.
+     * [x] and [y] are in normalised image coordinates, [radius] in units of the image's height.
+     *
+     * Nothing changes on the photo while it is painted: a correction has no content until the stroke
+     * ends ([finishRetouchGesture]), and only then does it become a history entry.
+     */
+    fun beginRetouchStroke(x: Float, y: Float, radius: Float) {
+        val current = state.value.recipe ?: return
+        if (editStart != null) return
+        val tool = state.value.retouchTool
+        val joined = extendable?.takeIf { (_, until) -> clock() <= until }?.first
+            ?.let { current.retouch(it) }
+            ?.takeIf { it.mode == tool.mode && it.mode != RetouchMode.REMOVE && it.id == state.value.selectedRetouchId }
+        closeExtendWindow()
+        if (joined != null) {
+            extendingRetouch = true
+            beginRetouchGesture(uiText(Res.string.editor_history_retouch_extended))
+            mutableState.update { it.copy(retouchNotice = null, showsRetouches = true) }
+            editRetouches { recipe ->
+                recipe.withRetouchChanged(joined.id) { it.copy(strokes = it.strokes + tool.firstStroke(x, y, radius)) }
+            }
+            return
+        }
+        extendingRetouch = false
+        val retouch = Retouch(
+            id = UUID.randomUUID().toString(),
+            mode = tool.mode,
+            strokes = listOf(tool.firstStroke(x, y, radius)),
+            opacity = tool.opacity,
+        )
+        editStart = current
+        pendingChange = null
+        // What is being painted has to be seen.
+        mutableState.update { it.copy(selectedRetouchId = retouch.id, retouchNotice = null, showsRetouches = true) }
+        editRetouches { it.withRetouch(retouch) }
+    }
+
+    fun extendRetouchStroke(x: Float, y: Float) {
+        if (editStart == null) return
+        val id = state.value.selectedRetouchId ?: return
+        editRetouches { it.withRetouchStrokeExtended(id, x, y) }
+    }
+
+    /** A second finger turns the stroke into a pinch: the correction it was painting goes away. */
+    fun cancelRetouchStroke() {
+        val start = editStart ?: return
+        editStart = null
+        pendingChange = null
+        val keepSelection = extendingRetouch
+        extendingRetouch = false
+        mutableState.update { it.copy(recipe = start, selectedRetouchId = it.selectedRetouchId.takeIf { keepSelection }, isSaving = true) }
+        scheduleSave(start)
+        applyDeferredRetouches()
+    }
+
+    /** The selected correction's source dragged to an offset from its area, in image units. */
+    fun moveRetouchSource(id: String, sourceX: Float, sourceY: Float) {
+        if (state.value.isSolvingRetouch) return
+        beginRetouchGesture(uiText(Res.string.editor_history_retouch_source_moved))
+        editRetouches { recipe ->
+            recipe.withRetouchChanged(id) { it.copy(sourceX = sourceX, sourceY = sourceY) }
+        }
+    }
+
+    /** The selected correction's area dragged by [dx], [dy] since the last call, in image units. */
+    fun moveRetouch(id: String, dx: Float, dy: Float) {
+        if (state.value.isSolvingRetouch || (dx == 0f && dy == 0f)) return
+        beginRetouchGesture(uiText(Res.string.editor_history_retouch_moved))
+        editRetouches { recipe -> recipe.withRetouchChanged(id) { it.movedBy(dx, dy) } }
+    }
+
+    /**
+     * The finger lifts. A correction still without content (a new stroke, or a Remove moved to another
+     * place) has it worked out now, and becomes a history entry when it has; any other gesture closes
+     * as a drag does.
+     */
+    fun finishRetouchGesture() {
+        val retouch = state.value.selectedRetouch
+        extendingRetouch = false
+        if (editStart != null && retouch != null && retouch.mode != RetouchMode.REMOVE) {
+            extendable = retouch.id to clock() + RETOUCH_EXTEND_MILLIS
+            mutableState.update { it.copy(extendableRetouchId = retouch.id) }
+            extendWindowJob?.cancel()
+            extendWindowJob = viewModelScope.launch {
+                delay(RETOUCH_EXTEND_MILLIS)
+                mutableState.update { it.copy(extendableRetouchId = null) }
+            }
+        }
+        if (editStart != null && retouch != null && !with(Retouching) { retouch.draws() }) {
+            val detail = (pendingChange as? PendingChange.Fixed)?.detail ?: uiText(retouch.mode.labelRes)
+            editStart = null
+            pendingChange = null
+            solveAndCommit(retouch, detail)
+        } else {
+            finishAdjustment()
+        }
+        applyDeferredRetouches()
+    }
+
+    private fun applyDeferredRetouches() {
+        if (editStart != null) return
+        val waiting = deferredRetouches.values.toList()
+        deferredRetouches.clear()
+        waiting.forEach { it() }
+    }
+
+    fun deleteRetouch(id: String) {
+        val current = state.value.recipe ?: return
+        mutableState.update { it.copy(selectedRetouchId = null) }
+        commitRetouches(current.withoutRetouch(id), uiText(Res.string.editor_history_retouch_deleted))
+    }
+
+    /** A Remove filled again from other places in the photo: Lightroom's Refresh. */
+    fun refreshRetouch(id: String) {
+        val retouch = state.value.recipe?.retouch(id)?.takeIf { it.mode == RetouchMode.REMOVE } ?: return
+        if (state.value.isSolvingRetouch) return
+        solveAndCommit(retouch.copy(fill = null), uiText(Res.string.editor_history_retouch_refreshed), seed = Random.nextLong())
+    }
+
+    private fun beginRetouchGesture(detail: UiText) {
+        if (editStart != null) return
+        editStart = state.value.recipe ?: return
+        pendingChange = PendingChange.Fixed(
+            label = uiText(Res.string.editor_tool_remove),
+            detail = detail,
+            valueText = null,
+            icon = HistoryIcon.REMOVE,
+        )
+    }
+
+    /** Mid-gesture: the recipe moves, the history waits for the finger to lift. */
+    private fun editRetouches(transform: (EditRecipe) -> EditRecipe) {
+        val current = state.value.recipe ?: return
+        val updated = transform(current)
+        if (updated == current) return
+        val committed = updated.copy(
+            processVersion = CURRENT_PROCESS_VERSION,
+            geometry = current.geometry.activeAtProcess(current.processVersion),
+            updatedAt = Instant.now().toString(),
+        )
+        mutableState.update { it.copy(recipe = committed, isSaving = true) }
+        scheduleSave(committed)
+    }
+
+    /** A change that is whole on its own: a correction solved, deleted or turned into another mode. */
+    private fun commitRetouches(updated: EditRecipe, detail: UiText) {
+        val current = state.value.recipe ?: return
+        if (updated.retouches == current.retouches) return
+        editStart = null
+        pendingChange = null
+        val committed = updated.copy(
+            processVersion = CURRENT_PROCESS_VERSION,
+            geometry = current.geometry.activeAtProcess(current.processVersion),
+            updatedAt = Instant.now().toString(),
+        )
+        setRecipeAndSave(committed)
+        pushHistory(
+            HistoryEntry(
+                id = UUID.randomUUID().toString(),
+                label = uiText(Res.string.editor_tool_remove),
+                detail = detail,
+                valueText = null,
+                icon = HistoryIcon.REMOVE,
+                timestamp = Instant.now().toString(),
+                recipe = committed,
+            ),
+        )
+    }
+
+    /**
+     * Works out what [retouch] lacks (a Remove's fill, a Heal's or a Clone's source) off the main
+     * thread, and writes it into the recipe as one history entry. When the photo has nothing to take it
+     * from, the correction goes and the panel says why.
+     */
+    private fun solveAndCommit(retouch: Retouch, detail: UiText, seed: Long = 0L) {
+        val bitmap = state.value.bitmap ?: return
+        retouchJobs.remove(retouch.id)?.cancel()
+        // Worked out again (a stroke joined it): what an earlier run found no longer fits.
+        deferredRetouches.remove(retouch.id)
+        mutableState.update { it.copy(isSolvingRetouch = true, retouchNotice = null) }
+        val previous = state.value.recipe
+        lateinit var job: Job
+        job = viewModelScope.launch {
+            try {
+                val earlier = previous?.retouches.orEmpty().takeWhile { it.id != retouch.id }
+                val reference = retouchReferenceFor(bitmap, earlier)
+                val solved = withContext(Dispatchers.Default) { solveRetouch(retouch, reference, seed) }
+                if (state.value.bitmap !== bitmap) return@launch
+                val write = { writeSolved(retouch, solved, detail) }
+                if (editStart == null) write() else deferredRetouches[retouch.id] = write
+            } finally {
+                if (retouchJobs[retouch.id] === job) retouchJobs.remove(retouch.id)
+                mutableState.update { it.copy(isSolvingRetouch = retouchJobs.isNotEmpty()) }
+            }
+        }
+        retouchJobs[retouch.id] = job
+    }
+
+    private fun writeSolved(retouch: Retouch, solved: Retouch?, detail: UiText) {
+        val current = state.value.recipe ?: return
+        // Undone while it was being worked out: there is nothing left to give it to.
+        if (current.retouch(retouch.id) == null) return
+        if (solved != null) {
+            val merged = current.withRetouchChanged(retouch.id) {
+                it.copy(sourceX = solved.sourceX, sourceY = solved.sourceY, fill = solved.fill)
+            }
+            commitRetouches(merged, detail)
+            return
+        }
+        mutableState.update {
+            it.copy(
+                selectedRetouchId = it.selectedRetouchId.takeUnless { id -> id == retouch.id },
+                retouchNotice = uiText(Res.string.editor_remove_nothing_to_take),
+            )
+        }
+        if (history.current?.recipe?.retouch(retouch.id) != null) {
+            commitRetouches(current.withoutRetouch(retouch.id), uiText(Res.string.editor_history_retouch_deleted))
+        } else {
+            // A new correction that never was: back to before it, with no entry.
+            setRecipeAndSave(current.withoutRetouch(retouch.id))
+        }
+    }
+
+    private fun solveRetouch(retouch: Retouch, reference: BrushReference, seed: Long): Retouch? = when (retouch.mode) {
+        RetouchMode.REMOVE -> Retouching.solveRemove(reference, retouch.strokes, seed)?.let { retouch.copy(fill = it) }
+        else -> if (with(Retouching) { retouch.draws() }) {
+            retouch
+        } else {
+            Retouching.proposeSource(reference, retouch.strokes)?.let { (dx, dy) -> retouch.copy(sourceX = dx, sourceY = dy) }
+        }
+    }
+
+    private suspend fun retouchReferenceFor(bitmap: Bitmap, earlier: List<Retouch>): BrushReference {
+        retouchReference?.takeIf { it.first === bitmap && it.second == earlier }?.let { return it.third }
+        val reference = withContext(Dispatchers.Default) { BrushReference.of(Retouching.apply(bitmap.toPixelBuffer(), earlier)) }
+        retouchReference = Triple(bitmap, earlier, reference)
+        return reference
+    }
+
     // --- ranges ---------------------------------------------------------------------------------
 
     fun setRangeAddsSamples(on: Boolean) = mutableState.update { it.copy(rangeAddsSamples = on) }
@@ -2929,6 +3298,9 @@ private const val MIN_GUIDE_PIXELS = 24f
 
 /** How long the geometry has to rest before it goes to Immich: a crop being dragged is not a crop yet. */
 private const val GEOMETRY_MIRROR_DELAY_MS = 2_000L
+
+/** How long after a gesture on a Heal or a Clone a new stroke still widens it instead of starting another. */
+internal const val RETOUCH_EXTEND_MILLIS = 2_000L
 
 private fun RecipeSource.editState(opened: EditRecipe) = when (this) {
     is RecipeSource.Saved -> RecipeEditState(saved = saved, suggestedName = null, suggestedCollection = null, baseline = opened)

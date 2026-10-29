@@ -152,6 +152,12 @@ class EncryptedConfigurationRepository(
         preferences.write(mapOf(BRUSH_TOOL_KEY to encoded))
     }
 
+    override val retouchTool: String? get() = preferences.getString(RETOUCH_TOOL_KEY)
+
+    override fun setRetouchTool(encoded: String) {
+        preferences.write(mapOf(RETOUCH_TOOL_KEY to encoded))
+    }
+
     override fun setShowOnThisDay(show: Boolean) {
         requireUser(preferences.write(mapOf(ON_THIS_DAY_KEY to show.toString())), UserMessage.CONFIGURATION_NOT_SAVED)
         onThisDay.value = show
@@ -373,6 +379,7 @@ class EncryptedConfigurationRepository(
         const val ON_THIS_DAY_KEY = "show_on_this_day"
         const val REEL_STYLE_KEY = "reel_style"
         const val BRUSH_TOOL_KEY = "brush_tool"
+        const val RETOUCH_TOOL_KEY = "retouch_tool"
         const val HIDDEN_FROM_GRID_KEY = "albums_hidden_from_grid"
     }
 }

@@ -94,6 +94,17 @@ class RecipePartTest {
         assertFalse(RecipePart.MASKS in RecipePart.LOOK)
         assertTrue(RecipePart.MASKS in RecipePart.LEGACY)
         assertTrue(RecipePart.GEOMETRY.none { it in RecipePart.LEGACY })
+        assertFalse(RecipePart.REMOVE in RecipePart.LOOK)
+        assertFalse(RecipePart.REMOVE in RecipePart.LEGACY)
+        assertFalse(RecipePart.REMOVE in RecipePart.BUILT_IN)
+    }
+
+    @Test
+    fun theCorrectionsTravelOnlyWhenAskedFor() {
+        val corrections = listOf(Retouch(id = "dust", mode = RetouchMode.HEAL, strokes = listOf(BrushStroke(listOf(.2f, .3f), .01f))))
+        val withDust = source.copy(retouches = corrections)
+        assertEquals(target.retouches, target.withPartsFrom(withDust, RecipePart.LOOK).retouches)
+        assertEquals(corrections, target.withPartsFrom(withDust, setOf(RecipePart.REMOVE)).retouches)
     }
 
     @Test

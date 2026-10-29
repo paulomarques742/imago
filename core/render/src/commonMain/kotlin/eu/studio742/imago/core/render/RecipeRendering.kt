@@ -25,6 +25,7 @@ import eu.studio742.imago.core.model.LENS_CORRECTION_PROCESS_VERSION
 import eu.studio742.imago.core.model.NOISE_REDUCTION_PROCESS_VERSION
 import eu.studio742.imago.core.model.SHARPENING_PROCESS_VERSION
 import eu.studio742.imago.core.model.WIDE_HIGHLIGHTS_PROCESS_VERSION
+import eu.studio742.imago.core.model.RETOUCH_PROCESS_VERSION
 import eu.studio742.imago.core.model.RAW_RENDERING_PROFILED
 import eu.studio742.imago.core.model.rawExposure
 import eu.studio742.imago.core.model.rawRendering
@@ -146,6 +147,8 @@ fun EditRecipe.toRenderParameters(
         else -> PerspectiveParameters()
     },
     masks = if (processVersion >= 8) masks.toRenderSpecs(processVersion, showMask) else emptyList(),
+    // Only what draws: a stroke still being painted would otherwise work the photo out again at every point.
+    retouches = if (processVersion >= RETOUCH_PROCESS_VERSION) with(Retouching) { retouches.filter { it.draws() } } else emptyList(),
 ).withoutIdleColourNoise()
 
 fun eu.studio742.imago.core.model.Perspective.toRenderPerspective() = PerspectiveParameters(

@@ -102,6 +102,7 @@ internal val RECIPE_PART_GROUPS: List<RecipePartGroup> = listOf(
         ),
     ),
     RecipePartGroup(Res.string.editor_panel_masks, listOf(RecipePart.MASKS to Res.string.editor_panel_masks)),
+    RecipePartGroup(Res.string.editor_tool_remove, listOf(RecipePart.REMOVE to Res.string.editor_tool_remove)),
     RecipePartGroup(
         Res.string.editor_part_geometry,
         listOf(

@@ -33,6 +33,11 @@ interface ConfigurationRepository {
     val brushTool: String? get() = null
 
     fun setBrushTool(encoded: String) = Unit
+
+    /** The Remove tool's mode and brush, as the editor encodes them; null before the tool is first touched. */
+    val retouchTool: String? get() = null
+
+    fun setRetouchTool(encoded: String) = Unit
     fun source(id: String): eu.studio742.imago.core.model.LibrarySource
     suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String, profile: ConnectionProfile = ConnectionProfile.None): ServerVersion
     suspend fun testLibrary(id: String): ServerVersion

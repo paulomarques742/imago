@@ -11,13 +11,14 @@ class RecipeEditorToolsTest {
     @Test
     fun theBarHoldsOnlyTheTools() {
         assertEquals(
-            listOf(EditorTool.ADJUSTMENTS, EditorTool.CROP, EditorTool.RECIPES, EditorTool.HISTORY),
+            listOf(EditorTool.ADJUSTMENTS, EditorTool.CROP, EditorTool.REMOVE, EditorTool.RECIPES, EditorTool.HISTORY),
             editorTools(recipeMode = false),
         )
     }
 
+    /** A frame and a speck of dust belong to one photo, not to a look meant for any. */
     @Test
-    fun aRecipeHasNoCrop() {
+    fun aRecipeHasNoCropAndNoRemove() {
         assertEquals(
             listOf(EditorTool.ADJUSTMENTS, EditorTool.RECIPES, EditorTool.HISTORY),
             editorTools(recipeMode = true),

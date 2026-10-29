@@ -21,6 +21,8 @@ import eu.studio742.imago.core.render.NeutralWhiteBalance
 import eu.studio742.imago.core.render.PixelBuffer
 import eu.studio742.imago.core.render.FloatPixelBuffer
 import eu.studio742.imago.core.render.RecipePixels
+import eu.studio742.imago.core.render.RenderParameters
+import eu.studio742.imago.core.render.Retouching
 import eu.studio742.imago.core.render.autoWhiteBalanceOf
 import eu.studio742.imago.core.render.decodePixels
 import eu.studio742.imago.core.render.toImageBitmap
@@ -133,9 +135,15 @@ object RecipePreviewCache {
             val parameters = shown.toRenderParameters(rawRendering = rendering, rawExposure = exposure)
             Histogram.of(
                 if (precise != null) RecipePixels.renderFloat(precise, parameters).toPixelBuffer()
-                else BitmapPhotoProcessor.renderInPlace(origin.copy(), parameters, brushes = BrushRasters.of(parameters, origin)),
+                else renderOver(origin, parameters),
             )
         }
+    }
+
+    /** [parameters] over a copy of [origin], corrections first; no geometry, as the previews have none. */
+    private fun renderOver(origin: PixelBuffer, parameters: RenderParameters): PixelBuffer {
+        val corrected = Retouching.apply(origin, parameters.retouches).let { if (it === origin) origin.copy() else it }
+        return BitmapPhotoProcessor.renderInPlace(corrected, parameters, brushes = BrushRasters.of(parameters, corrected))
     }
 
     suspend fun preview(assetId: String, recipeId: String, recipe: EditRecipe): ImageBitmap? {
@@ -151,11 +159,8 @@ object RecipePreviewCache {
             // A recipe with Auto shows what Auto finds on this photo, which is what applying it does.
             val shown = if (recipe.whiteBalance.auto) recipe.withAutoWhiteBalance(autoOf(origin)) else recipe
             val parameters = shown.toRenderParameters(rawRendering = rendering, rawExposure = exposure)
-            if (precise != null) RecipePixels.renderFloat(precise, parameters).toPixelBuffer().toImageBitmap() else BitmapPhotoProcessor.renderInPlace(
-                origin.copy(),
-                parameters,
-                brushes = BrushRasters.of(parameters, origin),
-            ).toImageBitmap()
+            if (precise != null) RecipePixels.renderFloat(precise, parameters).toPixelBuffer().toImageBitmap()
+            else renderOver(origin, parameters).toImageBitmap()
         }
         store(key, rendered)
         return rendered

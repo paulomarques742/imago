@@ -43,14 +43,47 @@ object Retouching {
 
     /** [source] with [retouches] applied in order; [source] itself when there is nothing to apply. */
     fun apply(source: PixelBuffer, retouches: List<Retouch>): PixelBuffer {
-        val active = retouches.filter { it.opacity > 0f && it.strokes.isNotEmpty() && (it.mode != RetouchMode.REMOVE || it.fill != null) }
+        val active = active(retouches)
         if (active.isEmpty()) return source
         val image = source.copy()
+        applyAll(BytePixels(image), active)
+        return image
+    }
+
+    /**
+     * [retouches] written over [image] itself: what an export uses, which holds the only copy of a
+     * full-size photo and has no room for a second.
+     */
+    fun applyInPlace(image: PixelBuffer, retouches: List<Retouch>) {
+        val active = active(retouches)
+        if (active.isNotEmpty()) applyAll(BytePixels(image), active)
+    }
+
+    /** A RAW's development with [retouches] applied, worked on encoded sRGB like every other photo. */
+    fun apply(source: FloatPixelBuffer, retouches: List<Retouch>): FloatPixelBuffer {
+        val active = active(retouches)
+        if (active.isEmpty()) return source
+        val image = source.copy()
+        applyAll(FloatPixels(image), active)
+        return image
+    }
+
+    private fun active(retouches: List<Retouch>) = retouches.filter { it.draws() }
+
+    /**
+     * Whether a correction changes a pixel. One still being painted does not: a Remove has no fill yet,
+     * and a Heal or a Clone takes its source from where it is, which is no change at all.
+     */
+    fun Retouch.draws(): Boolean = opacity > 0f && strokes.isNotEmpty() && when (mode) {
+        RetouchMode.REMOVE -> fill != null
+        else -> sourceX != 0f || sourceY != 0f
+    }
+
+    private fun applyAll(image: Pixels, active: List<Retouch>) {
         for (retouch in active) {
             if (Thread.currentThread().isInterrupted) throw CancellationException()
             applyOne(image, retouch)
         }
-        return image
     }
 
     /**
@@ -147,7 +180,7 @@ object Retouching {
         return ContentFill.solve(reference, zone, seed)
     }
 
-    private fun applyOne(image: PixelBuffer, retouch: Retouch) {
+    private fun applyOne(image: Pixels, retouch: Retouch) {
         val (rasterWidth, rasterHeight) = brushRasterSize(image.width.toFloat() / image.height)
         val zone = Zone.of(retouch.strokes, rasterWidth, rasterHeight) ?: return
         val opacity = (retouch.opacity / 100f).coerceIn(0f, 1f)
@@ -191,19 +224,68 @@ object Retouching {
                 if (weight <= 0f) continue
                 source.at(x + 0.5f, y + 0.5f, sample)
                 if (membrane != null) membrane.add(u, v, sample)
-                val index = y * image.width + x
-                val dst = image.pixels[index]
-                image.pixels[index] = blend(dst, sample, weight)
+                image.blend(y * image.width + x, sample, weight)
             }
         }
     }
 
-    private fun blend(dst: Int, src: FloatArray, weight: Float): Int {
-        fun channel(shift: Int, value: Float): Int {
-            val d = (dst ushr shift) and 0xFF
-            return (d + (value - d) * weight).roundToInt().coerceIn(0, 255) shl shift
+    /**
+     * The photo as the corrections read and write it: RGB on encoded sRGB from 0 to 255, whatever the
+     * buffer holds. On that one scale the Heal's membrane joins the same numbers on a JPEG and on a RAW.
+     */
+    private abstract class Pixels(val width: Int, val height: Int) {
+        /** The pixel at [index] into [out] from [offset]. */
+        abstract fun read(index: Int, out: FloatArray, offset: Int = 0)
+
+        /** The pixel at [index] moved [weight] of the way towards [rgb]. */
+        abstract fun blend(index: Int, rgb: FloatArray, weight: Float)
+    }
+
+    private class BytePixels(private val image: PixelBuffer) : Pixels(image.width, image.height) {
+        override fun read(index: Int, out: FloatArray, offset: Int) {
+            val argb = image.pixels[index]
+            out[offset] = ((argb ushr 16) and 0xFF).toFloat()
+            out[offset + 1] = ((argb ushr 8) and 0xFF).toFloat()
+            out[offset + 2] = (argb and 0xFF).toFloat()
         }
-        return (dst and -0x1000000) or channel(16, src[0]) or channel(8, src[1]) or channel(0, src[2])
+
+        override fun blend(index: Int, rgb: FloatArray, weight: Float) {
+            val dst = image.pixels[index]
+            fun channel(shift: Int, value: Float): Int {
+                val d = (dst ushr shift) and 0xFF
+                return (d + (value - d) * weight).roundToInt().coerceIn(0, 255) shl shift
+            }
+            image.pixels[index] = (dst and -0x1000000) or channel(16, rgb[0]) or channel(8, rgb[1]) or channel(0, rgb[2])
+        }
+    }
+
+    /**
+     * A RAW's development, encoded on the way in and decoded on the way out. Nothing is clamped: what
+     * the sensor kept above white is still there for the Highlights after the correction.
+     */
+    private class FloatPixels(private val image: FloatPixelBuffer) : Pixels(image.width, image.height) {
+        override fun read(index: Int, out: FloatArray, offset: Int) {
+            for (channel in 0 until 3) out[offset + channel] = encode(image.rgb[index * 3 + channel]) * 255f
+        }
+
+        override fun blend(index: Int, rgb: FloatArray, weight: Float) {
+            for (channel in 0 until 3) {
+                val d = encode(image.rgb[index * 3 + channel]) * 255f
+                image.rgb[index * 3 + channel] = decode((d + (rgb[channel] - d) * weight) / 255f)
+            }
+        }
+
+        private fun encode(value: Float): Float = when {
+            !image.linear -> value
+            value < 0f -> -encodeSrgb(-value)
+            else -> encodeSrgb(value)
+        }
+
+        private fun decode(value: Float): Float = when {
+            !image.linear -> value
+            value < 0f -> -BitmapPhotoProcessor.srgbToLinear(-value)
+            else -> BitmapPhotoProcessor.srgbToLinear(value)
+        }
     }
 
     /**
@@ -289,7 +371,7 @@ object Retouching {
 
     /** Heal and Clone: the photo moved by one offset. */
     private class ShiftedSource(
-        image: PixelBuffer,
+        image: Pixels,
         private val shiftX: Float,
         private val shiftY: Float,
         left: Int,
@@ -352,7 +434,7 @@ object Retouching {
 
             private fun seam(t: Float): Float = ((t - 0.5f) / SEAM + 0.5f).coerceIn(0f, 1f)
 
-            fun of(image: PixelBuffer, fill: RemoveFill, rasterWidth: Int, rasterHeight: Int, left: Int, top: Int, right: Int, bottom: Int): FilledSource? {
+            fun of(image: Pixels, fill: RemoveFill, rasterWidth: Int, rasterHeight: Int, left: Int, top: Int, right: Int, bottom: Int): FilledSource? {
                 val offsets = fill.offsets() ?: return null
                 var minX = 0; var maxX = 0; var minY = 0; var maxY = 0
                 for (cell in 0 until fill.columns * fill.rows) {
@@ -374,7 +456,7 @@ object Retouching {
         private val left: Int,
         private val top: Int,
         private val width: Int,
-        private val pixels: IntArray,
+        private val rgb: FloatArray,
     ) {
         /** RGB at a point in the photo's pixel coordinates, bilinear, clamped to the photo. */
         fun bilinear(px: Float, py: Float, out: FloatArray) {
@@ -390,27 +472,27 @@ object Retouching {
             val b = at(xb, ya)
             val c = at(xa, yb)
             val d = at(xb, yb)
-            for ((channel, shift) in SHIFTS.withIndex()) {
-                val upper = ((a ushr shift) and 0xFF) + (((b ushr shift) and 0xFF) - ((a ushr shift) and 0xFF)) * fx
-                val lower = ((c ushr shift) and 0xFF) + (((d ushr shift) and 0xFF) - ((c ushr shift) and 0xFF)) * fx
+            for (channel in 0 until 3) {
+                val upper = rgb[a + channel] + (rgb[b + channel] - rgb[a + channel]) * fx
+                val lower = rgb[c + channel] + (rgb[d + channel] - rgb[c + channel]) * fx
                 out[channel] = upper + (lower - upper) * fy
             }
         }
 
-        private fun at(x: Int, y: Int): Int = pixels[(y - top) * width + (x - left)]
+        private fun at(x: Int, y: Int): Int = ((y - top) * width + (x - left)) * 3
 
         companion object {
-            private val SHIFTS = intArrayOf(16, 8, 0)
-
-            fun of(image: PixelBuffer, fromX: Float, fromY: Float, untilX: Float, untilY: Float): Snapshot {
+            fun of(image: Pixels, fromX: Float, fromY: Float, untilX: Float, untilY: Float): Snapshot {
                 val left = (floor(fromX).toInt() - 1).coerceIn(0, image.width - 1)
                 val top = (floor(fromY).toInt() - 1).coerceIn(0, image.height - 1)
                 val right = (ceil(untilX).toInt() + 1).coerceIn(left + 1, image.width)
                 val bottom = (ceil(untilY).toInt() + 1).coerceIn(top + 1, image.height)
                 val width = right - left
-                val pixels = IntArray(width * (bottom - top))
-                image.getPixels(pixels, 0, width, left, top, width, bottom - top)
-                return Snapshot(image.width, image.height, left, top, width, pixels)
+                val rgb = FloatArray(width * (bottom - top) * 3)
+                for (y in top until bottom) for (x in left until right) {
+                    image.read(y * image.width + x, rgb, ((y - top) * width + (x - left)) * 3)
+                }
+                return Snapshot(image.width, image.height, left, top, width, rgb)
             }
         }
     }
@@ -455,7 +537,7 @@ object Retouching {
         }
 
         companion object {
-            fun solve(image: PixelBuffer, source: Source, zone: Zone): Membrane {
+            fun solve(image: Pixels, source: Source, zone: Zone): Membrane {
                 val raster = zone.raster
                 val left = max(0, zone.left - MARGIN)
                 val top = max(0, zone.top - MARGIN)
@@ -486,7 +568,7 @@ object Retouching {
              * mean is what keeps the boundary from depending on which.
              */
             private fun texelMean(
-                image: PixelBuffer,
+                image: Pixels,
                 source: Source,
                 tx: Int,
                 ty: Int,
@@ -512,10 +594,8 @@ object Retouching {
                 }
                 var count = 0
                 for (y in fromY until untilY) for (x in fromX until untilX) {
-                    val argb = image.pixels[y.coerceIn(0, image.height - 1) * image.width + x.coerceIn(0, image.width - 1)]
-                    dst[0] += ((argb ushr 16) and 0xFF).toFloat()
-                    dst[1] += ((argb ushr 8) and 0xFF).toFloat()
-                    dst[2] += (argb and 0xFF).toFloat()
+                    image.read(y.coerceIn(0, image.height - 1) * image.width + x.coerceIn(0, image.width - 1), sample)
+                    for (channel in 0 until 3) dst[channel] += sample[channel]
                     source.at(x + 0.5f, y + 0.5f, sample)
                     for (channel in 0 until 3) src[channel] += sample[channel]
                     count++
@@ -526,7 +606,7 @@ object Retouching {
                 }
             }
 
-            private fun pixelBilinear(image: PixelBuffer, px: Float, py: Float, out: FloatArray) {
+            private fun pixelBilinear(image: Pixels, px: Float, py: Float, out: FloatArray) {
                 val sx = (px - 0.5f).coerceIn(0f, (image.width - 1).toFloat())
                 val sy = (py - 0.5f).coerceIn(0f, (image.height - 1).toFloat())
                 val xa = floor(sx).toInt()
@@ -535,10 +615,14 @@ object Retouching {
                 val yb = min(ya + 1, image.height - 1)
                 val fx = sx - xa
                 val fy = sy - ya
-                for ((channel, shift) in intArrayOf(16, 8, 0).withIndex()) {
-                    fun at(x: Int, y: Int) = ((image.pixels[y * image.width + x] ushr shift) and 0xFF).toFloat()
-                    val upper = at(xa, ya) + (at(xb, ya) - at(xa, ya)) * fx
-                    val lower = at(xa, yb) + (at(xb, yb) - at(xa, yb)) * fx
+                val corners = FloatArray(12)
+                image.read(ya * image.width + xa, corners, 0)
+                image.read(ya * image.width + xb, corners, 3)
+                image.read(yb * image.width + xa, corners, 6)
+                image.read(yb * image.width + xb, corners, 9)
+                for (channel in 0 until 3) {
+                    val upper = corners[channel] + (corners[3 + channel] - corners[channel]) * fx
+                    val lower = corners[6 + channel] + (corners[9 + channel] - corners[6 + channel]) * fx
                     out[channel] = upper + (lower - upper) * fy
                 }
             }

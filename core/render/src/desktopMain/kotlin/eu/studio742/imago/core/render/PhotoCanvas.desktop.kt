@@ -47,6 +47,9 @@ actual fun PhotoCanvas(
     // Painted over the full photo and given to the draft too: a brush raster does not depend on the
     // size of what it is drawn on, and a stroke being drawn only adds its newest dabs.
     val brushCache = remember(source) { BrushRasterCache() }
+    // Each size and precision of the photo with its corrections, worked out when they change and not
+    // on every frame of a slider.
+    val retouched = remember(source) { RetouchedSources(capacity = 4) }
     val active = if (showOriginal) parameters.original else parameters
     var frame by remember(source) { mutableStateOf<ImageBitmap?>(null) }
 
@@ -56,11 +59,13 @@ actual fun PhotoCanvas(
             // of its eight hundred pixels and change look when full resolution replaced it.
             val scale = draft.width.toFloat() / source.width
             frame = withContext(Dispatchers.Default) {
-                renderFrame(draft, active, maskOverlay, brushCache.of(active, source), scale, floatDraft)
+                renderFrame(draft, active, maskOverlay, brushCache.of(active, source, retouched), retouched, scale, floatDraft)
             }
             delay(FULL_RESOLUTION_PAUSE_MS)
         }
-        frame = withContext(Dispatchers.Default) { renderFrame(source, active, maskOverlay, brushCache.of(active, source), floatSource = highPrecisionSource) }
+        frame = withContext(Dispatchers.Default) {
+            renderFrame(source, active, maskOverlay, brushCache.of(active, source, retouched), retouched, floatSource = highPrecisionSource)
+        }
     }
 
     val hasFrame = frame != null
@@ -94,9 +99,11 @@ actual fun PhotoCanvas(
     }
 }
 
-private fun BrushRasterCache.of(parameters: RenderParameters, source: PixelBuffer): BrushRasters =
+/** The Auto Mask and the ranges read the photo as the corrections left it, as the export does. */
+private fun BrushRasterCache.of(parameters: RenderParameters, source: PixelBuffer, retouched: RetouchedSources): BrushRasters =
     if (parameters.hasBrushes) {
-        rasters(parameters, source.width.toFloat() / source.height, source) { BrushReference.of(source) }
+        val corrected = retouched.of(source, parameters.retouches)
+        rasters(parameters, source.width.toFloat() / source.height, corrected) { BrushReference.of(corrected) }
     } else {
         BrushRasters.NONE
     }
@@ -106,11 +113,12 @@ private fun renderFrame(
     parameters: RenderParameters,
     maskOverlay: Int,
     brushes: BrushRasters,
+    retouched: RetouchedSources,
     renderScale: Float = 1f,
     floatSource: FloatPixelBuffer? = null,
 ): ImageBitmap {
-    val framed = if (floatSource == null) RecipePixels.render(source, parameters, renderScale, brushes) else
-        RecipePixels.renderFloat(floatSource, parameters, renderScale, brushes).toPixelBuffer()
+    val framed = if (floatSource == null) RecipePixels.render(source, parameters, renderScale, brushes, retouched) else
+        RecipePixels.renderFloat(floatSource, parameters, renderScale, brushes, retouched = retouched).toPixelBuffer()
     if (maskOverlay in 0 until minOf(parameters.masks.size, MAX_LOCAL_MASKS)) {
         tintMask(framed, source.width, source.height, parameters, maskOverlay, brushes)
     }

@@ -29,7 +29,7 @@ import java.lang.reflect.Proxy
 @OptIn(ExperimentalCoroutinesApi::class)
 class RecipeSaveTest {
     private inline fun <reified T> unused(): T = Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, _ ->
-        if (method.name == "getRecipePartsChoice" || method.name == "getBrushTool") return@newProxyInstance null
+        if (method.name == "getRecipePartsChoice" || method.name == "getBrushTool" || method.name == "getRetouchTool") return@newProxyInstance null
         error("${T::class.simpleName}.${method.name} is not used here")
     } as T
 

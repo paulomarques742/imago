@@ -290,7 +290,7 @@ private fun DrawScope.drawColorSamples(component: MaskComponent, projection: Mas
 }
 
 /** Two circles: the brush's reach, and dimmer, where its feather begins. */
-private fun DrawScope.drawBrushCursor(cursor: BrushCursor) {
+internal fun DrawScope.drawBrushCursor(cursor: BrushCursor) {
     val stroke = OUTLINE_WIDTH.toPx()
     drawCircle(Color.Black.copy(alpha = 0.5f), radius = cursor.radius + stroke, center = cursor.centre, style = Stroke(width = stroke))
     drawCircle(OUTLINE_COLOR, radius = cursor.radius, center = cursor.centre, style = Stroke(width = stroke))
@@ -395,13 +395,13 @@ private fun DrawScope.drawProjectedLine(
 }
 
 /** Another shape's pin: smaller and dimmer than a handle, so it does not read as one. */
-private fun DrawScope.drawPin(position: Offset) {
+internal fun DrawScope.drawPin(position: Offset) {
     val radius = PIN_RADIUS.toPx()
     drawCircle(color = Color.Black.copy(alpha = 0.5f), radius = radius + HANDLE_STROKE.toPx(), center = position)
     drawCircle(color = OUTLINE_COLOR.copy(alpha = OTHER_COMPONENT_ALPHA), radius = radius, center = position)
 }
 
-private fun DrawScope.drawHandle(position: Offset, filled: Boolean) {
+internal fun DrawScope.drawHandle(position: Offset, filled: Boolean) {
     val radius = (if (filled) HANDLE_RADIUS else HANDLE_RADIUS_SECONDARY).toPx()
     val stroke = HANDLE_STROKE.toPx()
     // The dark ring underneath is not decoration: over a light sky, a white circle without an outline
@@ -480,12 +480,12 @@ private val HANDLE_RADIUS_SECONDARY = 9.dp
 private val HANDLE_STROKE = 2.dp
 private val PIN_RADIUS = 6.dp
 private val SAMPLE_RADIUS = 7.dp
-private val OUTLINE_WIDTH = 1.5.dp
+internal val OUTLINE_WIDTH = 1.5.dp
 
 /** The shapes of the mask that are not being edited: present, but behind the one that is. */
 private const val OTHER_COMPONENT_ALPHA = 0.45f
 
-private val OUTLINE_COLOR = Color(0xFFF2F2F0)
+internal val OUTLINE_COLOR = Color(0xFFF2F2F0)
 
 /** A component's centre in normalised image coordinates, or null if it has no shape. */
 fun LocalMask.centreInImage(component: Int = 0): Offset? = components.getOrNull(component)?.let { shape ->

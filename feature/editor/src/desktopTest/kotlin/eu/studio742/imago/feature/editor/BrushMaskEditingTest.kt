@@ -37,6 +37,7 @@ class BrushMaskEditingTest {
         when (method.name) {
             "getRecipePartsChoice" -> return@newProxyInstance null
             "getBrushTool" -> return@newProxyInstance storedBrush
+            "getRetouchTool" -> return@newProxyInstance null
             "setBrushTool" -> return@newProxyInstance Unit.also { storedBrush = args[0] as String }
         }
         error("${T::class.simpleName}.${method.name} is not used by the brush")

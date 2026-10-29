@@ -15,6 +15,7 @@ import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
 import eu.studio742.imago.core.model.MAX_MASK_COMPONENTS
 import eu.studio742.imago.core.model.MaskShape
 import eu.studio742.imago.core.model.LocalAdjustments
+import eu.studio742.imago.core.model.Retouch
 
 /**
  * The preview pipeline, in several passes.
@@ -58,6 +59,16 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     /** The raster each layer last received; a different one means the whole layer goes up again. */
     private var uploadedBrushes = arrayOfNulls<BrushRaster>(0)
     private val brushCache = BrushRasterCache()
+    /**
+     * The photo with its corrections, kept for as long as they stay the same: they are worked out here,
+     * on the GL thread, when they change, and a slider moved afterwards finds them ready. [plain] is the
+     * bitmap's pixels, read once per bitmap, the key under which they are kept.
+     */
+    private val retouched = RetouchedSources(capacity = 2)
+    private var plain: PixelBuffer? = null
+    private var plainOf: Bitmap? = null
+    /** The corrections now in [sourceTexture]; null before the first upload. */
+    private var uploadedRetouches: List<Retouch>? = null
     private var toneCurveTexture = 0
     /** The tables now in [toneCurveTexture]; uploaded again only when the curves change. */
     private var uploadedToneCurves: FloatArray? = null
@@ -201,10 +212,16 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     override fun onDrawFrame(gl: GL10?) {
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
         val source = bitmap ?: return
-        if (pendingUpload) {
+        val active = if (showOriginal) parameters.original else parameters
+        // "Before" has no corrections: the texture goes back to the bare photo, and forward again after.
+        if (pendingUpload || active.retouches != uploadedRetouches) {
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, sourceTexture)
-            val raw = highPrecisionSource
-            if (raw == null) GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, source, 0) else {
+            val raw = highPrecisionSource?.let { retouched.of(it, active.retouches) }
+            if (raw == null) {
+                val corrected = if (active.retouches.isEmpty()) source else correctedBitmap(source, active.retouches)
+                GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, corrected, 0)
+                if (corrected !== source) corrected.recycle()
+            } else {
                 val pixels = ByteBuffer.allocateDirect(Math.multiplyExact(raw.width * raw.height, 16))
                     .order(ByteOrder.nativeOrder()).asFloatBuffer()
                 for (i in 0 until raw.width * raw.height) {
@@ -216,10 +233,10 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
             }
             imageWidth = source.width.coerceAtLeast(1)
             imageHeight = source.height.coerceAtLeast(1)
+            uploadedRetouches = active.retouches
             pendingUpload = false
         }
 
-        val active = if (showOriginal) parameters.original else parameters
         if (!ensureStage()) return
         val maskFields = if (active.needsMaskField) buildMaskField(active) else 0
         val local = active.needsLocalToneMask && buildLocalToneMask(active, maskFields)
@@ -322,6 +339,13 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         return halves
     }
 
+    private fun plainPixels(source: Bitmap): PixelBuffer =
+        plain?.takeIf { plainOf === source } ?: source.toPixelBuffer().also { plain = it; plainOf = source }
+
+    /** A new bitmap of [source] with [retouches], for the texture; the caller recycles it once uploaded. */
+    private fun correctedBitmap(source: Bitmap, retouches: List<Retouch>): Bitmap =
+        retouched.of(plainPixels(source), retouches).toPlatformBitmap()
+
     /**
      * Brings the brush rasters up to date and uploads what changed: the whole layer when the raster is
      * new, otherwise only the rectangle its newest dabs touched — a stroke being drawn changes a few
@@ -333,8 +357,10 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
      */
     private fun uploadBrushes(active: RenderParameters) {
         val source = bitmap ?: return
-        val rasters = brushCache.rasters(active, imageWidth.toFloat() / imageHeight.coerceAtLeast(1), source) {
-            BrushReference.of(BitmapSurface(source))
+        // The Auto Mask and the ranges read the photo as the corrections left it, as the export does.
+        val reference: Any = if (active.retouches.isEmpty()) source else retouched.of(plainPixels(source), active.retouches)
+        val rasters = brushCache.rasters(active, imageWidth.toFloat() / imageHeight.coerceAtLeast(1), reference) {
+            if (reference is PixelBuffer) BrushReference.of(reference) else BrushReference.of(BitmapSurface(source))
         }
         val first = (0 until rasters.count).firstNotNullOfOrNull { rasters[it] } ?: return
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + BRUSH_UNIT)

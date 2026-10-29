@@ -3,7 +3,7 @@ package eu.studio742.imago.core.model
 import kotlinx.serialization.Serializable
 
 /** The process from which a recipe's [EditRecipe.retouches] are drawn. */
-const val RETOUCH_PROCESS_VERSION = 18
+const val RETOUCH_PROCESS_VERSION = 22
 
 /** Lightroom's Remove tool, in its three modes that need no generative model. */
 @Serializable

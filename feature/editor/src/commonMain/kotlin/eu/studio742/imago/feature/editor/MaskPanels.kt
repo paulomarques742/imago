@@ -516,7 +516,7 @@ internal fun MaskAdjustmentsHeader(
 }
 
 @Composable
-private fun MaskIconButton(
+internal fun MaskIconButton(
     icon: ImageVector,
     description: String,
     tint: androidx.compose.ui.graphics.Color,
@@ -797,7 +797,7 @@ private fun RangeSettingSlider(
 }
 
 @Composable
-private fun BrushModeButton(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
+internal fun BrushModeButton(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
     val tint = if (selected) ImagoColors.Gold else ImagoColors.TextSecondary
     Row(
         modifier = Modifier

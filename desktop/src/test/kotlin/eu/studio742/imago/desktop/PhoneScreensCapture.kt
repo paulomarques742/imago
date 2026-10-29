@@ -677,6 +677,31 @@ class PhoneScreensCapture {
                 shot("90-list")
                 tree("90-list")
             }
+            // The Remove tool: a Heal and a Remove painted on the photo, each worked out when the finger lifts.
+            if (wants("remove")) {
+                onNodeWithContentDescription("Open DSCF9039.jpg").performClick()
+                settle(3_000)
+                onNodeWithText("Edit").performClick()
+                settle(4_000)
+                onAllNodesWithText("Remove")[0].performClick()
+                settle(1_500)
+                shot("95-remove")
+                tree("95-remove")
+                val remove = Gestures(this)
+                remove.step { onAllNodesWithText("Heal")[0].performClick() }
+                remove.pause(6)
+                remove.dragBetween(Offset(260f, 700f), Offset(330f, 720f), frames = 10)
+                remove.pause(20)
+                // The first "Remove" is the mode, in the panel; the last one is the bar's, which would close it.
+                remove.step { onAllNodesWithText("Remove")[0].performClick() }
+                remove.pause(6)
+                remove.dragBetween(Offset(820f, 760f), Offset(860f, 820f), frames = 10)
+                remove.pause(20)
+                clip("96-remove", frames = remove.frames) { remove.run(it) }
+                settle(4_000)
+                shot("97-removed")
+                tree("97-removed")
+            }
             // The tablet: the same photo, before and after the phone edited it (run with
             // -Pimago.capture.device=tablet on the profile the phone's run used).
             for (moment in listOf("before", "after")) {
