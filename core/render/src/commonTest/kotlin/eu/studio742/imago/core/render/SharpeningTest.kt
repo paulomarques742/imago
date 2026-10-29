@@ -27,6 +27,36 @@ class SharpeningTest {
     private fun sharpen(amount: Float = 100f, radius: Float = 1f, detail: Float = 100f, masking: Float = 0f) =
         RenderParameters(sharpenAmount = amount, sharpenRadius = radius, sharpenDetail = detail, sharpenMasking = masking)
 
+    @Test fun `the export's field in one array is the delta worked out with two`() {
+        val w = 37
+        val h = 23
+        val image = FloatPixelBuffer(w, h, FloatArray(w * h * 3) { ((it * 7919) % 1009) / 1009f }, linear = false)
+        val parameters = sharpen(amount = 80f, radius = 1.4f, detail = 40f, masking = 30f)
+        val field = SharpenField.build(image, parameters)
+
+        val pixels = FloatArray(w * 4)
+        val luminance = FloatArray(w * h)
+        for (y in 0 until h) {
+            image.readRgbaRow(y, pixels, IntArray(w))
+            for (x in 0 until w) luminance[y * w + x] = PhotoEffects.luminance(pixels[x * 4], pixels[x * 4 + 1], pixels[x * 4 + 2])
+        }
+        val blurred = luminance.copyOf()
+        DetailPyramid.blurInPlace(blurred, w, h, parameters.sharpenRadius)
+        for (y in 0 until h) for (x in 0 until w) {
+            val dx = blurred[y * w + minOf(x + 1, w - 1)] - blurred[y * w + maxOf(x - 1, 0)]
+            val dy = blurred[minOf(y + 1, h - 1) * w + x] - blurred[maxOf(y - 1, 0) * w + x]
+            val expected = Sharpening.delta(
+                luminance = luminance[y * w + x],
+                blurred = blurred[y * w + x],
+                gradient = 0.5f * kotlin.math.sqrt(dx * dx + dy * dy),
+                amount = parameters.sharpenAmount,
+                detail = parameters.sharpenDetail,
+                masking = parameters.sharpenMasking,
+            )
+            assertEquals("($x, $y)", expected, field.at(x, y), 0f)
+        }
+    }
+
     @Test fun `an edge gets its overshoot on both sides and a flat area is left alone`() {
         val plain = step(RenderParameters())
         val sharp = step(sharpen())

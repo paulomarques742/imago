@@ -1,7 +1,19 @@
 package eu.studio742.imago.core.raw
 
 /** IEEE binary16 storage with binary32 arithmetic, matching the GPU's RGBA16F working targets. */
-class HalfFloats(val values: ShortArray) {
+class HalfFloats(values: ShortArray) {
+    var values: ShortArray = values
+        private set
+
+    /**
+     * Lets go of the samples, leaving none. For the owner of a full-size development that is done with it
+     * while something still points at this object: a stack frame of a debuggable build keeps every
+     * reference alive, and the array is over a hundred megabytes.
+     */
+    fun release() {
+        values = ShortArray(0)
+    }
+
     val size: Int get() = values.size
     val indices: IntRange get() = values.indices
     operator fun get(index: Int): Float = decodeHalf(values[index])

@@ -62,8 +62,10 @@ internal object Sharpening {
  * The export's side of step 11: the delta of every pixel, computed from the toned image before the
  * finish pass overwrites it.
  *
- * It holds two floats per pixel at most while it is built (luminance and its blur) and one after;
- * on a 24 Mpx photo that is the price of a sharpening that sees its whole neighbourhood.
+ * It holds one float per pixel: the luminance, then its blur, then the delta, in the same array. The
+ * luminance is read again from the image, which nothing has changed yet, and the blur of the row above
+ * is kept aside before the delta writes over it. On a 26 Mpx RAW a second array was a hundred megabytes
+ * the export did not have.
  */
 internal class SharpenField private constructor(private val delta: FloatArray, private val width: Int) {
     fun at(x: Int, y: Int): Float = delta[y * width + x]
@@ -72,41 +74,44 @@ internal class SharpenField private constructor(private val delta: FloatArray, p
         fun build(bitmap: PixelSurface, parameters: RenderParameters): SharpenField {
             val width = bitmap.width
             val height = bitmap.height
-            val luminance = FloatArray(width * height)
+            val field = FloatArray(width * height)
             val pixels = FloatArray(width * 4)
             val scratch = IntArray(width)
             for (y in 0 until height) {
                 bitmap.readRgbaRow(y, pixels, scratch)
                 val base = y * width
                 for (x in 0 until width) {
-                    luminance[base + x] = PhotoEffects.luminance(pixels[x * 4], pixels[x * 4 + 1], pixels[x * 4 + 2])
+                    field[base + x] = PhotoEffects.luminance(pixels[x * 4], pixels[x * 4 + 1], pixels[x * 4 + 2])
                 }
             }
-            val blurred = luminance.copyOf()
-            DetailPyramid.blurInPlace(blurred, width, height, parameters.sharpenRadius)
+            DetailPyramid.blurInPlace(field, width, height, parameters.sharpenRadius)
 
-            // The delta goes over the luminance, which is not needed again once it has been read here.
+            var above = FloatArray(width)
+            var here = FloatArray(width)
             for (y in 0 until height) {
-                val above = max(y - 1, 0) * width
-                val below = min(y + 1, height - 1) * width
                 val base = y * width
+                field.copyInto(here, 0, base, base + width)
+                if (y == 0) here.copyInto(above)
+                val below = min(y + 1, height - 1) * width
+                bitmap.readRgbaRow(y, pixels, scratch)
                 for (x in 0 until width) {
-                    val left = base + max(x - 1, 0)
-                    val right = base + min(x + 1, width - 1)
-                    val dx = blurred[right] - blurred[left]
-                    val dy = blurred[below + x] - blurred[above + x]
+                    val dx = here[min(x + 1, width - 1)] - here[max(x - 1, 0)]
+                    val dy = field[below + x] - above[x]
                     val gradient = 0.5f * sqrt(dx * dx + dy * dy)
-                    luminance[base + x] = Sharpening.delta(
-                        luminance = luminance[base + x],
-                        blurred = blurred[base + x],
+                    field[base + x] = Sharpening.delta(
+                        luminance = PhotoEffects.luminance(pixels[x * 4], pixels[x * 4 + 1], pixels[x * 4 + 2]),
+                        blurred = here[x],
                         gradient = gradient,
                         amount = parameters.sharpenAmount,
                         detail = parameters.sharpenDetail,
                         masking = parameters.sharpenMasking,
                     )
                 }
+                val written = above
+                above = here
+                here = written
             }
-            return SharpenField(luminance, width)
+            return SharpenField(field, width)
         }
     }
 }

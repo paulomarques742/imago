@@ -1,6 +1,7 @@
 package eu.studio742.imago.core.raw
 
 import java.io.File
+import java.util.Collections
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -57,6 +58,44 @@ class RawDecodeQueueTest {
             worker.interrupt()
             worker.join(5000)
         }
+    }
+
+    @Test fun `LibRaw's work runs on one thread that outlives its callers`() {
+        val seen = Collections.synchronizedSet(HashSet<Thread>())
+        repeat(4) {
+            val caller = Thread { RawThreads.decode { seen += Thread.currentThread() } }
+            caller.start()
+            caller.join(5000)
+        }
+        assertEquals(1, seen.size)
+        assertTrue(seen.single().isAlive)
+    }
+
+    @Test fun `a failure reaches the caller as it was thrown`() {
+        val failure = RawDecodeException(-4)
+        assertSame(failure, assertThrows(RawDecodeException::class.java) { RawThreads.read { throw failure } })
+    }
+
+    @Test fun `interrupting the caller interrupts the work`() {
+        val started = CountDownLatch(1)
+        val stopped = CountDownLatch(1)
+        val failure = AtomicReference<Throwable>()
+        val caller = Thread {
+            try {
+                RawThreads.decode {
+                    started.countDown()
+                    try { Thread.sleep(10_000) } catch (interrupted: InterruptedException) { stopped.countDown() }
+                }
+            } catch (error: Throwable) {
+                failure.set(error)
+            }
+        }
+        caller.start()
+        assertTrue(started.await(5, TimeUnit.SECONDS))
+        caller.interrupt()
+        caller.join(5000)
+        assertTrue("${failure.get()}", failure.get() is CancellationException)
+        assertTrue("The work must hear the interruption.", stopped.await(5, TimeUnit.SECONDS))
     }
 
     private fun awaitWaiting(worker: Thread) {

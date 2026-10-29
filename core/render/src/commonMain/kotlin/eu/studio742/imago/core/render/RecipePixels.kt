@@ -27,6 +27,8 @@ object RecipePixels {
     }
 
     /**
+     * @param consumeSource [original] is given away: it may be written over, returned as the result, or
+     *   emptied once framed, and is not to be read after the call.
      * @param retouched where the editor keeps [source] with its corrections between frames; without
      *   it they are worked out on every call, which is what an export wants.
      */
@@ -38,7 +40,13 @@ object RecipePixels {
         consumeSource: Boolean = false,
         retouched: RetouchedSources? = null,
     ): FloatPixelBuffer {
-        val source = retouched?.of(original, params.retouches) ?: Retouching.apply(original, params.retouches)
+        val source = when {
+            retouched != null -> retouched.of(original, params.retouches)
+            // A source this call may consume takes its corrections where it is: an export's development
+            // is the largest array in the process, and a copy of it is what ran out of memory.
+            consumeSource -> original.also { Retouching.applyInPlace(it, params.retouches) }
+            else -> Retouching.apply(original, params.retouches)
+        }
         // A copy made here for the corrections is this call's to consume; one the cache keeps is not.
         val consume = if (source === original) consumeSource else retouched == null
         val rasters = brushes ?: BrushRasters.of(params, source)
@@ -58,6 +66,9 @@ object RecipePixels {
                 }
             }
         }
+        // Framed, a source this call may consume is read no more: its pixels go now and not when the
+        // caller returns, which is when an export needs the room for the rest of the recipe.
+        if (consume && framed !== source) source.rgb.release()
         return BitmapPhotoProcessor.renderInPlace(framed, params, frame, renderScale, rasters)
     }
 

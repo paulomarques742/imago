@@ -163,7 +163,9 @@ class BrushReference internal constructor(val width: Int, val height: Int, priva
         /** [source] is the photo in image space — before crop and rotation — at any resolution. */
         fun of(source: PixelSurface): BrushReference {
             val (width, height) = brushRasterSize(source.width.toFloat() / source.height)
-            val sums = DoubleArray(width * height * 3)
+            // The sums are added up in the array that then holds the means. They are whole numbers far
+            // below 2^24, which a float keeps exactly; a separate array of doubles was 67 MB on export.
+            val rgb = FloatArray(width * height * 3)
             val counts = IntArray(width * height)
             val row = IntArray(source.width)
             for (sy in 0 until source.height) {
@@ -173,13 +175,12 @@ class BrushReference internal constructor(val width: Int, val height: Int, priva
                     val tx = (sx.toLong() * width / source.width).toInt()
                     val texel = ty * width + tx
                     val argb = row[sx]
-                    sums[texel * 3] += ((argb ushr 16) and 0xFF).toDouble()
-                    sums[texel * 3 + 1] += ((argb ushr 8) and 0xFF).toDouble()
-                    sums[texel * 3 + 2] += (argb and 0xFF).toDouble()
+                    rgb[texel * 3] += ((argb ushr 16) and 0xFF).toFloat()
+                    rgb[texel * 3 + 1] += ((argb ushr 8) and 0xFF).toFloat()
+                    rgb[texel * 3 + 2] += (argb and 0xFF).toFloat()
                     counts[texel]++
                 }
             }
-            val rgb = FloatArray(width * height * 3)
             // The texels that no pixel fell in come row after row, and the row of the photo they read is the
             // same for all of them: read once, and not once per texel — on a small photo that was most of the
             // raster, millions of row reads.
@@ -189,7 +190,7 @@ class BrushReference internal constructor(val width: Int, val height: Int, priva
                 // pixel that covers them.
                 val count = counts[texel]
                 if (count > 0) {
-                    for (channel in 0 until 3) rgb[texel * 3 + channel] = (sums[texel * 3 + channel] / count / 255.0).toFloat()
+                    for (channel in 0 until 3) rgb[texel * 3 + channel] = (rgb[texel * 3 + channel].toDouble() / count / 255.0).toFloat()
                 } else {
                     val tx = texel % width
                     val ty = texel / width

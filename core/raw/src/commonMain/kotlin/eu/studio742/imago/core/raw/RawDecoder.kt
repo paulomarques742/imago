@@ -1,7 +1,12 @@
 package eu.studio742.imago.core.raw
 
 import java.io.File
+import java.util.concurrent.Callable
 import java.util.concurrent.CancellationException
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 
 /**
@@ -42,10 +47,7 @@ object RawDecoder {
     val supportedCameras: List<String> get() = NativeRaw.cameras().toList()
 
     /** Header-only recognition for indexing; never unpacks or demosaics the sensor. */
-    fun identify(file: File): RawInfo? {
-        if (Thread.currentThread().isInterrupted) throw CancellationException()
-        return NativeRaw.identify(file.absolutePath)
-    }
+    fun identify(file: File): RawInfo? = RawThreads.read { NativeRaw.identify(file.absolutePath) }
 
     /**
      * Null means that this LibRaw build does not recognize the input. A recognized but damaged
@@ -56,22 +58,59 @@ object RawDecoder {
      * reads; whether to is the recipe's choice, not the decoder's.
      */
     fun decode(file: File, halfSize: Boolean = false, baselineExposure: Boolean = false, highlight: Int = LEGACY_HIGHLIGHT): RawImage? {
-        return RawDecodeQueue.run { NativeRaw.decode(file.absolutePath, halfSize, 0, baselineExposure, highlight) }
+        return RawDecodeQueue.run { RawThreads.decode { NativeRaw.decode(file.absolutePath, halfSize, 0, baselineExposure, highlight) } }
     }
 
     /**
      * The JPEG the camera rendered and stored inside the original, or null when the file has none
      * (or keeps it as a bitmap). Reads the header and the preview only, never the sensor.
      */
-    fun embeddedJpeg(file: File): ByteArray? {
-        if (Thread.currentThread().isInterrupted) throw CancellationException()
-        return NativeRaw.embeddedJpeg(file.absolutePath)
-    }
+    fun embeddedJpeg(file: File): ByteArray? = RawThreads.read { NativeRaw.embeddedJpeg(file.absolutePath) }
 
     /** Bounds the JVM buffer before allocation, retaining linear precision and highlight headroom. */
     fun decodePreview(file: File, maxSide: Int, baselineExposure: Boolean = false, highlight: Int = LEGACY_HIGHLIGHT): RawImage? {
         require(maxSide > 0)
-        return RawDecodeQueue.run { NativeRaw.decode(file.absolutePath, true, maxSide, baselineExposure, highlight) }
+        return RawDecodeQueue.run { RawThreads.decode { NativeRaw.decode(file.absolutePath, true, maxSide, baselineExposure, highlight) } }
+    }
+}
+
+/**
+ * The only threads LibRaw runs on. Built with OpenMP, its runtime adopts every thread that calls it and
+ * keeps a team of workers for each; the app's own threads come and go, and on Android a call from a
+ * fresh one crashed inside the runtime (SIGSEGV in `__kmpc_critical_with_hint`, under LibRaw's
+ * allocator). Threads that live as long as the process are all it ever sees. Reading headers has its
+ * own, so the grid is not held behind a development that takes seconds.
+ *
+ * Interrupting the caller interrupts the work on its thread, which is what the native side checks.
+ */
+internal object RawThreads {
+    private val decoding = permanent("imago-raw-decode", 1)
+    private val reading = permanent("imago-raw-read", 2)
+
+    fun <T> decode(block: () -> T): T = call(decoding, block)
+
+    fun <T> read(block: () -> T): T = call(reading, block)
+
+    private fun <T> call(executor: ExecutorService, block: () -> T): T {
+        if (Thread.currentThread().isInterrupted) throw CancellationException()
+        val task = executor.submit(Callable(block))
+        try {
+            return task.get()
+        } catch (interrupted: InterruptedException) {
+            task.cancel(true)
+            Thread.currentThread().interrupt()
+            throw CancellationException("RAW work interrupted.").apply { initCause(interrupted) }
+        } catch (failure: ExecutionException) {
+            throw failure.cause ?: failure
+        }
+    }
+
+    private fun permanent(name: String, threads: Int): ExecutorService {
+        val count = AtomicInteger()
+        // Core threads of a fixed pool never time out: none of them ends while the process runs.
+        return Executors.newFixedThreadPool(threads) { work ->
+            Thread(work, "$name-${count.incrementAndGet()}").apply { isDaemon = true }
+        }
     }
 }
 

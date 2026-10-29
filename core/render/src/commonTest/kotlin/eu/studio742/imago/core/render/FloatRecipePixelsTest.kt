@@ -40,6 +40,22 @@ class FloatRecipePixelsTest {
         assertFalse(frame.linear)
     }
 
+    @Test fun `a consumed source lets go of its pixels once it is framed`() {
+        fun development() = FloatPixelBuffer(8, 6, FloatArray(8 * 6 * 3) { (it % 7) / 7f })
+        val cropped = RenderParameters(rotation = 90, cropWidth = .5f, cropHeight = .75f, exposure = .3f)
+        val expected = RecipePixels.renderFloat(development(), cropped).rgb.toFloatArray()
+        val source = development()
+        val frame = RecipePixels.renderFloat(source, cropped, consumeSource = true)
+        assertEquals(0, source.rgb.size)
+        assertArrayEquals(expected, frame.rgb.toFloatArray(), 0f)
+    }
+
+    @Test fun `a source that is not consumed keeps its pixels`() {
+        val source = FloatPixelBuffer(8, 6, FloatArray(8 * 6 * 3) { .25f })
+        RecipePixels.renderFloat(source, RenderParameters(rotation = 90, cropWidth = .5f))
+        assertEquals(8 * 6 * 3, source.rgb.size)
+    }
+
     @Test fun `float input follows the shared detail and color pipeline`() {
         val rgb = FloatArray(16 * 16 * 3) { ((it * 17) % 256) / 255f }
         val source = FloatPixelBuffer(16, 16, rgb.copyOf(), linear = false)

@@ -68,6 +68,12 @@ object Retouching {
         return image
     }
 
+    /** As the [PixelBuffer] one: a full-size development is over a hundred megabytes, too many to copy. */
+    fun applyInPlace(image: FloatPixelBuffer, retouches: List<Retouch>) {
+        val active = active(retouches)
+        if (active.isNotEmpty()) applyAll(FloatPixels(image), active)
+    }
+
     private fun active(retouches: List<Retouch>) = retouches.filter { it.draws() }
 
     /**

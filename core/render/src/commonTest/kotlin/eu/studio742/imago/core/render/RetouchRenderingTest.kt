@@ -120,6 +120,17 @@ class RetouchRenderingTest {
     }
 
     @Test
+    fun `an export's development takes the corrections where it is`() {
+        fun development() = FloatPixelBuffer(300, 200, FloatArray(300 * 200 * 3) { (it / 3 % 300 * 7 % 251) / 255f }, linear = false)
+        val parameters = recipe().toRenderParameters()
+        val expected = RecipePixels.renderFloat(development(), parameters).rgb.toFloatArray()
+        val source = development()
+        val rendered = RecipePixels.renderFloat(source, parameters, consumeSource = true)
+        assertSame("No copy of the development for the corrections.", source, rendered)
+        assertArrayEquals(expected, rendered.rgb.toFloatArray(), 0f)
+    }
+
+    @Test
     fun `a render through the cache leaves the cached photo as it was`() {
         val retouched = RetouchedSources()
         val float = FloatPixelBuffer(300, 200, FloatArray(300 * 200 * 3) { .5f }, linear = false)
