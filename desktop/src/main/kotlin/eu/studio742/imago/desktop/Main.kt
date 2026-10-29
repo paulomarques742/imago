@@ -54,12 +54,6 @@ import okio.Path.Companion.toOkioPath
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
-    coil3.SingletonImageLoader.setSafe { context ->
-        coil3.ImageLoader.Builder(context).components {
-            add(eu.studio742.imago.core.render.RawPhotoDecoder.Factory())
-            add(coil3.network.okhttp.OkHttpNetworkFetcherFactory(callFactory = { eu.studio742.imago.core.immich.ImmichHttp.client }))
-        }.build()
-    }
     // The Windows language, read before the app can change the process locale.
     val systemLocale = java.util.Locale.getDefault()
     val paths = AppPaths()
@@ -87,6 +81,16 @@ fun main(args: Array<String>) {
     }, 60 * 60 * 1000L, 60 * 60 * 1000L)
 
     val graph = DesktopDataGraph(paths.root)
+    coil3.SingletonImageLoader.setSafe { context ->
+        coil3.ImageLoader.Builder(context).components {
+            add(eu.studio742.imago.core.render.RawPhotoDecoder.Factory())
+            // Before the network: an edited RAW of the server is developed from its original, and
+            // read back from the cache once it has been.
+            add(eu.studio742.imago.core.render.CachedRawTileFetcher.Factory())
+            add(eu.studio742.imago.core.render.LibraryRawFetcher.Factory { id, file -> graph.library.downloadOriginal(id, file) })
+            add(coil3.network.okhttp.OkHttpNetworkFetcherFactory(callFactory = { eu.studio742.imago.core.immich.ImmichHttp.client }))
+        }.build()
+    }
     CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { graph.configuration.observeDiagnosticVersions() }
     val languageSettings = DesktopLanguageSettings(paths.root.resolve("language"))
     val secrets = WindowsSecretStore(paths.secrets)

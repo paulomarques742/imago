@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 class ImmichRoomApplication : Application(), SingletonImageLoader.Factory {
     @Inject lateinit var syncEngine: SyncEngine
     @Inject lateinit var configuration: eu.studio742.imago.core.data.ConfigurationRepository
+    @Inject lateinit var library: eu.studio742.imago.core.data.LibraryRepository
 
     override fun onCreate() {
         super.onCreate()
@@ -45,11 +46,13 @@ class ImmichRoomApplication : Application(), SingletonImageLoader.Factory {
         .components {
             add(eu.studio742.imago.core.render.RawPhotoDecoder.Factory())
             add(LibraryImageInterceptor())
+            // Before the network and the one that reads the RAW: a tile that was developed already is
+            // answered from the cache. Then an edited RAW of the server comes from its original.
+            add(eu.studio742.imago.core.render.CachedRawTileFetcher.Factory())
+            add(eu.studio742.imago.core.render.LibraryRawFetcher.Factory { id, file -> library.downloadOriginal(id, file) })
             // The shared client, not Coil's own: what the connection needs (headers, certificates)
             // is configured on it.
             add(coil3.network.okhttp.OkHttpNetworkFetcherFactory(callFactory = { eu.studio742.imago.core.immich.ImmichHttp.client }))
-            // Before the one that reads the RAW: a tile that was developed already is answered from the cache.
-            add(eu.studio742.imago.core.render.CachedRawTileFetcher.Factory())
             add(LocalThumbnailFetcher.Factory(this@ImmichRoomApplication))
         }
         // Coil's default share was too small to outlive a visit to the detail: a few full-screen

@@ -13,6 +13,7 @@ import eu.studio742.imago.core.designsystem.i18n.UiText
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import eu.studio742.imago.feature.library.resources.*
+import eu.studio742.imago.core.render.developedLibraryRaw
 import eu.studio742.imago.core.render.developedRawTile
 import eu.studio742.imago.core.render.libraryAuth
 import eu.studio742.imago.core.render.rawQuickPreview
@@ -1925,12 +1926,22 @@ private fun AssetTile(
         // A RAW from the phone is developed one at a time, and a grid of them would stay blank until
         // each one's turn. The phone already keeps a small look of it: it goes underneath, and the
         // developed photo fades in over it when it is ready.
+        // An edited RAW of the server is developed from its original as well, and the server's own image
+        // goes underneath until it is.
+        val serverRawEdit = asset.isRaw && asset.apiKey.isNotBlank() && asset.recipe != null
         if (asset.isRaw && asset.thumbnailUrl.startsWith("content:")) {
             val quickRequest = remember(context, asset.thumbnailUrl) {
                 ImageRequest.Builder(context).rawQuickPreview(asset.thumbnailUrl).build()
             }
             AsyncImage(
                 model = quickRequest,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (serverRawEdit) {
+            AsyncImage(
+                model = ImageRequest.Builder(context).data(asset.thumbnailUrl).libraryAuth(asset.apiKey).build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -1942,7 +1953,12 @@ private fun AssetTile(
                 .libraryAuth(asset.apiKey)
                 .crossfade(true)
                 .withRecipe(asset.recipe)
-                .apply { if (asset.isRaw) developedRawTile() }
+                .apply {
+                    when {
+                        serverRawEdit -> developedLibraryRaw(asset.id, asset.checksum)
+                        asset.isRaw -> developedRawTile()
+                    }
+                }
                 .build(),
             // The tile's description becomes the selection's while it lasts; two in a row would make
             // the screen reader say "open" for a thumbnail that no longer opens anything.

@@ -11,7 +11,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * A RAW tile from the phone, answered from [RecipeRenderCache] before the RAW is opened.
+ * A RAW tile from the phone or a server library, answered from [RecipeRenderCache] before the RAW is
+ * opened or downloaded.
  *
  * Reading a RAW through a content URI copies it into a temporary file, and developing it is one at a
  * time: both are what a tile that was already developed should not pay again. Whoever made the request
@@ -32,7 +33,7 @@ class CachedRawTileFetcher private constructor(
 
     class Factory : Fetcher.Factory<coil3.Uri> {
         override fun create(data: coil3.Uri, options: Options, imageLoader: ImageLoader): Fetcher? {
-            val key = options.extras[RawTileCacheKey] ?: return null
+            val key = options.extras[RawTileCacheKey] ?: libraryRawKey(options) ?: return null
             return CachedRawTileFetcher(key, options.extras[rawRecipeKey]?.let { recipeTransformation(it).cacheKey })
         }
     }

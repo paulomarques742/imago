@@ -7,7 +7,6 @@ import coil3.decode.DecodeResult
 import coil3.decode.Decoder
 import coil3.fetch.SourceFetchResult
 import coil3.request.Options
-import coil3.size.Dimension
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.CURRENT_RAW_RENDERING
 import eu.studio742.imago.core.model.RAW_INITIAL_SHARPEN_AMOUNT
@@ -45,15 +44,15 @@ internal object DevelopedRawBitmaps {
 /** Library thumbnails and detail images use the same development and recipe as the editor. */
 class RawPhotoDecoder private constructor(private val file: File, private val options: Options) : Decoder {
     override suspend fun decode(): DecodeResult? {
-        val side = rawTileSide(maxOf((options.size.width as? Dimension.Pixels)?.px ?: 0,
-            (options.size.height as? Dimension.Pixels)?.px ?: 0).takeIf { it > 0 } ?: 2048)
+        val side = rawTileSide(options)
         val recipe = options.extras[rawRecipeKey]
         // What the develop makes is kept on disk, as for any other edited photo; a photo read through a
         // grant that can be revoked has its disk cache switched off by the request, and keeps nothing.
         val transformationKey = recipe?.let { recipeTransformation(it).cacheKey } ?: RAW_DEFAULT_DEVELOPMENT_KEY
-        // A tile from the phone arrives with its key already made from MediaStore, and was looked up
-        // before this file was copied; the others are named by their own bytes.
-        val namedByThePhone = options.extras[RawTileCacheKey]
+        // A tile from the phone arrives with its key already made from MediaStore, and one from a server
+        // library is named by its id and checksum: both were looked up before this file was copied or
+        // downloaded. The others are named by their own bytes.
+        val namedByThePhone = options.extras[RawTileCacheKey] ?: libraryRawKey(options)
         val cacheKey = namedByThePhone ?: if (options.diskCachePolicy.readEnabled || options.diskCachePolicy.writeEnabled) {
             withContext(Dispatchers.IO) { runCatching { RecipeRenderCache.rawKey(transformationKey, file, side) }.getOrNull() }
         } else {
