@@ -12,7 +12,7 @@ import kotlinx.serialization.json.Json
  * export's id and a new date, and the save to the phone that followed rendered the same photo again.
  */
 fun EditRecipe.lookFingerprint(): String {
-    val look = copy(assetId = "", originalChecksum = "", createdAt = "", updatedAt = "", derivedAssetId = null)
+    val look = copy(assetId = "", originalChecksum = "", createdAt = "", updatedAt = "", derivedAssetId = null, exportedLook = null)
     return MessageDigest.getInstance("SHA-256")
         .digest(Json.encodeToString(EditRecipe.serializer(), look).toByteArray())
         .joinToString("") { "%02x".format(it) }

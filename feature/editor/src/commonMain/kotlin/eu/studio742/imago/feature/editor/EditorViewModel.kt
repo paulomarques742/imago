@@ -39,6 +39,7 @@ import eu.studio742.imago.core.data.ConfigurationRepository
 import eu.studio742.imago.core.data.DerivedAssetRepository
 import eu.studio742.imago.core.data.RecipeRepository
 import eu.studio742.imago.core.data.SavedRecipeRepository
+import eu.studio742.imago.core.data.lookFingerprint
 import eu.studio742.imago.core.model.BUILT_IN_RECIPES
 import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.render.NeutralWhiteBalance
@@ -2291,7 +2292,7 @@ open class EditorViewModel(
             // the library's next read.
             derivedAssets.record(asset.id, eu.studio742.imago.core.model.AssetReference(targetLibraryId, result.assetId).encode())
             if (result.stackedWithOriginal) runCatching { library?.stackChanged(asset.id) }
-            val saved = recipe.copy(derivedAssetId = result.assetId, updatedAt = Instant.now().toString())
+            val saved = recipe.copy(derivedAssetId = result.assetId, exportedLook = recipe.lookFingerprint(), updatedAt = Instant.now().toString())
             recipes.save(saved)
             shouldPersist = true
             mutableState.update { it.copy(recipe = saved, isSaving = false) }

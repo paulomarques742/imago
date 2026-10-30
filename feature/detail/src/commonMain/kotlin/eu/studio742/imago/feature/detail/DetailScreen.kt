@@ -455,7 +455,7 @@ private fun DetailScreen(
                                 )
                             }
                             // The stack the photo shown is in; the strip says which one it is.
-                            if (stack.isNotEmpty()) {
+                            if (stack.isNotEmpty() && state.stackEditable) {
                                 if (stack.first().id != asset.id) {
                                     DropdownMenuItem(
                                         text = { Text(stringResource(Res.string.detail_stack_make_cover)) },

@@ -512,6 +512,12 @@ class RoomLibraryRepository @Inject constructor(
             ?.originalAssetId
     }
 
+    override suspend fun latestExport(assetId: String): String? {
+        val connection = requireConnection()
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        return exports(libraryKey).filter { it.originalAssetId == assetId }.maxByOrNull { it.createdAt }?.derivedAssetId
+    }
+
     override suspend fun syncStacks() {
         val connection = requireConnection()
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)

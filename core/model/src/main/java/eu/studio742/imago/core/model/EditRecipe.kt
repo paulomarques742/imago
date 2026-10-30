@@ -200,6 +200,8 @@ data class EditRecipe(
     val createdAt: String,
     val updatedAt: String,
     val derivedAssetId: String? = null,
+    /** What the recipe did to the photo when [derivedAssetId] was sent; null for an export that predates it. */
+    val exportedLook: String? = null,
     val whiteBalance: WhiteBalance = WhiteBalance(),
     val tone: Tone = Tone(),
     val presence: Presence = Presence(),

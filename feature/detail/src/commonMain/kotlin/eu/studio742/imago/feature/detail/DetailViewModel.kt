@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import eu.studio742.imago.core.data.LibraryRepository
 import eu.studio742.imago.core.data.RecipeRepository
+import eu.studio742.imago.core.data.lookFingerprint
 import eu.studio742.imago.core.model.AssetExif
 import eu.studio742.imago.core.model.AssetReference
 import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
@@ -116,6 +117,8 @@ data class DetailUiState(
      * the key cannot read stacks. It survives moving between the photos of the same stack.
      */
     val stack: List<AssetUiModel> = emptyList(),
+    /** The shown photo is in a stack of the server, so it can be changed; the strip may hold more than that. */
+    val stackEditable: Boolean = false,
     /** What Edit opens instead of the photo shown: the original an IMAGO export was made from. */
     val editInstead: AssetUiModel? = null,
     val isLoading: Boolean = false,
@@ -243,10 +246,12 @@ open class DetailViewModel(
      */
     private suspend fun loadStack(assetId: String) {
         val known = mutableState.value.stack.takeIf { stack -> stack.any { it.id == assetId } }
-        val stack = known ?: runCatching { library.stackMembers(assetId) }.getOrDefault(emptyList()).map { member ->
+        val members = if (known != null) emptyList() else runCatching { library.stackMembers(assetId) }.getOrDefault(emptyList()).map { member ->
             member.toAssetUiModel(library, runCatching { recipes.get(member.id) }.getOrNull()?.takeIf(EditRecipe::changesTheImage))
         }
+        val stack = known ?: withStaleExports(assetId, members)
         val originalId = runCatching { library.exportOriginal(assetId) }.getOrNull()
+        val stackEditable = originalId == null && (if (known != null) mutableState.value.stackEditable else members.any { it.id == assetId })
         val original = originalId?.let { id ->
             stack.firstOrNull { it.id == id } ?: runCatching {
                 library.assetDetail(id).asset.copy(id = id)
@@ -254,8 +259,37 @@ open class DetailViewModel(
             }.getOrNull()
         }
         mutableState.update { current ->
-            if (current.assetId != assetId) current else current.copy(stack = stack, editInstead = original)
+            if (current.assetId != assetId) current else current.copy(stack = stack, stackEditable = stackEditable, editInstead = original)
         }
+    }
+
+    /**
+     * [members] with, beside each photo whose edit is no longer what its newest export shows, that
+     * export. An export that still matches the edit stays hidden — the photo stands for it — and of
+     * several exports only the newest is worth showing. A photo with no stack gets a strip of its
+     * own when it has such an export.
+     */
+    private suspend fun withStaleExports(assetId: String, members: List<AssetUiModel>): List<AssetUiModel> {
+        val photos = members.map { it.id }.ifEmpty { listOf(assetId) }
+        val result = members.toMutableList()
+        photos.forEach { id ->
+            val recipe = runCatching { recipes.get(id) }.getOrNull() ?: return@forEach
+            val exportedLook = recipe.exportedLook ?: return@forEach
+            if (exportedLook == recipe.lookFingerprint()) return@forEach
+            val exportId = runCatching { library.latestExport(id) }.getOrNull() ?: return@forEach
+            if (result.any { it.id == exportId }) return@forEach
+            val export = runCatching { library.assetDetail(exportId).asset.copy(id = exportId).toAssetUiModel(library, null) }.getOrNull()
+                ?: return@forEach
+            if (result.isEmpty()) {
+                val photo = runCatching {
+                    library.assetDetail(id).asset.copy(id = id)
+                        .toAssetUiModel(library, recipe.takeIf(EditRecipe::changesTheImage))
+                }.getOrNull() ?: return@forEach
+                result += photo
+            }
+            result.add(result.indexOfFirst { it.id == id } + 1, export)
+        }
+        return result
     }
 
     fun makeStackCover(asset: DetailAsset) = changeStack(asset, Res.string.detail_stack_cover_changed) { library.makeStackCover(asset.id) }

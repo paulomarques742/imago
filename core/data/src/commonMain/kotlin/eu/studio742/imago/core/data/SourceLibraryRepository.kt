@@ -267,6 +267,11 @@ class SourceLibraryRepository @Inject constructor(
         return provider(ref.libraryId).exportOriginal(ref.localId)?.let { AssetReference(ref.libraryId, it).encode() }
     }
 
+    override suspend fun latestExport(assetId: String): String? {
+        val ref = AssetReference.parse(assetId)
+        return provider(ref.libraryId).latestExport(ref.localId)?.let { AssetReference(ref.libraryId, it).encode() }
+    }
+
     override suspend fun stackMembers(assetId: String): List<ImmichAsset> {
         val ref = AssetReference.parse(assetId)
         return provider(ref.libraryId).stackMembers(ref.localId).map { it.inLibrary(ref.libraryId) }

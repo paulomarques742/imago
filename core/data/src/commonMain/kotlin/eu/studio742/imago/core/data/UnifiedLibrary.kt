@@ -400,6 +400,11 @@ class UnifiedLibrary(
         return libraryOf(reference.libraryId).exportOriginal(reference.localId)?.let { AssetReference(reference.libraryId, it).encode() }
     }
 
+    override suspend fun latestExport(assetId: String): String? {
+        val reference = AssetReference.parse(assetId)
+        return libraryOf(reference.libraryId).latestExport(reference.localId)?.let { AssetReference(reference.libraryId, it).encode() }
+    }
+
     /**
      * The photos of the unified stack [assetId] is in, the cover first: each by its phone copy when
      * there is one. The server's photos under a cover are not in the catalogue, and are asked for.

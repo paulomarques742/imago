@@ -3,6 +3,7 @@ package eu.studio742.imago.feature.detail
 import eu.studio742.imago.core.data.CatalogSyncState
 import eu.studio742.imago.core.data.LibraryRepository
 import eu.studio742.imago.core.data.RecipeRepository
+import eu.studio742.imago.core.data.lookFingerprint
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.model.AssetType
 import eu.studio742.imago.core.model.EditRecipe
@@ -48,6 +49,8 @@ class DetailStackTest {
     private class StackLibrary(
         private val stack: List<String>?,
         private val exports: Map<String, String> = emptyMap(),
+        /** The newest export of each original. */
+        private val latest: Map<String, String> = emptyMap(),
     ) : LibraryRepository {
         var stackReads = 0
         val changes = mutableListOf<String>()
@@ -62,7 +65,9 @@ class DetailStackTest {
             return if (assetId in members) members.map { photoOf(it) } else emptyList()
         }
         override suspend fun exportOriginal(assetId: String): String? = exports[assetId]
-        override suspend fun assetDetail(assetId: String): ImmichAssetDetail = error("not used")
+        override suspend fun latestExport(assetId: String): String? = latest[assetId]
+        override suspend fun assetDetail(assetId: String): ImmichAssetDetail =
+            if (latest.isEmpty()) error("not used") else ImmichAssetDetail(photoOf(assetId))
 
         override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?) = error("not used")
         override suspend fun albums(): List<ImmichAlbum> = error("not used")
@@ -98,8 +103,17 @@ class DetailStackTest {
         override suspend fun saveOriginalToDevice(file: File, fileName: String, isVideo: Boolean, createdAt: String): UiText? = error("not used")
     }
 
-    private fun viewModel(library: LibraryRepository) =
-        DetailViewModel(library, NoRecipes, NoExports, File(System.getProperty("java.io.tmpdir")))
+    private class RecipesOf(private val recipes: Map<String, EditRecipe>) : RecipeRepository {
+        override suspend fun get(assetId: String): EditRecipe? = recipes[assetId]
+        override suspend fun save(recipe: EditRecipe) = Unit
+    }
+
+    private fun viewModel(library: LibraryRepository, recipes: RecipeRepository = NoRecipes) =
+        DetailViewModel(library, recipes, NoExports, File(System.getProperty("java.io.tmpdir")))
+
+    private fun exported(id: String, look: String?) = EditRecipe(
+        assetId = id, originalChecksum = "", createdAt = "x", updatedAt = "x", derivedAssetId = "export", exportedLook = look,
+    )
 
     @Test fun aCoverBringsItsStackAndItStaysWhileMovingInsideIt() {
         val library = StackLibrary(stack = listOf("cover", "second", "third"))
@@ -124,6 +138,36 @@ class DetailStackTest {
         // The original itself is edited as itself.
         model.open(detailAsset("original"))
         assertNull(model.state.value.editInstead)
+    }
+
+    @Test fun anEditThatDiffersFromItsExportShowsTheNewestExportInTheStrip() {
+        val library = StackLibrary(stack = listOf("cover", "second"), exports = mapOf("export" to "cover"), latest = mapOf("cover" to "export"))
+        val model = viewModel(library, RecipesOf(mapOf("cover" to exported("cover", look = "an-older-look"))))
+
+        model.open(detailAsset("cover"))
+
+        assertEquals(listOf("cover", "export", "second"), model.state.value.stack.map { it.id })
+        assertTrue(model.state.value.stackEditable)
+    }
+
+    @Test fun aLoosePhotoWithAStaleExportGetsAStripOfItsOwn() {
+        val library = StackLibrary(stack = emptyList(), exports = mapOf("export" to "photo"), latest = mapOf("photo" to "export"))
+        val model = viewModel(library, RecipesOf(mapOf("photo" to exported("photo", look = "an-older-look"))))
+
+        model.open(detailAsset("photo"))
+
+        assertEquals(listOf("photo", "export"), model.state.value.stack.map { it.id })
+        assertTrue(!model.state.value.stackEditable)
+    }
+
+    @Test fun anExportThatMatchesTheEditStaysHidden() {
+        val library = StackLibrary(stack = emptyList(), latest = mapOf("photo" to "export"))
+        val recipe = exported("photo", look = null)
+        val model = viewModel(library, RecipesOf(mapOf("photo" to recipe.copy(exportedLook = recipe.lookFingerprint()))))
+
+        model.open(detailAsset("photo"))
+
+        assertTrue(model.state.value.stack.isEmpty())
     }
 
     @Test fun withoutStackReadThereIsNoStrip() {
