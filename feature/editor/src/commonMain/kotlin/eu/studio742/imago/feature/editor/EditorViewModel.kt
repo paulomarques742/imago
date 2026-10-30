@@ -110,6 +110,8 @@ import eu.studio742.imago.core.render.CameraLight
 import eu.studio742.imago.core.render.KelvinTint
 import eu.studio742.imago.core.render.CameraExposureMatch
 import eu.studio742.imago.core.render.shouldInspectRawOriginal
+import eu.studio742.imago.core.render.LibraryRaw
+import eu.studio742.imago.core.render.LibraryRawEdits
 import eu.studio742.imago.core.render.createPhotoTempFile
 import eu.studio742.imago.core.render.toPlatformBitmap
 import eu.studio742.imago.core.model.appliesBaselineExposure
@@ -2230,7 +2232,19 @@ open class EditorViewModel(
                 runCatching { recipes.save(recipe) }
                     .onSuccess { mutableState.update { it.copy(isSaving = false) } }
             }
+            keepServerRawEdit(recipe)
         }
+    }
+
+    /**
+     * A server RAW's edit, rendered over the development the editor has, for the grid and the viewer to
+     * show without downloading the original ([LibraryRawEdits]). A phone RAW is developed by the grid itself.
+     */
+    private fun keepServerRawEdit(recipe: EditRecipe) {
+        val asset = state.value.asset ?: return
+        val development = state.value.highPrecisionSource ?: return
+        if (asset.apiKey.isBlank() || !shouldInspectRawOriginal(asset.fileName)) return
+        LibraryRawEdits.keep(LibraryRaw(asset.id, asset.checksum), recipe, development, rawExposure = 0f)
     }
 
     /** The style the last "Show your edit" video had: the sheet opens on it. */

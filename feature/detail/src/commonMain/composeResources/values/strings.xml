@@ -84,4 +84,9 @@
     <string name="detail_motion_stop">Stop motion</string>
     <string name="detail_motion_failed">Couldn’t play the motion.</string>
     <string name="detail_motion_original">Original</string>
+    <string name="detail_raw_approximate">Approximate preview of the edit</string>
+    <string name="detail_raw_final">Show final</string>
+    <string name="detail_raw_developing">Developing…</string>
+    <string name="detail_raw_final_failed">Couldn’t get the original</string>
+    <string name="detail_raw_final_retry">Try again</string>
 </resources>

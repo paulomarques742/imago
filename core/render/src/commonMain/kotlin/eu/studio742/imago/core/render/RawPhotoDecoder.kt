@@ -44,7 +44,8 @@ internal object DevelopedRawBitmaps {
 /** Library thumbnails and detail images use the same development and recipe as the editor. */
 class RawPhotoDecoder private constructor(private val file: File, private val options: Options) : Decoder {
     override suspend fun decode(): DecodeResult? {
-        val side = rawTileSide(options)
+        val library = options.extras[LibraryRawOriginal]
+        val side = if (library != null) libraryRawSide(options) else rawTileSide(options)
         val recipe = options.extras[rawRecipeKey]
         // What the develop makes is kept on disk, as for any other edited photo; a photo read through a
         // grant that can be revoked has its disk cache switched off by the request, and keeps nothing.
@@ -84,6 +85,10 @@ class RawPhotoDecoder private constructor(private val file: File, private val op
                     wideHighlights = true,
                 )
             val rendered = RecipePixels.renderFloat(raw, parameters, consumeSource = true)
+            // The viewer's develop of a server RAW is downloaded for; the grid's tile comes from it too.
+            if (library != null && recipe != null && side == LIBRARY_RAW_FULL_SIDE) {
+                LibraryRawEdits.keepRendered(library, recipe, rendered, sides = listOf(LIBRARY_RAW_TILE_SIDE))
+            }
             rendered.toPixelBuffer().toPlatformBitmap().also { image ->
                 if (recipe != null) DevelopedRawBitmaps.mark(image, recipeTransformation(recipe).cacheKey)
             }

@@ -15,13 +15,13 @@ import okio.Path.Companion.toOkioPath
 import java.io.File
 
 /**
- * The original of a [developedLibraryRaw] request, for the RAW decoder to develop when
- * [CachedRawTileFetcher] has no render of it yet.
+ * The original of a [developedLibraryRaw] request that may download it, for the RAW decoder to develop
+ * when [CachedRawTileFetcher] has no render of it yet.
  *
  * [download] is the library's own: it knows the server, the key, and keeps the originals of the
  * session, so a photo the editor has just opened is not downloaded again. When the original cannot be
  * had — offline, a server that refuses it — this declines, and the request falls back to the server's
- * own image with the recipe over it, which is better than an empty tile. The library records the failure.
+ * own image with the recipe over it, which is better than an empty one. The library records the failure.
  */
 class LibraryRawFetcher private constructor(
     private val raw: LibraryRaw,
@@ -49,6 +49,7 @@ class LibraryRawFetcher private constructor(
     class Factory(private val download: suspend (assetId: String, destination: File) -> Unit) : Fetcher.Factory<coil3.Uri> {
         override fun create(data: coil3.Uri, options: Options, imageLoader: ImageLoader): Fetcher? {
             val raw = options.extras[LibraryRawOriginal] ?: return null
+            if (options.extras[LibraryRawDownload] != true) return null
             return LibraryRawFetcher(raw, options, download)
         }
     }

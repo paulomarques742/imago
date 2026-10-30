@@ -84,6 +84,7 @@ fun main(args: Array<String>) {
     coil3.SingletonImageLoader.setSafe { context ->
         coil3.ImageLoader.Builder(context).components {
             add(eu.studio742.imago.core.render.RawPhotoDecoder.Factory())
+            add(eu.studio742.imago.core.render.LibraryRawInterceptor())
             // Before the network: an edited RAW of the server is developed from its original, and
             // read back from the cache once it has been.
             add(eu.studio742.imago.core.render.CachedRawTileFetcher.Factory())

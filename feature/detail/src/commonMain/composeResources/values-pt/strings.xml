@@ -84,4 +84,9 @@
     <string name="detail_motion_stop">Parar movimento</string>
     <string name="detail_motion_failed">Não foi possível reproduzir o movimento.</string>
     <string name="detail_motion_original">Original</string>
+    <string name="detail_raw_approximate">Pré-visualização aproximada da edição</string>
+    <string name="detail_raw_final">Ver versão final</string>
+    <string name="detail_raw_developing">A revelar…</string>
+    <string name="detail_raw_final_failed">Não foi possível obter o original</string>
+    <string name="detail_raw_final_retry">Tentar de novo</string>
 </resources>

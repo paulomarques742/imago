@@ -85,6 +85,12 @@ object RecipeRenderCache {
     fun identityKey(transformationKey: String, identity: String, side: Int): String =
         "$FORMAT_VERSION:raw:$transformationKey:$side:$identity"
 
+    /** Whether a render is kept under [key], without reading it. */
+    fun contains(key: String): Boolean {
+        val disk = cache ?: return false
+        return runCatching { disk.openSnapshot(key)?.use { true } ?: false }.getOrDefault(false)
+    }
+
     /** The encoded render under [key], or null when there is none or it cannot be read. */
     fun read(key: String): ByteArray? {
         val disk = cache ?: return null

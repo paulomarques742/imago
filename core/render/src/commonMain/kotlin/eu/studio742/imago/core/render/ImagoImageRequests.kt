@@ -3,6 +3,7 @@ package eu.studio742.imago.core.render
 import coil3.Extras
 import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
+import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.Options
 import coil3.request.transformations
@@ -46,16 +47,39 @@ class LibraryRaw(val assetId: String, val checksum: String)
 /** Set by [developedLibraryRaw]; read by [LibraryRawFetcher], [CachedRawTileFetcher] and the decoder. */
 val LibraryRawOriginal = Extras.Key<LibraryRaw?>(default = null)
 
+/** Whether a [developedLibraryRaw] request may download the original when its develop is not kept. */
+val LibraryRawDownload = Extras.Key(default = false)
+
 /**
- * Marks the image of an edited RAW from a server library as one to develop from its original, as the
- * editor and the export do. What the server serves for it is a JPEG it made itself, already contrasted,
- * and a recipe made over the development and laid over that JPEG looked like another edit. The render
- * is kept in [RecipeRenderCache] and the original is only fetched when it is not there.
+ * Marks the image of an edited RAW from a server library as one whose develop is shown when it is kept.
+ * What the server serves for it is a JPEG it made itself, already contrasted, and a recipe made over the
+ * development and laid over that JPEG is only an approximation of the edit.
+ *
+ * The develop is kept when the editor is left ([LibraryRawEdits]) or when the original is downloaded,
+ * which only a request with [download] does: an original is tens of megabytes, and a grid that fetched
+ * one for every edited RAW it showed spent hundreds of them without being asked. Without a kept develop
+ * and without [download], the request is answered with the approximation. [kept] is
+ * [LibraryRawEdits.kept], collected by the screen so that it asks again when an edit is kept.
  */
-fun ImageRequest.Builder.developedLibraryRaw(assetId: String, checksum: String): ImageRequest.Builder = apply {
+fun ImageRequest.Builder.developedLibraryRaw(
+    assetId: String,
+    checksum: String,
+    download: Boolean = false,
+    kept: Int = 0,
+): ImageRequest.Builder = apply {
     extras[DevelopedRawTile] = true
     extras[LibraryRawOriginal] = LibraryRaw(assetId, checksum)
+    // [LibraryRawEdits.kept] as the screen last saw it: a new value is a new request, which looks for a
+    // develop kept since.
+    memoryCacheKeyExtra(KEPT_EXTRA, kept.toString())
+    if (download) {
+        extras[LibraryRawDownload] = true
+        // The memory cache may hold the approximation under the same key: this one is asked for to replace it.
+        memoryCachePolicy(CachePolicy.WRITE_ONLY)
+    }
 }
+
+private const val KEPT_EXTRA = "imago.libraryRawKept"
 
 /** The side a request's develop is made at, from the size Coil resolved for it. */
 internal fun rawTileSide(options: Options): Int = rawTileSide(
@@ -64,14 +88,45 @@ internal fun rawTileSide(options: Options): Int = rawTileSide(
 )
 
 /**
- * Where the develop of a [developedLibraryRaw] request is kept: named by the photo and its original's
- * checksum, so that it is found before anything is downloaded. Null for any other request.
+ * The two sides a server library's RAW is kept at — the grid's and the viewer's — instead of
+ * [rawTileSide]'s six, so that the editor, which has the development in hand, can keep both.
  */
+const val LIBRARY_RAW_TILE_SIDE = 512
+const val LIBRARY_RAW_FULL_SIDE = 2048
+
+internal fun libraryRawSide(options: Options): Int = libraryRawSide(options.size)
+
+internal fun libraryRawSide(size: coil3.size.Size): Int {
+    val requested = maxOf((size.width as? Dimension.Pixels)?.px ?: 0, (size.height as? Dimension.Pixels)?.px ?: 0)
+    return if (rawTileSide(requested.takeIf { it > 0 } ?: RAW_TILE_SIDES.last()) <= LIBRARY_RAW_TILE_SIDE) {
+        LIBRARY_RAW_TILE_SIDE
+    } else {
+        LIBRARY_RAW_FULL_SIDE
+    }
+}
+
+/**
+ * Where the develop of [raw] with [recipe] at [side] is kept: named by the photo and its original's
+ * checksum, so that it is found before anything is downloaded.
+ */
+internal fun libraryRawKey(raw: LibraryRaw, recipe: EditRecipe?, side: Int): String {
+    val transformationKey = recipe?.let { recipeTransformation(it).cacheKey } ?: RAW_DEFAULT_DEVELOPMENT_KEY
+    return RecipeRenderCache.identityKey(transformationKey, "library:${raw.assetId}:${raw.checksum}", side)
+}
+
+/** [libraryRawKey] for a [developedLibraryRaw] request; null for any other request. */
 internal fun libraryRawKey(options: Options): String? {
     val raw = options.extras[LibraryRawOriginal] ?: return null
-    val recipe = options.extras[rawRecipeKey]
-    val transformationKey = recipe?.let { recipeTransformation(it).cacheKey } ?: RAW_DEFAULT_DEVELOPMENT_KEY
-    return RecipeRenderCache.identityKey(transformationKey, "library:${raw.assetId}:${raw.checksum}", rawTileSide(options))
+    return libraryRawKey(raw, options.extras[rawRecipeKey], libraryRawSide(options))
+}
+
+/**
+ * Whether [image] is an edit developed from its RAW — kept, or developed now — and not the server's
+ * image with [recipe] laid over it: what the viewer tells apart to say that it shows an approximation.
+ */
+fun isDevelopedRawEdit(image: coil3.Image?, recipe: EditRecipe): Boolean {
+    val bitmap = (image as? coil3.BitmapImage)?.bitmap ?: return false
+    return DevelopedRawBitmaps.contains(bitmap, recipeTransformation(recipe).cacheKey)
 }
 
 /**

@@ -27,6 +27,8 @@ import org.jetbrains.compose.resources.stringResource
 import eu.studio742.imago.feature.detail.resources.*
 import eu.studio742.imago.core.render.developedLibraryRaw
 import eu.studio742.imago.core.render.developedRawTile
+import eu.studio742.imago.core.render.isDevelopedRawEdit
+import eu.studio742.imago.core.render.LibraryRawEdits
 import eu.studio742.imago.core.render.libraryAuth
 import eu.studio742.imago.core.render.rawQuickPreview
 import eu.studio742.imago.core.render.withRecipe
@@ -882,36 +884,49 @@ private fun ZoomablePhoto(
     // A RAW from the phone is developed one at a time, and developing is seconds: its renders are kept,
     // and what the phone already has of it is shown while they are made.
     val raw = rawSource(asset.fileName, asset.thumbnailUrl, asset.apiKey, recipe)
-    val previewRequest = remember(context, asset.previewUrl, asset.apiKey, recipe) {
+    val kept by LibraryRawEdits.kept.collectAsState()
+    val previewRequest = remember(context, asset.previewUrl, asset.apiKey, recipe, kept) {
         ImageRequest.Builder(context)
             .data(asset.previewUrl)
             .libraryAuth(asset.apiKey)
             .crossfade(true)
-            .developed(raw, asset.id, asset.checksum)
+            .developed(raw, asset.id, asset.checksum, kept)
             // The local recipe is what tells what is saved apart from what Immich serves; Coil treats
             // it as part of the key, so the processed version is cached like any other image.
             .withRecipe(recipe)
             .build()
     }
-    val placeholderRequest = remember(context, asset.thumbnailUrl, asset.apiKey, recipe) {
+    val placeholderRequest = remember(context, asset.thumbnailUrl, asset.apiKey, recipe, kept) {
         ImageRequest.Builder(context)
             .data(asset.thumbnailUrl)
             .libraryAuth(asset.apiKey)
             .size(PLACEHOLDER_PIXELS)
             .crossfade(false)
             .withRecipe(recipe)
-            .developed(raw, asset.id, asset.checksum)
+            .developed(raw, asset.id, asset.checksum, kept)
             .build()
     }
-    val quickRequest = remember(context, asset.thumbnailUrl, asset.apiKey, raw) {
-        when (raw) {
-            RawSource.PHONE -> ImageRequest.Builder(context).rawQuickPreview(asset.thumbnailUrl).build()
-            // The server's own image, without the recipe it was not made for, until the develop is ready.
-            RawSource.SERVER_EDIT -> ImageRequest.Builder(context).data(asset.thumbnailUrl).libraryAuth(asset.apiKey).build()
-            null -> null
+    val quickRequest = remember(context, asset.thumbnailUrl, raw) {
+        if (raw == RawSource.PHONE) ImageRequest.Builder(context).rawQuickPreview(asset.thumbnailUrl).build() else null
+    }
+    // The develop of a server RAW's edit when it is not kept: only when asked for, since it downloads the
+    // original. It goes over the approximation, which stays until it is ready.
+    var finalAttempt by remember(asset.id, recipe) { mutableIntStateOf(0) }
+    val finalRequest = remember(context, asset.previewUrl, asset.apiKey, recipe, finalAttempt) {
+        if (raw == RawSource.SERVER_EDIT && finalAttempt > 0) {
+            ImageRequest.Builder(context)
+                .data(asset.previewUrl)
+                .libraryAuth(asset.apiKey)
+                .crossfade(true)
+                .developedLibraryRaw(asset.id, asset.checksum, download = true)
+                .withRecipe(recipe)
+                .build()
+        } else {
+            null
         }
     }
     val preview = rememberAsyncImagePainter(model = previewRequest)
+    val finalPainter = finalRequest?.let { rememberAsyncImagePainter(model = it) }
     // The dimensions of the already processed photo — the recipe decides whether it rotates or
     // crops — and not the original's. The fit and the drag limit come from them.
     val intrinsic = preview.intrinsicSize
@@ -1101,12 +1116,80 @@ private fun ZoomablePhoto(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
             )
+            finalPainter?.let { painter ->
+                Image(
+                    painter = painter,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
-        if (preview.state.collectAsState().value is coil3.compose.AsyncImagePainter.State.Error) {
+        val previewState by preview.state.collectAsState()
+        if (previewState is coil3.compose.AsyncImagePainter.State.Error) {
             Text(stringResource(Res.string.detail_unavailable),
                 color = ImagoColors.TextSecondary, modifier = Modifier.align(Alignment.Center).padding(24.dp))
         }
+        if (raw == RawSource.SERVER_EDIT && recipe != null) {
+            val finalState = finalPainter?.state?.collectAsState()?.value
+            val shown = (previewState as? coil3.compose.AsyncImagePainter.State.Success)?.result?.image
+            val developed = isDevelopedRawEdit(shown, recipe) ||
+                finalState is coil3.compose.AsyncImagePainter.State.Success
+            if (shown != null && !developed) {
+                ApproximateEditNote(
+                    developing = finalPainter != null && finalState !is coil3.compose.AsyncImagePainter.State.Error,
+                    failed = finalState is coil3.compose.AsyncImagePainter.State.Error,
+                    onDevelop = { finalAttempt++ },
+                    // Under the top bar: the page runs under the details and the actions at the bottom.
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = ImagoSpacing.Md + ImagoSizes.TouchTarget + ImagoSpacing.Sm, start = ImagoSpacing.Lg, end = ImagoSpacing.Lg),
+                )
+            }
+        }
         HeartBurst(trigger = hearts)
+    }
+}
+
+/**
+ * Says that an edited RAW of the server is shown as an approximation — the server's image with the
+ * recipe over it — and offers its develop, which downloads the original. Gone once the develop is shown.
+ */
+@Composable
+private fun ApproximateEditNote(
+    developing: Boolean,
+    failed: Boolean,
+    onDevelop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(ImagoRadii.Medium))
+            .background(ImagoColors.Glass)
+            .padding(start = ImagoSpacing.Lg, end = ImagoSpacing.Sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+    ) {
+        Text(
+            stringResource(if (failed) Res.string.detail_raw_final_failed else Res.string.detail_raw_approximate),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (failed) ImagoColors.Error else ImagoColors.TextSecondary,
+        )
+        if (developing) {
+            Row(
+                modifier = Modifier.padding(vertical = ImagoSpacing.Md, horizontal = ImagoSpacing.Sm),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+            ) {
+                CircularProgressIndicator(color = ImagoColors.Ivory, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
+                Text(stringResource(Res.string.detail_raw_developing), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextPrimary)
+            }
+        } else {
+            TextButton(onClick = onDevelop) {
+                Text(stringResource(if (failed) Res.string.detail_raw_final_retry else Res.string.detail_raw_final))
+            }
+        }
     }
 }
 
@@ -1291,9 +1374,9 @@ private fun rawSource(fileName: String, thumbnailUrl: String, apiKey: String, re
     else -> null
 }
 
-private fun ImageRequest.Builder.developed(raw: RawSource?, id: String, checksum: String): ImageRequest.Builder = when (raw) {
+private fun ImageRequest.Builder.developed(raw: RawSource?, id: String, checksum: String, kept: Int): ImageRequest.Builder = when (raw) {
     RawSource.PHONE -> developedRawTile()
-    RawSource.SERVER_EDIT -> developedLibraryRaw(id, checksum)
+    RawSource.SERVER_EDIT -> developedLibraryRaw(id, checksum, kept = kept)
     null -> this
 }
 
@@ -1312,6 +1395,7 @@ private fun StripThumbnail(
     onClick: () -> Unit,
 ) {
     val context = LocalPlatformContext.current
+    val kept by LibraryRawEdits.kept.collectAsState()
     Box(
         modifier = Modifier
             .size(FILMSTRIP_THUMB)
@@ -1331,7 +1415,7 @@ private fun StripThumbnail(
                 .libraryAuth(apiKey)
                 .crossfade(false)
                 .withRecipe(recipe)
-                .developed(raw, id, checksum)
+                .developed(raw, id, checksum, kept)
                 .build(),
             contentDescription = description,
             contentScale = ContentScale.Crop,
