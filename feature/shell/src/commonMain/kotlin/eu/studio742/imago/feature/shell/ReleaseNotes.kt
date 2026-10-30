@@ -1,8 +1,15 @@
 package eu.studio742.imago.feature.shell
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Camera
+import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Deblur
+import androidx.compose.material.icons.outlined.Healing
+import androidx.compose.material.icons.outlined.Lens
+import androidx.compose.material.icons.outlined.MotionPhotosOn
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Info
@@ -22,6 +29,29 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.WbAuto
 import androidx.compose.ui.graphics.vector.ImageVector
 import eu.studio742.imago.feature.shell.resources.Res
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_1_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_1_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_2_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_2_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_3_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_3_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_4_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_4_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_5_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_5_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_6_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_6_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_7_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_7_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_8_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_8_1
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_8_2
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_8_3
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_8_4
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_8_5
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_8_6
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_8_7
+import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_8_8
 import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_1_title
 import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_1_body
 import eu.studio742.imago.feature.shell.resources.shell_news_0_23_0_2_title
@@ -98,8 +128,20 @@ internal data class AppVersion(val major: Int, val minor: Int, val patch: Int) :
     }
 }
 
-/** One page of a big release's news: what it is about, in a title and a couple of sentences. */
-internal class NewsPage(val icon: ImageVector, val title: StringResource, val body: StringResource)
+/**
+ * One page of a big release's news: what it is about, in a title and a couple of sentences, or in a
+ * title and a short list of [items] for the smaller things. A [featured] page is the release's lead,
+ * set in gold.
+ */
+internal class NewsPage(
+    val icon: ImageVector,
+    val title: StringResource,
+    val body: StringResource? = null,
+    val items: List<StringResource> = emptyList(),
+    val featured: Boolean = false,
+) {
+    init { require((body != null) != items.isNotEmpty()) { "A news page has either a body or items." } }
+}
 
 /**
  * What changed in a version: one line per change or, for a release with too much for a list, a page
@@ -117,6 +159,32 @@ internal class Release(
  * A version without an entry — a fix nobody would notice — opens nothing after the update.
  */
 internal val Releases: List<Release> = listOf(
+    Release(
+        AppVersion(0, 30, 0),
+        pages = listOf(
+            NewsPage(Icons.Outlined.Camera, Res.string.shell_news_0_30_0_1_title, Res.string.shell_news_0_30_0_1_body, featured = true),
+            NewsPage(Icons.Outlined.Healing, Res.string.shell_news_0_30_0_2_title, Res.string.shell_news_0_30_0_2_body),
+            NewsPage(Icons.Outlined.Deblur, Res.string.shell_news_0_30_0_3_title, Res.string.shell_news_0_30_0_3_body),
+            NewsPage(Icons.Outlined.BarChart, Res.string.shell_news_0_30_0_4_title, Res.string.shell_news_0_30_0_4_body),
+            NewsPage(Icons.Outlined.Lens, Res.string.shell_news_0_30_0_5_title, Res.string.shell_news_0_30_0_5_body),
+            NewsPage(Icons.Outlined.MotionPhotosOn, Res.string.shell_news_0_30_0_6_title, Res.string.shell_news_0_30_0_6_body),
+            NewsPage(Icons.Outlined.CloudUpload, Res.string.shell_news_0_30_0_7_title, Res.string.shell_news_0_30_0_7_body),
+            NewsPage(
+                Icons.Outlined.Checklist,
+                Res.string.shell_news_0_30_0_8_title,
+                items = listOf(
+                    Res.string.shell_news_0_30_0_8_1,
+                    Res.string.shell_news_0_30_0_8_2,
+                    Res.string.shell_news_0_30_0_8_3,
+                    Res.string.shell_news_0_30_0_8_4,
+                    Res.string.shell_news_0_30_0_8_5,
+                    Res.string.shell_news_0_30_0_8_6,
+                    Res.string.shell_news_0_30_0_8_7,
+                    Res.string.shell_news_0_30_0_8_8,
+                ),
+            ),
+        ),
+    ),
     Release(
         AppVersion(0, 23, 0),
         pages = listOf(

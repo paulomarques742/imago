@@ -50,6 +50,7 @@ import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.feature.shell.resources.Res
 import eu.studio742.imago.feature.shell.resources.shell_news_also_in
+import eu.studio742.imago.feature.shell.resources.shell_news_featured
 import eu.studio742.imago.feature.shell.resources.shell_news_next
 import eu.studio742.imago.feature.shell.resources.shell_news_skip
 import eu.studio742.imago.feature.shell.resources.shell_news_start
@@ -83,13 +84,26 @@ internal fun WhatsNewCards(
     val pager = rememberPagerState(initialPage = initialPage.coerceIn(0, count - 1)) { count }
     val scope = rememberCoroutineScope()
     val last = pager.currentPage == count - 1
+    val featured = release.pages.getOrNull(pager.currentPage)?.featured == true
     Box(
         modifier
             .clip(RoundedCornerShape(28.dp))
             .background(ImagoColors.Background)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(28.dp)),
+            .border(1.dp, if (featured) ImagoColors.Gold.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.08f), RoundedCornerShape(28.dp)),
     ) {
         NewsBackdrop(animate, Modifier.matchParentSize())
+        // The lead page glows gold from the lower corner, under the text and the buttons alike.
+        if (featured) {
+            Box(
+                Modifier.matchParentSize().background(
+                    Brush.radialGradient(
+                        listOf(ImagoColors.Gold.copy(alpha = 0.26f), ImagoColors.Gold.copy(alpha = 0f)),
+                        center = Offset(0f, Float.POSITIVE_INFINITY),
+                        radius = 1400f,
+                    ),
+                ),
+            )
+        }
         Column(Modifier.fillMaxWidth()) {
             Text(
                 text = (stringResource(Res.string.shell_news_title) + " · " +
@@ -135,32 +149,79 @@ internal fun WhatsNewCards(
 
 @Composable
 private fun NewsPageCard(page: NewsPage) {
-    // At the bottom of the card, near the buttons; with a very large font it scrolls instead of clipping.
-    Box(Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 24.dp), contentAlignment = Alignment.BottomStart) {
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    val list = page.items.isNotEmpty()
+    // A list carries more lines in the same height: a smaller badge and a smaller type.
+    val badge = if (list) 44.dp else 64.dp
+    Box(Modifier.fillMaxSize()) {
+        // At the bottom of the card, near the buttons; a list starts at the top. With a very large
+        // font either scrolls instead of clipping.
         Box(
-            Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.08f))
-                .border(1.dp, ImagoColors.Gold.copy(alpha = 0.6f), CircleShape),
-            contentAlignment = Alignment.Center,
+            Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 24.dp),
+            contentAlignment = if (page.items.isEmpty()) Alignment.BottomStart else Alignment.TopStart,
         ) {
-            Icon(page.icon, contentDescription = null, tint = ImagoColors.Gold, modifier = Modifier.size(30.dp))
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (page.featured) {
+                    Text(
+                        stringResource(Res.string.shell_news_featured).uppercase(),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        letterSpacing = 1.1.sp,
+                        color = ImagoColors.Background,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(ImagoColors.Gold)
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                    )
+                    Spacer(Modifier.height(ImagoSpacing.Md))
+                }
+                Box(
+                    Modifier
+                        .size(badge)
+                        .clip(CircleShape)
+                        .background(
+                            if (page.featured) {
+                                Brush.linearGradient(listOf(Color(0xFFF2D77A), ImagoColors.Gold, Color(0xFF9C7A1C)))
+                            } else {
+                                Brush.linearGradient(listOf(Color.White.copy(alpha = 0.08f), Color.White.copy(alpha = 0.08f)))
+                            },
+                        )
+                        .border(1.dp, if (page.featured) Color(0xCCFFECAA) else ImagoColors.Gold.copy(alpha = 0.6f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        page.icon,
+                        contentDescription = null,
+                        tint = if (page.featured) ImagoColors.Background else ImagoColors.Gold,
+                        modifier = Modifier.size(if (list) 22.dp else 30.dp),
+                    )
+                }
+                Spacer(Modifier.height(if (list) ImagoSpacing.Lg else ImagoSpacing.Xl))
+                Text(
+                    stringResource(page.title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = if (page.featured) ImagoColors.Gold else ImagoColors.BrandWhite,
+                )
+                Spacer(Modifier.height(ImagoSpacing.Md))
+                page.body?.let { body ->
+                    Text(stringResource(body), style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.78f))
+                }
+                if (list) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        page.items.forEach { item ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
+                                Text("•", style = MaterialTheme.typography.bodySmall, color = ImagoColors.Gold)
+                                Text(stringResource(item), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.78f))
+                            }
+                        }
+                    }
+                }
+            }
         }
-        Spacer(Modifier.height(ImagoSpacing.Xl))
-        Text(stringResource(page.title), style = MaterialTheme.typography.headlineSmall, color = ImagoColors.BrandWhite)
-        Spacer(Modifier.height(ImagoSpacing.Md))
-        Text(
-            stringResource(page.body),
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color.White.copy(alpha = 0.78f),
-        )
-    }
     }
 }
 
-private val CARD_HEIGHT = 420.dp
+// Tall enough for a page of eight short items on a phone; every page shares it.
+private val CARD_HEIGHT = 470.dp
 
 /** Releases told in lines: the newest itself if it has no pages, and the ones skipped before it. */
 @Composable

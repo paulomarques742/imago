@@ -66,6 +66,8 @@ class WhatsNewCardsTest {
                 }
                 val title = runBlocking { getString(release.pages[page].title) }
                 onNodeWithText(title).fetchSemanticsNode()
+                // A page of items shows each of them.
+                release.pages[page].items.forEach { item -> onNodeWithText(runBlocking { getString(item) }).fetchSemanticsNode() }
                 // Semantics can be ready before every graphics layer reaches the captured frame.
                 mainClock.advanceTimeBy(100)
                 waitForIdle()
