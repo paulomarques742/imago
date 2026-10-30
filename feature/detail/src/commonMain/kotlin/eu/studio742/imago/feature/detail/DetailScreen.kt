@@ -1182,7 +1182,14 @@ private fun ApproximateEditNote(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
             ) {
-                CircularProgressIndicator(color = ImagoColors.Ivory, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
+                // With its track drawn: the moving arc alone could be a dot at any given moment.
+                CircularProgressIndicator(
+                    color = ImagoColors.Ivory,
+                    trackColor = ImagoColors.BorderStrong,
+                    strokeWidth = 2.5.dp,
+                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    modifier = Modifier.size(18.dp),
+                )
                 Text(stringResource(Res.string.detail_raw_developing), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextPrimary)
             }
         } else {
