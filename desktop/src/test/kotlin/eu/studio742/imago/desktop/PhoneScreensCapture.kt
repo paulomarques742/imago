@@ -23,6 +23,9 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.filter
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -104,6 +107,15 @@ class PhoneScreensCapture {
 
     /** Where the buoy is dragged from and to, read from the screen when the drag starts. */
     private var arrangeDrag = Offset.Zero to Offset.Zero
+
+    /**
+     * `-Pimago.capture.swap=<photo>=<other>` puts another photo of the library in one photo's place in
+     * the montage: the launch video's carousel has the coast photo where reel 07 has the harbour.
+     */
+    private val montagePlaces: Map<String, Place> by lazy {
+        val swap = System.getProperty("imago.capture.swap")?.split("=")
+        if (swap == null) MONTAGE else MONTAGE.entries.associate { (name, place) -> (if (name == swap[0]) swap[1] else name) to place }
+    }
 
     /** `en` (the default) or `pt`: the app's language for the whole run, for the website's captures. */
     private val language = System.getProperty("imago.capture.language") ?: "en"
@@ -542,8 +554,10 @@ class PhoneScreensCapture {
                 settle(3_000)
                 onNodeWithContentDescription("Media").performClick()
                 settle(2_500)
-                for (photo in MONTAGE.keys) {
-                    onNodeWithContentDescription("Select $photo").performScrollTo().performClick()
+                for (photo in montagePlaces.keys) {
+                    // The picker's grid is lazy: a photo further down is not there until it is scrolled to.
+                    onAllNodes(hasScrollToNodeAction())[0].performScrollToNode(hasContentDescription("Select $photo"))
+                    onNodeWithContentDescription("Select $photo").performClick()
                     settle(300)
                 }
                 addButton().performClick()
@@ -736,13 +750,18 @@ class PhoneScreensCapture {
                 openForEditing("DSCF7951.jpg")
                 onAllNodesWithText(app("editor", "editor_tool_remove"))[0].performClick()
                 settle(1_500)
-                // The walker behind the caravan, alone on the sand.
+                // The walker behind the caravan, alone on the sand: a stroke down him, as on the tablet. A
+                // short sideways one took its fill from a camel.
                 val stroke = Gestures(this)
-                stroke.dragBetween(Offset(262f, 990f), Offset(280f, 1008f), frames = 8)
+                stroke.dragBetween(Offset(265f, 984f), Offset(270f, 1010f), frames = 8)
                 perform(stroke)
                 settle(8_000)
                 shot("p-remove-$language")
                 tree("p-remove-$language")
+                // The same without the pins, to look at what the correction drew.
+                onNodeWithContentDescription(app("editor", "editor_remove_hide_overlay")).performClick()
+                settle(2_000)
+                shot("p-remove-check-$language")
             }
             // The tablet: the same photo, before and after the phone edited it (run with
             // -Pimago.capture.device=tablet on the profile the phone's run used).
@@ -1020,7 +1039,7 @@ class PhoneScreensCapture {
         val now = java.time.Instant.now().toString()
         val print = FrameStyle(borderWidth = 22f, borderArgb = 0xFFFAF8F3, shadowRadius = 18f)
         val photos = added.elements.filterIsInstance<CompositionElement.Photo>().mapNotNull { photo ->
-            val place = MONTAGE[photo.media.fileName] ?: return@mapNotNull null
+            val place = montagePlaces[photo.media.fileName] ?: return@mapNotNull null
             photo.copy(
                 transform = ElementTransform(NormalizedRect(place.x, place.y, place.w, place.h), rotationDegrees = place.rotation),
                 zIndex = place.z,

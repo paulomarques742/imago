@@ -97,7 +97,7 @@ compose.desktop {
 tasks.test {
     testLogging { events("failed", "skipped") }
     // PhoneScreensCapture only runs when given where to write, which photos and a throwaway profile.
-    listOf("imago.capture.out", "imago.capture.photos", "imago.capture.profile", "imago.capture.scenes", "imago.capture.device", "imago.capture.immichEnv", "imago.capture.language").forEach { name ->
+    listOf("imago.capture.out", "imago.capture.photos", "imago.capture.profile", "imago.capture.scenes", "imago.capture.device", "imago.capture.immichEnv", "imago.capture.language", "imago.capture.swap").forEach { name ->
         providers.gradleProperty(name).orNull?.let { systemProperty(name, it) }
     }
 }

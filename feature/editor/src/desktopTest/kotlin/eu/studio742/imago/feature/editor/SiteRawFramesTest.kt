@@ -4,11 +4,16 @@ import androidx.compose.ui.graphics.asSkiaBitmap
 import eu.studio742.imago.core.model.CURRENT_RAW_RENDERING
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.developedAsRaw
+import eu.studio742.imago.core.model.Retouch
+import eu.studio742.imago.core.model.RetouchMode
+import eu.studio742.imago.core.render.BrushReference
 import eu.studio742.imago.core.render.CURRENT_RAW_HIGHLIGHT
+import eu.studio742.imago.core.render.Retouching
 import eu.studio742.imago.core.render.CameraExposureMatch
 import eu.studio742.imago.core.render.Histogram
 import eu.studio742.imago.core.render.PixelBuffer
 import eu.studio742.imago.core.render.RecipePixels
+import eu.studio742.imago.core.render.decodePixels
 import eu.studio742.imago.core.render.decodeRawEditorPreview
 import eu.studio742.imago.core.render.toImageBitmap
 import java.io.File
@@ -67,6 +72,7 @@ class SiteRawFramesTest {
 
     private suspend fun make(job: File) {
         val spec = json.parseToJsonElement(job.readText()).jsonObject
+        if ("photo" in spec) return makePhoto(job, spec)
         val raw = job.resolveSibling(spec.getValue("raw").jsonPrimitive.content)
         val side = spec["side"]?.jsonPrimitive?.float?.toInt() ?: 1600
         val preview = decodeRawEditorPreview(raw, maxSide = side, baselineExposure = true, highlight = CURRENT_RAW_HIGHLIGHT)
@@ -107,6 +113,41 @@ class SiteRawFramesTest {
         }
         job.resolveSibling("${job.nameWithoutExtension}-frames.json").writeText(json.encodeToString(JsonObject.serializer(), manifest))
     }
+
+    /**
+     * A JPEG or PNG job (`"photo"` instead of `"raw"`): each frame is the base recipe with its fields laid
+     * over it, on the photo reduced to `side`. A recipe saved by the app goes whole in a frame — its
+     * `retouches` too, which the render draws from what they keep.
+     */
+    private fun makePhoto(job: File, spec: JsonObject) {
+        val file = job.resolveSibling(spec.getValue("photo").jsonPrimitive.content)
+        val side = spec["side"]?.jsonPrimitive?.float?.toInt() ?: 1600
+        val source = RecipePixels.reduce(decodePixels(file.readBytes()) ?: error("${file.name} is not an image"), side)
+        val base = spec["base"]?.jsonObject ?: JsonObject(emptyMap())
+        for ((name, element) in spec.getValue("frames").jsonObject) {
+            val frame = element.jsonObject
+            var recipe = recipeOf(merge(base, JsonObject(frame - "solve" - "seed")), file.name)
+            if (frame["solve"]?.jsonPrimitive?.booleanOrNull == true) recipe = recipe.copy(retouches = solved(source, recipe.retouches, frame["seed"]?.jsonPrimitive?.float?.toLong() ?: 0L))
+            val crop = spec["crop"]?.jsonArray?.map { it.jsonPrimitive.float }
+            RecipePixels.render(source, recipe).let { whole -> crop?.let { whole.cropped(it) } ?: whole }.save(job.resolveSibling("$name.png"))
+            println("$name: ${source.width}x${source.height}")
+        }
+    }
+
+    /**
+     * `"solve": true`: each correction worked out as the editor does when the finger lifts
+     * (`EditorViewModel.solveRetouch`), over the photo as the corrections before it left it — a Remove
+     * synthesised with [seed], a Heal or a Clone given the source the app proposes.
+     */
+    private fun solved(source: PixelBuffer, retouches: List<Retouch>, seed: Long): List<Retouch> =
+        retouches.fold(emptyList()) { done, retouch ->
+            val reference = BrushReference.of(Retouching.apply(source, done))
+            done + when {
+                retouch.mode == RetouchMode.REMOVE -> Retouching.solveRemove(reference, retouch.strokes, seed)?.let { retouch.copy(fill = it) } ?: error("nothing to fill ${retouch.id} with")
+                with(Retouching) { retouch.draws() } -> retouch
+                else -> Retouching.proposeSource(reference, retouch.strokes)?.let { (dx, dy) -> retouch.copy(sourceX = dx, sourceY = dy) } ?: retouch
+            }
+        }
 
     /** The editor's warning on its own: its red where a channel is at white, transparent elsewhere. */
     private fun clippingWarning(image: PixelBuffer): Pair<PixelBuffer, Float> {
