@@ -105,7 +105,10 @@ class PhoneScreensCapture {
     /** Where the buoy is dragged from and to, read from the screen when the drag starts. */
     private var arrangeDrag = Offset.Zero to Offset.Zero
 
-    /** `phone` (the default) or `tablet`: the window's size and density. */
+    /** `en` (the default) or `pt`: the app's language for the whole run, for the website's captures. */
+    private val language = System.getProperty("imago.capture.language") ?: "en"
+
+    /** `phone` (the default), `tablet` or `site`: the window's size and density. */
     private val device = Device.valueOf((System.getProperty("imago.capture.device") ?: "phone").uppercase())
 
     @Test
@@ -124,7 +127,7 @@ class PhoneScreensCapture {
         }
         graph.configuration.completeWelcome()
         val languageSettings = DesktopLanguageSettings(paths.root.resolve("language"))
-        languageSettings.choose(LanguagePreference.SYSTEM)
+        languageSettings.choose(if (language == "pt") LanguagePreference.PORTUGUESE else LanguagePreference.SYSTEM)
         val secrets = WindowsSecretStore(paths.secrets)
         val backend = DesktopAccount.backend(secrets)
         val account = DesktopAccount.create(paths, secrets, graph, backend = backend)
@@ -165,7 +168,8 @@ class PhoneScreensCapture {
                 }
             }
             settle(3_000)
-            if (onAllNodesWithText("Skip").fetchSemanticsNodes().isNotEmpty()) onNodeWithText("Skip").performClick()
+            val skip = app("shell", "shell_news_skip")
+            if (onAllNodesWithText(skip).fetchSemanticsNodes().isNotEmpty()) onNodeWithText(skip).performClick()
             settle(4_000)
             shot("01-library")
 
@@ -708,6 +712,38 @@ class PhoneScreensCapture {
                 shot("98-spots")
                 tree("98-spots")
             }
+            // The website's captures (run with -Pimago.capture.device=site, on Docs/fotosexemplo, once
+            // with -Pimago.capture.language=pt): the Detail panel's Sharpening and Noise reduction, and
+            // the Remove tool on the desert. Each scene on its own, from the library.
+            if (wants("site-detail")) {
+                openForEditing("DSCF3542.jpg")
+                onAllNodesWithText(app("editor", "editor_tool_adjust"))[0].performClick()
+                settle(1_500)
+                onNodeWithContentDescription(app("editor", "editor_panel_detail")).performClick()
+                settle(1_500)
+                val scroll = Gestures(this)
+                scroll.scrollPanel(dy = -420f, frames = 12, from = app("editor", "editor_adj_clarity"))
+                perform(scroll)
+                settle(1_500)
+                val sharpen = Gestures(this)
+                sharpen.drag(app("editor", "editor_amount"), dx = 190f, frames = 14)
+                perform(sharpen)
+                settle(3_000)
+                shot("p-detail-$language")
+                tree("p-detail-$language")
+            }
+            if (wants("site-remove")) {
+                openForEditing("DSCF7951.jpg")
+                onAllNodesWithText(app("editor", "editor_tool_remove"))[0].performClick()
+                settle(1_500)
+                // The walker behind the caravan, alone on the sand.
+                val stroke = Gestures(this)
+                stroke.dragBetween(Offset(262f, 990f), Offset(280f, 1008f), frames = 8)
+                perform(stroke)
+                settle(8_000)
+                shot("p-remove-$language")
+                tree("p-remove-$language")
+            }
             // The tablet: the same photo, before and after the phone edited it (run with
             // -Pimago.capture.device=tablet on the profile the phone's run used).
             for (moment in listOf("before", "after")) {
@@ -934,6 +970,38 @@ class PhoneScreensCapture {
         })
     }
 
+    /** From the library into the editor, on the photo called [file]. */
+    private fun ComposeUiTest.openForEditing(file: String) {
+        onNodeWithContentDescription(app("library", "library_open_asset", file)).performScrollTo().performClick()
+        settle(3_000)
+        onNodeWithText(app("detail", "detail_edit")).performClick()
+        settle(4_000)
+    }
+
+    /** [gestures] played at once, a frame's time between steps, without keeping the frames. */
+    private fun ComposeUiTest.perform(gestures: Gestures) {
+        mainClock.autoAdvance = false
+        for (frame in 0 until gestures.frames) {
+            gestures.run(frame)
+            mainClock.advanceTimeBy(FRAME_MS)
+        }
+        mainClock.autoAdvance = true
+    }
+
+    /**
+     * A name as the app shows it in the capture's [language], read from the module's strings.xml, so
+     * a scene taps the same things in English and in Portuguese.
+     */
+    private fun app(module: String, key: String, value: String? = null): String {
+        val folder = if (language == "pt") "values-pt" else "values"
+        val root = File(System.getProperty("user.dir")).parentFile
+        val xml = File(root, "feature/$module/src/commonMain/composeResources/$folder/strings.xml").readText()
+        val text = Regex("<string name=\"${Regex.escape(key)}\">(.*?)</string>", RegexOption.DOT_MATCHES_ALL).find(xml)
+            ?.groupValues?.get(1) ?: error("no $key in feature/$module/$folder")
+        val plain = text.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&")
+        return if (value == null) plain else plain.replace("%1\$s", value)
+    }
+
     private fun ComposeUiTest.shot(name: String) {
         val roots = onAllNodes(isRoot()).fetchSemanticsNodes().size
         for (index in 0 until roots) {
@@ -1013,10 +1081,12 @@ class PhoneScreensCapture {
     /**
      * The app's part of each screen; the status and navigation bars, 24 dp each, are drawn in the
      * video. The phone is 412 × 843 dp (of a 412 × 891 dp screen) at the density that makes it 1080 px
-     * wide; the tablet, lying down, 1280 × 752 dp (of 1280 × 800 dp) at 2 px per dp.
+     * wide; the tablet, lying down, 1280 × 752 dp (of 1280 × 800 dp) at 2 px per dp. The website's
+     * captures are a whole 412 × 915 dp phone at 2 px per dp, as the ones already on it.
      */
     private enum class Device(val widthPx: Int, val heightPx: Int, val density: Float) {
         PHONE(1080, 2210, 1080f / 412f),
         TABLET(2560, 1504, 2f),
+        SITE(824, 1830, 2f),
     }
 }

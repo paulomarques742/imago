@@ -71,6 +71,8 @@ tasks.withType<Test>().matching { it.name == "desktopTest" }.configureEach {
     // ReelJobsTest: a folder of jobs to turn into videos, and optionally just one of them.
     providers.gradleProperty("imago.reel.jobs").orNull?.let { systemProperty("imago.reel.jobs", it) }
     providers.gradleProperty("imago.reel.only").orNull?.let { systemProperty("imago.reel.only", it) }
+    // SiteRawFramesTest: the website's RAW section, a RAW developed in a few states.
+    providers.gradleProperty("imago.site.raw").orNull?.let { systemProperty("imago.site.raw", it) }
 }
 
 compose.resources {
