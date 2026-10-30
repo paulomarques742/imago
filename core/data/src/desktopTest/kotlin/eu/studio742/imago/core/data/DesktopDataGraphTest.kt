@@ -1,6 +1,9 @@
 package eu.studio742.imago.core.data
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -21,6 +24,28 @@ import javax.imageio.ImageIO
  * folder library — working with the shared repositories.
  */
 class DesktopDataGraphTest {
+    /**
+     * As the screens' tests use it: opened inside `runTest`, with the test's main dispatcher, and closed as
+     * soon as the test is done. The configuration's reading of the stored identities used to fail on the
+     * closed database, uncaught, and `runTest` blamed whichever test came next — only now and then, when
+     * the machine was slow enough for the read to lose the race.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test fun `a graph closed as soon as it opens leaves nothing failing behind`() {
+        repeat(20) {
+            kotlinx.coroutines.test.runTest {
+                kotlinx.coroutines.Dispatchers.setMain(kotlinx.coroutines.test.StandardTestDispatcher(testScheduler))
+                val graph = DesktopDataGraph(Files.createTempDirectory("imago-graph-closed-"))
+                try {
+                    runCurrent()
+                } finally {
+                    graph.close()
+                    kotlinx.coroutines.Dispatchers.resetMain()
+                }
+            }
+        }
+    }
+
     @Test fun `RAW files enter the folder catalogue by contents with an unknown extension`() = runBlocking {
         val root = Files.createTempDirectory("imago-raw-catalogue-")
         val photos = Files.createDirectories(root.resolve("Photos"))

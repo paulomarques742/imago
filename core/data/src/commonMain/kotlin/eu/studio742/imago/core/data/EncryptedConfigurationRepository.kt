@@ -77,7 +77,10 @@ class EncryptedConfigurationRepository(
     init {
         persist()
         if (database != null) CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
-            val ids = kotlinx.coroutines.withContext(Dispatchers.IO) { database.libraryIdentityDao().ids() }
+            // A database closed before this reads it — the app or a test ending — has nothing to add, and
+            // the next launch looks again; uncaught, the failure outlived whoever closed it.
+            val ids = runCatching { kotlinx.coroutines.withContext(Dispatchers.IO) { database.libraryIdentityDao().ids() } }
+                .getOrNull() ?: return@launch
             val missing = ids.filter { id -> id != GLOBAL_LIBRARY_ID && sources.value.none { it.id == id } }
             if (missing.isNotEmpty()) {
                 sources.value += missing.map { LibrarySource(it, "") }
