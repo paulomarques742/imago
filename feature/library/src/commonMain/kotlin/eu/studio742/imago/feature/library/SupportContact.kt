@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import eu.studio742.imago.core.model.diagnostics.*
 import eu.studio742.imago.core.designsystem.i18n.appString
@@ -35,9 +36,23 @@ internal fun SupportContactCard(viewModel: LibrarySettingsViewModel, community: 
     var communityOpen by rememberSaveable { mutableStateOf(false) }
     var postsOpen by remember { mutableStateOf(false) }
     val posts = community?.posts?.collectAsState()?.value.orEmpty()
+    val replies = community?.replies?.collectAsState()?.value.orEmpty()
+    val unread = replies.values.any { it.unread }
+    val failed = community?.replyCheckFailed?.collectAsState()?.value == true
+    val storageFailed = community?.storageSaveFailed?.collectAsState()?.value == true
+    val uri = LocalUriHandler.current
+    var linkFailed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     var expanded by rememberSaveable { mutableStateOf(false) }
     eu.studio742.imago.core.designsystem.CollapsibleSettingsCard(
-        stringResource(Res.string.library_support_title), Icons.Outlined.HelpOutline, expanded, { expanded = it }) {
+        stringResource(if (unread) Res.string.community_support_unread else Res.string.library_support_title),
+        Icons.Outlined.HelpOutline, expanded, { expanded = it }, summary = {
+            OutlinedButton(onClick = {
+                linkFailed = runCatching { uri.openUri(COMMUNITY_FORUM_URL) }.isFailure
+            }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.community_open_forum)) }
+            Text(COMMUNITY_FORUM_URL, style = MaterialTheme.typography.bodySmall)
+            if (linkFailed) Text(stringResource(Res.string.community_link_failed), color = MaterialTheme.colorScheme.error)
+        }) {
         Text(stringResource(Res.string.library_support_privacy), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
         OutlinedButton(onClick = { open = true }) { Text(stringResource(Res.string.library_support_contact)) }
         if (community != null) {
@@ -45,7 +60,18 @@ internal fun SupportContactCard(viewModel: LibrarySettingsViewModel, community: 
             Text(stringResource(Res.string.community_invitation), style = MaterialTheme.typography.titleSmall)
             Text(stringResource(Res.string.community_description), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
             OutlinedButton(onClick = { communityOpen = true }) { Text(stringResource(Res.string.community_new)) }
-            if (posts.isNotEmpty()) TextButton(onClick = { postsOpen = true }) { Text(stringResource(Res.string.community_my_posts)) }
+            if (posts.isNotEmpty()) {
+                if (unread) Text(stringResource(Res.string.community_unread), color = MaterialTheme.colorScheme.primary)
+                TextButton(onClick = { postsOpen = true }) {
+                    Text(stringResource(if (unread) Res.string.community_view_replies else Res.string.community_my_posts))
+                }
+            }
+            if (failed) {
+                Text(stringResource(Res.string.community_check_failed), color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = { scope.launch { community.refreshReplies() } }) { Text(stringResource(Res.string.community_check_replies)) }
+            }
+            if (storageFailed) Text(stringResource(Res.string.community_state_save_failed), color = MaterialTheme.colorScheme.error)
+            Text(stringResource(Res.string.community_reply_check_on_open), style = MaterialTheme.typography.bodySmall)
         }
     }
     if (open) SupportDialog(viewModel, community, onDismiss = { open = false })

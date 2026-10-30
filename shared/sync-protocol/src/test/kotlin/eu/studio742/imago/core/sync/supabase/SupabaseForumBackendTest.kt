@@ -114,4 +114,48 @@ class SupabaseForumBackendTest {
         assertTrue(runCatching { backend("account-token").publish(draft, emptyList()) }.isFailure)
         assertEquals(1, server.requestCount)
     }
+
+    @Test fun replyChecksReadOnlyMetadataForLocalTopicsWithoutAccountOrOwnershipCredentials() = runBlocking {
+        answer("""[{"id":"$id","reply_count":2,"last_activity_at":"2026-10-28T10:30:00+00:00"}]""")
+        val activity = backend("account-access-token").activity(listOf(id, id)).single()
+        assertEquals(ForumActivity(id, 2, "2026-10-28T10:30:00Z"), activity)
+        val request = server.takeRequest()
+        assertEquals("GET", request.method)
+        assertEquals("/rest/v1/forum_topics", request.requestUrl!!.encodedPath)
+        assertEquals("id,reply_count,last_activity_at", request.requestUrl!!.queryParameter("select"))
+        assertEquals("in.($id)", request.requestUrl!!.queryParameter("id"))
+        assertEquals("1", request.requestUrl!!.queryParameter("limit"))
+        assertNull(request.getHeader("Authorization"))
+        assertEquals(0L, request.bodySize)
+    }
+
+    @Test fun emptyAndInvalidTopicListsNeverReachTheServer() = runBlocking {
+        assertTrue(backend().activity(emptyList()).isEmpty())
+        assertTrue(runCatching { backend().activity(listOf("invalid&select=body")) }.isFailure)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test fun replyChecksBatchLongListsWithoutSilentlyTruncatingOwnedTopics() = runBlocking {
+        val ids = List(51) { java.util.UUID.randomUUID().toString() }
+        answer("[]"); answer("[]")
+        assertTrue(backend().activity(ids).isEmpty())
+        val first = server.takeRequest().requestUrl!!
+        val second = server.takeRequest().requestUrl!!
+        assertEquals("50", first.queryParameter("limit"))
+        assertEquals("1", second.queryParameter("limit"))
+        assertEquals("in.(${ids.last()})", second.queryParameter("id"))
+    }
+
+    @Test fun malformedMetadataAndHttpFailuresCannotLookLikeTopicsWithNoReplies() = runBlocking {
+        for (body in listOf("{}", """[{"id":"$id","reply_count":-1,"last_activity_at":"2026-10-28T10:30:00Z"}]""",
+            """[{"id":"$slot","reply_count":1,"last_activity_at":"2026-10-28T10:30:00Z"}]""",
+            """[{"id":"$id","reply_count":1,"last_activity_at":"bad timestamp"}]""")) {
+            answer(body)
+            assertTrue(runCatching { backend().activity(listOf(id)) }.exceptionOrNull() is ForumException)
+        }
+        answer("""{"message":"private server text"}""", 503)
+        val failure = runCatching { backend().activity(listOf(id)) }.exceptionOrNull() as ForumException
+        assertEquals(503, failure.status)
+        assertFalse(failure.toString().contains("private server text"))
+    }
 }

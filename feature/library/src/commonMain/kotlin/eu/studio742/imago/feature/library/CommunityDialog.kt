@@ -29,7 +29,7 @@ internal expect fun rememberCommunityImages(onImages: (List<ForumImage>) -> Unit
 
 /** Only a public topic ID enters the URL. Ownership tokens always stay on the device. */
 internal fun communityTopicUrl(baseUrl: String, id: String? = null, portuguese: Boolean = false): String =
-    "${baseUrl.trimEnd('/')}/${if (portuguese) "pt/" else ""}forum/" + if (id == null) "" else "?t=$id"
+    forumTopicUrl(baseUrl, id, portuguese)
 
 @Composable
 internal fun CommunityDialog(repository: CommunityRepository, onDismiss: () -> Unit) {
@@ -68,6 +68,7 @@ internal fun CommunityDialog(repository: CommunityRepository, onDismiss: () -> U
                         Text(stringResource(Res.string.community_published))
                         Text(draft.title, style = MaterialTheme.typography.titleMedium)
                         if (repository.storageFailed) Text(stringResource(Res.string.community_storage_failed), color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(Res.string.community_reply_check_on_open), style = MaterialTheme.typography.bodySmall)
                     } else if (review) {
                         Text(stringResource(draft.category.label()), style = MaterialTheme.typography.labelLarge)
                         Text(draft.title, style = MaterialTheme.typography.titleMedium)
@@ -144,6 +145,9 @@ internal fun CommunityDialog(repository: CommunityRepository, onDismiss: () -> U
 @Composable
 internal fun CommunityPostsDialog(repository: CommunityRepository, onDismiss: () -> Unit) {
     val posts by repository.posts.collectAsState()
+    val replies by repository.replies.collectAsState()
+    val checkFailed by repository.replyCheckFailed.collectAsState()
+    val storageFailed by repository.storageSaveFailed.collectAsState()
     var deleting by remember { mutableStateOf<ForumPost?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<ForumException.Reason?>(null) }
@@ -153,16 +157,29 @@ internal fun CommunityPostsDialog(repository: CommunityRepository, onDismiss: ()
     AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, title = { Text(stringResource(Res.string.community_my_posts)) },
         text = { Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(Res.string.community_my_posts_hint))
+            TextButton(enabled = !busy, onClick = { scope.launch { repository.refreshReplies() } }) {
+                Text(stringResource(Res.string.community_check_replies))
+            }
+            if (checkFailed) Text(stringResource(Res.string.community_check_failed), color = MaterialTheme.colorScheme.error)
             posts.forEach { post ->
+                val reply = replies[post.id]
                 Text(post.title, style = MaterialTheme.typography.titleSmall)
+                if (reply?.available == false) Text(stringResource(Res.string.community_error_not_found))
+                else if (reply?.unread == true) Text(stringResource(Res.string.community_unread_topic), color = MaterialTheme.colorScheme.primary)
+                else if (reply != null && reply.replyCount > 0) Text(stringResource(Res.string.community_replies_read))
                 Row {
                     repository.websiteUrl?.let { website ->
-                        TextButton(enabled = !busy, onClick = { runCatching { uri.openUri(communityTopicUrl(website, post.id, portuguese)) }
-                            .onFailure { error = ForumException.Reason.FAILED } }) { Text(stringResource(Res.string.community_view)) }
+                        TextButton(enabled = !busy && reply?.available != false, onClick = {
+                            runCatching { uri.openUri(communityTopicUrl(website, post.id, portuguese)) }
+                                .onSuccess { scope.launch { repository.markRead(post.id, reply?.activity) } }
+                                .onFailure { error = ForumException.Reason.FAILED }
+                        }) { Text(stringResource(Res.string.community_view)) }
                     }
-                    TextButton(enabled = !busy, onClick = { deleting = post }) { Text(stringResource(Res.string.community_delete)) }
+                    if (reply?.available != false && (reply?.replyCount ?: 0) == 0)
+                        TextButton(enabled = !busy, onClick = { deleting = post }) { Text(stringResource(Res.string.community_delete)) }
                 }
             }
+            if (storageFailed) Text(stringResource(Res.string.community_state_save_failed), color = MaterialTheme.colorScheme.error)
             if (error != null) Text(stringResource(error!!.label()), color = MaterialTheme.colorScheme.error)
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         } }, confirmButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(stringResource(Res.string.community_close)) } })

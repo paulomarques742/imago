@@ -11,6 +11,8 @@ import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.UUID
+import java.time.Instant
+import okhttp3.HttpUrl.Companion.toHttpUrl
 
 /** Uses the existing forum RPCs and upload slots. Never sends a request on construction. */
 class SupabaseForumBackend(
@@ -73,11 +75,34 @@ class SupabaseForumBackend(
         }
     }
 
+    override suspend fun activity(topicIds: List<String>): List<ForumActivity> = withContext(Dispatchers.IO) {
+        val ids = topicIds.distinct().map(::uuid)
+        ids.chunked(50).flatMap { batch ->
+            val url = "${settings.url.trimEnd('/')}/rest/v1/forum_topics".toHttpUrl().newBuilder()
+                .addQueryParameter("select", "id,reply_count,last_activity_at")
+                .addQueryParameter("id", "in.(${batch.joinToString(",")})")
+                .addQueryParameter("limit", batch.size.toString())
+                .build()
+            try {
+                json.parseToJsonElement(request(url.toString(), null, null, method = "GET", absolute = true)).jsonArray.map { value ->
+                    val fields = value.jsonObject
+                    val id = uuid(fields.getValue("id").jsonPrimitive.content)
+                    val count = fields.getValue("reply_count").jsonPrimitive.int
+                    if (id !in batch || count < 0) throw ForumException(ForumException.Reason.FAILED)
+                    ForumActivity(id, count, Instant.parse(fields.getValue("last_activity_at").jsonPrimitive.content).toString())
+                }.also { rows ->
+                    if (rows.map { it.id }.distinct().size != rows.size) throw ForumException(ForumException.Reason.FAILED)
+                }
+            } catch (error: ForumException) { throw error }
+            catch (_: Exception) { throw ForumException(ForumException.Reason.FAILED) }
+        }
+    }
+
     private fun rpc(name: String, body: JsonObject, token: String?): JsonElement =
         json.parseToJsonElement(request("rest/v1/rpc/$name", body.toString().toRequestBody("application/json".toMediaType()), token))
 
-    private fun request(path: String, body: RequestBody, token: String?, headers: Map<String, String> = emptyMap(), method: String = "POST"): String {
-        val request = Request.Builder().url("${settings.url.trimEnd('/')}/$path").header("apikey", settings.publishableKey)
+    private fun request(path: String, body: RequestBody?, token: String?, headers: Map<String, String> = emptyMap(), method: String = "POST", absolute: Boolean = false): String {
+        val request = Request.Builder().url(if (absolute) path else "${settings.url.trimEnd('/')}/$path").header("apikey", settings.publishableKey)
             .apply { if (token != null) header("Authorization", "Bearer $token"); headers.forEach { (key, value) -> header(key, value) } }
             .method(method, body).build()
         try {

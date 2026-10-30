@@ -30,6 +30,7 @@ fun CollapsibleSettingsCard(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    summary: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val stateLabel = stringResource(if (expanded) Res.string.settings_category_expanded else Res.string.settings_category_collapsed)
@@ -53,6 +54,10 @@ fun CollapsibleSettingsCard(
                     drawPath(chevron, ImagoColors.TextSecondary, style = Stroke(width = 2.dp.toPx()))
                 }
             }
+            if (summary != null) Column(
+                Modifier.fillMaxWidth().padding(start = ImagoSpacing.Lg, end = ImagoSpacing.Lg, bottom = ImagoSpacing.Lg),
+                verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md), content = summary,
+            )
             if (expanded) Column(
                 Modifier.fillMaxWidth().padding(start = ImagoSpacing.Lg, end = ImagoSpacing.Lg, bottom = ImagoSpacing.Lg),
                 verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md), content = content,

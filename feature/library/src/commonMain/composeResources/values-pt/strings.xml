@@ -562,4 +562,13 @@
     <string name="community_error_failed">Não foi possível confirmar a operação. Verifica a ligação e o fórum antes de tentar de novo.</string>
     <string name="library_raw">RAW</string>
     <string name="library_raw_description">Fotografia RAW</string>
+    <string name="community_support_unread">Suporte e diagnóstico · Respostas novas</string>
+    <string name="community_unread">Tem respostas novas no fórum</string>
+    <string name="community_view_replies">Ver respostas</string>
+    <string name="community_unread_topic">Respostas novas</string>
+    <string name="community_replies_read">Respostas vistas</string>
+    <string name="community_check_replies">Procurar respostas</string>
+    <string name="community_check_failed">Não foi possível procurar respostas no fórum. Verifique a ligação e tente novamente. As respostas encontradas anteriormente continuam visíveis.</string>
+    <string name="community_state_save_failed">Não foi possível guardar o estado das respostas neste aparelho. Poderá voltar a ver estas respostas depois de reiniciar.</string>
+    <string name="community_reply_check_on_open">Ao abrir ou regressar ao IMAGO, a app procura respostas aos tópicos que publicou neste aparelho e mostra um aviso se houver respostas novas.</string>
 </resources>

@@ -190,8 +190,12 @@ fun ImagoApp(
     val source = androidx.compose.runtime.remember(syncIndicator) {
         syncIndicator?.let { eu.studio742.imago.core.designsystem.SyncIndicatorSource(it) { viewModel.openAccount() } }
     }
+    val community = eu.studio742.imago.feature.account.communityRepository()
     CompositionLocalProvider(eu.studio742.imago.core.designsystem.LocalSyncIndicator provides source) {
-        ImagoAppContent(viewModel, onLeaveViewer)
+        Box(Modifier.fillMaxSize()) {
+            ImagoAppContent(viewModel, onLeaveViewer)
+            eu.studio742.imago.feature.library.CommunityReplyNotice(community)
+        }
     }
 }
 

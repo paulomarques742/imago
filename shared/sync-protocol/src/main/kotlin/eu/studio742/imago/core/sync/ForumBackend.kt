@@ -7,7 +7,15 @@ interface ForumBackend {
     suspend fun profile(): ForumProfile
     suspend fun publish(draft: ForumDraft, images: List<ForumImage>): ForumPost
     suspend fun delete(post: ForumPost)
+    /** Public reply metadata only; ownership and account credentials are unnecessary. */
+    suspend fun activity(topicIds: List<String>): List<ForumActivity>
 }
+
+data class ForumActivity(val id: String, val replyCount: Int, val lastActivity: String)
+
+/** Links contain public identifiers only. The base must belong to the backend's environment. */
+fun forumTopicUrl(baseUrl: String, id: String? = null, portuguese: Boolean = false): String =
+    "${baseUrl.trimEnd('/')}/${if (portuguese) "pt/" else ""}forum/" + if (id == null) "" else "?t=$id"
 
 enum class ForumCategory(val wire: String) { BUG("bug"), IDEA("idea"), QUESTION("question"), OTHER("other") }
 data class ForumProfile(val signedIn: Boolean, val name: String?)

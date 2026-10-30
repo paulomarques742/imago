@@ -562,4 +562,13 @@
     <string name="community_error_failed">Could not confirm the operation. Check your connection and the forum before trying again.</string>
     <string name="library_raw">RAW</string>
     <string name="library_raw_description">RAW photo</string>
+    <string name="community_support_unread">Support and diagnostics · New replies</string>
+    <string name="community_unread">You have new forum replies</string>
+    <string name="community_view_replies">View replies</string>
+    <string name="community_unread_topic">New replies</string>
+    <string name="community_replies_read">Replies viewed</string>
+    <string name="community_check_replies">Check for replies</string>
+    <string name="community_check_failed">Couldn’t check for forum replies. Check your connection and try again. Previously found replies are still shown.</string>
+    <string name="community_state_save_failed">Couldn’t save the reply status on this device. You may see these replies again after restarting.</string>
+    <string name="community_reply_check_on_open">When you open or return to IMAGO, the app checks for replies to topics you posted from this device and shows a message if there are new replies.</string>
 </resources>

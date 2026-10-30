@@ -15,6 +15,7 @@ class CommunityComposerTest {
         try {
             var calls = 0
             val backend = object : ForumBackend {
+                override suspend fun activity(topicIds: List<String>) = emptyList<ForumActivity>()
                 override suspend fun profile() = ForumProfile(true, "Public name")
                 override suspend fun publish(draft: ForumDraft, images: List<ForumImage>): ForumPost {
                     calls++; return ForumPost("post", "owner", draft.title)

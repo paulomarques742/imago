@@ -16,6 +16,10 @@ import java.util.concurrent.TimeUnit
 object AndroidDiagnostics {
     fun start(context: Context, appVersion: String) {
         val application = context.applicationContext
+        // Older test builds scheduled forum checks; replies now refresh only in the foreground.
+        WorkManager.getInstance(application).cancelUniqueWork("forum-replies")
+        WorkManager.getInstance(application).cancelUniqueWork("forum-replies-now")
+        application.getSystemService(android.app.NotificationManager::class.java).deleteNotificationChannel("forum_replies")
         LocalDiagnostics.transport = {
             val manager = application.getSystemService(ConnectivityManager::class.java)
             val capabilities = manager.getNetworkCapabilities(manager.activeNetwork)
