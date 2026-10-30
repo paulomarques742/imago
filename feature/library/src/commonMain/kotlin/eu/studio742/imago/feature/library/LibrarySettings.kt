@@ -73,14 +73,17 @@ open class LibrarySettingsViewModel(
 ) : ViewModel() {
     val message = MutableStateFlow<UiText?>(null)
     val busy = MutableStateFlow(false)
-    /** The last save failed on something in front of the server: the form opens its Advanced section. */
-    val needsConnectionOptions = MutableStateFlow(false)
+    /**
+     * The address the last attempt was stopped at by something in front of the server, so the form
+     * opens that address's options: a listed address's own, or the new address's when it is not listed.
+     */
+    val needsConnectionOptions = MutableStateFlow<String?>(null)
     val certificates = CertificateSupport(configuration::importClientCertificate, configuration::describeClientCertificate)
     val connectionTests = MutableStateFlow<Map<String, ConnectionTestState>>(emptyMap())
     fun save(id: String?, name: String, url: String, key: String, profile: ConnectionProfile, done: () -> Unit) {
         viewModelScope.launch {
             busy.value = true
-            needsConnectionOptions.value = false
+            needsConnectionOptions.value = null
             runCatching { configuration.saveLibrary(id, name, url, key, profile) }
                 .onSuccess {
                     if (id != null) connectionTests.update { it - id }
@@ -89,7 +92,7 @@ open class LibrarySettingsViewModel(
                     else uiText(Res.string.library_saved_limited, missing.joinToString(", "))
                     done()
                 }
-                .onFailure { message.value = it.toUiText(Res.string.library_save_failed); needsConnectionOptions.value = it.isProtection() }
+                .onFailure { message.value = it.toUiText(Res.string.library_save_failed); needsConnectionOptions.value = if (it.isProtection()) url else null }
             busy.value = false
         }
     }
@@ -108,15 +111,17 @@ open class LibrarySettingsViewModel(
             throw cancelled
         } catch (error: Exception) {
             connectionTests.update { it + (id to ConnectionTestState(result = error.toUiText(Res.string.library_connect_failed), failed = true)) }
+            // Editing the library then opens the options of the address that was tried.
+            if (error.isProtection()) needsConnectionOptions.value = runCatching { configuration.source(id).serverUrl }.getOrNull()
         } finally { busy.value = false }
     } }
     fun addUrl(id: String, url: String, profile: ConnectionProfile, done: () -> Unit) {
         viewModelScope.launch {
             busy.value = true
-            needsConnectionOptions.value = false
+            needsConnectionOptions.value = null
             runCatching { configuration.addServerUrl(id, url, profile) }
                 .onSuccess { message.value = uiText(Res.string.library_address_added, it); done() }
-                .onFailure { message.value = it.toUiText(Res.string.library_address_add_failed); needsConnectionOptions.value = it.isProtection() }
+                .onFailure { message.value = it.toUiText(Res.string.library_address_add_failed); needsConnectionOptions.value = if (it.isProtection()) url else null }
             busy.value = false
         }
     }
@@ -124,7 +129,11 @@ open class LibrarySettingsViewModel(
         viewModelScope.launch {
             busy.value = true
             runCatching { configuration.setConnectionProfile(id, url, profile) }
-                .onSuccess { message.value = uiText(Res.string.connection_options_saved); done() }
+                .onSuccess {
+                    message.value = uiText(Res.string.connection_options_saved)
+                    if (needsConnectionOptions.value == url) needsConnectionOptions.value = null
+                    done()
+                }
                 .onFailure { message.value = it.toUiText(Res.string.connection_options_failed) }
             busy.value = false
         }
@@ -213,9 +222,13 @@ fun LibrarySettingsRoute(
     // Credentials deliberately stay out of saved-instance state.
     var key by remember { mutableStateOf("") }
     var remove by remember { mutableStateOf<LibrarySource?>(null) }
+    // Options typed for an address live only in the form: leaving it asks first, and runs this if confirmed.
+    var unsavedOptions by remember { mutableStateOf(false) }
+    var discard by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val guarded = { action: () -> Unit -> if (unsavedOptions) { discard = action } else action() }
     val back = {
         if (!busy) {
-            if (editing) { editing = false; key = ""; viewModel.message.value = null }
+            if (editing) guarded { editing = false; key = ""; viewModel.message.value = null }
             else onBack()
         }
     }
@@ -271,19 +284,20 @@ fun LibrarySettingsRoute(
                         OutlinedTextField(key, { key = it }, label = { Text(stringResource(Res.string.library_api_key)) }, visualTransformation = PasswordVisualTransformation(), enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                         ImmichKeyPermissions()
                         // A linked library keeps each address's options in the list below.
-                        if (connected == null) ConnectionAdvanced(headers, { headers = it }, enabled = !busy, highlight = needsConnectionOptions,
+                        if (connected == null) ConnectionAdvanced(headers, { headers = it }, enabled = !busy, highlight = needsConnectionOptions != null,
                             certificate = certificate, onCertificateChange = { certificate = it }, certificates = viewModel.certificates)
                         Button(enabled = !busy && name.isNotBlank() && url.isNotBlank() && key.isNotBlank(),
                             onClick = {
                                 val profile = if (connected == null) headers.toProfile(certificate)
                                     else connected.serverUrl?.let(connected::profileOf) ?: ConnectionProfile.None
-                                viewModel.save(editId, name, connected?.serverUrl ?: url, key, profile) { editing = false; key = ""; headers = emptyList(); certificate = null }
+                                // It saves the name and key only: what is typed for an address below is not part of it.
+                                guarded { viewModel.save(editId, name, connected?.serverUrl ?: url, key, profile) { editing = false; key = ""; headers = emptyList(); certificate = null } }
                             },
                             modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.library_verify_save)) }
                         TextButton(enabled = !busy, onClick = back) { Text(stringResource(Res.string.library_cancel)) }
                     }
                     connected?.let { source ->
-                        LibrarySettingsCard { ServerAddressList(source, probes[source.id].orEmpty(), busy, viewModel) }
+                        LibrarySettingsCard { ServerAddressList(source, probes[source.id].orEmpty(), busy, viewModel) { unsavedOptions = it } }
                     }
                 } else {
                     CollapsibleSettingsCard(stringResource(Res.string.library_libraries), Icons.Outlined.PhotoLibrary,
@@ -334,6 +348,8 @@ fun LibrarySettingsRoute(
                                     TextButton(enabled = !busy, onClick = {
                                         editId = source.id; name = source.name; url = source.serverUrl.orEmpty(); key = source.apiKey.orEmpty(); editing = true
                                         viewModel.message.value = null
+                                        // A test of this library that a proxy stopped opens that address's options; another library's does not.
+                                        if (viewModel.needsConnectionOptions.value !in source.serverUrls) viewModel.needsConnectionOptions.value = null
                                     }) { Text(if (source.isConnected) stringResource(Res.string.library_edit) else stringResource(Res.string.library_connect)) }
                                     if (source.isConnected) {
                                         TextButton(enabled = !busy, onClick = { viewModel.test(source.id) }) { Text(stringResource(Res.string.library_test)) }
@@ -345,6 +361,7 @@ fun LibrarySettingsRoute(
                         }
                         OutlinedButton(enabled = !busy, onClick = {
                             editId = null; name = ""; url = ""; key = ""; editing = true; viewModel.message.value = null
+                            viewModel.needsConnectionOptions.value = null
                         }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Outlined.Add, null, Modifier.size(18.dp))
                             Text(stringResource(Res.string.library_add_immich_server), Modifier.padding(start = ImagoSpacing.Sm))
@@ -362,7 +379,22 @@ fun LibrarySettingsRoute(
         text = { Text(stringResource(Res.string.library_remove_body)) },
         confirmButton = { TextButton(onClick = { viewModel.configuration.removeLibrary(source.id); remove = null }) { Text(stringResource(Res.string.library_remove), color = ImagoColors.Danger) } },
         dismissButton = { TextButton(onClick = { remove = null }) { Text(stringResource(Res.string.library_cancel)) } }) }
+    discard?.let { action -> AlertDialog(onDismissRequest = { discard = null }, title = { Text(stringResource(Res.string.connection_discard_title)) },
+        text = { Text(stringResource(Res.string.connection_discard_body)) },
+        confirmButton = { TextButton(onClick = { discard = null; action() }) { Text(stringResource(Res.string.connection_discard), color = ImagoColors.Danger) } },
+        dismissButton = { TextButton(onClick = { discard = null }) { Text(stringResource(Res.string.connection_keep_editing)) } }) }
 }
+
+/**
+ * Something typed for an address that is only kept once saved: a new address not added yet, or
+ * options that differ from the address's saved ones.
+ */
+internal fun hasUnsavedConnectionOptions(
+    newUrl: String,
+    newProfile: ConnectionProfile,
+    draft: ConnectionProfile?,
+    saved: ConnectionProfile?,
+): Boolean = newUrl.isNotBlank() || !newProfile.isEmpty || (draft != null && draft != (saved ?: ConnectionProfile.None))
 
 /**
  * An Immich library's addresses, in the order they are tried.
@@ -376,6 +408,7 @@ private fun ColumnScope.ServerAddressList(
     probes: Map<String, Boolean>,
     busy: Boolean,
     viewModel: LibrarySettingsViewModel,
+    onUnsavedChange: (Boolean) -> Unit,
 ) {
     var newUrl by remember(source.id) { mutableStateOf("") }
     var newHeaders by remember(source.id) { mutableStateOf(emptyList<ConnectionHeader>()) }
@@ -384,6 +417,19 @@ private fun ColumnScope.ServerAddressList(
     var optionsDraft by remember(source.id) { mutableStateOf(emptyList<ConnectionHeader>()) }
     var optionsCertificate by remember(source.id) { mutableStateOf<ClientCertificate?>(null) }
     var newCertificate by remember(source.id) { mutableStateOf<ClientCertificate?>(null) }
+    val openOptions = { address: String ->
+        val saved = source.profileOf(address)
+        optionsOf = address; optionsDraft = saved?.headers.orEmpty(); optionsCertificate = saved?.certificate
+    }
+    // A listed address stopped by a proxy has its own options opened; any other is the new one.
+    val needsOptions by viewModel.needsConnectionOptions.collectAsStateWithLifecycle()
+    LaunchedEffect(needsOptions) {
+        needsOptions?.takeIf { it in source.serverUrls && optionsOf == null }?.let(openOptions)
+    }
+    val unsaved = hasUnsavedConnectionOptions(newUrl, newHeaders.toProfile(newCertificate),
+        optionsOf?.let { optionsDraft.toProfile(optionsCertificate) }, optionsOf?.let(source::profileOf))
+    LaunchedEffect(unsaved) { onUnsavedChange(unsaved) }
+    DisposableEffect(Unit) { onDispose { onUnsavedChange(false) } }
     Text(stringResource(Res.string.library_addresses), style = MaterialTheme.typography.titleMedium, color = ImagoColors.TextPrimary)
     Text(stringResource(Res.string.library_addresses_hint),
         style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
@@ -419,11 +465,7 @@ private fun ColumnScope.ServerAddressList(
                 }
             }
             val options = source.profileOf(address)
-            IconButton(enabled = !busy, onClick = {
-                optionsOf = if (optionsOf == address) null else address
-                optionsDraft = options?.headers.orEmpty()
-                optionsCertificate = options?.certificate
-            }) {
+            IconButton(enabled = !busy, onClick = { if (optionsOf == address) optionsOf = null else openOptions(address) }) {
                 Icon(Icons.Outlined.Tune, stringResource(Res.string.connection_address_settings, address),
                     tint = if (options != null) ImagoColors.Gold else androidx.compose.material3.LocalContentColor.current)
             }
@@ -441,7 +483,7 @@ private fun ColumnScope.ServerAddressList(
     optionsOf?.takeIf { it in source.serverUrls }?.let { address ->
         Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
             Text(stringResource(Res.string.connection_address_settings, address), style = MaterialTheme.typography.titleSmall, color = ImagoColors.TextPrimary)
-            ConnectionAdvanced(optionsDraft, { optionsDraft = it }, enabled = !busy, initiallyOpen = true,
+            ConnectionAdvanced(optionsDraft, { optionsDraft = it }, enabled = !busy, initiallyOpen = true, highlight = needsOptions == address,
                 certificate = optionsCertificate, onCertificateChange = { optionsCertificate = it }, certificates = viewModel.certificates)
             Button(enabled = !busy, onClick = { viewModel.setProfile(source.id, address, optionsDraft.toProfile(optionsCertificate)) { optionsOf = null; optionsDraft = emptyList(); optionsCertificate = null } }) {
                 Text(stringResource(Res.string.connection_save_options))
@@ -450,8 +492,12 @@ private fun ColumnScope.ServerAddressList(
     }
     OutlinedTextField(newUrl, { newUrl = it }, label = { Text(stringResource(Res.string.library_new_address)) }, enabled = !busy, singleLine = true,
         modifier = Modifier.fillMaxWidth())
-    ConnectionAdvanced(newHeaders, { newHeaders = it }, enabled = !busy, highlight = viewModel.needsConnectionOptions.collectAsStateWithLifecycle().value,
-        certificate = newCertificate, onCertificateChange = { newCertificate = it }, certificates = viewModel.certificates)
+    // Only once an address is typed, so it is not taken for the options of the ones already listed.
+    if (newUrl.isNotBlank() || newHeaders.isNotEmpty() || newCertificate != null) {
+        ConnectionAdvanced(newHeaders, { newHeaders = it }, enabled = !busy, title = Res.string.connection_advanced_new_address,
+            highlight = needsOptions != null && needsOptions !in source.serverUrls,
+            certificate = newCertificate, onCertificateChange = { newCertificate = it }, certificates = viewModel.certificates)
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs), verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(enabled = !busy && newUrl.isNotBlank(), onClick = { viewModel.addUrl(source.id, newUrl, newHeaders.toProfile(newCertificate)) { newUrl = ""; newHeaders = emptyList(); newCertificate = null } }) {
             Icon(Icons.Outlined.Add, null, Modifier.size(18.dp))

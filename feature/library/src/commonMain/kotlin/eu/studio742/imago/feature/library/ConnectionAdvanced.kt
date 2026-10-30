@@ -43,6 +43,7 @@ import eu.studio742.imago.core.model.ConnectionHeader
 import eu.studio742.imago.core.model.ConnectionHeaders
 import eu.studio742.imago.core.model.ConnectionProfile
 import eu.studio742.imago.feature.library.resources.*
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** The attempt failed on something in front of the server — a proxy, a certificate it asks for — and not on the server itself. */
@@ -82,13 +83,14 @@ fun ConnectionAdvanced(
     certificate: ClientCertificate? = null,
     onCertificateChange: (ClientCertificate?) -> Unit = {},
     certificates: CertificateSupport? = null,
+    title: StringResource = Res.string.connection_advanced,
 ) {
     var open by remember { mutableStateOf(initiallyOpen || certificate != null || highlight) }
     LaunchedEffect(highlight) { if (highlight) open = true }
     var reveal by remember { mutableStateOf(false) }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
         TextButton(onClick = { open = !open }) {
-            Text(stringResource(Res.string.connection_advanced))
+            Text(stringResource(title))
             Icon(Icons.Outlined.ExpandMore, null, Modifier.padding(start = ImagoSpacing.Xs).size(18.dp).rotate(if (open) 180f else 0f))
         }
         if (!open) return@Column

@@ -506,6 +506,11 @@
     <string name="connection_certificate_expired_on">Expired on %1$s. The server refuses this device until a new certificate is imported.</string>
     <string name="connection_certificate_failed">Couldn’t read the certificate.</string>
     <string name="connection_certificate_filter">Client certificates</string>
+    <string name="connection_advanced_new_address">Advanced options for the new address</string>
+    <string name="connection_discard_title">Discard the unsaved connection options?</string>
+    <string name="connection_discard_body">What you typed for an address hasn’t been saved yet. To keep it, use “Verify and save options” or “Add address”.</string>
+    <string name="connection_discard">Discard</string>
+    <string name="connection_keep_editing">Keep editing</string>
     <string name="community_language">en</string>
     <string name="community_invitation">Want to share something with the community?</string>
     <string name="community_description">Questions, ideas and improvements: start a public topic in the IMAGO forum.</string>

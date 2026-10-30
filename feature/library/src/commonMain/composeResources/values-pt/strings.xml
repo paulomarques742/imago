@@ -506,6 +506,11 @@
     <string name="connection_certificate_expired_on">Expirou a %1$s. O servidor recusa este aparelho até se importar um certificado novo.</string>
     <string name="connection_certificate_failed">Não foi possível ler o certificado.</string>
     <string name="connection_certificate_filter">Certificados de cliente</string>
+    <string name="connection_advanced_new_address">Opções avançadas do novo endereço</string>
+    <string name="connection_discard_title">Descartar as opções de ligação por gravar?</string>
+    <string name="connection_discard_body">O que escreveu para um endereço ainda não foi gravado. Para o manter, use «Verificar e guardar opções» ou «Acrescentar endereço».</string>
+    <string name="connection_discard">Descartar</string>
+    <string name="connection_keep_editing">Continuar a editar</string>
     <string name="community_language">pt</string>
     <string name="community_invitation">Queres partilhar algo com a comunidade?</string>
     <string name="community_description">Dúvidas, ideias e sugestões de melhoria: cria um tópico público no fórum IMAGO.</string>
