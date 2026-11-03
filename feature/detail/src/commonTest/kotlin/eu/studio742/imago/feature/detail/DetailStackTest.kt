@@ -12,6 +12,7 @@ import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.LibraryFilter
+import eu.studio742.imago.core.model.MediaTypeFilter
 import eu.studio742.imago.feature.editor.EditorAsset
 import eu.studio742.imago.feature.editor.EditorExporter
 import kotlinx.coroutines.Dispatchers
@@ -69,14 +70,14 @@ class DetailStackTest {
         override suspend fun assetDetail(assetId: String): ImmichAssetDetail =
             if (latest.isEmpty()) error("not used") else ImmichAssetDetail(photoOf(assetId))
 
-        override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?) = error("not used")
+        override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?, mediaType: MediaTypeFilter) = error("not used")
         override suspend fun albums(): List<ImmichAlbum> = error("not used")
         override suspend fun timeBuckets(): List<ImmichTimeBucket> = error("not used")
         override val catalogSync: StateFlow<CatalogSyncState> = MutableStateFlow(CatalogSyncState())
         override suspend fun syncCatalog() = error("not used")
         override suspend fun loadMonth(month: String) = error("not used")
-        override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?): Int? = null
-        override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?): Int? = null
+        override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? = null
+        override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? = null
         override fun thumbnailUrl(assetId: String) = assetId
         override fun previewUrl(assetId: String) = assetId
         override fun videoPlaybackUrl(assetId: String) = assetId

@@ -12,6 +12,7 @@ import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.LibraryFilter
+import eu.studio742.imago.core.model.MediaTypeFilter
 import eu.studio742.imago.core.model.UserMessage
 import eu.studio742.imago.core.model.UserMessageException
 import java.io.File
@@ -84,15 +85,15 @@ class OpenedFileLibrary(context: Context) : LibraryRepository {
         }
     }.getOrNull()
 
-    override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?): Flow<PagingData<ImmichAsset>> =
+    override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?, mediaType: MediaTypeFilter): Flow<PagingData<ImmichAsset>> =
         flowOf(PagingData.empty())
     override suspend fun albums(): List<ImmichAlbum> = emptyList()
     override suspend fun timeBuckets(): List<ImmichTimeBucket> = emptyList()
     override val catalogSync: StateFlow<CatalogSyncState> = MutableStateFlow(CatalogSyncState())
     override suspend fun syncCatalog() = Unit
     override suspend fun loadMonth(month: String) = Unit
-    override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?): Int? = null
-    override suspend fun indexOfDate(date: java.time.LocalDate, filter: LibraryFilter, month: String?, query: String?): Int? = null
+    override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? = null
+    override suspend fun indexOfDate(date: java.time.LocalDate, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? = null
 
     // Coil, the video player and the editor read a content Uri directly.
     override fun thumbnailUrl(assetId: String) = assetId

@@ -39,6 +39,7 @@ import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.ImmichConnection
 import eu.studio742.imago.core.model.AssetType
 import eu.studio742.imago.core.model.LibraryFilter
+import eu.studio742.imago.core.model.MediaTypeFilter
 import eu.studio742.imago.core.model.RECENT_FILTER_DAYS
 import eu.studio742.imago.core.model.isImmichRoomExport
 import java.io.File
@@ -81,6 +82,7 @@ class RoomLibraryRepository @Inject constructor(
         month: String?,
         albumId: String?,
         query: String?,
+        mediaType: MediaTypeFilter,
     ): Flow<PagingData<ImmichAsset>> {
         val connection = requireConnection()
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
@@ -98,6 +100,7 @@ class RoomLibraryRepository @Inject constructor(
                         favoritesOnly = filter == LibraryFilter.FAVORITES,
                         editedOnly = filter == LibraryFilter.EDITED,
                         query = trimmedQuery,
+                        mediaType = mediaType.ordinal,
                     )
                 },
             ).flow.map { data -> data.map(AssetEntity::toDomain) }
@@ -135,6 +138,7 @@ class RoomLibraryRepository @Inject constructor(
                     monthStart = (monthStart ?: recentStart)?.let { "${it}T00:00:00.000Z" },
                     monthEnd = monthStart?.plusMonths(1)?.let { "${it}T00:00:00.000Z" },
                     query = trimmedQuery,
+                    mediaType = mediaType.ordinal,
                 )
             },
         ).flow.map { data -> data.map(AssetEntity::toDomain) }
@@ -407,6 +411,7 @@ class RoomLibraryRepository @Inject constructor(
         filter: LibraryFilter,
         month: String?,
         query: String?,
+        mediaType: MediaTypeFilter,
     ): Int? {
         val connection = configuration.currentConnection() ?: return null
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
@@ -423,6 +428,7 @@ class RoomLibraryRepository @Inject constructor(
             query = query?.trim()?.takeIf(String::isNotEmpty),
             anchorCreatedAt = createdAt,
             anchorId = assetId,
+            mediaType = mediaType.ordinal,
         )
     }
 
@@ -431,6 +437,7 @@ class RoomLibraryRepository @Inject constructor(
         filter: LibraryFilter,
         month: String?,
         query: String?,
+        mediaType: MediaTypeFilter,
     ): Int? {
         val connection = configuration.currentConnection() ?: return null
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
@@ -448,6 +455,7 @@ class RoomLibraryRepository @Inject constructor(
             // Everything after the end of this day is more recent than the destination; what is left
             // starts exactly on it.
             boundary = "${date.plusDays(1)}T00:00:00.000Z",
+            mediaType = mediaType.ordinal,
         )
     }
 

@@ -96,6 +96,8 @@ fun <T> ImagoChipRow(
     contentPadding: Dp = ImagoSpacing.Lg,
     /** A chip with an icon shows it in place of the label, which becomes what is read aloud. */
     icon: (T) -> ImageVector? = { null },
+    /** More than one chip can be lit when a row's chips are independent slices; by default only [selected] is. */
+    isActive: (T) -> Boolean = { it == selected },
 ) {
     val scrollState = rememberScrollState()
     val itemOffsets = remember { mutableStateMapOf<T, Int>() }
@@ -116,7 +118,7 @@ fun <T> ImagoChipRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         options.forEach { option ->
-            val isSelected = option == selected
+            val isSelected = isActive(option)
             Box(
                 modifier = Modifier
                     .onPlaced { itemOffsets[option] = it.positionInParent().x.toInt() }

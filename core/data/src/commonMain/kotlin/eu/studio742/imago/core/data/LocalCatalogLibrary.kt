@@ -191,14 +191,14 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
         return ids.mapNotNull { (known[it] ?: read[it])?.toDomain() }
     }
 
-    override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?): Flow<PagingData<ImmichAsset>> {
+    override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?, mediaType: MediaTypeFilter): Flow<PagingData<ImmichAsset>> {
         val start = month?.let { LocalDate.parse(it).withDayOfMonth(1) }
             ?: LocalDate.now().minusDays(RECENT_FILTER_DAYS).takeIf { filter == LibraryFilter.RECENT }
         return Pager(PagingConfig(pageSize = 100, initialLoadSize = 100, enablePlaceholders = true, jumpThreshold = 300)) {
             database.assetDao().pagingSource(DEVICE_LIBRARY_ID, filter == LibraryFilter.FAVORITES,
                 filter == LibraryFilter.EDITED, start?.let { "${it}T00:00:00.000Z" },
                 month?.let { "${LocalDate.parse(it).withDayOfMonth(1).plusMonths(1)}T00:00:00.000Z" }, query, albumId,
-                hideFolders = filter == LibraryFilter.ALL)
+                hideFolders = filter == LibraryFilter.ALL, mediaType = mediaType.ordinal)
         }.flow.map { page -> page.map(AssetEntity::toDomain) }
     }
     override suspend fun albums(): List<ImmichAlbum> {
@@ -265,6 +265,7 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
         filter: LibraryFilter,
         month: String?,
         query: String?,
+        mediaType: MediaTypeFilter,
     ): Int? {
         val libraryKey = DEVICE_LIBRARY_ID
         val createdAt = database.assetDao().createdAt(libraryKey, assetId) ?: return null
@@ -281,6 +282,7 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
             anchorCreatedAt = createdAt,
             anchorId = assetId,
             hideFolders = filter == LibraryFilter.ALL,
+            mediaType = mediaType.ordinal,
         )
     }
 
@@ -289,6 +291,7 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
         filter: LibraryFilter,
         month: String?,
         query: String?,
+        mediaType: MediaTypeFilter,
     ): Int? {
         val libraryKey = DEVICE_LIBRARY_ID
         val monthStart = month?.let { LocalDate.parse(it).withDayOfMonth(1) }
@@ -306,6 +309,7 @@ abstract class LocalCatalogLibrary(protected val database: ImmichRoomDatabase) :
             // starts exactly on it.
             boundary = "${date.plusDays(1)}T00:00:00.000Z",
             hideFolders = filter == LibraryFilter.ALL,
+            mediaType = mediaType.ordinal,
         )
     }
 

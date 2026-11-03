@@ -50,10 +50,10 @@ class SourceLibraryRepository @Inject constructor(
 
     override val catalogSync: StateFlow<CatalogSyncState> = configuration.activeSource()
         .flatMapLatest { provider(it.id).catalogSync }.stateIn(scope, SharingStarted.Eagerly, CatalogSyncState())
-    override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?): Flow<PagingData<ImmichAsset>> {
+    override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?, mediaType: MediaTypeFilter): Flow<PagingData<ImmichAsset>> {
         val id = configuration.selectedLibraryId.value
-        if (id == UNIFIED_LIBRARY_ID) return unified().assets(filter, month, albumId, query)
-        return provider(id).assets(filter, month, albumId?.let { AssetReference.parse(it).localId }, query)
+        if (id == UNIFIED_LIBRARY_ID) return unified().assets(filter, month, albumId, query, mediaType)
+        return provider(id).assets(filter, month, albumId?.let { AssetReference.parse(it).localId }, query, mediaType)
             .map { page -> page.map { it.inLibrary(id) } }
     }
     override suspend fun albums(): List<ImmichAlbum> = albumsOf(configuration.selectedLibraryId.value)
@@ -199,13 +199,13 @@ class SourceLibraryRepository @Inject constructor(
         runCatching { unified().syncStacks(refreshServer = selected != partner) }
     }
     override suspend fun loadMonth(month: String) = provider(configuration.selectedLibraryId.value).loadMonth(month)
-    override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?): Int? {
-        if (unifiedSelected) return unified().indexOfAsset(assetId, filter, month, query)
+    override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? {
+        if (unifiedSelected) return unified().indexOfAsset(assetId, filter, month, query, mediaType)
         val ref = AssetReference.parse(assetId)
-        return provider(ref.libraryId).indexOfAsset(ref.localId, filter, month, query)
+        return provider(ref.libraryId).indexOfAsset(ref.localId, filter, month, query, mediaType)
     }
-    override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?) =
-        provider(configuration.selectedLibraryId.value).indexOfDate(date, filter, month, query)
+    override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter) =
+        provider(configuration.selectedLibraryId.value).indexOfDate(date, filter, month, query, mediaType)
     // A removed source yields an unresolvable URI in previews, not a composition-time exception.
     private fun location(assetId: String, get: LibraryRepository.(String) -> String): String {
         val ref = AssetReference.parse(assetId)

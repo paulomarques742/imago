@@ -13,6 +13,7 @@ import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.LibraryFilter
+import eu.studio742.imago.core.model.MediaTypeFilter
 import eu.studio742.imago.core.model.UserMessage
 import eu.studio742.imago.core.model.UserMessageException
 import eu.studio742.imago.core.model.UserText
@@ -64,13 +65,13 @@ class UnifiedStacksTest {
         override val canStack = true
         override suspend fun stackTogether(assetIds: List<String>) { stacked += assetIds }
         override suspend fun syncCatalog() = Unit
-        override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?): Flow<PagingData<ImmichAsset>> = error("unused")
+        override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?, mediaType: MediaTypeFilter): Flow<PagingData<ImmichAsset>> = error("unused")
         override suspend fun albums(): List<ImmichAlbum> = error("unused")
         override suspend fun timeBuckets(): List<ImmichTimeBucket> = error("unused")
         override val catalogSync: StateFlow<CatalogSyncState> = MutableStateFlow(CatalogSyncState())
         override suspend fun loadMonth(month: String) = Unit
-        override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?): Int? = null
-        override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?): Int? = null
+        override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? = null
+        override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? = null
         override fun thumbnailUrl(assetId: String) = assetId
         override fun previewUrl(assetId: String) = assetId
         override fun videoPlaybackUrl(assetId: String) = assetId

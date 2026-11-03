@@ -49,6 +49,7 @@ interface AlbumMemberDao {
         WHERE m.libraryKey = :libraryKey AND m.albumId = :albumId
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
+          AND ${MEDIA_TYPE_ALIASED_SQL}
           AND NOT EXISTS (SELECT 1 FROM stack_members s WHERE s.libraryKey = a.libraryKey AND s.assetId = a.id AND s.assetId != s.primaryAssetId)
           AND (:query IS NULL OR a.originalFileName LIKE '%' || :query || '%')
         ORDER BY m.position, a.id
@@ -60,5 +61,6 @@ interface AlbumMemberDao {
         favoritesOnly: Boolean,
         editedOnly: Boolean,
         query: String?,
+        mediaType: Int = 0,
     ): PagingSource<Int, AssetEntity>
 }

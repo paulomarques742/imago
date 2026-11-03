@@ -47,6 +47,7 @@ interface AssetDao {
           AND (:hideFolders = 0 OR NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = a.libraryKey AND h.folderId = a.folderId))
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
+          AND ${MEDIA_TYPE_ALIASED_SQL}
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
           AND (:monthEnd IS NULL OR a.fileCreatedAt < :monthEnd)
           AND (:query IS NULL OR a.originalFileName LIKE '%' || :query || '%')
@@ -62,6 +63,7 @@ interface AssetDao {
         monthEnd: String?,
         query: String?,
         hideFolders: Boolean = false,
+        mediaType: Int = 0,
     ): PagingSource<Int, UnifiedAssetRow>
 
     @Query(
@@ -72,6 +74,7 @@ interface AssetDao {
           AND (:hideFolders = 0 OR NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = a.libraryKey AND h.folderId = a.folderId))
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
+          AND ${MEDIA_TYPE_ALIASED_SQL}
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
           AND (:monthEnd IS NULL OR a.fileCreatedAt < :monthEnd)
           AND (:query IS NULL OR a.originalFileName LIKE '%' || :query || '%')
@@ -89,6 +92,7 @@ interface AssetDao {
         anchorCreatedAt: String,
         anchorId: String,
         hideFolders: Boolean = false,
+        mediaType: Int = 0,
     ): Int
 
     @Query(
@@ -99,6 +103,7 @@ interface AssetDao {
           AND (:hideFolders = 0 OR NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = a.libraryKey AND h.folderId = a.folderId))
           AND (:favoritesOnly = 0 OR a.isFavorite = 1)
           AND (:editedOnly = 0 OR a.isEdited = 1 OR a.hasLocalRecipe = 1)
+          AND ${MEDIA_TYPE_ALIASED_SQL}
           AND (:monthStart IS NULL OR a.fileCreatedAt >= :monthStart)
           AND (:monthEnd IS NULL OR a.fileCreatedAt < :monthEnd)
           AND (:query IS NULL OR a.originalFileName LIKE '%' || :query || '%')
@@ -115,6 +120,7 @@ interface AssetDao {
         query: String?,
         boundary: String,
         hideFolders: Boolean = false,
+        mediaType: Int = 0,
     ): Int
 
     @Query(
@@ -255,6 +261,7 @@ interface AssetDao {
         WHERE libraryKey = :libraryKey
           AND (:favoritesOnly = 0 OR isFavorite = 1)
           AND (:editedOnly = 0 OR isEdited = 1 OR hasLocalRecipe = 1)
+          AND ${MEDIA_TYPE_SQL}
           AND (:monthStart IS NULL OR fileCreatedAt >= :monthStart)
           AND (:monthEnd IS NULL OR fileCreatedAt < :monthEnd)
           AND (:albumId IS NULL OR folderId = :albumId)
@@ -274,6 +281,7 @@ interface AssetDao {
         query: String?,
         albumId: String? = null,
         hideFolders: Boolean = false,
+        mediaType: Int = 0,
     ): PagingSource<Int, AssetEntity>
 
     @Query("UPDATE assets SET isFavorite = :isFavorite WHERE libraryKey = :libraryKey AND id = :assetId")
@@ -298,6 +306,7 @@ interface AssetDao {
           AND (:hideFolders = 0 OR NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = assets.libraryKey AND h.folderId = assets.folderId))
           AND (:favoritesOnly = 0 OR isFavorite = 1)
           AND (:editedOnly = 0 OR isEdited = 1 OR hasLocalRecipe = 1)
+          AND ${MEDIA_TYPE_SQL}
           AND (:monthStart IS NULL OR fileCreatedAt >= :monthStart)
           AND (:monthEnd IS NULL OR fileCreatedAt < :monthEnd)
           AND (:query IS NULL OR originalFileName LIKE '%' || :query || '%')
@@ -313,6 +322,7 @@ interface AssetDao {
         query: String?,
         boundary: String,
         hideFolders: Boolean = false,
+        mediaType: Int = 0,
     ): Int
 
     /**
@@ -331,6 +341,7 @@ interface AssetDao {
           AND (:hideFolders = 0 OR NOT EXISTS (SELECT 1 FROM hidden_folders h WHERE h.libraryKey = assets.libraryKey AND h.folderId = assets.folderId))
           AND (:favoritesOnly = 0 OR isFavorite = 1)
           AND (:editedOnly = 0 OR isEdited = 1 OR hasLocalRecipe = 1)
+          AND ${MEDIA_TYPE_SQL}
           AND (:monthStart IS NULL OR fileCreatedAt >= :monthStart)
           AND (:monthEnd IS NULL OR fileCreatedAt < :monthEnd)
           AND (:query IS NULL OR originalFileName LIKE '%' || :query || '%')
@@ -350,6 +361,7 @@ interface AssetDao {
         anchorCreatedAt: String,
         anchorId: String,
         hideFolders: Boolean = false,
+        mediaType: Int = 0,
     ): Int
 
     /** The date of a catalogue photo, to serve as the anchor for [countBefore]. */

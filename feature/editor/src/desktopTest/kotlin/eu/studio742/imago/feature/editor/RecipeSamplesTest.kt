@@ -1,8 +1,10 @@
 package eu.studio742.imago.feature.editor
 
 import eu.studio742.imago.core.render.decodePixels
+import eu.studio742.imago.core.render.shouldInspectRawOriginal
 import eu.studio742.imago.feature.editor.resources.Res
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -19,6 +21,14 @@ class RecipeSamplesTest {
             val pixels = decodePixels(bytes)
             assertNotNull("sample $index does not decode", pixels)
             assertTrue("sample $index is empty", pixels!!.width > 0 && pixels.height > 0)
+        }
+    }
+
+    @Test
+    fun aSampleNeverLooksLikeARawOriginal() {
+        // A blank name made the editor download the original of "sample:N" and fail to open the photo.
+        for (index in 0 until SAMPLE_COUNT) {
+            assertFalse("sample $index", shouldInspectRawOriginal(sampleEditorAsset(index).fileName))
         }
     }
 }

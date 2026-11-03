@@ -9,6 +9,7 @@ import eu.studio742.imago.core.model.AssetReference
 import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.LibraryFilter
+import eu.studio742.imago.core.model.MediaTypeFilter
 import eu.studio742.imago.core.model.MapContents
 import eu.studio742.imago.core.model.MapMarker
 import eu.studio742.imago.core.model.MapReading
@@ -189,14 +190,14 @@ class MapContentsTest {
     ) : LibraryRepository {
         override fun mapContents(): Flow<MapContents> = flowOf(MapContents(markers))
         override suspend fun onThisDay(today: LocalDate) = memories
-        override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?) = error("unused")
+        override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?, mediaType: MediaTypeFilter) = error("unused")
         override suspend fun albums() = emptyList<eu.studio742.imago.core.model.ImmichAlbum>()
         override suspend fun timeBuckets() = emptyList<eu.studio742.imago.core.model.ImmichTimeBucket>()
         override val catalogSync: StateFlow<CatalogSyncState> = MutableStateFlow(CatalogSyncState())
         override suspend fun syncCatalog() = Unit
         override suspend fun loadMonth(month: String) = Unit
-        override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?): Int? = null
-        override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?): Int? = null
+        override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? = null
+        override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? = null
         override fun thumbnailUrl(assetId: String) = ""
         override fun previewUrl(assetId: String) = ""
         override fun videoPlaybackUrl(assetId: String) = ""

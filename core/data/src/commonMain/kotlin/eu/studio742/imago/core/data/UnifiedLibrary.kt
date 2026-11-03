@@ -20,6 +20,7 @@ import eu.studio742.imago.core.model.MapContents
 import eu.studio742.imago.core.model.DayMemory
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.LibraryFilter
+import eu.studio742.imago.core.model.MediaTypeFilter
 import eu.studio742.imago.core.model.RECENT_FILTER_DAYS
 import java.io.File
 import java.time.LocalDate
@@ -73,7 +74,7 @@ class UnifiedLibrary(
 
     private fun libraryOf(id: String) = if (id == DEVICE_LIBRARY_ID) device else server
 
-    override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?): Flow<PagingData<ImmichAsset>> {
+    override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?, mediaType: MediaTypeFilter): Flow<PagingData<ImmichAsset>> {
         // An album belongs to one side: it opens as that library shows it.
         if (albumId != null) {
             val album = AssetReference.parse(albumId)
@@ -88,6 +89,7 @@ class UnifiedLibrary(
                 hideFolders = filter == LibraryFilter.ALL,
                 favoritesOnly = filter == LibraryFilter.FAVORITES,
                 editedOnly = filter == LibraryFilter.EDITED,
+            mediaType = mediaType.ordinal,
                 monthStart = range.start,
                 monthEnd = range.end,
                 query = query?.trim()?.takeIf(String::isNotEmpty),
@@ -208,7 +210,7 @@ class UnifiedLibrary(
         server.loadMonth(month)
     }
 
-    override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?): Int? {
+    override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? {
         val reference = AssetReference.parse(assetId)
         val createdAt = database.assetDao().createdAt(reference.libraryId, reference.localId) ?: return null
         val range = range(filter, month)
@@ -218,6 +220,7 @@ class UnifiedLibrary(
             hideFolders = filter == LibraryFilter.ALL,
             favoritesOnly = filter == LibraryFilter.FAVORITES,
             editedOnly = filter == LibraryFilter.EDITED,
+            mediaType = mediaType.ordinal,
             monthStart = range.start,
             monthEnd = range.end,
             query = query?.trim()?.takeIf(String::isNotEmpty),
@@ -226,7 +229,7 @@ class UnifiedLibrary(
         )
     }
 
-    override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?): Int? {
+    override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? {
         val range = range(filter, month)
         return database.assetDao().unifiedCountNewerThan(
             device = DEVICE_LIBRARY_ID,
@@ -234,6 +237,7 @@ class UnifiedLibrary(
             hideFolders = filter == LibraryFilter.ALL,
             favoritesOnly = filter == LibraryFilter.FAVORITES,
             editedOnly = filter == LibraryFilter.EDITED,
+            mediaType = mediaType.ordinal,
             monthStart = range.start,
             monthEnd = range.end,
             query = query?.trim()?.takeIf(String::isNotEmpty),

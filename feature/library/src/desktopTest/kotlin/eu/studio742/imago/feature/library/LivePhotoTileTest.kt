@@ -9,6 +9,7 @@ import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.LibraryFilter
+import eu.studio742.imago.core.model.MediaTypeFilter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
@@ -74,14 +75,14 @@ class LivePhotoTileTest {
         override fun apiKey(assetId: String): String =
             AssetReference.parse(assetId).libraryId.takeIf { it != DEVICE_LIBRARY_ID }?.let { "key-$it" }.orEmpty()
 
-        override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?) = error("not used")
+        override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?, mediaType: MediaTypeFilter) = error("not used")
         override suspend fun albums(): List<ImmichAlbum> = error("not used")
         override suspend fun timeBuckets(): List<ImmichTimeBucket> = error("not used")
         override val catalogSync: StateFlow<CatalogSyncState> = MutableStateFlow(CatalogSyncState())
         override suspend fun syncCatalog() = error("not used")
         override suspend fun loadMonth(month: String) = error("not used")
-        override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?): Int? = null
-        override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?): Int? = null
+        override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? = null
+        override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? = null
         override suspend fun setFavorite(assetId: String, isFavorite: Boolean) = error("not used")
         override suspend fun deleteAsset(assetId: String) = error("not used")
         override suspend fun downloadOriginal(assetId: String, destination: File) = error("not used")

@@ -14,6 +14,7 @@ import eu.studio742.imago.core.model.FolderTransfer
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichTimeBucket
 import eu.studio742.imago.core.model.LibraryFilter
+import eu.studio742.imago.core.model.MediaTypeFilter
 import java.io.File
 
 /**
@@ -34,6 +35,7 @@ interface LibraryRepository {
         month: String? = null,
         albumId: String? = null,
         query: String? = null,
+        mediaType: MediaTypeFilter = MediaTypeFilter.ANY,
     ): Flow<PagingData<ImmichAsset>>
     suspend fun albums(): List<ImmichAlbum>
 
@@ -84,6 +86,7 @@ interface LibraryRepository {
         filter: LibraryFilter,
         month: String? = null,
         query: String? = null,
+        mediaType: MediaTypeFilter = MediaTypeFilter.ANY,
     ): Int?
 
     suspend fun indexOfDate(
@@ -91,6 +94,7 @@ interface LibraryRepository {
         filter: LibraryFilter,
         month: String? = null,
         query: String? = null,
+        mediaType: MediaTypeFilter = MediaTypeFilter.ANY,
     ): Int?
     fun thumbnailUrl(assetId: String): String
     fun previewUrl(assetId: String): String

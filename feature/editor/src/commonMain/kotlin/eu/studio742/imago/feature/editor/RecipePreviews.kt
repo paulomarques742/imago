@@ -218,7 +218,9 @@ fun rememberSampleIndex(): MutableState<Int> =
 fun sampleEditorAsset(index: Int) = EditorAsset(
     id = SAMPLE_KEY_PREFIX + index,
     checksum = "",
-    fileName = "",
+    // A name with a JPEG extension: a blank one reads as a possible RAW, and the editor would try to
+    // download the original of an id that exists in no library.
+    fileName = recipeSamplePath(index).substringAfterLast('/'),
     previewUrl = "",
     apiKey = "",
     fileCreatedAt = "",

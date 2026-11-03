@@ -44,6 +44,7 @@ import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.ImmichAsset
 import eu.studio742.imago.core.model.LibraryFilter
+import eu.studio742.imago.core.model.MediaTypeFilter
 import eu.studio742.imago.core.render.changesTheImage
 import java.time.LocalDate
 
@@ -253,6 +254,10 @@ open class LibraryViewModel(
      * and leaving it brings the timeline back as it was.
      */
     private val albumFilter = MutableStateFlow(LibraryFilter.ALL)
+
+    /** The "Type" chip, which slices on top of the chip above: Favorites and Video is a thing. Same split as the chip's. */
+    val mediaType = MutableStateFlow(MediaTypeFilter.ANY)
+    private val albumMediaType = MutableStateFlow(MediaTypeFilter.ANY)
     val uiState = MutableStateFlow(LibraryUiState())
 
     /** The chip the screen shows lit: the album's while one is open, the timeline's otherwise. */
@@ -263,6 +268,13 @@ open class LibraryViewModel(
     ) { timeline, inAlbum, albumOpen -> if (albumOpen) inAlbum else timeline }
         .stateIn(viewModelScope, SharingStarted.Eagerly, LibraryFilter.ALL)
 
+    val activeMediaType: StateFlow<MediaTypeFilter> = combine(
+        mediaType,
+        albumMediaType,
+        uiState.map { it.selectedAlbum != null }.distinctUntilChanged(),
+    ) { timeline, inAlbum, albumOpen -> if (albumOpen) inAlbum else timeline }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, MediaTypeFilter.ANY)
+
     /**
      * What slices the grid.
      *
@@ -271,6 +283,7 @@ open class LibraryViewModel(
      */
     private data class AssetQuery(
         val filter: LibraryFilter,
+        val mediaType: MediaTypeFilter,
         val month: String?,
         val album: AlbumUiModel?,
         val query: String,
@@ -279,7 +292,12 @@ open class LibraryViewModel(
     )
 
     val assets: StateFlow<Flow<PagingData<AssetUiModel>>> = combine(
-        combine(filter, albumFilter, configuration.activeSource()) { timeline, inAlbum, source -> Triple(timeline, inAlbum, source) },
+        combine(
+            combine(filter, albumFilter, mediaType, albumMediaType) { timeline, inAlbum, timelineType, albumType ->
+                (timeline to timelineType) to (inAlbum to albumType)
+            },
+            configuration.activeSource(),
+        ) { slices, source -> Triple(slices.first, slices.second, source) },
         uiState.map { it.selectedMonth },
         uiState.map { it.selectedAlbum }.distinctAlbumContents(),
         uiState.map { it.query.trim() }.distinctUntilChanged().debounce { if (it.isEmpty()) 0 else SEARCH_DEBOUNCE_MS },
@@ -327,6 +345,7 @@ open class LibraryViewModel(
                 filter.value = restored?.first ?: LibraryFilter.ALL
                 uiState.value = (restored?.second ?: LibraryUiState()).copy(revealingHiddenAlbums = false)
                 previous = id
+                mediaType.value = MediaTypeFilter.ANY
                 uiState.update {
                     it.copy(
                         hasPeople = library.hasPeople,
@@ -482,9 +501,19 @@ open class LibraryViewModel(
     fun showPeople() {
         filter.value = LibraryFilter.ALL
         uiState.update { it.copy(showingPeople = true, selectedMonth = null, selectedAlbum = null) }
+    fun selectMediaType(value: MediaTypeFilter) {
+        if (uiState.value.selectedAlbum != null) {
+            albumMediaType.value = value
+            return
+        }
+        mediaType.value = value
+        uiState.update { it.copy(selectedMonth = null, selectedAlbum = null, showingPeople = false) }
+    }
+
         loadPeople()
     }
 
+        mediaType.value = MediaTypeFilter.ANY
     private var peopleJob: kotlinx.coroutines.Job? = null
 
     fun loadPeople() {
@@ -905,6 +934,7 @@ open class LibraryViewModel(
     }
 
     fun renameOpenAlbum(name: String) {
+            albumMediaType.value = MediaTypeFilter.ANY
         val album = uiState.value.selectedAlbum ?: return
         runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_album_failed, needsSelection = false) {
             // A folder's id is where it is, and changes with the name.
@@ -999,6 +1029,7 @@ open class LibraryViewModel(
                 // a date is scrolling to its index — and the grid stays the whole library, instead of
                 // being stuck in a month with a chip explaining it.
                 selectedMonth = null,
+        mediaType.value = MediaTypeFilter.ANY
                 selectedAlbum = null,
                 showingPeople = false,
                 isSearching = false,
@@ -1023,6 +1054,7 @@ open class LibraryViewModel(
         it.copy(section = LibrarySection.ALBUMS, selectedAlbum = album, selectedMonth = null, isSearching = false, query = "")
     }
 
+        albumMediaType.value = MediaTypeFilter.ANY
     fun closeAlbum() = uiState.update { it.copy(selectedAlbum = null) }
 
     /** Puts the hidden albums in the grid for now; leaving the albums takes them out again. */

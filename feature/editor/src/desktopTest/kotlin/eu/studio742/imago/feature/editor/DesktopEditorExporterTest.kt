@@ -78,14 +78,14 @@ class DesktopEditorExporterTest {
 
     /** A library that only knows how to hand over the requested file; it is all the export uses. */
     private class FileLibrary(private val original: File) : LibraryRepository {
-        override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?) = error("not used")
+        override fun assets(filter: LibraryFilter, month: String?, albumId: String?, query: String?, mediaType: MediaTypeFilter) = error("not used")
         override suspend fun albums(): List<ImmichAlbum> = error("not used")
         override suspend fun timeBuckets(): List<ImmichTimeBucket> = error("not used")
         override val catalogSync: StateFlow<CatalogSyncState> = MutableStateFlow(CatalogSyncState())
         override suspend fun syncCatalog() = error("not used")
         override suspend fun loadMonth(month: String) = error("not used")
-        override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?): Int? = null
-        override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?): Int? = null
+        override suspend fun indexOfAsset(assetId: String, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? = null
+        override suspend fun indexOfDate(date: LocalDate, filter: LibraryFilter, month: String?, query: String?, mediaType: MediaTypeFilter): Int? = null
         override fun thumbnailUrl(assetId: String) = assetId
         override fun previewUrl(assetId: String) = assetId
         override fun videoPlaybackUrl(assetId: String) = assetId

@@ -50,6 +50,11 @@
     <string name="library_filter_recent">Recent</string>
     <string name="library_filter_favorites">Favorites</string>
     <string name="library_filter_edited">Edited</string>
+    <string name="library_filter_type">Type</string>
+    <string name="library_filter_type_chosen">Type: %1$s</string>
+    <string name="library_type_photo">Photo</string>
+    <string name="library_type_video">Video</string>
+    <string name="library_type_raw">RAW</string>
     <string name="library_search">Search</string>
     <string name="library_more_options">More options</string>
     <string name="library_end_selection">End selection</string>

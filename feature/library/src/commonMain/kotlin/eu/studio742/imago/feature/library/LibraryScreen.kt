@@ -117,6 +117,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -160,6 +161,7 @@ import eu.studio742.imago.core.designsystem.ImagoBrand
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import eu.studio742.imago.core.data.CatalogSyncState
 import eu.studio742.imago.core.model.LibraryFilter
+import eu.studio742.imago.core.model.MediaTypeFilter
 import eu.studio742.imago.core.render.editedAspectRatio
 import java.time.Instant
 import java.time.LocalDate
@@ -446,6 +448,7 @@ private fun LibraryHost(
     val assetPages by viewModel.assets.collectAsStateWithLifecycle()
     val assets = key(assetPages) { assetPages.collectAsLazyPagingItems() }
     val filter by viewModel.activeFilter.collectAsStateWithLifecycle()
+    val mediaType by viewModel.activeMediaType.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val catalogSync by viewModel.catalogSync.collectAsStateWithLifecycle()
     var retriedDateNavigation by remember { mutableStateOf(false) }
@@ -478,12 +481,14 @@ private fun LibraryHost(
             onRequestMonth = viewModel::loadMonthFor,
             assets = assets,
             filter = filter,
+            mediaType = mediaType,
             uiState = uiState,
             // Changing the slice drops what was chosen — but only in the library, where still counting
             // photos the new view does not show could not be explained on screen. In a picker it is the
             // other way round: the chip and the album are how one looks for what is left to choose,
             // and losing the selection on every change kept it from gathering photos from different places.
             onFilterChange = { viewModel.selectFilter(it); if (picker == null) viewModel.clearSelection() },
+            onMediaTypeChange = { viewModel.selectMediaType(it); if (picker == null) viewModel.clearSelection() },
             onShowPeople = { viewModel.showPeople(); if (picker == null) viewModel.clearSelection() },
             onOpenMemory = { viewModel.openMemory(it); viewModel.clearSelection() },
             onOpenPerson = { viewModel.openPerson(it); if (picker == null) viewModel.clearSelection() },
@@ -542,8 +547,10 @@ private fun LibraryScreen(
     onRequestMonth: (LocalDate) -> Unit,
     assets: LazyPagingItems<AssetUiModel>,
     filter: LibraryFilter,
+    mediaType: MediaTypeFilter,
     uiState: LibraryUiState,
     onFilterChange: (LibraryFilter) -> Unit,
+    onMediaTypeChange: (MediaTypeFilter) -> Unit,
     onShowPeople: () -> Unit,
     onOpenMemory: (MemoryUiModel) -> Unit,
     onOpenPerson: (PersonUiModel) -> Unit,
@@ -716,15 +723,44 @@ private fun LibraryScreen(
                 val album = uiState.selectedAlbum
                 val albumTakesChips = album != null && album.placeAssetIds == null && !album.isArchive
                 if ((!selecting || picker != null) && (albumTakesChips || (!inAlbum && uiState.section == LibrarySection.TIMELINE))) {
-                    val chips = TimelineChip.entries.filter { it != TimelineChip.PEOPLE || (uiState.hasPeople && !inAlbum) }
+                    val chips = TimelineChip.entries.filter {
+                        (it != TimelineChip.PEOPLE || (uiState.hasPeople && !inAlbum)) &&
+                            (it != TimelineChip.TYPE || !uiState.showingPeople || inAlbum)
+                    }
+                    val chipSelected = if (uiState.showingPeople && !inAlbum) TimelineChip.PEOPLE else TimelineChip.of(filter)
+                    // The Type chip opens the row of types under it. It stays open while one is chosen, so that
+                    // the chip's own label is not the only thing saying why the grid is short.
+                    var typesOpen by rememberSaveable { mutableStateOf(false) }
+                    val typesShown = typesOpen || mediaType != MediaTypeFilter.ANY
                     ImagoChipRow(
                         options = chips,
-                        selected = if (uiState.showingPeople && !inAlbum) TimelineChip.PEOPLE else TimelineChip.of(filter),
-                        label = { it.label() },
+                        selected = chipSelected,
+                        isActive = { if (it == TimelineChip.TYPE) mediaType != MediaTypeFilter.ANY else it == chipSelected },
+                        label = { if (it == TimelineChip.TYPE) typeChipLabel(mediaType) else it.label() },
                         icon = { if (it == TimelineChip.PEOPLE) Icons.Outlined.Person else null },
-                        onSelect = { chip -> chip.filter?.let(onFilterChange) ?: onShowPeople() },
-                        modifier = Modifier.padding(bottom = ImagoSpacing.Md),
+                        onSelect = { chip ->
+                            when {
+                                chip == TimelineChip.TYPE -> {
+                                    // Closing it with a type chosen takes the type off: a hidden filter is the worst kind.
+                                    if (typesShown && mediaType != MediaTypeFilter.ANY) onMediaTypeChange(MediaTypeFilter.ANY)
+                                    typesOpen = !typesShown
+                                }
+                                chip.filter != null -> onFilterChange(chip.filter)
+                                else -> onShowPeople()
+                            }
+                        },
+                        modifier = Modifier.padding(bottom = if (typesShown) ImagoSpacing.Sm else ImagoSpacing.Md),
                     )
+                    if (typesShown) {
+                        ImagoChipRow(
+                            options = MediaTypeFilter.entries.filter { it != MediaTypeFilter.ANY },
+                            selected = mediaType,
+                            label = { it.label() },
+                            // Choosing the lit one again lets go of it, so that "all types" needs no chip of its own.
+                            onSelect = { onMediaTypeChange(if (it == mediaType) MediaTypeFilter.ANY else it) },
+                            modifier = Modifier.padding(bottom = ImagoSpacing.Md),
+                        )
+                    }
                 }
                 uiState.selectedMonth?.takeIf { !inAlbum && !selecting }?.let { month ->
                     SelectedMonthChip(month = month, onClear = { onSelectMonth(null) })
@@ -889,7 +925,7 @@ private fun LibraryFilter.label() = when (this) {
 
 /** The chips over the timeline: its slices, and then the people in it, where the library knows them. */
 internal enum class TimelineChip(val filter: LibraryFilter?) {
-    ALL(LibraryFilter.ALL), RECENT(LibraryFilter.RECENT), FAVORITES(LibraryFilter.FAVORITES), EDITED(LibraryFilter.EDITED), PEOPLE(null);
+    ALL(LibraryFilter.ALL), RECENT(LibraryFilter.RECENT), FAVORITES(LibraryFilter.FAVORITES), EDITED(LibraryFilter.EDITED), TYPE(null), PEOPLE(null);
 
     companion object {
         fun of(filter: LibraryFilter) = entries.first { it.filter == filter }
@@ -897,7 +933,25 @@ internal enum class TimelineChip(val filter: LibraryFilter?) {
 }
 
 @Composable
-private fun TimelineChip.label() = filter?.label() ?: stringResource(Res.string.library_people)
+private fun TimelineChip.label() = when (this) {
+    TimelineChip.TYPE -> stringResource(Res.string.library_filter_type)
+    TimelineChip.PEOPLE -> stringResource(Res.string.library_people)
+    else -> filter!!.label()
+}
+
+@Composable
+private fun MediaTypeFilter.label() = when (this) {
+    MediaTypeFilter.ANY -> stringResource(Res.string.library_filter_type)
+    MediaTypeFilter.PHOTO -> stringResource(Res.string.library_type_photo)
+    MediaTypeFilter.VIDEO -> stringResource(Res.string.library_type_video)
+    MediaTypeFilter.RAW -> stringResource(Res.string.library_type_raw)
+}
+
+/** "Type", or "Type: Video" once one is chosen. */
+@Composable
+private fun typeChipLabel(mediaType: MediaTypeFilter) =
+    if (mediaType == MediaTypeFilter.ANY) stringResource(Res.string.library_filter_type)
+    else stringResource(Res.string.library_filter_type_chosen, mediaType.label())
 
 /**
  * The library bar: wordmark, search and menu.

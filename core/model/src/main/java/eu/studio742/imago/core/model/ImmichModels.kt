@@ -217,5 +217,12 @@ data class ImmichTimeBucket(
  */
 enum class LibraryFilter { ALL, RECENT, FAVORITES, EDITED }
 
+/**
+ * The "Type" chip, which combines with [LibraryFilter] instead of replacing it. It is resolved over the
+ * local catalogue, where the whole timeline lives; the server is not asked to narrow, because it cannot
+ * tell a RAW from a photo. The SQL reads [ordinal], so the order here is part of the query.
+ */
+enum class MediaTypeFilter { ANY, PHOTO, VIDEO, RAW }
+
 /** How many days back the "Recent" chip covers. */
 const val RECENT_FILTER_DAYS = 30L
