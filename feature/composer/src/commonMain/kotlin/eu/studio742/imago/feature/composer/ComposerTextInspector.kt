@@ -51,7 +51,7 @@ import eu.studio742.imago.core.composition.TextAlignment
 import eu.studio742.imago.core.composition.offeredWeights
 import eu.studio742.imago.core.composition.weightName
 import eu.studio742.imago.core.designsystem.ImagoChipRow
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import kotlin.math.abs
 
 /**
@@ -141,13 +141,14 @@ private fun TextEffect(
     onPickColor: (PendingColor) -> Unit,
     content: @Composable () -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     Row(Modifier.fillMaxWidth().alpha(chrome).padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = ImagoColors.TextSecondary, modifier = Modifier.weight(1f))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = uiColors.secondaryText, modifier = Modifier.weight(1f))
         if (argb != null) {
             Box(
                 Modifier.padding(end = 12.dp).size(28.dp)
                     .background(Color(argb), CircleShape)
-                    .border(1.dp, ImagoColors.BorderSubtle, CircleShape)
+                    .border(1.dp, uiColors.subtleBorder, CircleShape)
                     .clickable { onPickColor(PendingColor(colorTitle.asUiText(), argb) { onSet(it) }) }
                     .semantics { contentDescription = colorTitle },
             )
@@ -155,7 +156,7 @@ private fun TextEffect(
         Switch(
             checked = argb != null,
             onCheckedChange = { onSet(if (it) defaultArgb else null) },
-            colors = SwitchDefaults.colors(checkedTrackColor = ImagoColors.Gold),
+            colors = SwitchDefaults.colors(checkedTrackColor = uiColors.accent),
             modifier = Modifier.semantics { contentDescription = label },
         )
     }

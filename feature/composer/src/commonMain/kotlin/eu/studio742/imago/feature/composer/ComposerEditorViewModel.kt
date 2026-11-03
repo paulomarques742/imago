@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import eu.studio742.imago.core.composition.CompositionElement
 import eu.studio742.imago.core.composition.CompositionPage
 import eu.studio742.imago.core.composition.CompositionProject
@@ -143,6 +145,7 @@ data class ComposerEditorUiState(
      * element inside it behaves as it always did.
      */
     val selectedElementIds: Set<String> = emptySet(),
+    val multiSelect: Boolean = false,
     /** The background is a layer like the others: either it or an element, never both. */
     val backgroundSelected: Boolean = false,
     /** True while an element is being moved, rotated or resized on the stage. */
@@ -150,6 +153,7 @@ data class ComposerEditorUiState(
     val currentPage: Int = 0,
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
+    val saveFailed: Boolean = false,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
     val notice: UiText? = null,
@@ -185,6 +189,7 @@ open class ComposerEditorViewModel(
      * meantime — a name given in the hub, a revision brought by sync.
      */
     private var persisted: CompositionProject? = null
+    private val saveMutex = Mutex()
     private var exportJob: Job? = null
     private var proxyJob: Job? = null
     private var proxyFile: java.io.File? = null
@@ -228,31 +233,36 @@ open class ComposerEditorViewModel(
         }
     }
 
-    fun selectElement(id: String?) = mutableState.update {
-        it.copy(selectedElementId = id, selectedElementIds = setOfNotNull(id), backgroundSelected = false)
+    fun selectElement(id: String?) {
+        if (id != null && !canEdit(id)) return
+        mutableState.update { it.copy(selectedElementId = id, selectedElementIds = setOfNotNull(id), multiSelect = false, backgroundSelected = false) }
     }
 
-    /**
-     * Adds this element to the selection or takes it out.
-     *
-     * Taking out the primary leaves the selection headless: whichever of the remaining ones takes
-     * over, because the inspector always needs a concrete element to read the type from.
-     */
-    fun toggleElementInSelection(id: String) = mutableState.update { state ->
-        val next = if (id in state.selectedElementIds) state.selectedElementIds - id else state.selectedElementIds + id
-        state.copy(
-            selectedElementIds = next,
-            selectedElementId = if (id in next) id else next.firstOrNull(),
-            backgroundSelected = false,
-        )
+    fun beginMultiSelection(id: String) {
+        if (!canEdit(id)) return
+        mutableState.update {
+            val ids = if (it.multiSelect) it.selectedElementIds + id else setOf(id)
+            it.copy(selectedElementId = id, selectedElementIds = ids, multiSelect = true, backgroundSelected = false)
+        }
+    }
+
+    fun toggleMultiSelect() = mutableState.update { it.copy(multiSelect = !it.multiSelect) }
+
+    fun toggleElementInSelection(id: String) {
+        if (!canEdit(id)) return
+        mutableState.update {
+            val ids = if (id in it.selectedElementIds) it.selectedElementIds - id else it.selectedElementIds + id
+            it.copy(selectedElementId = if (id in ids) id else ids.firstOrNull(), selectedElementIds = ids,
+                multiSelect = ids.isNotEmpty(), backgroundSelected = false)
+        }
     }
 
     fun selectBackground() = mutableState.update {
-        it.copy(selectedElementId = null, selectedElementIds = emptySet(), backgroundSelected = true)
+        it.copy(selectedElementId = null, selectedElementIds = emptySet(), multiSelect = false, backgroundSelected = true)
     }
 
     fun clearSelection() = mutableState.update {
-        it.copy(selectedElementId = null, selectedElementIds = emptySet(), backgroundSelected = false)
+        it.copy(selectedElementId = null, selectedElementIds = emptySet(), multiSelect = false, backgroundSelected = false)
     }
     fun selectPage(index: Int) = mutableState.update { state ->
         state.copy(currentPage = index.coerceIn(0, (state.project?.pages?.lastIndex ?: 0)))
@@ -723,7 +733,7 @@ open class ComposerEditorViewModel(
      * from jumps the queue to be served first.
      */
     fun addMedia(media: List<ComposerMedia>, replaceElementId: String? = null) = viewModelScope.launch {
-        if (media.isEmpty()) return@launch
+        if (media.isEmpty() || replaceElementId != null && !canEdit(replaceElementId)) return@launch
         val project = requireProject()
         val existing = project.elements.mapTo(mutableSetOf(), CompositionElement::id)
         val insertion = project.withMedia(
@@ -1043,11 +1053,13 @@ open class ComposerEditorViewModel(
 
     /** Whether a clip is heard. Turning one on takes away a solo that would keep it silent. */
     fun setVideoAudible(id: String, audible: Boolean) {
+        if (!canEdit(id)) return
         val project = requireProject()
         val video = project.elements.firstOrNull { it.id == id } as? CompositionElement.Video ?: return
         val soloElsewhere = project.elements.any {
             it is CompositionElement.Video && it.id != id && it.pageIndex == video.pageIndex && it.timing.solo
         }
+        if (audible && soloElsewhere && project.elements.any { it is CompositionElement.Video && it.pageIndex == video.pageIndex && it.timing.solo && !canEdit(it.id) }) return
         commit {
             project.copy(elements = project.elements.map { element ->
                 when {
@@ -1078,18 +1090,51 @@ open class ComposerEditorViewModel(
     fun toggleVideoSolo() = updateSelectedVideoTiming { _, timing -> timing.copy(solo = !timing.solo) }
     fun toggleVideoLoop() = updateSelectedVideoTiming { _, timing -> timing.copy(loop = !timing.loop) }
 
-    fun toggleLocked() = mutateSelected { it.withLocked(!it.locked) }
+    fun toggleLocked() {
+        val project = requireProject()
+        val ids = project.selectionMembers().mapTo(mutableSetOf()) { it.id }
+        if (ids.isEmpty()) return
+        commit { project.copy(elements = project.elements.map { if (it.id in ids) it.withLocked(true) else it }) }
+        clearSelection()
+    }
     fun toggleVisible() = mutateSelected { it.withVisible(!it.visible) }
-    fun toggleElementLocked(id: String) { selectElement(id); toggleLocked() }
-    fun toggleElementVisible(id: String) { selectElement(id); toggleVisible() }
-    fun moveElement(id: String, dx: Float, dy: Float) { selectElement(id); moveSelected(dx, dy) }
-    fun bringElementForward(id: String) { selectElement(id); bringForward() }
-    fun sendElementBackward(id: String) { selectElement(id); sendBackward() }
-    fun deleteElement(id: String) { selectElement(id); deleteSelected() }
+
+    fun toggleElementLocked(id: String) {
+        val project = requireProject()
+        val target = project.elements.firstOrNull { it.id == id } ?: return
+        commit { project.copy(elements = project.elements.map {
+            if (it.id == id || target.groupId != null && it.groupId == target.groupId) it.withLocked(!target.locked) else it
+        }) }
+        mutableState.update { current ->
+            val ids = current.selectedElementIds.filterTo(mutableSetOf()) { selected ->
+                current.project?.elements?.any { it.id == selected && !it.locked } == true
+            }
+            current.copy(selectedElementIds = ids, selectedElementId = current.selectedElementId?.takeIf { it in ids } ?: ids.firstOrNull(),
+                multiSelect = current.multiSelect && ids.isNotEmpty())
+        }
+    }
+
+    fun toggleElementVisible(id: String) {
+        val project = requireProject()
+        val target = project.elements.firstOrNull { it.id == id } ?: return
+        commit { project.copy(elements = project.elements.map { if (it.id == id) it.withVisible(!target.visible) else it }) }
+    }
+
+    internal fun canEdit(id: String): Boolean {
+        val elements = state.value.project?.elements ?: return false
+        val target = elements.firstOrNull { it.id == id } ?: return false
+        return !target.locked && (target.groupId == null || elements.none { it.groupId == target.groupId && it.locked })
+    }
+
+    fun moveElement(id: String, dx: Float, dy: Float) { if (canEdit(id)) { selectElement(id); moveSelected(dx, dy) } }
+    fun bringElementForward(id: String) { if (canEdit(id)) { selectElement(id); bringForward() } }
+    fun sendElementBackward(id: String) { if (canEdit(id)) { selectElement(id); sendBackward() } }
+    fun deleteElement(id: String) { if (canEdit(id)) { selectElement(id); deleteSelected() } }
 
     fun groupSelectedWith(otherId: String) {
+        if (!canEdit(otherId)) return
         val selectedId = state.value.selectedElementId ?: return
-        if (selectedId == otherId) return
+        if (selectedId == otherId || !canEdit(selectedId)) return
         val project = requireProject()
         val selected = project.elements.firstOrNull { it.id == selectedId } ?: return
         val other = project.elements.firstOrNull { it.id == otherId } ?: return
@@ -1180,21 +1225,52 @@ open class ComposerEditorViewModel(
     fun undo() {
         if (historyIndex <= 0) return
         historyIndex--
-        restore(history[historyIndex])
+        restoreHistory()
     }
 
     fun redo() {
         if (historyIndex >= history.lastIndex) return
         historyIndex++
-        restore(history[historyIndex])
+        restoreHistory()
+    }
+
+    private fun restoreHistory() {
+        val snapshot = history[historyIndex]
+        val saved = persisted
+        val restored = if (saved != null && snapshot.copy(revision = saved.revision, updatedAt = saved.updatedAt) == saved) saved
+            else snapshot.copy(revision = requireProject().revision + 1, updatedAt = Instant.now().toString())
+        restore(restored)
+        scheduleSave(restored)
     }
 
     fun saveNow() {
+        requestSave(false)
+    }
+
+    fun saveDraft() {
+        requestSave(true)
+    }
+
+    private fun requestSave(confirm: Boolean) {
         saveJob?.cancel()
         val project = state.value.project ?: return
-        // Without changes nothing is saved: the in-memory copy may already be older than the repository's.
-        if (project == persisted) return mutableState.update { it.copy(isSaving = false) }
-        viewModelScope.launch { persist(project); mutableState.update { it.copy(isSaving = false) } }
+        if (project == persisted) {
+            mutableState.update { it.copy(isSaving = false, saveFailed = false) }
+            if (confirm) notice(uiText(Res.string.composer_draft_saved))
+            return
+        }
+        mutableState.update { it.copy(isSaving = true, saveFailed = false) }
+        saveJob = viewModelScope.launch {
+            try {
+                persist(project)
+                mutableState.update { it.copy(isSaving = false, saveFailed = false) }
+                if (confirm) notice(uiText(Res.string.composer_draft_saved))
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                mutableState.update { it.copy(isSaving = false, saveFailed = true, error = error.toUiText(Res.string.composer_save_failed)) }
+            }
+        }
     }
 
     fun saveAsTemplate(name: String, includeMedia: Boolean) = viewModelScope.launch {
@@ -1324,6 +1400,7 @@ open class ComposerEditorViewModel(
     private fun updateVideoTiming(id: String, block: (CompositionElement.Video, VideoTiming) -> VideoTiming) {
         val project = requireProject()
         val video = project.elements.firstOrNull { it.id == id } as? CompositionElement.Video ?: return
+        if (!canEdit(id)) return
         val updated = block(video, video.timing)
         if (updated == video.timing) return
         commit { project.copy(elements = project.elements.map { if (it.id == id) video.copy(timing = updated) else it }) }
@@ -1360,7 +1437,7 @@ open class ComposerEditorViewModel(
         if (units.size < 2) return
         val from = units.lastIndex - fromTopIndex
         val to = units.lastIndex - toTopIndex
-        if (from !in units.indices || to !in units.indices || from == to) return
+        if (from !in units.indices || to !in units.indices || from == to || units[from].any { !canEdit(it.id) }) return
         units.add(to, units.removeAt(from))
         commit { project.withDenseZIndexes(units) }
     }
@@ -1369,6 +1446,7 @@ open class ComposerEditorViewModel(
         val project = requireProject()
         val selected = project.elements.firstOrNull { it.id == state.value.selectedElementId } ?: return
         val units = project.layerUnits()
+        if (!canEdit(selected.id)) return
         val key = selected.groupId ?: selected.id
         val from = units.indexOfFirst { (it.first().groupId ?: it.first().id) == key }
         val to = from + direction
@@ -1444,9 +1522,11 @@ open class ComposerEditorViewModel(
      */
     private fun CompositionProject.selectionMembers(): List<CompositionElement> {
         val ids = state.value.selectedElementIds
-        if (ids.size > 1) return elements.filter { it.id in ids }
-        val primary = elements.firstOrNull { it.id == state.value.selectedElementId } ?: return emptyList()
-        return if (primary.groupId == null) listOf(primary) else elements.filter { it.groupId == primary.groupId }
+        val members = if (ids.size > 1) elements.filter { it.id in ids } else {
+            val primary = elements.firstOrNull { it.id == state.value.selectedElementId } ?: return emptyList()
+            if (primary.groupId == null) listOf(primary) else elements.filter { it.groupId == primary.groupId }
+        }
+        return members.takeIf { it.all { element -> canEdit(element.id) } }.orEmpty()
     }
 
     private fun mutateSelected(block: (CompositionElement) -> CompositionElement) {
@@ -1495,16 +1575,26 @@ open class ComposerEditorViewModel(
 
     private fun scheduleSave(project: CompositionProject) {
         saveJob?.cancel()
-        mutableState.update { it.copy(isSaving = true) }
+        if (project == persisted) {
+            mutableState.update { it.copy(isSaving = false, saveFailed = false) }
+            return
+        }
+        mutableState.update { it.copy(isSaving = true, saveFailed = false) }
         saveJob = viewModelScope.launch {
             delay(600)
             runCatching { persist(project) }
                 .onSuccess { mutableState.update { it.copy(isSaving = false) } }
-                .onFailure { error -> mutableState.update { it.copy(isSaving = false, error = error.toUiText(Res.string.composer_save_failed)) } }
+                .onFailure { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    mutableState.update { it.copy(isSaving = false, saveFailed = true, error = error.toUiText(Res.string.composer_save_failed)) }
+                }
         }
     }
 
-    private suspend fun persist(project: CompositionProject) {
+    private suspend fun persist(project: CompositionProject) = saveMutex.withLock {
+        // Export, exit and autosave can overlap. An older queued snapshot must not overwrite a newer save.
+        val previous = persisted
+        if (project == previous || previous?.id == project.id && previous.revision > project.revision) return@withLock
         projects.save(project)
         persisted = project
     }

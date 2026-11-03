@@ -88,6 +88,7 @@ fun ImagoSlider(
     enabled: Boolean = true,
     onValueChangeFinished: (() -> Unit)? = null,
 ) {
+    val uiColors = ImagoUi.colors
     val span = (range.endInclusive - range.start).takeIf { it > 0f } ?: 1f
     val valueFraction = ((value - range.start) / span).coerceIn(0f, 1f)
     val neutralFraction = ((neutral - range.start) / span).coerceIn(0f, 1f)
@@ -100,11 +101,11 @@ fun ImagoSlider(
         interactionSource = remember { MutableInteractionSource() },
         modifier = modifier,
         thumb = {
-            Canvas(Modifier.size(ThumbRadius * 2)) { drawImagoThumb(center, enabled) }
+            Canvas(Modifier.size(ThumbRadius * 2)) { drawImagoThumb(center, enabled, uiColors) }
         },
         track = {
             Canvas(Modifier.fillMaxWidth().height(ThumbRadius * 2)) {
-                drawImagoTrack(valueFraction, neutralFraction, enabled)
+                drawImagoTrack(valueFraction, neutralFraction, enabled, uiColors)
             }
         },
         colors = SliderDefaults.colors(
@@ -270,14 +271,14 @@ fun DrawScope.drawImagoSlider(valueFraction: Float, neutralFraction: Float, enab
  * The ring moves between two limits inset by its radius, not between 0 and the full width; without
  * the inset the fill would run away from it at the ends.
  */
-private fun DrawScope.drawImagoTrack(valueFraction: Float, neutralFraction: Float, enabled: Boolean) {
+private fun DrawScope.drawImagoTrack(valueFraction: Float, neutralFraction: Float, enabled: Boolean, palette: ImagoUiPalette? = null) {
     val start = ThumbRadius.toPx()
     val end = size.width - ThumbRadius.toPx()
     val usable = (end - start).coerceAtLeast(0f)
     val y = size.height / 2
     val thickness = TrackHeight.toPx()
     drawLine(
-        color = ImagoColors.BorderVisible,
+        color = (palette?.border ?: ImagoColors.BorderVisible),
         start = Offset(start, y),
         end = Offset(end, y),
         strokeWidth = thickness,
@@ -287,7 +288,7 @@ private fun DrawScope.drawImagoTrack(valueFraction: Float, neutralFraction: Floa
     val to = start + usable * valueFraction
     if (abs(to - from) > 0.5f) {
         drawLine(
-            color = if (enabled) ImagoColors.BrandWhite else ImagoColors.TextDisabled,
+            color = if (enabled) (palette?.text ?: ImagoColors.BrandWhite) else (palette?.disabledText ?: ImagoColors.TextDisabled),
             start = Offset(minOf(from, to), y),
             end = Offset(maxOf(from, to), y),
             strokeWidth = thickness,
@@ -296,14 +297,14 @@ private fun DrawScope.drawImagoTrack(valueFraction: Float, neutralFraction: Floa
     }
 }
 
-private fun DrawScope.drawImagoThumb(center: Offset, enabled: Boolean) {
+private fun DrawScope.drawImagoThumb(center: Offset, enabled: Boolean, palette: ImagoUiPalette? = null) {
     val stroke = 2.dp.toPx()
     val radius = ThumbRadius.toPx() - stroke / 2
     // The inside darkens just enough for the white ring not to get lost over a light area of the
     // photo; it still lets what is underneath show through.
-    drawCircle(color = Color.Black.copy(alpha = 0.28f), radius = radius, center = center)
+    drawCircle(color = (palette?.workspace ?: Color.Black).copy(alpha = 0.28f), radius = radius, center = center)
     drawCircle(
-        color = if (enabled) ImagoColors.BrandWhite else ImagoColors.TextDisabled,
+        color = if (enabled) (palette?.text ?: ImagoColors.BrandWhite) else (palette?.disabledText ?: ImagoColors.TextDisabled),
         radius = radius,
         center = center,
         style = Stroke(width = stroke),
@@ -342,6 +343,7 @@ fun ImagoParameterSlider(
     onReset: () -> Unit,
     enabled: Boolean = true,
 ) {
+    val uiColors = ImagoUi.colors
     val haptic = LocalHapticFeedback.current
     var lastSnap by remember(pointerKey) { mutableStateOf<Int?>(null) }
     val snapTolerance = (range.endInclusive - range.start) * 0.008f
@@ -371,7 +373,7 @@ fun ImagoParameterSlider(
             .drawBehind {
                 if (scrim > 0f) {
                     drawRoundRect(
-                        color = Color.Black.copy(alpha = scrim),
+                        color = uiColors.workspace.copy(alpha = scrim),
                         cornerRadius = CornerRadius(ImagoRadii.Medium.toPx()),
                     )
                 }
@@ -388,16 +390,16 @@ fun ImagoParameterSlider(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = ImagoColors.TextSecondary,
+                color = uiColors.secondaryText,
                 modifier = Modifier.weight(1f),
             )
             Text(
                 valueText(value),
                 style = MaterialTheme.typography.labelLarge,
                 color = if (abs(value - neutral) < 0.001f) {
-                    ImagoColors.TextTertiary
+                    uiColors.tertiaryText
                 } else {
-                    ImagoColors.Gold
+                    uiColors.accent
                 },
             )
         }
@@ -445,6 +447,7 @@ private fun ParameterTrack(
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: () -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     val span = (range.endInclusive - range.start).takeIf { it > 0f } ?: 1f
     val valueFraction = ((value - range.start) / span).coerceIn(0f, 1f)
     val neutralFraction = ((neutral - range.start) / span).coerceIn(0f, 1f)
@@ -503,9 +506,9 @@ private fun ParameterTrack(
                 }
             },
     ) {
-        drawImagoTrack(valueFraction, neutralFraction, enabled)
+        drawImagoTrack(valueFraction, neutralFraction, enabled, uiColors)
         val x = ThumbRadius.toPx() + (size.width - ThumbRadius.toPx() * 2).coerceAtLeast(0f) * valueFraction
-        drawImagoThumb(Offset(x, size.height / 2), enabled)
+        drawImagoThumb(Offset(x, size.height / 2), enabled, uiColors)
     }
 }
 

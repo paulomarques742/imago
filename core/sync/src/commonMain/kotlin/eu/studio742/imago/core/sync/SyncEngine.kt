@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
@@ -304,6 +305,14 @@ class SyncEngine(
      * discarded: it stays in the backend's history, or — for projects — in a copy.
      */
     private suspend fun resolve(entity: SyncedEntity, local: SyncRow, remote: IncomingChange, deviceId: String) {
+        // A successful write can outlive its response. Receiving the same content confirms it;
+        // it is not a divergent version to preserve in another project.
+        if (entity.entity == SyncEntity.PROJECT && local.deleted == (remote.deletedAt != null) &&
+            projectContent(local.payload) == projectContent(remote.payload)) {
+            entity.markPushed(local.key, remote.revision, local.editedAt)
+            return
+        }
+
         val localMoment = moment(local.editedAt)
         val remoteMoment = moment(remote.editedAt)
         val localWins = when {
@@ -340,9 +349,10 @@ class SyncEngine(
             database.withTransaction {
                 for (change in page.rows) {
                     val local = entity.local(change.key)
-                    // A row waiting to be sent with another base is resolved on the next send;
-                    // writing over it would lose the edit that has not gone up yet.
-                    val keepLocal = local != null && local.dirty && local.baseRevision != change.revision
+                    // A project's acknowledged base may already match this echo while a newer
+                    // autosave is pending. Keep that edit for the next push instead of overwriting it.
+                    val keepLocal = local != null && local.dirty &&
+                        (entity.entity == SyncEntity.PROJECT || local.baseRevision != change.revision)
                     if (!keepLocal) entity.apply(change)
                 }
                 database.syncCursorDao().set(SyncCursorEntity(entity.entity.wireName, page.cursor))
@@ -389,6 +399,13 @@ class SyncEngine(
             else hashes.request(assetId)
         }
     }
+
+    private fun projectContent(payload: JsonObject): JsonObject =
+        JsonObject(payload.filterKeys { it != "revision" && it != "updatedAt" }.mapValues { (key, value) ->
+            if (key == "project" && value is JsonObject)
+                JsonObject(value.filterKeys { it != "revision" && it != "updatedAt" })
+            else value
+        })
 
     private fun SyncRow.outgoing(deviceId: String) = OutgoingChange(
         key = key,

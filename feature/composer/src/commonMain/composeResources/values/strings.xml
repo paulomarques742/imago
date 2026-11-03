@@ -360,4 +360,10 @@
         <item quantity="one">Local export finished; %1$s upload to Immich failed.</item>
         <item quantity="other">Local export finished; %1$s uploads to Immich failed.</item>
     </plurals>
+    <string name="composer_save_draft">Save draft</string>
+    <string name="composer_add_elements">Add</string>
+    <string name="composer_more">More</string>
+    <string name="composer_draft_saved">Draft saved</string>
+    <string name="composer_retry_save">Retry save</string>
+    <string name="composer_replace_media">Replace media</string>
 </resources>

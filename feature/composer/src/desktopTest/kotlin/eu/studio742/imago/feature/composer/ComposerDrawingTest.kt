@@ -194,6 +194,7 @@ class ComposerDrawingTest {
         val fakes = FakeComposerRepos
         val viewModel = ComposerEditorViewModel(OneProject(project), fakes.templates, fakes.media, fakes.recipes, fakes.exports, fakes.brandKits)
             .also { it.open(project.id) }
+        var addLabel = ""
         var drawingLabel = ""
         var penLabel = ""
         var shapeLabel = ""
@@ -202,6 +203,7 @@ class ComposerDrawingTest {
         var exitLabel = ""
         var hint = ""
         setContent {
+            addLabel = stringResource(Res.string.composer_add_elements)
             drawingLabel = stringResource(Res.string.composer_drawing)
             penLabel = stringResource(Res.string.composer_pen)
             shapeLabel = stringResource(Res.string.composer_shape)
@@ -212,6 +214,7 @@ class ComposerDrawingTest {
             ComposerEditorScreen(viewModel.state.collectAsState().value, remember { SnackbarHostState() }, {}, viewModel, null, {})
         }
         fun armDrawing() {
+            onNodeWithContentDescription(addLabel).performClick()
             onNodeWithContentDescription(drawingLabel).performScrollTo().performClick()
             onNodeWithText(penLabel).performClick()
             onNodeWithContentDescription(exitLabel).assertExists()
@@ -219,6 +222,7 @@ class ComposerDrawingTest {
         }
         armDrawing()
         // Opening the shape menu already leaves drawing, before a shape is chosen.
+        onNodeWithContentDescription(addLabel).performClick()
         onNodeWithContentDescription(shapeLabel).performScrollTo().performClick()
         onNodeWithContentDescription(exitLabel).assertDoesNotExist()
         onNodeWithText(rectangleLabel).performClick()
@@ -226,6 +230,7 @@ class ComposerDrawingTest {
         onNodeWithContentDescription(exitLabel).assertExists()
         assertEquals(0, viewModel.state.value.project!!.elements.filterIsInstance<CompositionElement.Shape>().size)
         armDrawing()
+        onNodeWithContentDescription(addLabel).performClick()
         onNodeWithContentDescription(textLabel).performScrollTo().performClick()
         onNodeWithContentDescription(exitLabel).assertDoesNotExist()
         assertEquals(1, viewModel.state.value.project!!.elements.filterIsInstance<CompositionElement.Text>().size)
@@ -236,17 +241,20 @@ class ComposerDrawingTest {
         val fakes = FakeComposerRepos
         val viewModel = ComposerEditorViewModel(OneProject(project), fakes.templates, fakes.media, fakes.recipes, fakes.exports, fakes.brandKits)
             .also { it.open(project.id) }
+        var addLabel = ""
         var drawingLabel = ""
         var penLabel = ""
         var colorLabel = ""
         var eyedropperLabel = ""
         setContent {
+            addLabel = stringResource(Res.string.composer_add_elements)
             drawingLabel = stringResource(Res.string.composer_drawing)
             penLabel = stringResource(Res.string.composer_pen)
             colorLabel = stringResource(Res.string.composer_color)
             eyedropperLabel = stringResource(Res.string.composer_eyedropper)
             ComposerEditorScreen(viewModel.state.collectAsState().value, remember { SnackbarHostState() }, {}, viewModel, null, {})
         }
+        onNodeWithContentDescription(addLabel).performClick()
         onNodeWithContentDescription(drawingLabel).performScrollTo().performClick()
         onNodeWithText(penLabel).performClick()
         onNodeWithContentDescription(colorLabel).performClick()

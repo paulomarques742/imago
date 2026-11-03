@@ -360,4 +360,10 @@
         <item quantity="one">Exportação local concluída; %1$s envio ao Immich falhou.</item>
         <item quantity="other">Exportação local concluída; %1$s envios ao Immich falharam.</item>
     </plurals>
+    <string name="composer_save_draft">Guardar rascunho</string>
+    <string name="composer_add_elements">Adicionar</string>
+    <string name="composer_more">Mais</string>
+    <string name="composer_draft_saved">Rascunho guardado</string>
+    <string name="composer_retry_save">Tentar guardar</string>
+    <string name="composer_replace_media">Substituir media</string>
 </resources>

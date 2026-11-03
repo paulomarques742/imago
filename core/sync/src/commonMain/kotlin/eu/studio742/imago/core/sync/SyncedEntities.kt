@@ -12,6 +12,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 import eu.studio742.imago.core.data.ContentHashRepository
+import eu.studio742.imago.core.data.withTransaction
 import eu.studio742.imago.core.data.MediaHints
 import eu.studio742.imago.core.data.MediaResolver
 import eu.studio742.imago.core.data.ReferenceTranslator
@@ -396,11 +397,16 @@ internal class ProjectSync(
     override fun observePendingCount() = dao.observePendingCount()
     override suspend fun local(key: String) = dao.getAny(GLOBAL_LIBRARY_ID, key)?.let { LocalState(it.sync.dirty, it.sync.remoteRevision) }
 
-    override suspend fun markPushed(key: String, revision: Long?, sentEditedAt: String) {
-        val row = dao.getAny(GLOBAL_LIBRARY_ID, key) ?: return
-        if (row.sync.editedAt != sentEditedAt) return
-        if (row.sync.deletedAt != null) dao.delete(GLOBAL_LIBRARY_ID, key)
-        else dao.upsert(row.copy(sync = row.sync.copy(remoteRevision = revision, dirty = false)))
+    override suspend fun markPushed(key: String, revision: Long?, sentEditedAt: String) = database.withTransaction {
+        val row = dao.getAny(GLOBAL_LIBRARY_ID, key) ?: return@withTransaction
+        val acknowledgedRevision = listOfNotNull(row.sync.remoteRevision, revision).maxOrNull()
+        val unchanged = row.sync.editedAt == sentEditedAt
+        if (unchanged && row.sync.deletedAt != null) dao.delete(GLOBAL_LIBRARY_ID, key)
+        else dao.upsert(row.copy(sync = row.sync.copy(
+            remoteRevision = acknowledgedRevision,
+            // A newer autosave still needs sending, against the revision that just succeeded.
+            dirty = if (unchanged) false else row.sync.dirty,
+        )))
     }
 
     override suspend fun markDirty(key: String) {
@@ -416,20 +422,28 @@ internal class ProjectSync(
     override suspend fun keepLocalLoser(local: SyncRow, names: DeviceNames): Boolean {
         val row = dao.getAny(GLOBAL_LIBRARY_ID, local.key) ?: return true
         // A deletion that loses has nothing to keep: the project goes on, in the winning version.
-        if (row.sync.deletedAt != null) return true
-        dao.upsert(copyOf(row.name, parseObject(row.projectJson), row.revision, row.createdAt, names.thisDevice))
+        if (row.sync.deletedAt != null || !row.sync.dirty) return true
+        val snapshot = if (row.sync.editedAt == local.editedAt) local else rowOf(row)
+        keepCopy(copyOf(row.name, parseObject(row.projectJson), row.revision, row.createdAt, names.thisDevice, snapshot.payload))
         return true
     }
 
     override suspend fun keepRemoteLoser(remote: IncomingChange, names: DeviceNames): Boolean {
         if (remote.deletedAt != null) return true
         val received = entityOf(remote.key, remote.payload, SyncState())
-        dao.upsert(copyOf(received.name, parseObject(received.projectJson), received.revision, received.createdAt, names.of(remote.editedByDevice)))
+        keepCopy(copyOf(received.name, parseObject(received.projectJson), received.revision, received.createdAt, names.of(remote.editedByDevice), remote.payload))
         return true
     }
 
-    private suspend fun copyOf(name: String, project: JsonObject, revision: Long, createdAt: String, deviceName: String): CompositionProjectEntity {
-        val id = UUID.randomUUID().toString()
+    private suspend fun keepCopy(copy: CompositionProjectEntity) = database.withTransaction {
+        // Do not dirty a copy again when the same conflict is replayed after a failed response.
+        if (dao.getAny(GLOBAL_LIBRARY_ID, copy.id) == null) dao.upsert(copy)
+    }
+
+    private suspend fun copyOf(name: String, project: JsonObject, revision: Long, createdAt: String, deviceName: String, portableVersion: JsonObject): CompositionProjectEntity {
+        // Portable references make the identity independent of local asset IDs and JSON key order.
+        val identity = "project-conflict:" + canonicalConflictJson(portableVersion).toString()
+        val id = UUID.nameUUIDFromBytes(identity.toByteArray(Charsets.UTF_8)).toString()
         val copyName = texts.conflictCopyName(name, deviceName)
         val stamp = now()
         val json = JsonObject(project + mapOf("id" to JsonPrimitive(id), "name" to JsonPrimitive(copyName), "updatedAt" to JsonPrimitive(stamp)))
@@ -625,3 +639,9 @@ internal class DerivedAssetSync(private val database: ImmichRoomDatabase) : Sync
 
 /** The moment of an edit, to compare the local clock with the backend's. */
 internal fun moment(value: String): Instant = MediaResolver.parseMoment(value) ?: Instant.EPOCH
+
+private fun canonicalConflictJson(value: JsonElement): JsonElement = when (value) {
+    is JsonObject -> JsonObject(value.toSortedMap().mapValues { canonicalConflictJson(it.value) })
+    is JsonArray -> JsonArray(value.map(::canonicalConflictJson))
+    else -> value
+}

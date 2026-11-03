@@ -13,11 +13,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -28,7 +30,7 @@ import kotlin.math.atan2
 import eu.studio742.imago.core.composition.NormalizedRect
 import eu.studio742.imago.core.composition.ResizeCorner
 import eu.studio742.imago.core.composition.rotateVector
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 
 /** The visible disc. The touch target is [HandleTouchRadius], much larger, as accessibility requires. */
 private val HandleRadius = 7.dp
@@ -80,6 +82,7 @@ internal fun ComposerSelectionOverlay(
     /** A clean tap inside the element. Whoever counts the two taps is the stage. */
     onTap: () -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     val density = LocalDensity.current
     val touchRadiusPx = with(density) { HandleTouchRadius.toPx() }
     val handleRadiusPx = with(density) { HandleRadius.toPx() }
@@ -88,167 +91,22 @@ internal fun ComposerSelectionOverlay(
     // Everything the gesture block reads that is not `mutableStateOf` has to go through here: the block
     // only restarts when `elementId` changes, and without this it stayed holding the values of the
     // composition it was born in. It is the same trap that already cost crop mode in the editor.
-    val currentBounds by rememberUpdatedState(bounds)
-    val currentRotation by rememberUpdatedState(rotationDegrees)
-    val currentLocked by rememberUpdatedState(locked)
-    val currentPageWidth by rememberUpdatedState(pageWidthPx)
-    val currentPageHeight by rememberUpdatedState(pageHeightPx)
-    val beginGesture by rememberUpdatedState(onBeginGesture)
-    val endGesture by rememberUpdatedState(onEndGesture)
-    val resize by rememberUpdatedState(onResize)
-    // Not called `rotate`: it would collide with the `DrawScope.rotate` extension used in the Canvas below.
-    val rotateTo by rememberUpdatedState(onRotate)
-    val move by rememberUpdatedState(onMove)
-    val scale by rememberUpdatedState(onScale)
-    val rotateBy by rememberUpdatedState(onRotateBy)
-    val tap by rememberUpdatedState(onTap)
-
-    // The box covers the whole stage instead of following the element. That is what makes dragging
-    // stable: a box stuck to the element moves under the finger while resizing, and `positionChange()`
-    // — which is relative to the node — measured the difference between the finger and the box instead
-    // of the finger's movement. On the top and left handles, which move the origin, that cancelled out
-    // and the handle got stuck. With the node still, the movement is the finger's and nothing else.
-    Box(
-        Modifier
-            .fillMaxSize()
-            // In the middle of framing this box leaves the gestures entirely, and not just on the
-            // inside. A `pointerInput` node hit by the touch does not share it with the siblings it
-            // covers — not even when its block does nothing with it —, and what is under this box is
-            // precisely the photo one wants to drag. Keeping the mode **inside** the block left the
-            // node standing, and with it the touch stuck here: the mode opened and the finger moved
-            // nothing.
-            .then(
-                if (positioning) {
-                    Modifier
-                } else {
-                    Modifier.pointerInput(elementId) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            val handle = handleAt(
-                                position = down.position,
-                                centre = stageCentre(currentBounds, currentPageWidth, currentPageHeight),
-                                size = stageSize(currentBounds, currentPageWidth, currentPageHeight),
-                                rotationDegrees = currentRotation,
-                                rotationGapPx = rotationGapPx,
-                                touchRadiusPx = touchRadiusPx,
-                            )
-                            if (currentLocked) return@awaitEachGesture
-
-                            val insideElement = isInsideElement(
-                                position = down.position,
-                                centre = stageCentre(currentBounds, currentPageWidth, currentPageHeight),
-                                size = stageSize(currentBounds, currentPageWidth, currentPageHeight),
-                                rotationDegrees = currentRotation,
-                            )
-
-                            if (handle != null) {
-                                down.consume()
-                                beginGesture()
-                                try {
-                                    while (true) {
-                                        val event = awaitPointerEvent()
-                                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                        if (!change.pressed) break
-                                        if (event.changes.count { it.pressed } > 1) break
-                                        when (handle) {
-                                            SelectionHandle.ROTATE -> {
-                                                val centre = stageCentre(currentBounds, currentPageWidth, currentPageHeight)
-                                                val vector = change.position - centre
-                                                // The handle is at -90° from the centre when the rotation is zero.
-                                                val degrees = Math.toDegrees(atan2(vector.y, vector.x).toDouble()).toFloat() + 90f
-                                                rotateTo(degrees)
-                                            }
-                                            else -> {
-                                                val delta = change.positionChange()
-                                                val (localX, localY) = rotateVector(delta.x, delta.y, -currentRotation)
-                                                resize(
-                                                    checkNotNull(handle.corner),
-                                                    localX / currentPageWidth,
-                                                    localY / currentPageHeight,
-                                                )
-                                            }
-                                        }
-                                        change.consume()
-                                    }
-                                } finally {
-                                    endGesture()
-                                }
-                                return@awaitEachGesture
-                            }
-
-                            // Outside a handle but inside the element: this box covers the whole stage
-                            // and sits on top of everything, precisely so the handles do not lose the
-                            // drag — and it is that same design that keeps the touch from ever reaching
-                            // the element underneath. Contrary to what this comment used to say, Compose
-                            // does not let an unconsumed touch fall to a covered SIBLING; it only lets it
-                            // go up to an ANCESTOR. With nobody handling move and pinch here, the touch kept
-                            // going up to the stage's background — which has its own `pointerInput` — and
-                            // selected it.
-                            //
-                            // `insideElement` matters for a second reason: this box covers the WHOLE stage,
-                            // not just the selected element. A touch outside the element — even over ANOTHER
-                            // element, not yet selected — also goes through here, and without this filter it
-                            // would be treated as "move the current element" instead of letting that other
-                            // element be selected. Outside the element the box still returns without
-                            // consuming, as before — that it switches selection correctly is an existing
-                            // limitation, not something this fix makes worse.
-                            if (!insideElement) return@awaitEachGesture
-
-                            // Move and pinch then live here, with the same maths as
-                            // `composerElementGestures`, minus the counter-rotation: that function runs
-                            // inside the element's rotated layer and has to undo the angle; this box is not
-                            // rotated, the finger's movement already arrives in stage space.
-                            down.consume()
-                            beginGesture()
-                            try {
-                                var pinching = false
-                                // An already selected element is covered by this box, so it is here — and
-                                // not in `composerElementGestures` — that the taps on it now land. Without
-                                // this, the second tap of a double tap was never counted.
-                                var travelled = 0f
-                                do {
-                                    val event = awaitPointerEvent()
-                                    val pressed = event.changes.filter { it.pressed }
-                                    if (pressed.size >= 2) {
-                                        pinching = true
-                                        val centroid = event.calculateCentroid(useCurrent = true)
-                                        if (centroid != Offset.Unspecified) {
-                                            // This frame's ratio, of the order of 1.005 — it accumulates,
-                                            // never compared with a threshold.
-                                            scale(event.calculateZoom())
-                                            rotateBy(event.calculateRotation())
-                                            val pan = event.calculatePan()
-                                            move(pan.x / currentPageWidth, pan.y / currentPageHeight)
-                                        }
-                                    } else if (!pinching && pressed.size == 1) {
-                                        val delta = pressed.first().positionChange()
-                                        travelled += abs(delta.x) + abs(delta.y)
-                                        move(delta.x / currentPageWidth, delta.y / currentPageHeight)
-                                    }
-                                    event.changes.forEach(PointerInputChange::consume)
-                                } while (event.changes.any { it.pressed })
-                                if (!pinching && travelled <= viewConfiguration.touchSlop) tap()
-                            } finally {
-                                endGesture()
-                            }
-                        }
-                    }
-                },
-            ),
-    ) {
+    // Only the stage ancestor handles the pegs. A full-screen sibling input node would hide
+    // every unselected element underneath it from hit testing.
+    Box(Modifier.fillMaxSize()) {
         Canvas(Modifier.fillMaxSize()) {
             val elementSize = Size(bounds.width * pageWidthPx, bounds.height * pageHeightPx)
             val topLeft = Offset(bounds.x * pageWidthPx, bounds.y * pageHeightPx)
             val centre = Offset(topLeft.x + elementSize.width / 2f, topLeft.y + elementSize.height / 2f)
             // The rotation is applied to the drawing, not to the box, so the gestures' node stays still.
             rotate(degrees = rotationDegrees, pivot = centre) {
-                drawRect(ImagoColors.Gold, topLeft, elementSize, style = Stroke(width = 2.dp.toPx()))
+                drawRect(uiColors.accent, topLeft, elementSize, style = Stroke(width = 2.dp.toPx()))
                 // While framing, the frame only says where it is: resize and rotate handles would be
                 // targets that do not respond, because no gesture is installed in this mode.
                 if (locked || positioning) return@rotate
 
                 val rotationHandle = Offset(centre.x, topLeft.y - rotationGapPx)
-                drawLine(ImagoColors.Gold, Offset(centre.x, topLeft.y), rotationHandle, strokeWidth = 2.dp.toPx())
+                drawLine(uiColors.accent, Offset(centre.x, topLeft.y), rotationHandle, strokeWidth = 2.dp.toPx())
                 listOf(
                     topLeft,
                     Offset(topLeft.x + elementSize.width, topLeft.y),
@@ -256,11 +114,67 @@ internal fun ComposerSelectionOverlay(
                     Offset(topLeft.x + elementSize.width, topLeft.y + elementSize.height),
                     rotationHandle,
                 ).forEach { handle ->
-                    drawCircle(Color.Black.copy(alpha = .45f), handleRadiusPx + 1.dp.toPx(), handle)
-                    drawCircle(ImagoColors.BrandWhite, handleRadiusPx, handle)
-                    drawCircle(ImagoColors.Gold, handleRadiusPx, handle, style = Stroke(width = 2.dp.toPx()))
+                    drawCircle(uiColors.workspace.copy(alpha = .45f), handleRadiusPx + 1.dp.toPx(), handle)
+                    drawCircle(uiColors.text, handleRadiusPx, handle)
+                    drawCircle(uiColors.accent, handleRadiusPx, handle, style = Stroke(width = 2.dp.toPx()))
                 }
             }
+        }
+    }
+}
+
+/** Handles run on the stage ancestor, so other elements remain available to hit testing. */
+@Composable
+internal fun Modifier.composerHandleGestures(
+    state: ComposerEditorUiState,
+    pageWidthPx: Float,
+    pageHeightPx: Float,
+    enabled: Boolean,
+    actions: ComposerEditorViewModel,
+): Modifier {
+    val liveState by rememberUpdatedState(state)
+    val width by rememberUpdatedState(pageWidthPx)
+    val height by rememberUpdatedState(pageHeightPx)
+    val touchRadius = with(LocalDensity.current) { HandleTouchRadius.toPx() }
+    val rotationGap = with(LocalDensity.current) { RotationHandleGap.toPx() }
+    fun frame(): Pair<NormalizedRect, Float>? {
+        val current = liveState
+        val elements = current.project?.elements.orEmpty().filter { it.id in current.selectedElementIds }
+        if (elements.isEmpty() || elements.any { it.locked }) return null
+        if (elements.size == 1) return elements.single().let { it.transform.bounds to it.transform.rotationDegrees }
+        val left = elements.minOf { it.transform.bounds.x }
+        val top = elements.minOf { it.transform.bounds.y }
+        return NormalizedRect(left, top, elements.maxOf { it.transform.bounds.right } - left,
+            elements.maxOf { it.transform.bounds.bottom } - top) to 0f
+    }
+    return pointerInput(state.project?.id, enabled) {
+        if (!enabled) return@pointerInput
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = true, pass = PointerEventPass.Initial)
+            val initial = frame() ?: return@awaitEachGesture
+            val handle = handleAt(down.position, stageCentre(initial.first, width, height),
+                stageSize(initial.first, width, height), initial.second, rotationGap, touchRadius)
+                ?: return@awaitEachGesture
+            down.consume()
+            actions.beginGesture()
+            try {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    if (event.changes.count { it.pressed } > 1) break
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed) break
+                    val current = frame() ?: break
+                    if (handle == SelectionHandle.ROTATE) {
+                        val vector = change.position - stageCentre(current.first, width, height)
+                        actions.setSelectedRotation(Math.toDegrees(atan2(vector.y, vector.x).toDouble()).toFloat() + 90f, snap = true)
+                    } else {
+                        val delta = change.positionChange()
+                        val (x, y) = rotateVector(delta.x, delta.y, -current.second)
+                        actions.resizeSelectedFromCorner(checkNotNull(handle.corner), x / width, y / height)
+                    }
+                    event.changes.forEach(PointerInputChange::consume)
+                }
+            } finally { actions.endGesture() }
         }
     }
 }
@@ -345,65 +259,83 @@ internal fun Modifier.composerElementGestures(
     onMove: (Float, Float) -> Unit,
     onScale: (Float) -> Unit,
     onRotate: (Float) -> Unit,
-): Modifier = pointerInput(elementId) {
+): Modifier = composed {
+    val currentLocked by rememberUpdatedState(locked)
+    val currentRotationDegrees by rememberUpdatedState(rotationDegrees)
+    val currentMirrorHorizontal by rememberUpdatedState(mirrorHorizontal)
+    val currentMirrorVertical by rememberUpdatedState(mirrorVertical)
+    val currentPageWidthPx by rememberUpdatedState(pageWidthPx)
+    val currentPageHeightPx by rememberUpdatedState(pageHeightPx)
+    val currentOnSelect by rememberUpdatedState(onSelect)
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
+    val currentOnTap by rememberUpdatedState(onTap)
+    val currentOnBeginGesture by rememberUpdatedState(onBeginGesture)
+    val currentOnEndGesture by rememberUpdatedState(onEndGesture)
+    val currentOnMove by rememberUpdatedState(onMove)
+    val currentOnScale by rememberUpdatedState(onScale)
+    val currentOnRotate by rememberUpdatedState(onRotate)
+    Modifier.pointerInput(elementId) {
     awaitEachGesture {
         // `requireUnconsumed = true` is what keeps the element from following a handle: the frame is on
         // top, sees the touch first and consumes it when it lands on a handle. Without this, the two
         // gestures ran at the same time and resizing dragged the element too.
         val down = awaitFirstDown(requireUnconsumed = true)
-        onSelect()
-        if (locked()) return@awaitEachGesture
+        if (currentLocked()) return@awaitEachGesture
         down.consume()
-        // The context menu is decided at the end, not halfway.
-        //
-        // An `awaitLongPressOrCancellation` would have to run **before** the drag loop and would compete
-        // with it for the same `down` — and this canvas has already had two gesture arbitration bugs.
-        // This way the drag is never interrupted: how far the finger moved and how long it stayed is
-        // measured, and only when it lifts is it known whether that was a long press or a drag.
-        val pressedAt = System.currentTimeMillis()
-        var travelled = 0f
-        onBeginGesture()
+        val pressedAt = down.uptimeMillis
+        val startedAt = System.currentTimeMillis()
+        var longPressed = false
+        var releasedAt = pressedAt
+        var travelled = Offset.Zero
+        var dragging = false
+        var pinching = false
         try {
-            var pinching = false
             do {
-                val event = awaitPointerEvent()
+                val pending = if (!dragging && !pinching && !longPressed) {
+                    withTimeoutOrNull((LONG_PRESS_MS - (System.currentTimeMillis() - startedAt)).coerceAtLeast(1)) {
+                        awaitPointerEvent()
+                    }
+                } else awaitPointerEvent()
+                if (pending == null) {
+                    currentOnLongPress()
+                    longPressed = true
+                }
+                val event = pending ?: awaitPointerEvent()
+                releasedAt = event.changes.maxOf { it.uptimeMillis }
                 val pressed = event.changes.filter { it.pressed }
-                // The layer applies flip and then rotation; undoing goes in reverse order. Flipping a
-                // single axis also inverts the direction the pinch rotates in.
-                val flipX = if (mirrorHorizontal()) -1f else 1f
-                val flipY = if (mirrorVertical()) -1f else 1f
-                fun toScreen(dx: Float, dy: Float) = rotateVector(dx * flipX, dy * flipY, rotationDegrees())
+                val flipX = if (currentMirrorHorizontal()) -1f else 1f
+                val flipY = if (currentMirrorVertical()) -1f else 1f
+                fun toScreen(delta: Offset): Pair<Float, Float> = rotateVector(delta.x * flipX, delta.y * flipY, currentRotationDegrees())
                 if (pressed.size >= 2) {
                     pinching = true
-                    val centroid = event.calculateCentroid(useCurrent = true)
-                    if (centroid != Offset.Unspecified) {
-                        // `calculateZoom` returns **this frame's** ratio, of the order of 1.005. It goes
-                        // straight to the accumulated scale; comparing it with a threshold stuck the gesture.
-                        onScale(event.calculateZoom())
-                        onRotate(rotationDegrees() + event.calculateRotation() * flipX * flipY)
-                        val pan = event.calculatePan()
-                        val (panX, panY) = toScreen(pan.x, pan.y)
-                        onMove(panX / pageWidthPx(), panY / pageHeightPx())
-                    }
+                    if (!dragging) { currentOnSelect(); currentOnBeginGesture(); dragging = true }
+                    currentOnScale(event.calculateZoom())
+                    currentOnRotate(currentRotationDegrees() + event.calculateRotation() * flipX * flipY)
+                    val (x, y) = toScreen(event.calculatePan())
+                    currentOnMove(x / currentPageWidthPx(), y / currentPageHeightPx())
                 } else if (!pinching && pressed.size == 1) {
                     val delta = pressed.first().positionChange()
-                    travelled += abs(delta.x) + abs(delta.y)
-                    val (screenX, screenY) = toScreen(delta.x, delta.y)
-                    onMove(screenX / pageWidthPx(), screenY / pageHeightPx())
+                    travelled += delta
+                    if (!dragging && travelled.getDistance() > viewConfiguration.touchSlop) {
+                        currentOnSelect(); currentOnBeginGesture(); dragging = true
+                        val (x, y) = toScreen(travelled)
+                        currentOnMove(x / currentPageWidthPx(), y / currentPageHeightPx())
+                    } else if (dragging) {
+                        val (x, y) = toScreen(delta)
+                        currentOnMove(x / currentPageWidthPx(), y / currentPageHeightPx())
+                    }
                 }
                 event.changes.forEach(PointerInputChange::consume)
             } while (event.changes.any { it.pressed })
-            // The tap and the long press both come out of here, for the same reason the context menu
-            // is decided at the end: a separate `detectTapGestures` would compete again for the `down`
-            // with the drag loop. Whoever neither moved nor stretched did one of the two, and the clock
-            // says which.
-            if (!pinching && travelled <= viewConfiguration.touchSlop) {
-                if (System.currentTimeMillis() - pressedAt >= LONG_PRESS_MS) onLongPress() else onTap()
+            if (!dragging && !pinching && !longPressed) {
+                if (releasedAt - pressedAt >= LONG_PRESS_MS) currentOnLongPress() else currentOnTap()
             }
         } finally {
-            onEndGesture()
+            if (dragging) currentOnEndGesture()
         }
     }
+}
+
 }
 
 /** How long a finger resting on an element is worth a menu. The same threshold as the system. */

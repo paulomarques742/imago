@@ -14,6 +14,7 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -56,6 +57,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -111,6 +113,7 @@ import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -141,6 +144,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -193,6 +197,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -238,7 +243,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.ColumnScope
@@ -324,6 +329,9 @@ internal fun ComposerEditorScreen(
     }
 }
 
+private enum class ComposerContextKind { INSERT, PAGES, INSPECTOR, NONE }
+private data class ComposerContext(val kind: ComposerContextKind, val state: ComposerEditorUiState)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ComposerEditorScreenBody(
@@ -336,6 +344,7 @@ private fun ComposerEditorScreenBody(
     eyedropperActive: Boolean,
     onEyedropperResult: (Long?) -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     // With room, the composer stops stacking everything at the bottom of the screen: the structure
     // goes to the left, the properties to the right and the stage keeps the middle. It is the only
     // layout where what is being changed is seen while changing it.
@@ -343,6 +352,7 @@ private fun ComposerEditorScreenBody(
     val inspectorRail = composerWindow.prefersSidePanel
     val layersRail = inspectorRail && composerWindow.width >= LayersPaneMinWindow
     var mediaPicker by remember { mutableStateOf<MediaPickerTarget?>(null) }
+    var addingElements by rememberSaveable { mutableStateOf(false) }
     var pageTools by rememberSaveable { mutableStateOf(false) }
     // `drawing`, `positioningBackground` and `multiSelect` stay in `remember`: they are armed gesture
     // modes, and resuming one of them after a rotation — with the stage already another size — would
@@ -395,7 +405,7 @@ private fun ComposerEditorScreenBody(
     var positioningMedia by remember { mutableStateOf(false) }
     // When on, a tap on the stage adds to and removes from the selection instead of replacing it. It
     // turns off on its own when the selection empties: a mode left on with nothing chosen is a forgotten mode.
-    var multiSelect by remember { mutableStateOf(false) }
+    val multiSelect = state.multiSelect
     val scope = rememberCoroutineScope()
     // Read here because the snackbar calls run in coroutines, outside the composition.
     val undoLabel = stringResource(Res.string.composer_undo_action)
@@ -446,6 +456,7 @@ private fun ComposerEditorScreenBody(
         shapeKind = null
     }
     val startDrawing: (StrokeKind) -> Unit = { kind ->
+        addingElements = false
         drawingKind = kind
         drawing = true
         shapeKind = null
@@ -453,6 +464,7 @@ private fun ComposerEditorScreenBody(
         positioningMedia = false
     }
     val startShape: (ShapeKind) -> Unit = { kind ->
+        addingElements = false
         actions.finishDrawingSession()
         drawing = false
         shapeKind = kind
@@ -469,6 +481,7 @@ private fun ComposerEditorScreenBody(
         positioningMedia = !positioningMedia
         if (positioningMedia) { drawing = false; shapeKind = null; positioningBackground = false }
     }
+    var saveMenu by remember { mutableStateOf(false) }
     var templateDialog by rememberSaveable { mutableStateOf(false) }
     var textDialog by rememberSaveable { mutableStateOf(false) }
     var exportDialog by rememberSaveable { mutableStateOf(false) }
@@ -477,17 +490,25 @@ private fun ComposerEditorScreenBody(
     var brandKitDialog by rememberSaveable { mutableStateOf(false) }
     var brandEditor by rememberSaveable { mutableStateOf(false) }
     val project = state.project
+    val requestedContext = ComposerContext(when {
+        drawing || shapeKind != null -> ComposerContextKind.NONE
+        addingElements -> ComposerContextKind.INSERT
+        pageTools -> ComposerContextKind.PAGES
+        !inspectorRail && (state.backgroundSelected || state.selectedElementId != null) -> ComposerContextKind.INSPECTOR
+        else -> ComposerContextKind.NONE
+    }, state)
+    var retainedContext by remember { mutableStateOf(requestedContext) }
+    if (requestedContext.kind != ComposerContextKind.NONE) SideEffect { retainedContext = requestedContext }
+    val shownContext = if (requestedContext.kind == ComposerContextKind.NONE) retainedContext else requestedContext
     // Leaving the background (selecting something else, or nothing) has to disarm position mode —
     // otherwise the gesture stayed ready to move an image no longer in view in the inspector.
     LaunchedEffect(state.backgroundSelected) {
         if (!state.backgroundSelected) positioningBackground = false
     }
-    LaunchedEffect(state.selectedElementIds.isEmpty()) {
-        if (state.selectedElementIds.isEmpty()) multiSelect = false
-    }
     // Switching element — or choosing more than one — disarms framing, for the same reason leaving the
     // background disarms its own: a mode armed over something else is a forgotten mode.
     LaunchedEffect(state.selectedElementId, state.selectedElementIds.size) {
+        if (state.selectedElementId != null) addingElements = false
         val target = project?.elements?.firstOrNull { it.id == state.selectedElementId }
         if (target?.placementCrop() == null || target.locked || state.selectedElementIds.size > 1) {
             positioningMedia = false
@@ -576,7 +597,9 @@ private fun ComposerEditorScreenBody(
                         }
                     },
                     actions = {
-                        AutoSaveStatus(
+                        if (state.saveFailed) {
+                            TextButton(onClick = actions::saveDraft) { Text(stringResource(Res.string.composer_retry_save), color = uiColors.error) }
+                        } else AutoSaveStatus(
                             isSaving = state.isSaving,
                             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         )
@@ -586,108 +609,139 @@ private fun ComposerEditorScreenBody(
                         IconButton(onClick = actions::redo, enabled = state.canRedo) {
                             Icon(Icons.AutoMirrored.Outlined.Redo, stringResource(Res.string.composer_redo))
                         }
-                        IconButton(onClick = { stopDrawing(); templateDialog = true }) {
-                            Icon(Icons.Outlined.Save, stringResource(Res.string.composer_save_as_template))
+                        Box {
+                            IconButton(onClick = { stopDrawing(); saveMenu = true }) {
+                                Icon(Icons.Outlined.Save, stringResource(Res.string.composer_save))
+                            }
+                            DropdownMenu(expanded = saveMenu, onDismissRequest = { saveMenu = false }) {
+                                ToolMenuItem(stringResource(Res.string.composer_export), Icons.Outlined.Download, { saveMenu = false }) { exportDialog = true }
+                                ToolMenuItem(stringResource(Res.string.composer_save_draft), Icons.Outlined.Save, { saveMenu = false }, actions::saveDraft)
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = ImagoColors.Surface,
-                        titleContentColor = ImagoColors.TextPrimary,
-                        navigationIconContentColor = ImagoColors.TextPrimary,
-                        actionIconContentColor = ImagoColors.TextPrimary,
+                        containerColor = uiColors.surface,
+                        titleContentColor = uiColors.text,
+                        navigationIconContentColor = uiColors.text,
+                        actionIconContentColor = uiColors.text,
                     ),
                 )
                 }
             },
             bottomBar = {
-                ComposerPanelSurface(
-                immersive = adjusting || stageBusy,
-                contentAlpha = panelAlpha,
-                onHeightChanged = { height ->
-                    if (height != measuredChrome.bottom) measuredChrome = measuredChrome.copy(bottom = height)
-                },
-            ) {
-                    // With the column mounted, the inspector lives there; here it would say the same
-                    // thing twice and steal height from the stage.
-                    if (!inspectorRail && !drawing && shapeKind == null) {
-                        ComposerInspector(
-                            state = state,
-                            actions = actions,
-                            rail = false,
-                            multiSelect = multiSelect,
-                            positioningBackground = positioningBackground,
-                            positioningMedia = positioningMedia,
-                            onToggleMultiSelect = { multiSelect = !multiSelect },
-                            onTogglePositioning = toggleBackgroundPositioning,
-                            onTogglePositioningMedia = toggleMediaPositioning,
-                            onPickImage = { currentPageOnly -> mediaPicker = MediaPickerTarget.Background(currentPageOnly) },
-                            onEditText = { textDialog = true },
-                            onEditPhoto = { onEditPhotoId(state.selectedElementId) },
-                            onRequestGroup = { groupDialog = true },
-                            onDeleted = { label ->
+                ComposerNavigationChrome(
+                    contextVisible = requestedContext.kind != ComposerContextKind.NONE,
+                    immersive = adjusting || stageBusy,
+                    contentAlpha = panelAlpha,
+                    onHeightChanged = { height ->
+                        if (height != measuredChrome.bottom) measuredChrome = measuredChrome.copy(bottom = height)
+                    },
+                    context = {
+                        when (shownContext.kind) {
+                            ComposerContextKind.INSERT -> {
+                                Row(
+                                    Modifier.alpha(chromeAlpha).horizontalScroll(rememberScrollState())
+                                        .padding(horizontal = ImagoSpacing.Xs, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    ToolButton(stringResource(Res.string.composer_media), Icons.Outlined.Image) {
+                                        stopDrawing()
+                                        mediaPicker = MediaPickerTarget.Element(null)
+                                    }
+                                    ToolButton(stringResource(Res.string.composer_text), Icons.Outlined.TextFields, onClick = { stopDrawing(); actions.addText(textPlaceholder) })
+                                    ToolMenuButton(stringResource(Res.string.composer_shape), Icons.Outlined.Rectangle, onOpen = stopDrawing) { dismiss ->
+                                        ToolMenuItem(stringResource(Res.string.composer_rectangle), Icons.Outlined.Rectangle, dismiss) { startShape(ShapeKind.RECTANGLE) }
+                                        ToolMenuItem(stringResource(Res.string.composer_circle), Icons.Outlined.Circle, dismiss) { startShape(ShapeKind.ELLIPSE) }
+                                        ToolMenuItem(stringResource(Res.string.composer_arrow), Icons.AutoMirrored.Outlined.ArrowForward, dismiss) { startShape(ShapeKind.ARROW) }
+                                        ToolMenuItem(stringResource(Res.string.composer_line), Icons.Outlined.Remove, dismiss) { startShape(ShapeKind.LINE) }
+                                    }
+                                    ToolMenuButton(stringResource(Res.string.composer_drawing), Icons.Outlined.Brush) { dismiss ->
+                                        ToolMenuItem(stringResource(Res.string.composer_pen), Icons.Outlined.Brush, dismiss) { startDrawing(StrokeKind.PEN) }
+                                        ToolMenuItem(stringResource(Res.string.composer_marker), Icons.Outlined.Brush, dismiss) { startDrawing(StrokeKind.MARKER) }
+                                        ToolMenuItem(stringResource(Res.string.composer_eraser), Icons.Outlined.Remove, dismiss) { startDrawing(StrokeKind.ERASER) }
+                                    }
+                                }
+                            }
+                            ComposerContextKind.INSPECTOR -> {
+                                ComposerInspector(
+                                    state = shownContext.state,
+                                    actions = actions,
+                                    rail = false,
+                                    multiSelect = multiSelect,
+                                    positioningBackground = positioningBackground,
+                                    positioningMedia = positioningMedia,
+                                    onToggleMultiSelect = actions::toggleMultiSelect,
+                                    onTogglePositioning = toggleBackgroundPositioning,
+                                    onTogglePositioningMedia = toggleMediaPositioning,
+                                    onPickImage = { currentPageOnly -> mediaPicker = MediaPickerTarget.Background(currentPageOnly) },
+                                    onEditText = { textDialog = true },
+                                    onEditPhoto = { onEditPhotoId(state.selectedElementId) },
+                                    onRequestGroup = { groupDialog = true },
+                                    onDeleted = { label ->
+                                        scope.launch {
+                                            val result = snackbar.showSnackbar(
+                                                message = label,
+                                                actionLabel = undoLabel,
+                                                withDismissAction = true,
+                                            )
+                                            if (result == SnackbarResult.ActionPerformed) actions.undo()
+                                        }
+                                    },
+                                )
+                            }
+                            ComposerContextKind.PAGES -> PageControls(shownContext.state, actions) { label ->
                                 scope.launch {
-                                    val result = snackbar.showSnackbar(
-                                        message = label,
-                                        actionLabel = undoLabel,
-                                        withDismissAction = true,
-                                    )
+                                    val result = snackbar.showSnackbar(label, undoLabel, withDismissAction = true)
                                     if (result == SnackbarResult.ActionPerformed) actions.undo()
+                                }
+                            }
+                            ComposerContextKind.NONE -> Unit
+                        }
+                    },
+                    navigation = {
+                        ComposerNavigationBar(
+                            onAdd = { stopDrawing(); pageTools = false; addingElements = !addingElements },
+                            immersive = adjusting || stageBusy,
+                            modifier = Modifier.alpha(chromeAlpha),
+                            layers = {
+                                if (!layersRail) ToolButton(stringResource(Res.string.composer_layers), Icons.Outlined.Layers) {
+                                    stopDrawing(); addingElements = false; pageTools = false; layersSheet = true
+                                }
+                            },
+                            background = {
+                                ToolButton(stringResource(Res.string.composer_background), Icons.Outlined.Wallpaper, active = state.backgroundSelected) {
+                                    stopDrawing(); addingElements = false; pageTools = false; actions.selectBackground()
+                                }
+                            },
+                            pages = {
+                                ToolButton(stringResource(Res.string.composer_pages), Icons.Outlined.GridView, active = pageTools) {
+                                    stopDrawing(); addingElements = false; pageTools = !pageTools
+                                }
+                            },
+                            more = {
+                                ToolMenuButton(stringResource(Res.string.composer_more), Icons.Outlined.MoreHoriz, onOpen = stopDrawing) { dismiss ->
+                                    ToolMenuItem(stringResource(Res.string.composer_save_as_template), Icons.Outlined.Save, dismiss) { templateDialog = true }
+                                    ToolMenuItem(stringResource(Res.string.composer_brand), Icons.Outlined.Palette, dismiss) { brandKitDialog = true }
+                                    val selected = project?.elements?.firstOrNull { it.id == state.selectedElementId }
+                                    if (selected is CompositionElement.Photo || selected is CompositionElement.Video || selected is CompositionElement.MediaPlaceholder) {
+                                        ToolMenuItem(stringResource(Res.string.composer_replace_media), Icons.Outlined.Image, dismiss) { mediaPicker = MediaPickerTarget.Element(selected.id) }
+                                    }
+                                    if (selected != null && selected !is CompositionElement.Video) {
+                                        ToolMenuItem(stringResource(Res.string.composer_repeat_all_pages), Icons.Outlined.Repeat, dismiss, actions::repeatOnAllPages)
+                                    }
+                                    ToolMenuItem(
+                                        if (multiSelect) stringResource(Res.string.composer_end_multi_select) else stringResource(Res.string.composer_select_multiple),
+                                        Icons.Outlined.SelectAll, dismiss,
+                                    ) { addingElements = false; actions.toggleMultiSelect() }
+                                    if (project?.elements?.any { it is CompositionElement.Video && it.visible && it.pageIndex == state.currentPage } == true) {
+                                        ToolMenuItem(stringResource(Res.string.composer_preview), Icons.Outlined.PlayArrow, dismiss) { actions.previewCurrentPage() }
+                                    }
                                 }
                             },
                         )
-                    }
-                    // Two halves separated by the hairline: on the left what is inserted into the page,
-                    // on the right what is done to the document. Mixed, "Export" came after "Circle"
-                    // and the row read like a bag of buttons.
-                    Row(
-                        Modifier.fillMaxWidth().alpha(chromeAlpha).horizontalScroll(rememberScrollState())
-                            .padding(horizontal = ImagoSpacing.Xs, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ToolButton(stringResource(Res.string.composer_media), Icons.Outlined.Image) {
-                            stopDrawing()
-                            mediaPicker = MediaPickerTarget.Element(
-                                project?.elements?.firstOrNull { it.id == state.selectedElementId }
-                                    ?.takeIf { it is CompositionElement.Photo || it is CompositionElement.Video || it is CompositionElement.MediaPlaceholder }
-                                    ?.id,
-                            )
-                        }
-                        ToolButton(stringResource(Res.string.composer_text), Icons.Outlined.TextFields, onClick = { stopDrawing(); actions.addText(textPlaceholder) })
-                        ToolMenuButton(stringResource(Res.string.composer_shape), Icons.Outlined.Rectangle, onOpen = stopDrawing) { dismiss ->
-                            ToolMenuItem(stringResource(Res.string.composer_rectangle), Icons.Outlined.Rectangle, dismiss) { startShape(ShapeKind.RECTANGLE) }
-                            ToolMenuItem(stringResource(Res.string.composer_circle), Icons.Outlined.Circle, dismiss) { startShape(ShapeKind.ELLIPSE) }
-                            ToolMenuItem(stringResource(Res.string.composer_arrow), Icons.AutoMirrored.Outlined.ArrowForward, dismiss) { startShape(ShapeKind.ARROW) }
-                            ToolMenuItem(stringResource(Res.string.composer_line), Icons.Outlined.Remove, dismiss) { startShape(ShapeKind.LINE) }
-                        }
-                        ToolMenuButton(stringResource(Res.string.composer_drawing), Icons.Outlined.Brush) { dismiss ->
-                            ToolMenuItem(stringResource(Res.string.composer_pen), Icons.Outlined.Brush, dismiss) { startDrawing(StrokeKind.PEN) }
-                            ToolMenuItem(stringResource(Res.string.composer_marker), Icons.Outlined.Brush, dismiss) { startDrawing(StrokeKind.MARKER) }
-                            ToolMenuItem(stringResource(Res.string.composer_eraser), Icons.Outlined.Remove, dismiss) { startDrawing(StrokeKind.ERASER) }
-                        }
-                        ToolGroupDivider()
-                        // Only when the layers are not in view in a column of their own.
-                        if (!layersRail) ToolButton(stringResource(Res.string.composer_layers), Icons.Outlined.Layers) { stopDrawing(); layersSheet = true }
-                        ToolButton(stringResource(Res.string.composer_pages), Icons.Outlined.GridView, active = pageTools) { stopDrawing(); pageTools = !pageTools }
-                        ToolButton(stringResource(Res.string.composer_background), Icons.Outlined.Wallpaper, active = state.backgroundSelected, onClick = { stopDrawing(); actions.selectBackground() })
-                        ToolButton(stringResource(Res.string.composer_brand), Icons.Outlined.Palette) { stopDrawing(); brandKitDialog = true }
-                        // Since Android 10 saving to the gallery through MediaStore asks for no
-                        // permission, and `minSdk` is 31 — the WRITE_EXTERNAL_STORAGE request that was
-                        // here was always skipped.
-                        ToolButton(stringResource(Res.string.composer_export), Icons.Outlined.Download) { stopDrawing(); exportDialog = true }
-                        if (project?.elements?.any { it is CompositionElement.Video && it.visible && it.pageIndex == state.currentPage } == true) {
-                            ToolButton(stringResource(Res.string.composer_preview), Icons.Outlined.PlayArrow, onClick = { stopDrawing(); actions.previewCurrentPage() })
-                        }
-                    }
-                    if (pageTools && project != null) {
-                        PageControls(state, actions) { label ->
-                            scope.launch {
-                                val result = snackbar.showSnackbar(label, undoLabel, withDismissAction = true)
-                                if (result == SnackbarResult.ActionPerformed) actions.undo()
-                            }
-                        }
-                    }
-                }
+                    },
+                )
             },
         ) { padding ->
             Box(Modifier.fillMaxSize().onSizeChanged { stageBoxSize = it }) {
@@ -714,7 +768,7 @@ private fun ComposerEditorScreenBody(
                             modifier = railPadding
                                 .width(LayersPaneWidth)
                                 .fillMaxHeight()
-                                .background(ImagoColors.Surface),
+                                .background(uiColors.surface),
                         )
                         ComposerPaneDivider()
                     }
@@ -762,7 +816,7 @@ private fun ComposerEditorScreenBody(
                             railPadding
                                 .width(InspectorPaneWidth)
                                 .fillMaxHeight()
-                                .background(ImagoColors.Surface)
+                                .background(uiColors.surface)
                                 .verticalScroll(rememberScrollState()),
                         ) {
                             ComposerInspector(
@@ -772,7 +826,7 @@ private fun ComposerEditorScreenBody(
                                 multiSelect = multiSelect,
                                 positioningBackground = positioningBackground,
                                 positioningMedia = positioningMedia,
-                                onToggleMultiSelect = { multiSelect = !multiSelect },
+                                onToggleMultiSelect = actions::toggleMultiSelect,
                                 onTogglePositioning = toggleBackgroundPositioning,
                                 onTogglePositioningMedia = toggleMediaPositioning,
                                 onPickImage = { currentPageOnly -> mediaPicker = MediaPickerTarget.Background(currentPageOnly) },
@@ -835,7 +889,7 @@ private fun ComposerEditorScreenBody(
                         Text(
                             stringResource(Res.string.composer_shape_hint),
                             style = MaterialTheme.typography.labelSmall,
-                            color = ImagoColors.TextSecondary,
+                            color = uiColors.secondaryText,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                         )
                     } else {
@@ -857,11 +911,11 @@ private fun ComposerEditorScreenBody(
             }
             if (eyedropperActive) {
                 Surface(
-                    color = ImagoColors.Glass,
+                    color = uiColors.glass,
                     shape = RoundedCornerShape(ImagoRadii.Panel),
                     modifier = Modifier.align(Alignment.BottomCenter)
                         .padding(bottom = measuredChrome.bottom + 12.dp, start = 12.dp, end = 12.dp)
-                        .border(1.dp, ImagoColors.BorderSubtle, RoundedCornerShape(ImagoRadii.Panel)),
+                        .border(1.dp, uiColors.subtleBorder, RoundedCornerShape(ImagoRadii.Panel)),
                 ) {
                     Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(stringResource(Res.string.composer_eyedropper_hint), style = MaterialTheme.typography.labelLarge)
@@ -987,7 +1041,8 @@ private fun ComposerEditorScreenBody(
 /** The hairline that separates a column from the stage. */
 @Composable
 private fun ComposerPaneDivider() {
-    Box(Modifier.fillMaxHeight().width(1.dp).background(ImagoColors.BorderSubtle))
+    val uiColors = ImagoUi.colors
+    Box(Modifier.fillMaxHeight().width(1.dp).background(uiColors.subtleBorder))
 }
 
 /**
@@ -1015,6 +1070,7 @@ private fun ComposerInspector(
     onRequestGroup: () -> Unit,
     onDeleted: (String) -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     val selected = state.project?.elements?.firstOrNull { it.id == state.selectedElementId }
     when {
         state.backgroundSelected -> BackgroundInspector(
@@ -1046,7 +1102,7 @@ private fun ComposerInspector(
         rail -> Text(
             text = stringResource(Res.string.composer_inspector_hint),
             style = MaterialTheme.typography.bodySmall,
-            color = ImagoColors.TextTertiary,
+            color = uiColors.tertiaryText,
             modifier = Modifier.padding(ImagoSpacing.Lg),
         )
     }
@@ -1064,6 +1120,7 @@ private fun BrandKitDialog(
     onEditBrand: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     val kit = state.brandKit ?: BrandKit(updatedAt = "")
     val selected = state.project?.elements?.firstOrNull { it.id == state.selectedElementId }
     AlertDialog(
@@ -1074,13 +1131,13 @@ private fun BrandKitDialog(
                 Text(
                     if (selected == null) stringResource(Res.string.composer_brand_tap_background) else stringResource(Res.string.composer_brand_tap_selected),
                     style = MaterialTheme.typography.bodySmall,
-                    color = ImagoColors.TextTertiary,
+                    color = uiColors.tertiaryText,
                 )
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val applyBrandColor = stringResource(Res.string.composer_apply_brand_color)
                     kit.paletteArgb.forEach { argb ->
                         Box(
-                            Modifier.size(42.dp).clip(CircleShape).background(Color(argb)).border(1.dp, Color.Gray, CircleShape)
+                            Modifier.size(42.dp).clip(CircleShape).background(Color(argb)).border(1.dp, uiColors.border, CircleShape)
                                 .clickable { actions.applyBrandColor(argb) }
                                 .semantics { contentDescription = applyBrandColor },
                         )
@@ -1209,16 +1266,18 @@ internal fun ExportDialog(
 
 @Composable
 private fun ExportSectionTitle(text: String) {
+    val uiColors = ImagoUi.colors
     Text(
         text,
         style = MaterialTheme.typography.labelMedium,
-        color = ImagoColors.TextSecondary,
+        color = uiColors.secondaryText,
         modifier = Modifier.padding(top = 8.dp),
     )
 }
 
 @Composable
 private fun ExportOption(label: String, detail: String, selected: Boolean, onSelect: () -> Unit) {
+    val uiColors = ImagoUi.colors
     Row(
         Modifier
             .fillMaxWidth()
@@ -1229,8 +1288,8 @@ private fun ExportOption(label: String, detail: String, selected: Boolean, onSel
     ) {
         RadioButton(selected = selected, onClick = null)
         Column(Modifier.padding(start = 4.dp)) {
-            Text(label, style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
-            Text(detail, style = MaterialTheme.typography.labelSmall, color = ImagoColors.TextTertiary)
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = uiColors.text)
+            Text(detail, style = MaterialTheme.typography.labelSmall, color = uiColors.tertiaryText)
         }
     }
 }
@@ -1266,6 +1325,7 @@ private fun BackgroundInspector(
     positioning: Boolean,
     onTogglePositioning: () -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     val project = state.project ?: return
     val pageOverride = project.pages.getOrNull(state.currentPage)?.backgroundOverride
     val background = pageOverride ?: project.background
@@ -1287,9 +1347,9 @@ private fun BackgroundInspector(
         )
     }
     val chrome = inspectorChromeAlpha(rail)
-    Column(Modifier.fillMaxWidth().padding(horizontal = ImagoSpacing.Sm)) {
+    Column(Modifier.padding(horizontal = ImagoSpacing.Sm), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.alpha(chrome), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Wallpaper, null, Modifier.size(ImagoSizes.IconSmall), tint = ImagoColors.Gold)
+            Icon(Icons.Outlined.Wallpaper, null, Modifier.size(ImagoSizes.IconSmall), tint = uiColors.accent)
             Text(
                 "  " + if (currentPageOnly) {
                     stringResource(Res.string.composer_background_page, state.currentPage + 1)
@@ -1297,8 +1357,8 @@ private fun BackgroundInspector(
                     stringResource(Res.string.composer_background_all)
                 },
                 style = MaterialTheme.typography.labelMedium,
-                color = ImagoColors.TextSecondary,
-                modifier = Modifier.weight(1f),
+                color = uiColors.secondaryText,
+                modifier = Modifier.padding(end = ImagoSpacing.Sm),
             )
             TextButton(onClick = { currentPageOnly = !currentPageOnly }) {
                 Text(if (currentPageOnly) stringResource(Res.string.composer_apply_to_all) else stringResource(Res.string.composer_this_page_only), fontSize = 11.sp)
@@ -1306,7 +1366,7 @@ private fun BackgroundInspector(
             IconButton(onClick = actions::clearSelection) { Icon(Icons.Outlined.Check, stringResource(Res.string.composer_close_background)) }
         }
         Row(
-            Modifier.fillMaxWidth().alpha(chrome).horizontalScroll(rememberScrollState()),
+            Modifier.alpha(chrome).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             ToolButton(stringResource(Res.string.composer_image), Icons.Outlined.Image) { onPickImage(currentPageOnly) }
@@ -1356,7 +1416,7 @@ private fun BackgroundInspector(
             Text(
                 stringResource(Res.string.composer_background_position_hint),
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.Gold,
+                color = uiColors.accent,
                 modifier = Modifier.padding(top = ImagoSpacing.Xs),
             )
         }
@@ -1376,7 +1436,7 @@ private fun BackgroundInspector(
                 is CompositionBackground.Solid -> Text(
                     stringResource(Res.string.composer_background_color_hint),
                     style = MaterialTheme.typography.bodySmall,
-                    color = ImagoColors.TextTertiary,
+                    color = uiColors.tertiaryText,
                     modifier = Modifier.padding(vertical = ImagoSpacing.Xs),
                 )
             }
@@ -1434,53 +1494,6 @@ internal fun InspectorSlider(
             actions.endGesture(stage = false)
         },
     )
-}
-
-/**
- * The composer's bottom panel: the row of tools, the inspector and the page controls.
- *
- * It is the same sheet as the photo editor's — blurred glass, rounded top corners, a separating
- * hairline — and not the opaque navigation bar that used to be here. The difference that is noticed
- * is in [immersive]: while dragging a value or moving an element, the sheet becomes transparent and
- * the page shows under it, whole.
- */
-@Composable
-private fun ComposerPanelSurface(
-    immersive: Boolean,
-    contentAlpha: Float,
-    onHeightChanged: (Dp) -> Unit,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val density = LocalDensity.current
-    val shape = RoundedCornerShape(topStart = ImagoRadii.Panel, topEnd = ImagoRadii.Panel)
-    val panelColor by animateColorAsState(
-        targetValue = if (immersive) Color.Transparent else ImagoColors.Glass,
-        animationSpec = imagoTween(ImagoMotion.Instant),
-        label = "composerPanelColor",
-    )
-    val borderColor by animateColorAsState(
-        targetValue = if (immersive) Color.Transparent else ImagoColors.BorderSubtle,
-        animationSpec = imagoTween(ImagoMotion.Instant),
-        label = "composerPanelBorder",
-    )
-    Box(
-        // The measured height tells the stage how much this sheet covers, so the page settles above it
-        // instead of being hidden underneath.
-        Modifier.fillMaxWidth().onSizeChanged { measured ->
-            val height = with(density) { measured.height.toDp() }
-            if (height > 0.dp) onHeightChanged(height)
-        },
-    ) {
-        // The blur lives on a layer underneath: applied to the sheet, it would blur the sliders too.
-        if (!immersive) Box(Modifier.matchParentSize().clip(shape).imagoGlassBlur().background(Color.Transparent))
-        Surface(
-            color = panelColor,
-            shape = shape,
-            modifier = Modifier.fillMaxWidth().border(1.dp, borderColor, shape),
-        ) {
-            Column(Modifier.navigationBarsPadding().alpha(contentAlpha), content = content)
-        }
-    }
 }
 
 /**
@@ -1575,6 +1588,7 @@ internal fun ComposerCanvas(
     eyedropper: Boolean = false,
     onSample: (Long?) -> Unit = {},
 ) {
+    val uiColors = ImagoUi.colors
     // Drawing and placing a shape both own the stage's finger: scrolling, selecting and the elements'
     // own gestures stand aside for either.
     val armed = drawing || shapeKind != null || eyedropper
@@ -1626,7 +1640,7 @@ internal fun ComposerCanvas(
     // stage must not undo where the pinch is taking the view.
     val pinchActive = remember { booleanArrayOf(false) }
     BoxWithConstraints(
-        modifier.background(ImagoColors.Background).pointerInput(canPinchZoom) {
+        modifier.background(uiColors.background).pointerInput(canPinchZoom) {
             if (!canPinchZoom) return@pointerInput
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -1790,7 +1804,7 @@ internal fun ComposerCanvas(
                                 val picked = picture.toPixelMap(sx, sy, 1, 1)[0, 0]
                                 val disc = Path().apply { addOval(androidx.compose.ui.geometry.Rect(centre, radius)) }
                                 clipPath(disc) {
-                                    drawRect(Color.Black, centre - Offset(radius, radius), androidx.compose.ui.geometry.Size(diameter, diameter))
+                                    drawRect(uiColors.workspace, centre - Offset(radius, radius), androidx.compose.ui.geometry.Size(diameter, diameter))
                                     drawImage(
                                         picture,
                                         srcOffset = androidx.compose.ui.unit.IntOffset(
@@ -1805,16 +1819,16 @@ internal fun ComposerCanvas(
                                 }
                                 // The pixel under the finger, outlined at the loupe's centre.
                                 val cell = diameter / grid
-                                drawRect(Color.Black, centre - Offset(cell / 2f, cell / 2f), androidx.compose.ui.geometry.Size(cell, cell), style = Stroke(3f))
-                                drawRect(Color.White, centre - Offset(cell / 2f, cell / 2f), androidx.compose.ui.geometry.Size(cell, cell), style = Stroke(1.5f))
+                                drawRect(uiColors.workspace, centre - Offset(cell / 2f, cell / 2f), androidx.compose.ui.geometry.Size(cell, cell), style = Stroke(3f))
+                                drawRect(uiColors.text, centre - Offset(cell / 2f, cell / 2f), androidx.compose.ui.geometry.Size(cell, cell), style = Stroke(1.5f))
                                 drawCircle(Color(picked.red, picked.green, picked.blue), radius, centre, style = Stroke(10.dp.toPx()))
-                                drawCircle(Color.White, radius + 5.dp.toPx(), centre, style = Stroke(1.5f))
+                                drawCircle(uiColors.text, radius + 5.dp.toPx(), centre, style = Stroke(1.5f))
                                 // And the touch point itself, small, where the finger is.
-                                drawCircle(Color.Black, 12f, at, style = Stroke(4f))
-                                drawCircle(Color.White, 12f, at, style = Stroke(2f))
+                                drawCircle(uiColors.workspace, 12f, at, style = Stroke(4f))
+                                drawCircle(uiColors.text, 12f, at, style = Stroke(2f))
                             } else if (at != null) {
-                                drawCircle(Color.Black, 22f, at, style = Stroke(5f))
-                                drawCircle(Color.White, 22f, at, style = Stroke(2.5f))
+                                drawCircle(uiColors.workspace, 22f, at, style = Stroke(5f))
+                                drawCircle(uiColors.text, 22f, at, style = Stroke(2.5f))
                             }
                         }
                     } else {
@@ -1926,6 +1940,7 @@ internal fun ComposerCanvas(
                 // (`drawing`, `positioningBackground`) can no longer both be true at the same time —
                 // whoever turns one on turns the other off — but keeping them separate avoids turning
                 // one on restarting the other's gesture halfway.
+                .composerHandleGestures(state, pageWidthPx, pageHeightPx, !armed && !positioningBackground && !positioningMedia, actions)
                 .pointerInput(positioningBackground, eyedropper, project.pages.size) {
                     if (positioningBackground && !eyedropper) detectDragGestures(
                         onDragStart = { actions.beginGesture() },
@@ -1960,7 +1975,7 @@ internal fun ComposerCanvas(
                     if (armed || positioningBackground) return@pointerInput
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = true)
-                        if (waitForUpOrCancellation() != null) actions.selectBackground()
+                        if (waitForUpOrCancellation() != null) actions.clearSelection()
                     }
                 },
         ) {
@@ -1982,14 +1997,14 @@ internal fun ComposerCanvas(
                         .border(
                             1.dp,
                             if (state.backgroundSelected && page.index == state.currentPage) {
-                                ImagoColors.Gold
+                                uiColors.accent
                             } else {
-                                Color.White.copy(alpha = .32f)
+                                uiColors.text.copy(alpha = .32f)
                             },
                         ),
                 ) {
-                    if (project.safeZonesVisible) Box(Modifier.fillMaxSize().padding(pageWidth * .06f).border(1.dp, Color.White.copy(alpha = .2f)))
-                    Text("${page.index + 1}", color = Color.White.copy(alpha = .5f), fontSize = 10.sp, modifier = Modifier.padding(4.dp))
+                    if (project.safeZonesVisible) Box(Modifier.fillMaxSize().padding(pageWidth * .06f).border(1.dp, uiColors.text.copy(alpha = .2f)))
+                    Text("${page.index + 1}", color = uiColors.text.copy(alpha = .5f), fontSize = 10.sp, modifier = Modifier.padding(4.dp))
                 }
             }
             // Clipped to the stage: a shape dragged past the page's edge is cut there, as it is on export.
@@ -2008,7 +2023,7 @@ internal fun ComposerCanvas(
                         // several pages shows several times, and only the copy in view receives the
                         // finger — the others follow it anyway, because it is the same `crop` that changes.
                         positioning = positioningMedia && element.id == state.selectedElementId,
-                        onLongPress = { contextMenuFor = element.id },
+                        onLongPress = { actions.beginMultiSelection(element.id) },
                         // A media slot with a "+" drawn on it promised that tapping it was good for
                         // something, and it was not: it selected it and everything stayed the same.
                         // Whoever taps the "+" wants the library, and that is what opens — except in
@@ -2043,7 +2058,7 @@ internal fun ComposerCanvas(
                             Modifier
                                 .offset(x = pageWidth * cb.x, y = pageHeight * cb.y)
                                 .size(pageWidth * cb.width, pageHeight * cb.height)
-                                .border(1.dp, ImagoColors.Gold.copy(alpha = .8f)),
+                                .border(1.dp, uiColors.accent.copy(alpha = .8f)),
                         )
                     }
             }
@@ -2109,7 +2124,7 @@ internal fun ComposerCanvas(
                         moveTo(liveStroke.first().x * pageWidthPx, liveStroke.first().y * pageHeightPx)
                         liveStroke.drop(1).forEach { lineTo(it.x * pageWidthPx, it.y * pageHeightPx) }
                     }
-                    drawPath(path, Color.White, alpha = .28f, style = Stroke(ERASER_REACH * 2f * pageWidthPx, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                    drawPath(path, uiColors.text, alpha = .28f, style = Stroke(ERASER_REACH * 2f * pageWidthPx, cap = StrokeCap.Round, join = StrokeJoin.Round))
                 }
             } else if (liveStroke.size > 1) {
                 Canvas(Modifier.fillMaxSize()) {
@@ -2175,7 +2190,7 @@ internal fun ComposerCanvas(
             }
         }
         Surface(
-            color = Color.Black.copy(alpha = .72f),
+            color = uiColors.workspace.copy(alpha = .72f),
             shape = RoundedCornerShape(18.dp),
             // Out of the way of the mode bubble, which floats at the top while drawing or placing a shape.
             modifier = (if (armed) Modifier.align(Alignment.BottomEnd) else Modifier.align(Alignment.TopEnd))
@@ -2283,6 +2298,7 @@ private fun CompositionElementView(
     apiKey: (String) -> String,
     actions: ComposerEditorViewModel,
 ) {
+    val uiColors = ImagoUi.colors
     val b = element.transform.bounds
     val context = LocalPlatformContext.current
     // The aspect ratio the media is really drawn with, told by the image itself when it arrives.
@@ -2302,6 +2318,11 @@ private fun CompositionElementView(
     // In multiple selection mode a tap adds and removes instead of replacing: that is what allows
     // picking up three things to align them without having to group them first.
     val onSelect = {
+        if (!selected) {
+            if (multiSelect) actions.toggleElementInSelection(element.id) else actions.selectElement(element.id)
+        }
+    }
+    val onSelectTap = {
         if (multiSelect) actions.toggleElementInSelection(element.id) else actions.selectElement(element.id)
     }
     // The semantics block is not a composition: the texts are read here, before it.
@@ -2325,7 +2346,7 @@ private fun CompositionElementView(
             alpha = element.transform.opacity
         }
         .then(
-            if (positioning) {
+            if (!actions.canEdit(element.id)) Modifier else if (positioning) {
                 Modifier.mediaFramingGestures(
                     elementId = element.id,
                     boxWidthPx = { liveBoxWidth },
@@ -2350,7 +2371,7 @@ private fun CompositionElementView(
                     pageHeightPx = { pageHeightPx },
                     onSelect = onSelect,
                     onLongPress = onLongPress,
-                    onTap = { onPickMedia?.invoke() ?: onTap() },
+                    onTap = { onSelectTap(); if (!multiSelect) { onPickMedia?.invoke() ?: onTap() } },
                     onBeginGesture = actions::beginGesture,
                     onEndGesture = actions::endGesture,
                     onMove = actions::moveSelected,
@@ -2366,26 +2387,27 @@ private fun CompositionElementView(
         // touch from the selection frame, and saw the same danger in it. Without a free `down`,
         // `awaitEachGesture` never started: selecting by tap kept working (the `clickable`'s
         // `onClick` is independent), but moving stopped responding.
-        // Selection already happens inside `composerElementGestures`, which calls `onSelect()` as soon
-        // as the finger lands — so `clickable` was redundant, and it is what goes; the semantic action
-        // stays, so TalkBack can still select by double tap.
+        // Semantic actions follow the same selection rules as touch and keyboard input.
         .semantics {
             contentDescription = elementLabel
             role = Role.Button
             // In a media slot TalkBack's double tap is worth what the tap on the stage is worth:
             // opening the library. Choosing an empty slot leads nowhere.
-            if (onPickMedia != null) {
-                onClick(label = pickMediaLabel) { onPickMedia(); true }
-            } else {
-                onClick(label = selectLabel) { onSelect(); true }
+            if (actions.canEdit(element.id)) {
+                onClick(label = if (onPickMedia != null) pickMediaLabel else selectLabel) {
+                    onSelectTap()
+                    if (!multiSelect) onPickMedia?.invoke()
+                    true
+                }
+                onLongClick(label = selectLabel) { onLongPress(); true }
             }
         }
     when (element) {
         is CompositionElement.MediaPlaceholder -> Box(
-            common.frameDecoration(element.frame, pageWidthPx / REFERENCE_PAGE_WIDTH).background(Color.White.copy(alpha = .08f))
-                .border(1.dp, Color.White.copy(alpha = .35f), RoundedCornerShape(8.dp)),
+            common.frameDecoration(element.frame, pageWidthPx / REFERENCE_PAGE_WIDTH).background(uiColors.text.copy(alpha = .08f))
+                .border(1.dp, uiColors.text.copy(alpha = .35f), RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Outlined.Add, stringResource(Res.string.composer_add_media), tint = Color.White.copy(alpha = .7f)) }
+        ) { Icon(Icons.Outlined.Add, stringResource(Res.string.composer_add_media), tint = uiColors.text.copy(alpha = .7f)) }
         // The element's recipe comes in here for the same reason it comes in on export: the stage has
         // to show the photo with the look the final file will have.
         is CompositionElement.Photo -> Box(common.frameDecoration(element.frame, pageWidthPx / REFERENCE_PAGE_WIDTH)) {
@@ -2427,7 +2449,7 @@ private fun CompositionElementView(
             if (unavailable) {
                 Text(
                     unavailableMediaText(element.media.assetId),
-                    color = Color.White,
+                    color = uiColors.text,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.align(Alignment.Center).padding(8.dp),
                 )
@@ -2445,7 +2467,7 @@ private fun CompositionElementView(
                     alignment = placementAlignment(element.crop),
                     contentScale = ContentScale.Crop,
                 )
-                Surface(color = Color.Black.copy(alpha = .55f), shape = CircleShape, modifier = Modifier.align(Alignment.Center)) {
+                Surface(color = uiColors.workspace.copy(alpha = .55f), shape = CircleShape, modifier = Modifier.align(Alignment.Center)) {
                     Icon(Icons.Outlined.PlayArrow, null, Modifier.padding(8.dp))
                 }
             }
@@ -2771,6 +2793,7 @@ private fun SelectedInspector(
     onRequestGroup: () -> Unit,
     onDeleted: (String) -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     val selected = state.project?.elements?.firstOrNull { it.id == state.selectedElementId } ?: return
     val chosen = state.selectedElementIds.size
     val isMedia = selected is CompositionElement.Photo ||
@@ -2799,23 +2822,12 @@ private fun SelectedInspector(
         )
     }
     val chrome = inspectorChromeAlpha(rail)
-    Column(Modifier.padding(horizontal = ImagoSpacing.Sm)) {
-        Text(
-            when {
-                chosen > 1 -> stringResource(Res.string.composer_many_selected_hint, chosen)
-                multiSelect -> stringResource(Res.string.composer_multi_select_hint, selected.accessibilityLabel())
-                else -> stringResource(Res.string.composer_selected_hint, selected.accessibilityLabel())
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = ImagoColors.TextTertiary,
-            maxLines = 1,
-            modifier = Modifier.alpha(chrome).padding(top = ImagoSpacing.Xs),
-        )
+    Column(Modifier.padding(horizontal = ImagoSpacing.Sm), horizontalAlignment = Alignment.CenterHorizontally) {
         // Six buttons, not twenty-five. What is continuous is a slider in the drawer; what belongs to
         // the same subject — align, arrange — sits behind a menu. What is left in the row is what is
         // used on every element one taps.
         Row(
-            Modifier.fillMaxWidth().alpha(chrome).horizontalScroll(rememberScrollState()),
+            Modifier.alpha(chrome).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             // First of all: it is the drawer that has opacity, rotation and the frame, and it is where
@@ -2903,41 +2915,9 @@ private fun SelectedInspector(
                     }
                 }
             }
-            ToolMenuButton(stringResource(Res.string.composer_arrange), Icons.Outlined.Layers) { dismiss ->
-                ToolMenuItem(
-                    if (multiSelect) stringResource(Res.string.composer_end_multi_select) else stringResource(Res.string.composer_select_multiple),
-                    if (multiSelect) Icons.Outlined.Check else Icons.Outlined.SelectAll,
-                    dismiss,
-                    onToggleMultiSelect,
-                )
-                HorizontalDivider()
-                ToolMenuItem(stringResource(Res.string.composer_bring_forward), Icons.AutoMirrored.Outlined.ArrowForward, dismiss, actions::bringForward)
-                ToolMenuItem(stringResource(Res.string.composer_send_backward), Icons.AutoMirrored.Outlined.ArrowBack, dismiss, actions::sendBackward)
-                HorizontalDivider()
-                when {
-                    // With several in hand the question "with which one?" is already answered.
-                    chosen > 1 -> ToolMenuItem(stringResource(Res.string.composer_group), Icons.Outlined.Layers, dismiss, actions::groupSelection)
-                    selected.groupId == null -> ToolMenuItem(stringResource(Res.string.composer_group_with_ellipsis), Icons.Outlined.Layers, dismiss, onRequestGroup)
-                    else -> ToolMenuItem(stringResource(Res.string.composer_ungroup), Icons.Outlined.Layers, dismiss, actions::ungroupSelected)
-                }
-                ToolMenuItem(
-                    if (selected.locked) stringResource(Res.string.composer_unlock) else stringResource(Res.string.composer_lock),
-                    if (selected.locked) Icons.Outlined.LockOpen else Icons.Outlined.Lock,
-                    dismiss,
-                    actions::toggleLocked,
-                )
-                ToolMenuItem(
-                    if (selected.visible) stringResource(Res.string.composer_hide) else stringResource(Res.string.composer_show),
-                    if (selected.visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                    dismiss,
-                    actions::toggleVisible,
-                )
-                // A video repeated on every page would be the same clip playing several times on the
-                // same timeline — the exporter has no way to resolve that.
-                if (selected !is CompositionElement.Video) {
-                    ToolMenuItem(stringResource(Res.string.composer_repeat_all_pages), Icons.Outlined.Repeat, dismiss, actions::repeatOnAllPages)
-                }
-            }
+            ToolButton(stringResource(Res.string.composer_lock), Icons.Outlined.Lock, onClick = actions::toggleLocked)
+            if (chosen > 1) ToolButton(stringResource(Res.string.composer_group), Icons.Outlined.Layers, onClick = actions::groupSelection)
+            else if (selected.groupId != null) ToolButton(stringResource(Res.string.composer_ungroup), Icons.Outlined.Layers, onClick = actions::ungroupSelected)
             ToolButton(stringResource(Res.string.composer_duplicate), Icons.Outlined.ContentCopy, onClick = actions::duplicateSelected)
             // The caption is read before deleting: afterwards there is no element to take it from.
             val deletedLabel = if (chosen > 1) {
@@ -2945,7 +2925,7 @@ private fun SelectedInspector(
             } else {
                 stringResource(Res.string.composer_element_deleted, selected.accessibilityLabel())
             }
-            ToolButton(stringResource(Res.string.composer_delete), Icons.Outlined.Delete, tint = ImagoColors.Danger) {
+            ToolButton(stringResource(Res.string.composer_delete), Icons.Outlined.Delete, tint = uiColors.danger) {
                 val label = deletedLabel
                 actions.deleteSelected()
                 onDeleted(label)
@@ -2960,7 +2940,7 @@ private fun SelectedInspector(
             Text(
                 stringResource(Res.string.composer_mask_hint),
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.Gold,
+                color = uiColors.accent,
                 modifier = Modifier.padding(top = ImagoSpacing.Xs),
             )
         }
@@ -3102,7 +3082,8 @@ private fun LayersSheet(
     actions: ComposerEditorViewModel,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = ImagoColors.Surface, dragHandle = { SheetHandle() }) {
+    val uiColors = ImagoUi.colors
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = uiColors.surface, dragHandle = { SheetHandle() }) {
         LayersPanel(
             project = project,
             state = state,
@@ -3127,17 +3108,18 @@ private fun LayersPanel(
     onSelectBackground: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val uiColors = ImagoUi.colors
     val ordered = remember(project.revision) { project.elements.sortedByDescending { it.zIndex } }
     // The index the dragged row would go to, if the finger let go now.
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableStateOf(0f) }
     val rowHeightPx = with(LocalDensity.current) { (LayerThumbnailSize + ImagoSpacing.Md).toPx() }
     Column(modifier.padding(horizontal = ImagoSpacing.Md)) {
-        Text(stringResource(Res.string.composer_layers), style = MaterialTheme.typography.titleLarge, color = ImagoColors.TextPrimary)
+        Text(stringResource(Res.string.composer_layers), style = MaterialTheme.typography.titleLarge, color = uiColors.text)
         Text(
             stringResource(Res.string.composer_layers_hint),
             style = MaterialTheme.typography.bodySmall,
-            color = ImagoColors.TextTertiary,
+            color = uiColors.tertiaryText,
             modifier = Modifier.padding(bottom = ImagoSpacing.Sm),
         )
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -3168,7 +3150,6 @@ private fun LayersPanel(
                 )
             }
         }
-        BackgroundLayerRow(project, state, onSelectBackground)
     }
 }
 
@@ -3187,6 +3168,7 @@ private fun LayerRow(
     onDrag: (Float) -> Unit,
     onDragEnd: () -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     val label = element.accessibilityLabel()
     // The semantics block is not a composition: the texts are read here, before it.
     val layerForward = stringResource(Res.string.composer_layer_forward)
@@ -3209,19 +3191,23 @@ private fun LayerRow(
             .clip(RoundedCornerShape(ImagoRadii.Medium))
             .background(
                 when {
-                    dragging -> ImagoColors.Graphite
-                    selected -> ImagoColors.Gold.copy(alpha = .14f)
-                    else -> ImagoColors.SurfaceElevated
+                    dragging -> uiColors.selectedSurface
+                    selected -> uiColors.accent.copy(alpha = .14f)
+                    else -> uiColors.elevated
                 },
             )
-            .clickable { actions.selectElement(element.id) }
+            .combinedClickable(
+                enabled = actions.canEdit(element.id),
+                onClick = { if (actions.state.value.multiSelect) actions.toggleElementInSelection(element.id) else actions.selectElement(element.id) },
+                onLongClick = { actions.beginMultiSelection(element.id) },
+            )
             .padding(ImagoSpacing.Sm)
             // The drag handle does not exist for TalkBack, and the "Back"/"Forward" buttons that played
             // that role left the row. The custom actions keep the promise: the screen reader announces
             // them without them taking up space.
             .semantics {
                 contentDescription = label
-                customActions = listOf(
+                customActions = if (!actions.canEdit(element.id)) emptyList() else listOf(
                     CustomAccessibilityAction(layerForward) {
                         val possible = index > 0
                         if (possible) actions.reorderLayer(index, index - 1)
@@ -3245,13 +3231,13 @@ private fun LayerRow(
             Text(
                 label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (element.visible) ImagoColors.TextPrimary else ImagoColors.TextDisabled,
+                color = if (element.visible) uiColors.text else uiColors.disabledText,
                 maxLines = 1,
             )
             Text(
                 element.layerSubtitle(),
                 style = MaterialTheme.typography.labelSmall,
-                color = ImagoColors.TextTertiary,
+                color = uiColors.tertiaryText,
                 maxLines = 1,
             )
         }
@@ -3260,7 +3246,7 @@ private fun LayerRow(
                 if (element.locked) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
                 if (element.locked) stringResource(Res.string.composer_unlock) else stringResource(Res.string.composer_lock),
                 Modifier.size(ImagoSizes.IconSmall),
-                tint = if (element.locked) ImagoColors.Gold else ImagoColors.TextSecondary,
+                tint = if (element.locked) uiColors.accent else uiColors.secondaryText,
             )
         }
         IconButton(onClick = { actions.toggleElementVisible(element.id) }, modifier = Modifier.size(ImagoSizes.TouchTarget)) {
@@ -3268,11 +3254,11 @@ private fun LayerRow(
                 if (element.visible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
                 if (element.visible) stringResource(Res.string.composer_hide) else stringResource(Res.string.composer_show),
                 Modifier.size(ImagoSizes.IconSmall),
-                tint = ImagoColors.TextSecondary,
+                tint = uiColors.secondaryText,
             )
         }
         IconButton(onClick = { actions.deleteElement(element.id) }, modifier = Modifier.size(ImagoSizes.TouchTarget)) {
-            Icon(Icons.Outlined.Delete, stringResource(Res.string.composer_delete_element), Modifier.size(ImagoSizes.IconSmall), tint = ImagoColors.TextSecondary)
+            Icon(Icons.Outlined.Delete, stringResource(Res.string.composer_delete_element), Modifier.size(ImagoSizes.IconSmall), tint = uiColors.secondaryText)
         }
         Box(
             Modifier
@@ -3287,7 +3273,7 @@ private fun LayerRow(
                 .semantics { contentDescription = reorderLabel },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Outlined.DragHandle, null, Modifier.size(ImagoSizes.IconSmall), tint = ImagoColors.TextTertiary)
+            Icon(Icons.Outlined.DragHandle, null, Modifier.size(ImagoSizes.IconSmall), tint = uiColors.tertiaryText)
         }
     }
 }
@@ -3295,10 +3281,11 @@ private fun LayerRow(
 /** The layer's thumbnail: the real image when there is one, otherwise a drawn summary of the element. */
 @Composable
 private fun LayerThumbnail(element: CompositionElement, thumbnailUrl: (String) -> String, apiKey: (String) -> String) {
+    val uiColors = ImagoUi.colors
     val shape = RoundedCornerShape(ImagoRadii.Small)
     Box(
-        Modifier.size(LayerThumbnailSize).clip(shape).background(ImagoColors.Charcoal)
-            .border(1.dp, ImagoColors.BorderSubtle, shape),
+        Modifier.size(LayerThumbnailSize).clip(shape).background(uiColors.elevated)
+            .border(1.dp, uiColors.subtleBorder, shape),
         contentAlignment = Alignment.Center,
     ) {
         when (element) {
@@ -3311,7 +3298,7 @@ private fun LayerThumbnail(element: CompositionElement, thumbnailUrl: (String) -
                     null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
                 )
                 if (element is CompositionElement.Video) {
-                    Icon(Icons.Outlined.PlayArrow, null, Modifier.size(ImagoSizes.IconSmall), tint = Color.White)
+                    Icon(Icons.Outlined.PlayArrow, null, Modifier.size(ImagoSizes.IconSmall), tint = uiColors.text)
                 }
             }
             is CompositionElement.Text -> Text(
@@ -3342,7 +3329,7 @@ private fun LayerThumbnail(element: CompositionElement, thumbnailUrl: (String) -
             }
             is CompositionElement.MediaPlaceholder -> Canvas(Modifier.fillMaxSize().padding(ImagoSpacing.Xs)) {
                 drawRect(
-                    ImagoColors.TextTertiary,
+                    uiColors.tertiaryText,
                     style = Stroke(
                         width = 1.5.dp.toPx(),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)),
@@ -3356,12 +3343,12 @@ private fun LayerThumbnail(element: CompositionElement, thumbnailUrl: (String) -
 /** The background layer, fixed at the end of the list just as on the stage it sits under everything. */
 @Composable
 private fun BackgroundLayerRow(project: CompositionProject, state: ComposerEditorUiState, onSelect: () -> Unit) {
+    val uiColors = ImagoUi.colors
     val background = project.pages.getOrNull(state.currentPage)?.backgroundOverride ?: project.background
     val shape = RoundedCornerShape(ImagoRadii.Medium)
     Row(
         Modifier.fillMaxWidth().padding(vertical = ImagoSpacing.Sm).clip(shape)
-            .background(if (state.backgroundSelected) ImagoColors.Gold.copy(alpha = .14f) else ImagoColors.SurfaceElevated)
-            .clickable(onClick = onSelect).padding(ImagoSpacing.Sm),
+            .background(if (state.backgroundSelected) uiColors.accent.copy(alpha = .14f) else uiColors.elevated).padding(ImagoSpacing.Sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -3370,18 +3357,18 @@ private fun BackgroundLayerRow(project: CompositionProject, state: ComposerEdito
                     when (background) {
                         is CompositionBackground.Solid -> Color(background.argb)
                         is CompositionBackground.Gradient -> Color(background.startArgb)
-                        is CompositionBackground.Photo -> ImagoColors.Charcoal
+                        is CompositionBackground.Photo -> uiColors.elevated
                     },
                 )
-                .border(1.dp, ImagoColors.BorderSubtle, RoundedCornerShape(ImagoRadii.Small)),
+                .border(1.dp, uiColors.subtleBorder, RoundedCornerShape(ImagoRadii.Small)),
             contentAlignment = Alignment.Center,
         ) {
             if (background is CompositionBackground.Photo) {
-                Icon(Icons.Outlined.Image, null, Modifier.size(ImagoSizes.IconSmall), tint = ImagoColors.TextSecondary)
+                Icon(Icons.Outlined.Image, null, Modifier.size(ImagoSizes.IconSmall), tint = uiColors.secondaryText)
             }
         }
         Column(Modifier.weight(1f).padding(horizontal = ImagoSpacing.Sm)) {
-            Text(stringResource(Res.string.composer_background), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
+            Text(stringResource(Res.string.composer_background), style = MaterialTheme.typography.bodyMedium, color = uiColors.text)
             Text(
                 when (background) {
                     is CompositionBackground.Solid -> stringResource(Res.string.composer_solid_color)
@@ -3396,10 +3383,10 @@ private fun BackgroundLayerRow(project: CompositionProject, state: ComposerEdito
                     }
                 },
                 style = MaterialTheme.typography.labelSmall,
-                color = ImagoColors.TextTertiary,
+                color = uiColors.tertiaryText,
             )
         }
-        Icon(Icons.Outlined.Wallpaper, null, Modifier.size(ImagoSizes.IconSmall), tint = ImagoColors.TextTertiary)
+        Icon(Icons.Outlined.Wallpaper, null, Modifier.size(ImagoSizes.IconSmall), tint = uiColors.tertiaryText)
     }
 }
 
@@ -3421,10 +3408,11 @@ private fun PageControls(
     actions: ComposerEditorViewModel,
     onPageDeleted: (String) -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     val project = state.project ?: return
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    Column(Modifier.padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -3439,7 +3427,7 @@ private fun PageControls(
             }
         }
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -3453,7 +3441,7 @@ private fun PageControls(
                 onClick = actions::toggleSafeZones,
             )
             val deletedLabel = stringResource(Res.string.composer_page_deleted, state.currentPage + 1)
-            ToolButton(stringResource(Res.string.composer_delete), Icons.Outlined.Delete, tint = ImagoColors.Danger) {
+            ToolButton(stringResource(Res.string.composer_delete), Icons.Outlined.Delete, tint = uiColors.danger) {
                 actions.deleteCurrentPage()
                 onPageDeleted(deletedLabel)
             }
@@ -3479,6 +3467,7 @@ private fun PageThumbnail(
     actions: ComposerEditorViewModel,
     onClick: () -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     val width = PageStripHeight * project.format.pixelWidth / project.format.pixelHeight
     val pageLabel = stringResource(Res.string.composer_page_n, page.index + 1)
     Box(
@@ -3487,7 +3476,7 @@ private fun PageThumbnail(
             .clip(RoundedCornerShape(ImagoRadii.Small))
             .border(
                 width = if (current) 2.dp else 1.dp,
-                color = if (current) ImagoColors.Gold else ImagoColors.BorderVisible,
+                color = if (current) uiColors.accent else uiColors.border,
                 shape = RoundedCornerShape(ImagoRadii.Small),
             )
             .clickable(role = Role.Tab, onClick = onClick)
@@ -3502,14 +3491,14 @@ private fun PageThumbnail(
             apiKey = actions::apiKey,
         )
         Surface(
-            color = Color.Black.copy(alpha = .6f),
+            color = uiColors.workspace.copy(alpha = .6f),
             shape = RoundedCornerShape(topStart = ImagoRadii.Small),
             modifier = Modifier.align(Alignment.BottomEnd),
         ) {
             Text(
                 "${page.index + 1}",
                 fontSize = 10.sp,
-                color = ImagoColors.TextPrimary,
+                color = uiColors.text,
                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
             )
         }
@@ -3544,9 +3533,10 @@ private fun ComposerMediaPicker(
     onDismiss: () -> Unit,
     onPicked: (List<ComposerMedia>) -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     val forBackground = target is MediaPickerTarget.Background
     Surface(
-        color = ImagoColors.Background,
+        color = uiColors.background,
         modifier = Modifier
             .fillMaxSize()
             // Opaque is not enough: without something consuming the touches, those falling outside the
@@ -3590,21 +3580,23 @@ internal fun ToolButton(
     label: String,
     icon: ImageVector,
     active: Boolean = false,
-    tint: Color = ImagoColors.TextSecondary,
+    tint: Color = ImagoUi.colors.secondaryText,
     onClick: () -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     // The filled capsule marks what is on — drawing mode, the adjustments drawer. Over a stage of
     // arbitrary colour, a difference in opacity alone does not read.
-    val content = if (active) ImagoColors.TextPrimary else tint
+    val content = if (active) uiColors.text else tint
     Column(
-        Modifier.clip(RoundedCornerShape(ImagoRadii.Small))
-            .background(if (active) ImagoColors.Graphite else Color.Transparent)
+        Modifier.widthIn(min = LocalComposerContextToolWidth.current).clip(RoundedCornerShape(ImagoRadii.Small))
+            .background(if (active) uiColors.selectedSurface else Color.Transparent)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 7.dp).semantics { contentDescription = label },
+            .padding(horizontal = 10.dp, vertical = 7.dp)
+            .semantics { contentDescription = label },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, null, Modifier.size(20.dp), tint = content)
-        Text(label, fontSize = 10.sp, color = content)
+        Text(label, fontSize = 10.sp, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -3649,12 +3641,13 @@ private fun ToolMenuItem(
 /** The cut between two groups of the same row. Without it, insert and export read as neighbours. */
 @Composable
 private fun ToolGroupDivider() {
+    val uiColors = ImagoUi.colors
     Box(
         Modifier
             .padding(horizontal = ImagoSpacing.Sm, vertical = ImagoSpacing.Sm)
             .width(1.dp)
             .height(28.dp)
-            .background(ImagoColors.BorderVisible),
+            .background(uiColors.border),
     )
 }
 
@@ -3704,14 +3697,15 @@ private fun ComposerModeBubble(
     onDrag: (Offset) -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     val shape = RoundedCornerShape(ImagoRadii.Panel)
     val currentOnDrag by rememberUpdatedState(onDrag)
     Box(modifier.onSizeChanged(onSize)) {
         Box(Modifier.matchParentSize().clip(shape).imagoGlassBlur().background(Color.Transparent))
         Surface(
-            color = ImagoColors.Glass,
+            color = uiColors.glass,
             shape = shape,
-            modifier = Modifier.border(1.dp, ImagoColors.BorderSubtle, shape),
+            modifier = Modifier.border(1.dp, uiColors.subtleBorder, shape),
         ) {
             Column(Modifier.padding(horizontal = ImagoSpacing.Sm, vertical = 4.dp)) {
                 // The grip: the only part of the bubble that moves it, so sliders and buttons keep their own drags.
@@ -3724,7 +3718,7 @@ private fun ComposerModeBubble(
                     },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Box(Modifier.width(36.dp).height(4.dp).clip(CircleShape).background(ImagoColors.BorderStrong))
+                    Box(Modifier.width(36.dp).height(4.dp).clip(CircleShape).background(uiColors.strongBorder))
                 }
                 content()
             }
@@ -3749,9 +3743,10 @@ private fun clampBubble(
 /** The colour in use, as a circle; tapping it opens the picker. */
 @Composable
 private fun ColorDot(argb: Long, label: String = stringResource(Res.string.composer_color), onClick: () -> Unit) {
+    val uiColors = ImagoUi.colors
     Box(
         Modifier.padding(horizontal = 6.dp).size(28.dp).clip(CircleShape)
-            .background(Color(argb)).border(1.5.dp, ImagoColors.BorderStrong, CircleShape)
+            .background(Color(argb)).border(1.5.dp, uiColors.strongBorder, CircleShape)
             .semantics { contentDescription = label }
             .clickable(role = Role.Button, onClick = onClick),
     )

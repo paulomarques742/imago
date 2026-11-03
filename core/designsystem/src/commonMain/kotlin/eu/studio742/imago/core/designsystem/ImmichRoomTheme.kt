@@ -156,13 +156,27 @@ private val ImagoColorScheme = darkColorScheme(
 )
 
 @Composable
-fun ImagoTheme(content: @Composable () -> Unit) {
+fun ImagoTheme(palette: ImagoUiPalette = ImagoUiPalette(), content: @Composable () -> Unit) {
     CompositionLocalProvider(
+        LocalImagoUiPalette provides palette,
         LocalReducedMotion provides rememberSystemReducedMotion(),
         LocalImagoWindow provides currentImagoWindow(),
     ) {
         MaterialTheme(
-            colorScheme = ImagoColorScheme,
+            colorScheme = ImagoColorScheme.copy(
+                background = palette.background, onBackground = palette.text,
+                surface = palette.surface, onSurface = palette.text,
+                surfaceVariant = palette.elevated, onSurfaceVariant = palette.secondaryText,
+                surfaceContainer = palette.surface, surfaceContainerLow = palette.surface,
+                surfaceContainerLowest = palette.background, surfaceContainerHigh = palette.elevated,
+                surfaceContainerHighest = palette.elevated, surfaceBright = palette.elevated,
+                surfaceDim = palette.background, inverseSurface = palette.text,
+                inverseOnSurface = palette.workspace, surfaceTint = palette.accent,
+                primary = palette.text, onPrimary = palette.workspace,
+                primaryContainer = palette.selectedSurface, onPrimaryContainer = palette.text,
+                secondary = palette.secondaryText, onSecondary = palette.workspace, outline = palette.border,
+                outlineVariant = palette.subtleBorder, error = palette.error, scrim = palette.scrim,
+            ),
             typography = ImagoTypography,
             content = content,
         )
@@ -171,4 +185,4 @@ fun ImagoTheme(content: @Composable () -> Unit) {
 
 /** Kept as a source-compatible alias for modules not yet renamed internally. */
 @Composable
-fun ImmichRoomTheme(content: @Composable () -> Unit) = ImagoTheme(content)
+fun ImmichRoomTheme(content: @Composable () -> Unit) = ImagoTheme(content = content)

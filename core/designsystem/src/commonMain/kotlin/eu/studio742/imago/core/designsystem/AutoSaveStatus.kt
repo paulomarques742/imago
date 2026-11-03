@@ -29,6 +29,7 @@ private const val SAVED_VISIBLE_MS = 1_600L
 
 @Composable
 fun AutoSaveStatus(isSaving: Boolean, modifier: Modifier = Modifier) {
+    val colors = ImagoUi.colors
     var showSaved by remember { mutableStateOf(false) }
     var wasSaving by remember { mutableStateOf(false) }
 
@@ -53,7 +54,7 @@ fun AutoSaveStatus(isSaving: Boolean, modifier: Modifier = Modifier) {
         Text(
             text = stringResource(if (isSaving) Res.string.autosave_saving else Res.string.autosave_saved),
             style = MaterialTheme.typography.labelSmall,
-            color = if (isSaving) ImagoColors.TextSecondary else ImagoColors.TextTertiary,
+            color = if (isSaving) colors.secondaryText else colors.tertiaryText,
         )
     }
 }
