@@ -21,14 +21,30 @@ import kotlinx.coroutines.runInterruptible
  * rotated, cropped or corrected for the lens, and none of that moves a quantile much. Each quantile
  * where the JPEG is in the mid-tones, between [LOW] and [HIGH] on the screen, is taken back through the
  * profile's inverse to the light that would have shown it; the answer is the median of the ratios.
- * Shadows are left out because phones lift them locally, highlights because they clip. The result is
- * bounded by [LIMIT]: past a stop the JPEG has done something a single exposure cannot repeat — a
- * phone's local tone mapping on a backlit window asked for +1.7 EV.
+ * Shadows are left out because phones lift them locally, highlights because they clip.
+ *
+ * How far the answer may go depends on whether a single exposure can repeat the JPEG at all. When the
+ * tones agree it can, and the bound is [STEADY_LIMIT]: an X-T30 RAF asked for +1.9 EV and another for
+ * −1.1, their tones' answers within 0.15 of each other. When they disagree the JPEG has been tone-mapped
+ * locally, and the bound is [LIMIT]: a phone's backlit window asked for +1.7 EV with answers 0.5 apart.
+ *
+ * A dark photo may have too few mid-tones to read: an X-T30 at ISO 4000 had three quantiles above [LOW].
+ * Then the shadows down to [DARK_LOW] are read too, and believed only if the tones agree. Across 36 RAWs,
+ * every one whose answers agreed that way landed within 0.05 EV of what its mid-tones alone said.
  */
 object CameraExposureMatch {
     const val LOW = 0.25f
+    const val DARK_LOW = 0.10f
     const val HIGH = 0.85f
     const val LIMIT = 1f
+    const val STEADY_LIMIT = 3f
+
+    /**
+     * The widest gap, in stops, between the 10th and 90th percentile of the tones' answers that still
+     * counts as one exposure. Among 36 RAWs, those asking for about a stop or more were at 0.30 or less,
+     * but for a phone's backlit window and a drone's scene, both above 0.4.
+     */
+    private const val STEADY_SPREAD = 0.35f
 
     /** Below this many usable quantiles out of [QUANTILES] the JPEG says too little: no correction. */
     private const val MIN_QUANTILES = 10
@@ -49,18 +65,30 @@ object CameraExposureMatch {
             val linear = luminance(srgbToLinear((p ushr 16 and 255) / 255f), srgbToLinear((p ushr 8 and 255) / 255f), srgbToLinear((p and 255) / 255f))
             encodeSrgb(linear)
         }
+        var ratios = ratios(ours, theirs, LOW)
+        val hasMidTones = ratios.size >= MIN_QUANTILES
+        if (!hasMidTones) ratios = ratios(ours, theirs, DARK_LOW)
+        if (ratios.size < MIN_QUANTILES) return 0f
+        ratios.sort()
+        val median = if (ratios.size % 2 == 1) ratios[ratios.size / 2] else (ratios[ratios.size / 2 - 1] + ratios[ratios.size / 2]) / 2f
+        val spread = ratios[min(ratios.size - 1, (ratios.size * 0.9f).toInt())] - ratios[(ratios.size * 0.1f).toInt()]
+        val steady = spread <= STEADY_SPREAD
+        if (!hasMidTones && !steady) return 0f
+        val limit = if (steady) STEADY_LIMIT else LIMIT
+        return median.coerceIn(-limit, limit)
+    }
+
+    /** What each quantile the JPEG shows between [low] and [HIGH] asks for, in stops. */
+    private fun ratios(ours: FloatArray, theirs: FloatArray, low: Float): ArrayList<Float> {
         val ratios = ArrayList<Float>(QUANTILES)
         for (k in 0 until QUANTILES) {
             val q = 0.05f + k * 0.01f
             val shown = quantile(theirs, q)
             val light = quantile(ours, q)
-            if (shown <= LOW || shown >= HIGH || light <= 1e-5f) continue
+            if (shown <= low || shown >= HIGH || light <= 1e-5f) continue
             ratios += (ln(RawProfile.inverse(shown) / light) / LN2).toFloat()
         }
-        if (ratios.size < MIN_QUANTILES) return 0f
-        ratios.sort()
-        val median = if (ratios.size % 2 == 1) ratios[ratios.size / 2] else (ratios[ratios.size / 2 - 1] + ratios[ratios.size / 2]) / 2f
-        return median.coerceIn(-LIMIT, LIMIT)
+        return ratios
     }
 
     /**

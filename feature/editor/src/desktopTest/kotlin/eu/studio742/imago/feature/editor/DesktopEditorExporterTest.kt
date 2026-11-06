@@ -39,7 +39,7 @@ class DesktopEditorExporterTest {
                 assertTrue(maxOf(preview.width, preview.height) <= 2048)
                 assertTrue(preview.linear)
                 val matched = eu.studio742.imago.core.render.CameraExposureMatch.of(original, preview)
-                assertTrue(kotlin.math.abs(matched) <= eu.studio742.imago.core.render.CameraExposureMatch.LIMIT)
+                assertTrue(kotlin.math.abs(matched) <= eu.studio742.imago.core.render.CameraExposureMatch.STEADY_LIMIT)
                 println("RAW camera JPEG match ${info.cameraMake} ${info.cameraModel}: ${"%+.2f".format(matched)} EV")
                 println("RAW preview ${info.cameraMake} ${info.cameraModel}: ${preview.width}x${preview.height}, FP16 buffer ${preview.rgb.size.toLong() * 2} bytes, ${(System.nanoTime() - previewStarted) / 1_000_000} ms")
             }
