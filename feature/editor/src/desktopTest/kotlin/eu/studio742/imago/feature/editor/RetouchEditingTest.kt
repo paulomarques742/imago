@@ -12,6 +12,7 @@ import eu.studio742.imago.core.model.RetouchMode
 import eu.studio742.imago.core.model.SavedRecipe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -28,6 +29,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.lang.reflect.Proxy
+import java.util.concurrent.Executors
 
 /** The Remove tool through the real view model: strokes, their content, the history and the device's tool. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -154,20 +156,30 @@ class RetouchEditingTest {
     /** A quick hand paints the next stroke before the last one is solved: both stay, each with its content. */
     @Test
     fun `a stroke painted while another is being solved is kept, and neither is lost`() {
-        open()
-        val before = state.history.size
-        viewModel.setRetouchMode(RetouchMode.REMOVE)
-        viewModel.beginRetouchStroke(0.3f, 0.6f, 0.04f)
-        viewModel.finishRetouchGesture()
-        viewModel.beginRetouchStroke(0.7f, 0.3f, 0.04f)
-        viewModel.extendRetouchStroke(0.72f, 0.3f)
-        viewModel.finishRetouchGesture()
-        solved()
+        // One main thread, as on a device. Under the unconfined dispatcher the first solve resumes on its
+        // worker thread and races the gestures below, which no device can do.
+        val main = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        Dispatchers.setMain(main)
+        try {
+            open()
+            val before = state.history.size
+            runBlocking(main) {
+                viewModel.setRetouchMode(RetouchMode.REMOVE)
+                viewModel.beginRetouchStroke(0.3f, 0.6f, 0.04f)
+                viewModel.finishRetouchGesture()
+                viewModel.beginRetouchStroke(0.7f, 0.3f, 0.04f)
+                viewModel.extendRetouchStroke(0.72f, 0.3f)
+                viewModel.finishRetouchGesture()
+            }
+            solved()
 
-        assertEquals(2, retouches.size)
-        assertTrue(retouches.all { it.fill != null })
-        assertEquals(2, state.renderParameters.retouches.size)
-        assertEquals(before + 2, state.history.size)
+            assertEquals(2, retouches.size)
+            assertTrue(retouches.all { it.fill != null })
+            assertEquals(2, state.renderParameters.retouches.size)
+            assertEquals(before + 2, state.history.size)
+        } finally {
+            main.close()
+        }
     }
 
     @Test
