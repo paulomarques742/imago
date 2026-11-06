@@ -40,6 +40,7 @@ actual fun PhotoCanvas(
     highPrecisionSource: FloatPixelBuffer?,
     clipping: ClippingWarning,
     spots: Float?,
+    luminanceMap: Boolean,
     onFirstFrame: () -> Unit,
 ) {
     val source = remember(bitmap) { bitmap.toPixelBuffer() }
@@ -52,15 +53,27 @@ actual fun PhotoCanvas(
     // on every frame of a slider.
     val retouched = remember(source) { RetouchedSources(capacity = 4) }
     val spotsView = remember(source) { SpotsView() }
+    val luminanceView = remember(source) { LuminanceView() }
     val active = if (showOriginal) parameters.original else parameters
     var frame by remember(source) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(source, highPrecisionSource, active, maskOverlay, spots) {
+    LaunchedEffect(source, highPrecisionSource, active, maskOverlay, spots, luminanceMap) {
         if (spots != null) {
             // No draft: the map is worked out once per set of corrections, and framing it is quick.
             frame = withContext(Dispatchers.Default) {
                 val map = spotsView.render(retouched.of(source, active.retouches), spots)
                 RecipePixels.render(map, active.framing).toSkiaBitmap().asComposeImageBitmap()
+            }
+            return@LaunchedEffect
+        }
+        if (luminanceMap) {
+            frame = withContext(Dispatchers.Default) {
+                val map = luminanceView.render(retouched.of(source, active.retouches))
+                val framed = RecipePixels.render(map, active.framing)
+                if (maskOverlay in 0 until minOf(active.masks.size, MAX_LOCAL_MASKS)) {
+                    tintMask(framed, map.width, map.height, active, maskOverlay, brushCache.of(active, source, retouched))
+                }
+                framed.toSkiaBitmap().asComposeImageBitmap()
             }
             return@LaunchedEffect
         }

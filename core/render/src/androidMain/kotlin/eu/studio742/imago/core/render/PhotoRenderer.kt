@@ -36,6 +36,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     @Volatile private var maskOverlay = -1
     @Volatile private var clipping = ClippingWarning.NONE
     @Volatile private var spots: Float? = null
+    @Volatile private var luminanceMap = false
     @Volatile private var minZoom = MIN_PHOTO_ZOOM
     @Volatile private var zoom = MIN_PHOTO_ZOOM
     @Volatile private var panX = 0f
@@ -88,6 +89,13 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     /** Visualize Spots: the map that takes the photo's place in [sourceTexture], and the sensitivity it was drawn at. */
     private val spotsView = SpotsView()
     private var uploadedSpots: Float? = null
+
+    /** Show Luminance Mask: the map that takes the photo's place in [sourceTexture], under the mask's red. */
+    private val luminanceView = LuminanceView()
+    private var uploadedLuminance = false
+
+    /** An aid's map is in [sourceTexture]: encoded 8-bit greys, whatever the photo it stands in for. */
+    private var textureHoldsMap = false
     private var toneCurveTexture = 0
     /** The tables now in [toneCurveTexture]; uploaded again only when the curves change. */
     private var uploadedToneCurves: FloatArray? = null
@@ -185,6 +193,9 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     fun setClipping(value: ClippingWarning) { clipping = value }
     /** Visualize Spots at this sensitivity, or null for the photo; an aid of the editor, like [setMaskOverlay]. */
     fun setSpots(value: Float?) { spots = value }
+
+    /** Show Luminance Mask on or off; an aid of the editor, like [setMaskOverlay]. */
+    fun setLuminanceMap(value: Boolean) { luminanceMap = value }
     /**
      * @param minZoom the minimum this mode accepts. Crop passes [MIN_CROP_ZOOM] so it can zoom the
      *   photo out; viewing leaves the default and nothing changes for it.
@@ -235,19 +246,25 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         val source = bitmap ?: return
         val edited = if (showOriginal) parameters.original else parameters
         val spotsNow = spots
-        val developed = if (spotsNow == null) highPrecisionSource?.let { retouched.of(it, edited.retouches) } else null
+        val luminanceNow = luminanceMap && spotsNow == null
+        val mapNow = spotsNow != null || luminanceNow
+        val developed = if (!mapNow) highPrecisionSource?.let { retouched.of(it, edited.retouches) } else null
         val noiseKey = developed?.takeIf { it.linear && RawNoiseReduction.isActive(edited) }?.let { noiseKeyOf(edited, it) }
         val denoised = if (noiseKey != null) denoisedFor(noiseKey, checkNotNull(developed), edited) else null
         // A reduction still being worked out leaves the last one on screen until it is ready.
         val noiseChanged = noiseKey != uploadedNoise && (noiseKey == null || denoised != null)
         // "Before" has no corrections: the texture goes back to the bare photo, and forward again after.
-        if (pendingUpload || edited.retouches != uploadedRetouches || spotsNow != uploadedSpots || noiseChanged) {
+        if (pendingUpload || edited.retouches != uploadedRetouches || spotsNow != uploadedSpots || luminanceNow != uploadedLuminance || noiseChanged) {
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, sourceTexture)
             val raw = denoised ?: developed
             if (spotsNow != null) {
                 // The map is worked out on the GL thread, as the corrections are, and kept between sensitivities.
                 val map = spotsView.render(retouched.of(plainPixels(source), edited.retouches), spotsNow)
                 val mapBitmap = map.toPlatformBitmap()
+                GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, mapBitmap, 0)
+                mapBitmap.recycle()
+            } else if (luminanceNow) {
+                val mapBitmap = luminanceView.render(retouched.of(plainPixels(source), edited.retouches)).toPlatformBitmap()
                 GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, mapBitmap, 0)
                 mapBitmap.recycle()
             } else if (raw == null) {
@@ -268,6 +285,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
             imageHeight = (if (spotsNow != null) spotsView.height else source.height).coerceAtLeast(1)
             uploadedRetouches = edited.retouches
             uploadedSpots = spotsNow
+            uploadedLuminance = luminanceNow
+            textureHoldsMap = mapNow
             uploadedNoise = if (denoised != null) noiseKey else null
             pendingUpload = false
         }
@@ -275,6 +294,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         // noise is in the texture already, or about to be: step 10 does not run on top of it.
         val active = when {
             spotsNow != null -> edited.framing
+            // Only the red goes over this one, so the masks stay and their adjustments go.
+            luminanceNow -> edited.maskFraming
             noiseKey != null -> edited.copy(noiseLuminance = 0f, noiseColor = 0f)
             else -> edited
         }
@@ -959,7 +980,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
      * is built once here; the constants let the shader build it per pixel where a mask moves them.
      */
     private fun bindWhiteBalance(program: GlProgram, active: RenderParameters) {
-        program.boolean("uSourceLinear", highPrecisionSource?.linear == true)
+        program.boolean("uSourceLinear", !textureHoldsMap && highPrecisionSource?.linear == true)
         program.int("uRawProfile", active.rawProfile)
         program.boolean("uCalibrationOn", active.needsCalibration)
         program.float("uLensVignetteAmount", active.lensVignetteAmount)

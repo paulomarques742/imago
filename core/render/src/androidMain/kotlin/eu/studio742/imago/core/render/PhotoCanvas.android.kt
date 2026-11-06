@@ -15,7 +15,8 @@ actual fun PhotoCanvas(
     highPrecisionSource: FloatPixelBuffer?,
     clipping: ClippingWarning,
     spots: Float?,
+    luminanceMap: Boolean,
     onFirstFrame: () -> Unit,
-) = GlPhotoCanvas(bitmap, parameters, showOriginal, transform, minZoom, maskOverlay, modifier, highPrecisionSource, clipping, spots, onFirstFrame)
+) = GlPhotoCanvas(bitmap, parameters, showOriginal, transform, minZoom, maskOverlay, modifier, highPrecisionSource, clipping, spots, luminanceMap, onFirstFrame)
 
 actual val photoCanvasShowsClipping: Boolean = true

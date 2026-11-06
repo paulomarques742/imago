@@ -1,7 +1,9 @@
 package eu.studio742.imago.feature.editor
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import eu.studio742.imago.core.model.ColorRange
 import eu.studio742.imago.core.model.ColorSample
@@ -30,6 +32,33 @@ class RangeMaskEditingTest {
     private fun sample(x: Float) = ColorSample(x = x, y = 0.5f, l = 0.6f, a = 0.01f, b = -0.1f)
 
     private fun EditRecipe.samples(component: Int = 0) = masks.single().components[component].color!!.samples
+
+    private fun editing(vararg components: MaskComponent, component: Int = 0, on: Boolean = true) = EditorUiState(
+        recipe = recipe(*components),
+        sheet = EditorSheet.MASK_ADJUSTMENTS,
+        selectedMaskId = "m",
+        selectedMaskComponent = component,
+        luminanceMapOn = on,
+    )
+
+    @Test
+    fun theLuminanceMapShowsOnALuminanceRangeWithItsSwitchOn() {
+        assertTrue(editing(luminance).showsLuminanceMap)
+        assertFalse(editing(luminance, on = false).showsLuminanceMap)
+    }
+
+    /** The switch stays where it was: going back to the range brings the map back. */
+    @Test
+    fun theLuminanceMapGivesWayOnAnyOtherShape() {
+        assertFalse(editing(color).showsLuminanceMap)
+        assertFalse(editing(radial, luminance, component = 0).showsLuminanceMap)
+        assertTrue(editing(radial, luminance, component = 1).showsLuminanceMap)
+    }
+
+    @Test
+    fun theLuminanceMapGoesWhenTheMaskCloses() {
+        assertFalse(editing(luminance).copy(sheet = EditorSheet.MASKS, selectedMaskId = null).showsLuminanceMap)
+    }
 
     @Test
     fun aPlainTapReplacesTheSamplesAndAnAddedOneJoinsThem() {

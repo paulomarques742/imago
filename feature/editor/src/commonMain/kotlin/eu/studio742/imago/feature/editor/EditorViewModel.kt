@@ -583,6 +583,8 @@ data class EditorUiState(
     val brushTool: BrushTool = BrushTool(),
     /** Lightroom's Shift on a Color Range: a new sample joins the others instead of replacing them. */
     val rangeAddsSamples: Boolean = false,
+    /** The Show Luminance Mask switch. It only shows on a Luminance Range: read it through [showsLuminanceMap]. */
+    val luminanceMapOn: Boolean = false,
     /** The Remove tool in the hand: the mode and the brush of a new correction. Remembered on the device. */
     val retouchTool: RetouchTool = RetouchTool(),
     /** The correction whose pins are lit, and the one the panel's sliders and buttons act on. */
@@ -673,6 +675,11 @@ data class EditorUiState(
     /** The open mask's selected shape is a range: one finger on the photo samples it. */
     val isSamplingRange: Boolean
         get() = isMaskEditing && selectedMask?.components?.getOrNull(selectedComponent)?.shape?.isRange == true
+
+    /** The open mask's selected shape is a Luminance Range and the switch is on: the stage shows the map. */
+    val showsLuminanceMap: Boolean
+        get() = luminanceMapOn && isMaskEditing &&
+            selectedMask?.components?.getOrNull(selectedComponent)?.shape == MaskShape.LUMINANCE
 
     /** The open mask's selected shape is a brush: one finger on the photo paints. */
     val isPainting: Boolean
@@ -3051,6 +3058,8 @@ open class EditorViewModel(
     // --- ranges ---------------------------------------------------------------------------------
 
     fun setRangeAddsSamples(on: Boolean) = mutableState.update { it.copy(rangeAddsSamples = on) }
+
+    fun setLuminanceMapOn(on: Boolean) = mutableState.update { it.copy(luminanceMapOn = on) }
 
     /**
      * A tap or a drag on the photo with a range selected: a point when [width] and [height] are zero,

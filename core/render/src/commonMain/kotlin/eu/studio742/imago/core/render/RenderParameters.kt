@@ -197,6 +197,13 @@ data class RenderParameters(
             perspective = perspective,
         )
 
+    /**
+     * [framing] with the masks' shapes and none of their adjustments: for an aid that stands in for the
+     * photo's pixels ([LuminanceView]) and has the red of a mask drawn over it.
+     */
+    val maskFraming: RenderParameters
+        get() = framing.copy(masks = masks.map { it.copy(adjustments = LocalAdjustments()) })
+
     // Either white balance model does nothing at 0, 0: which one it is says nothing about neutrality.
     // Nor does the profile, which only a linear RAW reads, and a linear source is always processed.
     val isNeutral: Boolean

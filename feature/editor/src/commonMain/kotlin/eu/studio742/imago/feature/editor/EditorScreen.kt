@@ -423,6 +423,7 @@ fun EditorRoute(
                 onBrushSettingFinished = viewModel::finishBrushSetting,
                 onRangeSample = viewModel::sampleRange,
                 onRangeAddSamples = viewModel::setRangeAddsSamples,
+                onLuminanceMap = viewModel::setLuminanceMapOn,
                 onColorSampleRemove = viewModel::removeColorSample,
                 onLuminanceRange = viewModel::setLuminanceRange,
                 onRangeSetting = viewModel::setRangeSetting,
@@ -679,6 +680,7 @@ private fun EditorScreen(
     val cropMode = toolsVisible && state.isCropping
     // Closing the drawer closes the tool, and the photo comes back; hiding the interface keeps the map.
     val visualizingSpots = state.isRetouching && state.visualizesSpots && (rail || drawer != DrawerDetent.CLOSED)
+    val showingLuminanceMap = state.showsLuminanceMap && (rail || drawer != DrawerDetent.CLOSED)
     // While a value is being dragged, the panel fades and lets the whole photo show: only the
     // focused mode's ruler survives. It lives here, and not inside the panel, because that ruler —
     // drawn outside it — is what needs to know what is being moved.
@@ -1119,13 +1121,14 @@ private fun EditorScreen(
                                 // The channel comes from the already filtered list and not from
                                 // `recipe.masks`: a mask that is off or has no adjustments does not
                                 // reach the render, and the ones after it move up a channel.
-                                maskOverlay = if (!cropMode && (state.maskOverlayPinned || maskFlashing)) {
+                                maskOverlay = if (!cropMode && (state.maskOverlayPinned || maskFlashing || showingLuminanceMap)) {
                                     renderParameters.masks.indexOfFirst { it.id == state.selectedMaskId }
                                 } else {
                                     -1
                                 },
-                                clipping = if (cropMode || visualizingSpots) ClippingWarning.NONE else state.clipping,
+                                clipping = if (cropMode || visualizingSpots || showingLuminanceMap) ClippingWarning.NONE else state.clipping,
                                 spots = if (visualizingSpots) state.retouchTool.spots else null,
+                                luminanceMap = showingLuminanceMap && !cropMode,
                                 modifier = Modifier.fillMaxSize(),
                                 onFirstFrame = { stageShown = true },
                             )
@@ -2875,6 +2878,7 @@ private fun AdjustmentPanel(
                                         maskId = mask.id,
                                         component = range,
                                         addSamples = state.rangeAddsSamples,
+                                        luminanceMap = state.luminanceMapOn,
                                         editingKey = editingKey,
                                         onEditing = onEditing,
                                         actions = maskActions,

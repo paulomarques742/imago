@@ -123,6 +123,8 @@ data class MaskActions(
     val onRangeSample: (String, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
     /** Lightroom's Shift: samples taken from here on join the others instead of replacing them. */
     val onRangeAddSamples: (Boolean) -> Unit = {},
+    /** Show Luminance Mask: the photo as the range reads it, in greys, with the mask in red over them. */
+    val onLuminanceMap: (Boolean) -> Unit = {},
     val onColorSampleRemove: (String, Int) -> Unit = { _, _ -> },
     val onLuminanceRange: (String, Float, Float) -> Unit = { _, _, _ -> },
     val onRangeSetting: (String, RangeSetting, Float) -> Unit = { _, _, _ -> },
@@ -640,6 +642,7 @@ internal fun RangeToolPanel(
     maskId: String,
     component: MaskComponent,
     addSamples: Boolean,
+    luminanceMap: Boolean,
     editingKey: Any?,
     onEditing: (Any?) -> Unit,
     actions: MaskActions,
@@ -763,6 +766,25 @@ internal fun RangeToolPanel(
                 onEditing = onEditing,
                 actions = actions,
             )
+            Row(
+                modifier = Modifier.fillMaxWidth().alpha(headerAlpha),
+                horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val mapLabel = stringResource(Res.string.editor_range_show_luminance)
+                Text(
+                    text = mapLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ImagoColors.TextSecondary,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = luminanceMap,
+                    onCheckedChange = actions.onLuminanceMap,
+                    colors = SwitchDefaults.colors(checkedTrackColor = ImagoColors.Gold),
+                    modifier = Modifier.semantics { contentDescription = mapLabel },
+                )
+            }
         }
         MaskShape.LINEAR, MaskShape.RADIAL, MaskShape.BRUSH -> Unit
     }

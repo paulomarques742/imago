@@ -27,6 +27,8 @@ expect fun PhotoCanvas(
     clipping: ClippingWarning = ClippingWarning.NONE,
     /** Visualize Spots at this sensitivity, 0 to 100: the photo's [SpotsView] map, framed as the photo is; null shows the photo. */
     spots: Float? = null,
+    /** Show Luminance Mask: the photo's [LuminanceView] map, framed as the photo is, under the [maskOverlay]. */
+    luminanceMap: Boolean = false,
     /** Called once the photo is on screen, so that what held its place while it developed can be taken away. */
     onFirstFrame: () -> Unit = {},
 )

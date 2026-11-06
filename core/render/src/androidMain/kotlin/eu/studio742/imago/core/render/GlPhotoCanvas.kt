@@ -30,6 +30,8 @@ fun GlPhotoCanvas(
     clipping: ClippingWarning = ClippingWarning.NONE,
     /** Visualize Spots at this sensitivity; another aid of the editor, like [maskOverlay]. */
     spots: Float? = null,
+    /** Show Luminance Mask; another aid of the editor, like [maskOverlay]. */
+    luminanceMap: Boolean = false,
     /** The photo is on screen: whatever held its place can go. */
     onFirstFrame: () -> Unit = {},
 ) {
@@ -59,6 +61,7 @@ fun GlPhotoCanvas(
             renderer.setMaskOverlay(maskOverlay)
             renderer.setClipping(clipping)
             renderer.setSpots(spots)
+            renderer.setLuminanceMap(luminanceMap)
             renderer.setTransform(transform, minZoom)
             stage.requestRender()
         },
