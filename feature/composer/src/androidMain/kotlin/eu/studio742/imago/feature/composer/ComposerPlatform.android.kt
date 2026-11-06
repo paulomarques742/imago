@@ -12,6 +12,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
+import eu.studio742.imago.core.designsystem.ImagoUi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -136,6 +146,10 @@ class HiltComposerHubViewModel @Inject constructor(
 ) : ComposerHubViewModel(projects, templates, mediaRepository)
 
 @HiltViewModel
+class HiltComposerFormatsViewModel @Inject constructor(repository: eu.studio742.imago.core.data.CompositionFormatRepository) :
+    ComposerFormatsViewModel(repository)
+
+@HiltViewModel
 class HiltAddToCompositionViewModel @Inject constructor(
     projects: CompositionRepository,
     recipes: RecipeRepository,
@@ -147,11 +161,16 @@ class HiltBrandKitViewModel @Inject constructor(
     mediaRepository: CompositionMediaRepository,
 ) : BrandKitViewModel(brandKits, mediaRepository)
 
+internal actual val supportsVideoFrameOutlines: Boolean = true
+
 @Composable
 actual fun composerEditorViewModel(): ComposerEditorViewModel = hiltViewModel<HiltComposerEditorViewModel>()
 
 @Composable
 actual fun composerHubViewModel(): ComposerHubViewModel = hiltViewModel<HiltComposerHubViewModel>()
+
+@Composable
+actual fun composerFormatsViewModel(): ComposerFormatsViewModel = hiltViewModel<HiltComposerFormatsViewModel>()
 
 @Composable
 actual fun addToCompositionViewModel(): AddToCompositionViewModel = hiltViewModel<HiltAddToCompositionViewModel>()
@@ -212,6 +231,8 @@ actual fun ElementVideoPlayer(
             .setDefaultRequestProperties(if (apiKey.isBlank()) emptyMap() else mapOf(eu.studio742.imago.core.immich.IMMICH_API_KEY_HEADER to apiKey))
         ExoPlayer.Builder(context).setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(context, http))).build()
     }
+    var previewFailed by remember(player) { mutableStateOf(false) }
+    val framing = remember(player) { ComposerVideoFraming(player, { previewFailed = true }, { previewFailed = false }) }
     LaunchedEffect(player, element.timing.trimStartMs, element.timing.trimEndMs, url) {
         val clipping = MediaItem.ClippingConfiguration.Builder()
             .setStartPositionMs(element.timing.trimStartMs)
@@ -224,10 +245,18 @@ actual fun ElementVideoPlayer(
         player.volume = if (element.timing.muted) 0f else element.timing.volume
         player.repeatMode = if (element.timing.loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
-    DisposableEffect(player) { onDispose(player::release) }
-    AndroidView(
-        factory = { PlayerView(it).apply { this.player = player; useController = true } },
-        update = { it.player = player },
-        modifier = modifier,
-    )
+    DisposableEffect(player) { onDispose { framing.release(); player.release() } }
+    Box(modifier) {
+        AndroidView(
+            // TextureView participates in the cutout and in the stage's outside-page treatment.
+            factory = { android.view.LayoutInflater.from(it).inflate(R.layout.composer_element_video_player, null, false)
+                .let { view -> (view as PlayerView).also(framing::attach) } },
+            update = { framing.attach(it); framing.update(element.crop) },
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (previewFailed) Column(Modifier.align(Alignment.Center).background(ImagoUi.colors.surface).padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(stringResource(Res.string.composer_video_open_failed), color = ImagoUi.colors.text)
+            TextButton(onClick = { previewFailed = false; player.prepare(); player.playWhenReady = true }) { Text(stringResource(Res.string.composer_retry)) }
+        }
+    }
 }

@@ -3,10 +3,6 @@ package eu.studio742.imago.feature.composer
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculateCentroid
-import androidx.compose.foundation.gestures.calculatePan
-import androidx.compose.foundation.gestures.calculateRotation
-import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -30,6 +26,7 @@ import kotlin.math.atan2
 import eu.studio742.imago.core.composition.NormalizedRect
 import eu.studio742.imago.core.composition.ResizeCorner
 import eu.studio742.imago.core.composition.rotateVector
+import eu.studio742.imago.core.composition.snapRotation
 import eu.studio742.imago.core.designsystem.ImagoUi
 
 /** The visible disc. The touch target is [HandleTouchRadius], much larger, as accessibility requires. */
@@ -62,6 +59,7 @@ private enum class SelectionHandle(val corner: ResizeCorner?) {
 internal fun ComposerSelectionOverlay(
     elementId: String,
     bounds: NormalizedRect,
+    origin: Offset = Offset.Zero,
     rotationDegrees: Float,
     locked: Boolean,
     /**
@@ -96,7 +94,7 @@ internal fun ComposerSelectionOverlay(
     Box(Modifier.fillMaxSize()) {
         Canvas(Modifier.fillMaxSize()) {
             val elementSize = Size(bounds.width * pageWidthPx, bounds.height * pageHeightPx)
-            val topLeft = Offset(bounds.x * pageWidthPx, bounds.y * pageHeightPx)
+            val topLeft = origin + Offset(bounds.x * pageWidthPx, bounds.y * pageHeightPx)
             val centre = Offset(topLeft.x + elementSize.width / 2f, topLeft.y + elementSize.height / 2f)
             // The rotation is applied to the drawing, not to the box, so the gestures' node stays still.
             rotate(degrees = rotationDegrees, pivot = centre) {
@@ -131,16 +129,20 @@ internal fun Modifier.composerHandleGestures(
     pageHeightPx: Float,
     enabled: Boolean,
     actions: ComposerEditorViewModel,
+    origin: Offset = Offset.Zero,
 ): Modifier {
     val liveState by rememberUpdatedState(state)
     val width by rememberUpdatedState(pageWidthPx)
     val height by rememberUpdatedState(pageHeightPx)
+    val liveOrigin by rememberUpdatedState(origin)
     val touchRadius = with(LocalDensity.current) { HandleTouchRadius.toPx() }
     val rotationGap = with(LocalDensity.current) { RotationHandleGap.toPx() }
+    val snapDistance = with(LocalDensity.current) { ComposerSnapDistance.toPx() }
     fun frame(): Pair<NormalizedRect, Float>? {
         val current = liveState
-        val elements = current.project?.elements.orEmpty().filter { it.id in current.selectedElementIds }
-        if (elements.isEmpty() || elements.any { it.locked }) return null
+        val elements = current.editableSelection()
+        if (elements.isEmpty() || elements.none { it.visible } || elements.any { it.locked }) return null
+        current.manipulatedLayout()?.let { return it.frame.bounds to it.frame.rotationDegrees }
         if (elements.size == 1) return elements.single().let { it.transform.bounds to it.transform.rotationDegrees }
         val left = elements.minOf { it.transform.bounds.x }
         val top = elements.minOf { it.transform.bounds.y }
@@ -152,25 +154,35 @@ internal fun Modifier.composerHandleGestures(
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true, pass = PointerEventPass.Initial)
             val initial = frame() ?: return@awaitEachGesture
-            val handle = handleAt(down.position, stageCentre(initial.first, width, height),
+            val handle = handleAt(down.position - liveOrigin, stageCentre(initial.first, width, height),
                 stageSize(initial.first, width, height), initial.second, rotationGap, touchRadius)
                 ?: return@awaitEachGesture
             down.consume()
-            actions.beginGesture()
+            if (handle.corner == null) actions.beginGesture() else actions.beginResizeGesture(handle.corner)
+            val pivot = stageCentre(initial.first, width, height)
+            fun angle(position: Offset): Float = Math.toDegrees(atan2((position - liveOrigin - pivot).y,
+                (position - liveOrigin - pivot).x).toDouble()).toFloat()
+            var previousAngle = angle(down.position)
+            var requestedAngle = initial.second
+            var appliedAngle = initial.second
             try {
                 while (true) {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
-                    if (event.changes.count { it.pressed } > 1) break
+                    if (event.changes.any { it.isConsumed } || event.changes.count { it.pressed } > 1) break
                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
                     if (!change.pressed) break
                     val current = frame() ?: break
                     if (handle == SelectionHandle.ROTATE) {
-                        val vector = change.position - stageCentre(current.first, width, height)
-                        actions.setSelectedRotation(Math.toDegrees(atan2(vector.y, vector.x).toDouble()).toFloat() + 90f, snap = true)
+                        val nextAngle = angle(change.position)
+                        requestedAngle += ((nextAngle - previousAngle + 540f) % 360f) - 180f
+                        val target = snapRotation(requestedAngle)
+                        actions.rotateSelectedBy(((target - appliedAngle + 540f) % 360f) - 180f)
+                        previousAngle = nextAngle
+                        appliedAngle = target
                     } else {
                         val delta = change.positionChange()
                         val (x, y) = rotateVector(delta.x, delta.y, -current.second)
-                        actions.resizeSelectedFromCorner(checkNotNull(handle.corner), x / width, y / height)
+                        actions.resizeSelectedWithGuides(x / width, y / height, snapDistance / width, snapDistance / height)
                     }
                     event.changes.forEach(PointerInputChange::consume)
                 }
@@ -231,7 +243,7 @@ private fun handleAt(
 }
 
 /**
- * The element's own gesture: one finger moves, two fingers scale and rotate.
+ * One finger moves the element; the stage owns two-finger navigation.
  *
  * This block lives **inside** the graphics layer that rotates the element, so Compose delivers the
  * movement already in its frame of reference — which is why move converts it back to the screen with
@@ -257,8 +269,6 @@ internal fun Modifier.composerElementGestures(
     onBeginGesture: () -> Unit,
     onEndGesture: () -> Unit,
     onMove: (Float, Float) -> Unit,
-    onScale: (Float) -> Unit,
-    onRotate: (Float) -> Unit,
 ): Modifier = composed {
     val currentLocked by rememberUpdatedState(locked)
     val currentRotationDegrees by rememberUpdatedState(rotationDegrees)
@@ -272,8 +282,6 @@ internal fun Modifier.composerElementGestures(
     val currentOnBeginGesture by rememberUpdatedState(onBeginGesture)
     val currentOnEndGesture by rememberUpdatedState(onEndGesture)
     val currentOnMove by rememberUpdatedState(onMove)
-    val currentOnScale by rememberUpdatedState(onScale)
-    val currentOnRotate by rememberUpdatedState(onRotate)
     Modifier.pointerInput(elementId) {
     awaitEachGesture {
         // `requireUnconsumed = true` is what keeps the element from following a handle: the frame is on
@@ -288,10 +296,10 @@ internal fun Modifier.composerElementGestures(
         var releasedAt = pressedAt
         var travelled = Offset.Zero
         var dragging = false
-        var pinching = false
+        var cancelled = false
         try {
             do {
-                val pending = if (!dragging && !pinching && !longPressed) {
+                val pending = if (!dragging && !longPressed) {
                     withTimeoutOrNull((LONG_PRESS_MS - (System.currentTimeMillis() - startedAt)).coerceAtLeast(1)) {
                         awaitPointerEvent()
                     }
@@ -301,19 +309,16 @@ internal fun Modifier.composerElementGestures(
                     longPressed = true
                 }
                 val event = pending ?: awaitPointerEvent()
+                if (event.changes.any { it.isConsumed } || event.changes.count { it.pressed } > 1) {
+                    cancelled = true
+                    break
+                }
                 releasedAt = event.changes.maxOf { it.uptimeMillis }
                 val pressed = event.changes.filter { it.pressed }
                 val flipX = if (currentMirrorHorizontal()) -1f else 1f
                 val flipY = if (currentMirrorVertical()) -1f else 1f
                 fun toScreen(delta: Offset): Pair<Float, Float> = rotateVector(delta.x * flipX, delta.y * flipY, currentRotationDegrees())
-                if (pressed.size >= 2) {
-                    pinching = true
-                    if (!dragging) { currentOnSelect(); currentOnBeginGesture(); dragging = true }
-                    currentOnScale(event.calculateZoom())
-                    currentOnRotate(currentRotationDegrees() + event.calculateRotation() * flipX * flipY)
-                    val (x, y) = toScreen(event.calculatePan())
-                    currentOnMove(x / currentPageWidthPx(), y / currentPageHeightPx())
-                } else if (!pinching && pressed.size == 1) {
+                if (pressed.size == 1) {
                     val delta = pressed.first().positionChange()
                     travelled += delta
                     if (!dragging && travelled.getDistance() > viewConfiguration.touchSlop) {
@@ -327,7 +332,7 @@ internal fun Modifier.composerElementGestures(
                 }
                 event.changes.forEach(PointerInputChange::consume)
             } while (event.changes.any { it.pressed })
-            if (!dragging && !pinching && !longPressed) {
+            if (!cancelled && !dragging && !longPressed) {
                 if (releasedAt - pressedAt >= LONG_PRESS_MS) currentOnLongPress() else currentOnTap()
             }
         } finally {

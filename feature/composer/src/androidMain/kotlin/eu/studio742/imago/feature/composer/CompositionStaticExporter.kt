@@ -41,10 +41,15 @@ import kotlinx.coroutines.withContext
 import eu.studio742.imago.core.composition.CompositionBackground
 import eu.studio742.imago.core.composition.CompositionElement
 import eu.studio742.imago.core.composition.CompositionProject
+import eu.studio742.imago.core.composition.boundsOnPage
 import eu.studio742.imago.core.composition.hasVariablePressure
 import eu.studio742.imago.core.composition.strokeWidthAt
 import eu.studio742.imago.core.composition.backgroundBlurDivisor
 import eu.studio742.imago.core.composition.FrameStyle
+import eu.studio742.imago.core.composition.renderElements
+import eu.studio742.imago.core.composition.placementImageRect
+import eu.studio742.imago.core.composition.videoDecorationAlphaFactor
+import androidx.compose.ui.graphics.asAndroidPath
 import eu.studio742.imago.core.composition.MediaReference
 import eu.studio742.imago.core.composition.PlacementCrop
 import eu.studio742.imago.core.composition.ShapeKind
@@ -95,6 +100,63 @@ class CompositionStaticExporter @Inject constructor(
             bitmaps.values.distinct().forEach { if (!it.isRecycled) it.recycle() }
             sources.values.forEach(File::delete)
         }
+    }
+
+    suspend fun renderVideoDecorationToCache(project: CompositionProject, pageIndex: Int, video: CompositionElement.Video,
+        width: Int, height: Int,
+    ): File = withContext(Dispatchers.IO) {
+        val output = File.createTempFile("composition-video-frame-", ".png", context.cacheDir)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val b = video.transform.bounds
+        val w = b.width * width; val h = b.height * height
+        val cx = (b.x - pageIndex + b.width / 2f) * width; val cy = (b.y + b.height / 2f) * height
+        val rect = RectF(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f)
+        fun transform(canvas: Canvas, row: Int = 0): Int {
+            val checkpoint = canvas.save()
+            canvas.translate(0f, -row.toFloat())
+            canvas.rotate(video.transform.rotationDegrees, cx, cy)
+            canvas.scale(if (video.transform.mirrorHorizontal) -1f else 1f, if (video.transform.mirrorVertical) -1f else 1f, cx, cy)
+            return checkpoint
+        }
+        try {
+            val canvas = Canvas(bitmap)
+            val checkpoint = transform(canvas)
+            drawContent(canvas, rect) {
+                drawCompositionMediaBackground(video.frame, width / REFERENCE_PAGE_WIDTH)
+                drawCompositionFrame(video.frame, width / REFERENCE_PAGE_WIDTH)
+            }
+            canvas.restoreToCount(checkpoint)
+            if (video.transform.opacity < 1f) {
+                // A narrow mask strip bounds working memory even for a full-size page.
+                val rows = min(64, height)
+                val mask = Bitmap.createBitmap(width, rows, Bitmap.Config.ARGB_8888)
+                try {
+                    val maskCanvas = Canvas(mask)
+                    val coverage = IntArray(width * rows); val pixels = IntArray(width * rows)
+                    val path = mediaCutoutPath(video.frame, androidx.compose.ui.geometry.Size(w, h)).asAndroidPath().apply { offset(rect.left, rect.top) }
+                    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
+                    for (top in 0 until height step rows) {
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        val count = min(rows, height - top)
+                        mask.eraseColor(Color.TRANSPARENT)
+                        val mark = transform(maskCanvas, top)
+                        maskCanvas.drawPath(path, paint); maskCanvas.restoreToCount(mark)
+                        mask.getPixels(coverage, 0, width, 0, 0, width, count)
+                        bitmap.getPixels(pixels, 0, width, 0, top, width, count)
+                        for (index in 0 until width * count) {
+                            val alpha = pixels[index] ushr 24
+                            if (alpha == 0) continue
+                            val factor = videoDecorationAlphaFactor((coverage[index] ushr 24) / 255f, video.transform.opacity)
+                            pixels[index] = (pixels[index] and 0xFFFFFF) or ((alpha * factor).roundToInt().coerceIn(0, 255) shl 24)
+                        }
+                        bitmap.setPixels(pixels, 0, width, 0, top, width, count)
+                    }
+                } finally { mask.recycle() }
+            }
+            output.outputStream().buffered().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+            output
+        } catch (error: Exception) { output.delete(); throw error }
+        finally { bitmap.recycle() }
     }
 
     suspend fun export(
@@ -157,16 +219,11 @@ class CompositionStaticExporter @Inject constructor(
                 bitmaps,
             )
         } else canvas.drawColor(Color.TRANSPARENT, android.graphics.PorterDuff.Mode.CLEAR)
-        project.elements.asSequence().filter { it.visible && (elementIds == null || it.id in elementIds) }
-            .sortedWith(compareBy<CompositionElement> { it.zIndex }.thenBy { it.id }).forEach { element ->
-            val renderBounds = when {
-                element.repeatOnPages.isEmpty() -> element.transform.bounds
-                pageIndex !in element.repeatOnPages -> return@forEach
-                else -> {
-                    val originalPage = floor(element.transform.bounds.x).toInt()
-                    element.transform.bounds.copy(x = pageIndex + element.transform.bounds.x - originalPage)
-                }
-            }
+        project.renderElements().asSequence().filter { it.visible && (elementIds == null || it.id in elementIds) }
+            .sortedBy { it.zIndex }.forEach { element ->
+            if (element is CompositionElement.Video && element.pageIndex != pageIndex) return@forEach
+            if (element.repeatOnPages.isNotEmpty() && pageIndex !in element.repeatOnPages) return@forEach
+            val renderBounds = element.boundsOnPage(pageIndex)
             val rect = RectF(
                 (renderBounds.x - pageIndex) * target.width,
                 renderBounds.y * target.height,
@@ -223,7 +280,9 @@ class CompositionStaticExporter @Inject constructor(
         bitmaps: MutableMap<String, Bitmap>,
         decodeEdge: Int,
     ) {
-        if (element is CompositionElement.MediaPlaceholder || element is CompositionElement.Video) return
+        if (element is CompositionElement.Video) return
+        if (element is CompositionElement.MediaPlaceholder && element.frame.decoration.kind == eu.studio742.imago.core.composition.MediaFrameKind.NONE &&
+            element.frame.cutout == eu.studio742.imago.core.composition.MediaCutout.RECTANGLE) return
         val checkpoint = canvas.save()
         val transform = element.transform
         canvas.rotate(transform.rotationDegrees, rect.centerX(), rect.centerY())
@@ -231,18 +290,19 @@ class CompositionStaticExporter @Inject constructor(
         val opacity = (transform.opacity.coerceIn(0f, 1f) * 255).roundToInt()
         when (element) {
             is CompositionElement.Photo -> {
-                val radius = element.frame.cornerRadius.coerceAtLeast(0f) * min(rect.width(), rect.height())
                 // Outline and shadow are measured on a REFERENCE_PAGE_WIDTH page, like the stage.
                 val unit = canvas.width / REFERENCE_PAGE_WIDTH
-                drawFrameShadow(canvas, rect, element.frame, radius, unit, opacity)
+                val alphaLayer = if (opacity < 255) canvas.saveLayerAlpha(null, opacity) else canvas.save()
+                drawContent(canvas, rect) { drawCompositionMediaBackground(element.frame, unit) }
                 // The clip is only for the photo: the outline goes around it, outside, and a clip left on
                 // would cut it.
                 val photoClip = canvas.save()
-                canvas.clipPath(Path().apply { addRoundRect(rect, radius, radius, Path.Direction.CW) })
+                canvas.clipPath(mediaCutoutPath(element.frame, androidx.compose.ui.geometry.Size(rect.width(), rect.height())).asAndroidPath().apply { offset(rect.left, rect.top) })
                 val bitmap = loadBitmap(element.media, element.recipe.recipe, sources, bitmaps, decodeEdge)
-                drawCover(canvas, bitmap, rect, element.crop, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = opacity })
+                drawCover(canvas, bitmap, rect, element.crop, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
                 canvas.restoreToCount(photoClip)
-                drawFrameBorder(canvas, rect, element.frame, radius, unit, opacity)
+                drawFrameBorder(canvas, rect, element.frame, unit, 255)
+                canvas.restoreToCount(alphaLayer)
             }
             is CompositionElement.Text -> {
                 // The same painter as the stage, with the same scale: a model pixel is worth a fraction
@@ -255,40 +315,26 @@ class CompositionStaticExporter @Inject constructor(
             }
             is CompositionElement.Shape -> drawShape(canvas, element, rect, opacity)
             is CompositionElement.Drawing -> drawStroke(canvas, element, rect, opacity)
+            is CompositionElement.MediaPlaceholder -> drawContent(canvas, rect) {
+                val unit = canvas.width / REFERENCE_PAGE_WIDTH
+                drawCompositionMediaBackground(element.frame, unit, opacity / 255f)
+                drawCompositionFrame(element.frame, unit, opacity / 255f)
+            }
             else -> Unit
         }
         canvas.restoreToCount(checkpoint)
     }
 
     private fun drawShape(canvas: Canvas, element: CompositionElement.Shape, rect: RectF, opacity: Int) {
-        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = element.fillArgb.toInt(); alpha = opacity; style = Paint.Style.FILL }
-        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = element.strokeArgb.toInt(); alpha = opacity; style = Paint.Style.STROKE
-            // The same convention as the text size, now explicit here too: the thickness is measured
-            // on a page REFERENCE_PAGE_WIDTH wide, not in pixels of this canvas.
-            strokeWidth = element.strokeWidth * canvas.width / REFERENCE_PAGE_WIDTH
-            strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
-        }
-        // The outline goes outside the shape and is gone at zero, as on the stage.
-        val outline = RectF(rect).apply { inset(-stroke.strokeWidth / 2f, -stroke.strokeWidth / 2f) }
-        val outlined = stroke.strokeWidth > 0f
-        when (element.kind) {
-            ShapeKind.RECTANGLE -> { canvas.drawRect(rect, fill); if (outlined) canvas.drawRect(outline, stroke) }
-            ShapeKind.ELLIPSE -> { canvas.drawOval(rect, fill); if (outlined) canvas.drawOval(outline, stroke) }
-            ShapeKind.LINE -> canvas.drawLine(rect.left, rect.centerY(), rect.right, rect.centerY(), stroke)
-            ShapeKind.ARROW -> {
-                canvas.drawLine(rect.left, rect.centerY(), rect.right, rect.centerY(), stroke)
-                val head = min(rect.width(), rect.height()) * .22f
-                canvas.drawLine(rect.right, rect.centerY(), rect.right - head, rect.centerY() - head, stroke)
-                canvas.drawLine(rect.right, rect.centerY(), rect.right - head, rect.centerY() + head, stroke)
-            }
-        }
+        val unit = canvas.width / REFERENCE_PAGE_WIDTH
+        drawContent(canvas, rect) { drawCompositionShape(element, unit, opacity / 255f) }
     }
 
     private fun drawStroke(canvas: Canvas, element: CompositionElement.Drawing, rect: RectF, opacity: Int) {
         if (element.points.size < 2 || element.kind == StrokeKind.ERASER) return
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = element.colorArgb.toInt(); alpha = if (element.kind == StrokeKind.MARKER) opacity / 2 else opacity
+            color = element.colorArgb.toInt()
+            alpha = (opacity * (element.colorArgb ushr 24 and 255) / 255f * if (element.kind == StrokeKind.MARKER) .45f else 1f).roundToInt()
             style = Paint.Style.STROKE; strokeWidth = element.strokeWidth * canvas.width / REFERENCE_PAGE_WIDTH; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
         }
         // The same criterion as the stage, and for the same reason: a constant-pressure stroke is drawn
@@ -322,35 +368,24 @@ class CompositionStaticExporter @Inject constructor(
     }
 
     /** The outline is a ring around the element: from its edge outwards, never over the photo. */
-    private fun drawFrameBorder(canvas: Canvas, rect: RectF, frame: FrameStyle, radius: Float, unit: Float, opacity: Int) {
-        if (frame.borderWidth <= 0f) return
-        val width = frame.borderWidth * unit
-        val outer = RectF(rect.left - width, rect.top - width, rect.right + width, rect.bottom + width)
-        val ring = Path().apply {
-            fillType = Path.FillType.EVEN_ODD
-            addRoundRect(outer, radius + width, radius + width, Path.Direction.CW)
-            addRoundRect(rect, radius, radius, Path.Direction.CW)
-        }
-        canvas.drawPath(ring, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = frame.borderArgb.toInt(); alpha = opacity; style = Paint.Style.FILL
-        })
+    private fun drawFrameBorder(canvas: Canvas, rect: RectF, frame: FrameStyle, unit: Float, opacity: Int) {
+        drawContent(canvas, rect) { drawCompositionFrame(frame, unit, opacity / 255f) }
+    }
+
+    private fun drawContent(canvas: Canvas, rect: RectF, block: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit) {
+        val checkpoint = canvas.save()
+        canvas.translate(rect.left, rect.top)
+        try {
+            androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(androidx.compose.ui.unit.Density(1f),
+                androidx.compose.ui.unit.LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(canvas),
+                androidx.compose.ui.geometry.Size(rect.width(), rect.height()), block)
+        } finally { canvas.restoreToCount(checkpoint) }
     }
 
     private fun drawCover(canvas: Canvas, bitmap: Bitmap, destination: RectF, crop: PlacementCrop, paint: Paint) {
-        val scale = max(destination.width() / bitmap.width, destination.height() / bitmap.height) * crop.scale.coerceAtLeast(.01f)
-        val visibleW = destination.width() / scale
-        val visibleH = destination.height() / scale
-        val maxX = max(0f, bitmap.width - visibleW)
-        val maxY = max(0f, bitmap.height - visibleH)
-        val centerX = bitmap.width / 2f + crop.offsetX.coerceIn(-1f, 1f) * maxX / 2f
-        val centerY = bitmap.height / 2f + crop.offsetY.coerceIn(-1f, 1f) * maxY / 2f
-        val source = Rect(
-            (centerX - visibleW / 2f).roundToInt().coerceIn(0, bitmap.width - 1),
-            (centerY - visibleH / 2f).roundToInt().coerceIn(0, bitmap.height - 1),
-            (centerX + visibleW / 2f).roundToInt().coerceIn(1, bitmap.width),
-            (centerY + visibleH / 2f).roundToInt().coerceIn(1, bitmap.height),
-        )
-        canvas.drawBitmap(bitmap, source, destination, paint)
+        val image = placementImageRect(bitmap.width.toFloat(), bitmap.height.toFloat(), destination.width(), destination.height(), crop)
+        canvas.drawBitmap(bitmap, null, RectF(destination.left + image.left, destination.top + image.top,
+            destination.left + image.left + image.width, destination.top + image.top + image.height), paint)
     }
 
     private suspend fun loadBitmap(

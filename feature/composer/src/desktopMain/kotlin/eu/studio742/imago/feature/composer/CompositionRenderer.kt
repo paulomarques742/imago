@@ -1,6 +1,13 @@
 package eu.studio742.imago.feature.composer
 
 import org.jetbrains.skia.*
+import androidx.compose.ui.graphics.asComposeCanvas
+import androidx.compose.ui.graphics.asDesktopPath
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import eu.studio742.imago.core.composition.*
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
@@ -26,12 +33,12 @@ class CompositionRenderer {
             val w = project.format.pixelWidth.toFloat(); val h = project.format.pixelHeight.toFloat()
             val bounds = Rect.makeWH(w, h)
             background(canvas, project.pages[pageIndex].backgroundOverride ?: project.background, bounds, media)
-            project.elements.filter { it.visible }.sortedBy { it.zIndex }.forEach { element ->
-                val placement = element.transform.bounds
+            project.renderElements().filter { it.visible }.sortedBy { it.zIndex }.forEach { element ->
                 val repeated = pageIndex in element.repeatOnPages
+                if (element.repeatOnPages.isNotEmpty() && !repeated) return@forEach
                 if (element is CompositionElement.Video && element.pageIndex != pageIndex) return@forEach
-                if (!repeated && placement.intersectionWithPage(pageIndex) == null) return@forEach
-                val rect = Rect.makeXYWH((placement.x - if (repeated) floor(placement.x) else pageIndex.toFloat()) * w,
+                val placement = element.boundsOnPage(pageIndex)
+                val rect = Rect.makeXYWH((placement.x - pageIndex.toFloat()) * w,
                     placement.y * h, placement.width * w, placement.height * h)
                 canvas.save()
                 canvas.clipRect(bounds)
@@ -48,32 +55,39 @@ class CompositionRenderer {
                         is CompositionElement.Video -> media[element.id]?.let { frame ->
                             photo(canvas, frame, local, element.crop, element.frame, paint, w / REFERENCE_PAGE_WIDTH)
                         }
-                        is CompositionElement.MediaPlaceholder -> { paint.color = 0xFF333333.toInt(); canvas.drawRect(local, paint) }
-                        is CompositionElement.Shape -> {
-                            paint.color = element.fillArgb.toInt(); paint.alpha = (element.transform.opacity * ((element.fillArgb ushr 24) and 255)).toInt()
-                            drawShape(canvas, element.kind, local, paint)
-                            if (element.strokeWidth > 0) {
-                                // Measured on a REFERENCE_PAGE_WIDTH page, like the stage and Android.
-                                val width = element.strokeWidth * w / REFERENCE_PAGE_WIDTH
-                                paint.color = element.strokeArgb.toInt(); paint.mode = PaintMode.STROKE; paint.strokeWidth = width
-                                // Outside the shape: the rectangle and the ellipse grow by half the stroke.
-                                val outside = if (element.kind == ShapeKind.RECTANGLE || element.kind == ShapeKind.ELLIPSE) {
-                                    Rect.makeLTRB(local.left - width / 2, local.top - width / 2, local.right + width / 2, local.bottom + width / 2)
-                                } else {
-                                    local
-                                }
-                                drawShape(canvas, element.kind, outside, paint)
-                            }
+                        is CompositionElement.MediaPlaceholder -> {
+                            if (element.frame.decoration.kind == MediaFrameKind.NONE && element.frame.cutout == MediaCutout.RECTANGLE) {
+                                paint.color = 0xFF333333.toInt(); paint.alpha = (element.transform.opacity * 255).roundToInt()
+                                val radius = element.frame.cornerRadius.coerceIn(0f, .5f) * min(local.width, local.height)
+                                canvas.drawRRect(RRect.makeXYWH(0f, 0f, local.width, local.height, radius), paint)
+                            } else drawContent(canvas, local) { drawCompositionMediaBackground(element.frame, w / REFERENCE_PAGE_WIDTH, element.transform.opacity) }
+                            drawContent(canvas, local) { drawCompositionFrame(element.frame, w / REFERENCE_PAGE_WIDTH, element.transform.opacity) }
+                        }
+                        is CompositionElement.Shape -> drawContent(canvas, local) {
+                            drawCompositionShape(element, w / REFERENCE_PAGE_WIDTH, element.transform.opacity)
                         }
                         is CompositionElement.Text -> drawText(canvas, element, local, w, paint)
                         is CompositionElement.Drawing -> {
                             paint.color = element.colorArgb.toInt(); paint.mode = PaintMode.STROKE; paint.strokeCap = PaintStrokeCap.ROUND
+                            paint.alpha = (element.transform.opacity.coerceIn(0f, 1f) * (element.colorArgb ushr 24 and 255)).roundToInt()
                             if (element.kind == StrokeKind.ERASER) paint.blendMode = BlendMode.CLEAR
                             if (element.kind == StrokeKind.MARKER) paint.alpha = (paint.alpha * .45f).toInt()
-                            element.points.zipWithNext().forEach { (a, b) ->
-                                if (b.startsStroke) return@forEach
-                                paint.strokeWidth = strokeWidthAt(element.strokeWidth * w / REFERENCE_PAGE_WIDTH, (a.pressure + b.pressure) / 2)
-                                canvas.drawLine(a.x * local.width, a.y * local.height, b.x * local.width, b.y * local.height, paint)
+                            if (!element.points.hasVariablePressure() && element.points.isNotEmpty()) {
+                                paint.strokeWidth = element.strokeWidth * w / REFERENCE_PAGE_WIDTH
+                                paint.strokeJoin = PaintStrokeJoin.ROUND
+                                Path().use { path ->
+                                    path.moveTo(element.points.first().x * local.width, element.points.first().y * local.height)
+                                    element.points.drop(1).forEach { point ->
+                                        if (point.startsStroke) path.moveTo(point.x * local.width, point.y * local.height)
+                                        else path.lineTo(point.x * local.width, point.y * local.height)
+                                    }
+                                    canvas.drawPath(path, paint)
+                                }
+                            } else element.points.zipWithNext().forEach { (a, b) ->
+                                if (!b.startsStroke) {
+                                    paint.strokeWidth = strokeWidthAt(element.strokeWidth * w / REFERENCE_PAGE_WIDTH, (a.pressure + b.pressure) / 2)
+                                    canvas.drawLine(a.x * local.width, a.y * local.height, b.x * local.width, b.y * local.height, paint)
+                                }
                             }
                         }
                     }
@@ -108,36 +122,24 @@ class CompositionRenderer {
             paint.color = 0xFF3B3633.toInt(); canvas.drawRect(rect, paint)
             return
         }
-        val radius = frame.cornerRadius.coerceAtLeast(0f) * min(rect.width, rect.height)
+        val alpha = paint.alpha
+        val checkpoint = if (alpha < 255) Paint().use { layer -> layer.alpha = alpha; canvas.saveLayer(null, layer) } else canvas.save()
+        paint.alpha = 255
+        drawContent(canvas, rect) { drawCompositionMediaBackground(frame, unit) }
         Image.makeFromEncoded(bytes).use { image ->
             canvas.save()
-            canvas.clipRRect(RRect.makeXYWH(rect.left, rect.top, rect.width, rect.height, radius))
-            val cover = max(rect.width / image.width, rect.height / image.height) * crop.scale.coerceAtLeast(1f)
-            val width = image.width * cover; val height = image.height * cover
-            val left = (rect.width - width) / 2 + crop.offsetX * rect.width
-            val top = (rect.height - height) / 2 + crop.offsetY * rect.height
-            canvas.drawImageRect(image, Rect.makeXYWH(left, top, width, height), paint)
+            canvas.clipPath(mediaCutoutPath(frame, Size(rect.width, rect.height)).asDesktopPath())
+            val placement = placementImageRect(image.width.toFloat(), image.height.toFloat(), rect.width, rect.height, crop)
+            canvas.drawImageRect(image, Rect.makeXYWH(placement.left, placement.top, placement.width, placement.height), paint)
             canvas.restore()
         }
         // A ring around the photo, outside it: a stroke centred half a width out from the edge.
-        if (frame.borderWidth > 0) Paint().use { border ->
-            val width = frame.borderWidth * unit
-            border.color = frame.borderArgb.toInt(); border.mode = PaintMode.STROKE; border.strokeWidth = width
-            canvas.drawRRect(RRect.makeXYWH(rect.left - width / 2, rect.top - width / 2, rect.width + width, rect.height + width, radius + width / 2), border)
-        }
+        drawContent(canvas, rect) { drawCompositionFrame(frame, unit) }
+        canvas.restoreToCount(checkpoint)
+        paint.alpha = alpha
     }
-    private fun drawShape(canvas: Canvas, kind: ShapeKind, rect: Rect, paint: Paint) {
-        when (kind) {
-            ShapeKind.RECTANGLE -> canvas.drawRect(rect, paint)
-            ShapeKind.ELLIPSE -> canvas.drawOval(rect, paint)
-            ShapeKind.LINE -> canvas.drawLine(0f, rect.height / 2, rect.width, rect.height / 2, paint)
-            ShapeKind.ARROW -> {
-                canvas.drawLine(0f, rect.height / 2, rect.width, rect.height / 2, paint)
-                canvas.drawLine(rect.width * .75f, 0f, rect.width, rect.height / 2, paint)
-                canvas.drawLine(rect.width * .75f, rect.height, rect.width, rect.height / 2, paint)
-            }
-        }
-    }
+    private fun drawContent(canvas: Canvas, rect: Rect, block: DrawScope.() -> Unit) =
+        CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, canvas.asComposeCanvas(), Size(rect.width, rect.height), block)
     private fun drawText(canvas: Canvas, text: CompositionElement.Text, rect: Rect, pageWidth: Float, paint: Paint) {
         // The catalogue font, loaded before drawing and shared with the stage. If for some reason it is
         // not loaded, the painter uses the system's: better that than a missing text.

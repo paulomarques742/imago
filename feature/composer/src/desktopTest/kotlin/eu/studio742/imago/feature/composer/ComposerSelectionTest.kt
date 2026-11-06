@@ -67,7 +67,7 @@ class ComposerSelectionTest {
         assertEquals(before, vm.state.value.project)
         vm.toggleElementLocked(right.id)
         vm.beginMultiSelection(left.id)
-        vm.toggleElementInSelection(right.id)
+        assertEquals(setOf(left.id, right.id), vm.state.value.selectedElementIds)
         vm.toggleLocked()
         assertTrue(vm.state.value.project!!.elements.all { it.locked })
         assertTrue(vm.state.value.selectedElementIds.isEmpty())

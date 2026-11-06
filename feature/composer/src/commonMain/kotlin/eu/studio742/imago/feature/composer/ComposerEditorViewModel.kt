@@ -1,5 +1,12 @@
 package eu.studio742.imago.feature.composer
 
+import eu.studio742.imago.core.composition.CompositionArrangementReference
+import eu.studio742.imago.core.composition.alignedSelection
+import eu.studio742.imago.core.composition.distributedSelection
+import eu.studio742.imago.core.composition.selectionUnits
+import eu.studio742.imago.core.composition.visualBounds
+import eu.studio742.imago.core.composition.*
+
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.designsystem.i18n.toUiText
 import eu.studio742.imago.core.designsystem.i18n.uiPlural
@@ -36,6 +43,11 @@ import eu.studio742.imago.core.composition.mappedBetween
 import eu.studio742.imago.core.composition.orbited
 import eu.studio742.imago.core.composition.NormalizedRect
 import eu.studio742.imago.core.composition.PhotoRecipeSnapshot
+import eu.studio742.imago.core.composition.CompositionGuide
+import eu.studio742.imago.core.composition.CompositionMoveSnapping
+import eu.studio742.imago.core.composition.CompositionResizeSnapping
+import eu.studio742.imago.core.composition.resizedSelectionFromCorner
+import eu.studio742.imago.core.composition.withColorAlpha
 import eu.studio742.imago.core.composition.PlacementCrop
 import eu.studio742.imago.core.composition.ShapeKind
 import eu.studio742.imago.core.composition.TextAlignment
@@ -46,11 +58,12 @@ import eu.studio742.imago.core.composition.BrandKit
 import eu.studio742.imago.core.composition.CompositionFonts
 import eu.studio742.imago.core.composition.ResizeCorner
 import eu.studio742.imago.core.composition.MAX_BACKGROUND_BLUR
-import eu.studio742.imago.core.composition.clampedBounds
+import eu.studio742.imago.core.composition.editableBounds
+import eu.studio742.imago.core.composition.MIN_ELEMENT_SIZE
+import eu.studio742.imago.core.composition.repeatOriginPage
 import eu.studio742.imago.core.composition.normalizeDegrees
-import eu.studio742.imago.core.composition.resizedFrom
 import eu.studio742.imago.core.composition.scaledAboutCentre
-import eu.studio742.imago.core.composition.snapCoordinate
+import eu.studio742.imago.core.composition.rotateVector
 import eu.studio742.imago.core.composition.snapRotation
 import eu.studio742.imago.core.composition.VideoTiming
 import eu.studio742.imago.core.composition.VideoTimelineEdits
@@ -82,7 +95,7 @@ import eu.studio742.imago.core.model.EditRecipe
 
 /** The inspector sliders' limits, shared with the interface. */
 const val MAX_FRAME_CORNER = .5f
-const val MAX_FRAME_BORDER = 24f
+const val MAX_FRAME_BORDER = 120f
 const val MAX_FRAME_SHADOW = 48f
 const val MIN_TEXT_SIZE = 8f
 const val MAX_TEXT_SIZE = 240f
@@ -97,7 +110,8 @@ fun ShapeKind.minStroke(): Float = if (this == ShapeKind.LINE || this == ShapeKi
 
 /** How far the eraser reaches around the finger, as a fraction of the page's width. */
 const val ERASER_REACH = .03f
-const val MAX_SHAPE_STROKE = 40f
+const val MAX_SHAPE_STROKE = 120f
+const val MAX_DRAWING_STROKE = 40f
 /**
  * The zoom of an element's framing. It starts at 1× — below that the image stopped covering the box
  * and background was left inside the frame, which is not what "framing" means.
@@ -146,10 +160,16 @@ data class ComposerEditorUiState(
      */
     val selectedElementIds: Set<String> = emptySet(),
     val multiSelect: Boolean = false,
+    val editingGroupId: String? = null,
+    val arrangementReference: CompositionArrangementReference = CompositionArrangementReference.SELECTION,
+    val groupMergeRequest: ComposerGroupMergeRequest? = null,
+    val gridEditor: ComposerGridEditor? = null,
+    val revealSelectionRequest: Int = 0,
     /** The background is a layer like the others: either it or an element, never both. */
     val backgroundSelected: Boolean = false,
     /** True while an element is being moved, rotated or resized on the stage. */
     val stageGesture: Boolean = false,
+    val movementGuides: List<CompositionGuide> = emptyList(),
     val currentPage: Int = 0,
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
@@ -195,9 +215,10 @@ open class ComposerEditorViewModel(
     private var proxyFile: java.io.File? = null
     private var gestureActive = false
     private var gestureCommitted = false
+    private var moveSnapping: CompositionMoveSnapping? = null
+    private var resizeSnapping: CompositionResizeSnapping? = null
     /** The absolute angle the handle has already asked of the block, and the selection it belongs to. */
-    private var blockRotation = 0f
-    private var blockRotationOf: Set<String> = emptySet()
+    private var groupRotationPivot: Pair<Float, Float>? = null
 
     init {
         viewModelScope.launch {
@@ -234,14 +255,33 @@ open class ComposerEditorViewModel(
     }
 
     fun selectElement(id: String?) {
-        if (id != null && !canEdit(id)) return
-        mutableState.update { it.copy(selectedElementId = id, selectedElementIds = setOfNotNull(id), multiSelect = false, backgroundSelected = false) }
+        val target = state.value.project?.elements?.firstOrNull { it.id == id }
+        val editing = state.value.editingGroupId?.takeIf { it == target?.groupId }
+        val next = state.value.copy(editingGroupId = editing)
+        if (id != null && !next.canEditElement(id)) return
+        clearMovementGuides()
+        val ids = if (target?.groupId != null && editing == null) state.value.project!!.elements
+            .filter { it.groupId == target.groupId }.mapTo(mutableSetOf()) { it.id } else setOfNotNull(id)
+        mutableState.update { it.copy(selectedElementId = id, selectedElementIds = ids, multiSelect = false,
+            backgroundSelected = false, editingGroupId = editing, groupMergeRequest = null) }
+    }
+
+    /** Layers can recover an element outside the viewport, including one already selected. */
+    fun focusElement(id: String) {
+        if (!canEdit(id)) return
+        selectElement(id)
+        mutableState.update { it.copy(revealSelectionRequest = it.revealSelectionRequest + 1) }
     }
 
     fun beginMultiSelection(id: String) {
+        val target = state.value.project?.elements?.firstOrNull { it.id == id } ?: return
+        if (state.value.editingGroupId != null && target.groupId != state.value.editingGroupId) selectElement(id)
         if (!canEdit(id)) return
+        clearMovementGuides()
         mutableState.update {
-            val ids = if (it.multiSelect) it.selectedElementIds + id else setOf(id)
+            val unit = if (target.groupId != null && it.editingGroupId != target.groupId) it.project!!.elements
+                .filter { member -> member.groupId == target.groupId }.mapTo(mutableSetOf()) { member -> member.id } else setOf(id)
+            val ids = if (it.multiSelect) it.selectedElementIds + unit else unit
             it.copy(selectedElementId = id, selectedElementIds = ids, multiSelect = true, backgroundSelected = false)
         }
     }
@@ -249,20 +289,35 @@ open class ComposerEditorViewModel(
     fun toggleMultiSelect() = mutableState.update { it.copy(multiSelect = !it.multiSelect) }
 
     fun toggleElementInSelection(id: String) {
+        val target = state.value.project?.elements?.firstOrNull { it.id == id } ?: return
+        if (state.value.editingGroupId != null && target.groupId != state.value.editingGroupId) {
+            selectElement(id); beginMultiSelection(id); return
+        }
         if (!canEdit(id)) return
+        clearMovementGuides()
         mutableState.update {
-            val ids = if (id in it.selectedElementIds) it.selectedElementIds - id else it.selectedElementIds + id
+            val unit = if (target.groupId != null && it.editingGroupId != target.groupId) it.project!!.elements
+                .filter { member -> member.groupId == target.groupId }.mapTo(mutableSetOf()) { member -> member.id } else setOf(id)
+            val ids = if (id in it.selectedElementIds) it.selectedElementIds - unit else it.selectedElementIds + unit
             it.copy(selectedElementId = if (id in ids) id else ids.firstOrNull(), selectedElementIds = ids,
                 multiSelect = ids.isNotEmpty(), backgroundSelected = false)
         }
     }
 
-    fun selectBackground() = mutableState.update {
-        it.copy(selectedElementId = null, selectedElementIds = emptySet(), multiSelect = false, backgroundSelected = true)
+    fun selectBackground() {
+        clearMovementGuides()
+        mutableState.update {
+            it.copy(selectedElementId = null, selectedElementIds = emptySet(), multiSelect = false, backgroundSelected = true,
+                editingGroupId = null, groupMergeRequest = null)
+        }
     }
 
-    fun clearSelection() = mutableState.update {
-        it.copy(selectedElementId = null, selectedElementIds = emptySet(), multiSelect = false, backgroundSelected = false)
+    fun clearSelection() {
+        clearMovementGuides()
+        mutableState.update {
+            it.copy(selectedElementId = null, selectedElementIds = emptySet(), multiSelect = false, backgroundSelected = false,
+                editingGroupId = null, groupMergeRequest = null)
+        }
     }
     fun selectPage(index: Int) = mutableState.update { state ->
         state.copy(currentPage = index.coerceIn(0, (state.project?.pages?.lastIndex ?: 0)))
@@ -281,6 +336,10 @@ open class ComposerEditorViewModel(
      * too early.
      */
     fun beginGesture(stage: Boolean = true) {
+        clearMovementGuides()
+        val members = state.value.editableSelection()
+        groupRotationPivot = members.takeIf { it.size > 1 }?.map { it.transform.bounds }?.boundingBox()
+            ?.let { it.x + it.width / 2f to it.y + it.height / 2f }
         gestureActive = true
         gestureCommitted = false
         // The screen clears while the hand works: whoever drags an element is looking at the page,
@@ -292,26 +351,68 @@ open class ComposerEditorViewModel(
 
     fun endGesture(stage: Boolean = true) {
         gestureActive = false
+        groupRotationPivot = null
+        clearMovementGuides()
         if (stage) mutableState.update { it.copy(stageGesture = false) }
+    }
+
+    /** The grabbed repeat supplies its page offset; the saved placement remains relative to its origin. */
+    fun beginMoveGesture(instanceOffsetX: Float = 0f) {
+        beginGesture()
+        val project = state.value.manipulationProject()
+        val ids = state.value.manipulationIds()
+        if (ids.isNotEmpty()) moveSnapping = CompositionMoveSnapping(project, ids, instanceOffsetX)
+    }
+
+    fun moveSelectedWithGuides(dx: Float, dy: Float, toleranceX: Float, toleranceY: Float) {
+        val snapping = moveSnapping ?: return
+        val ids = state.value.manipulationIds()
+        if (ids != snapping.elementIds) { clearMovementGuides(); return }
+        val result = snapping.moveBy(dx, dy, toleranceX, toleranceY)
+        if (result.dx != 0f || result.dy != 0f) moveSelected(result.dx, result.dy)
+        mutableState.update { it.copy(movementGuides = result.guides) }
+    }
+
+    private fun clearMovementGuides() {
+        moveSnapping = null
+        resizeSnapping = null
+        mutableState.update { if (it.movementGuides.isEmpty()) it else it.copy(movementGuides = emptyList()) }
+    }
+
+    fun beginResizeGesture(corner: ResizeCorner) {
+        beginGesture()
+        val project = state.value.manipulationProject()
+        val ids = state.value.manipulationIds()
+        if (ids.isNotEmpty()) resizeSnapping = CompositionResizeSnapping(project, ids, corner)
+    }
+
+    fun resizeSelectedWithGuides(dx: Float, dy: Float, toleranceX: Float, toleranceY: Float) {
+        val snapping = resizeSnapping ?: return
+        val ids = state.value.manipulationIds()
+        if (ids != snapping.elementIds) { clearMovementGuides(); return }
+        val result = snapping.resizeBy(dx, dy, toleranceX, toleranceY)
+        applyResizedSelection(result.elements)
+        mutableState.update { it.copy(movementGuides = result.guides) }
     }
 
     fun addPage() {
         val project = requireProject()
         if (project.pages.size >= MAX_COMPOSITION_PAGES) return notice(uiText(Res.string.composer_max_pages, MAX_COMPOSITION_PAGES))
         val insertAt = state.value.currentPage + 1
-        if (project.elements.any { insertAt in it.crossedBoundaries() }) {
+        if (project.elements.any { insertAt in it.crossedBoundaries() } || project.layouts.any { it.crossesBoundary(insertAt, project.format.aspectRatio) }) {
             return notice(uiText(Res.string.composer_insert_page_blocked))
         }
         val pages = project.pages.toMutableList().apply {
             add(insertAt, CompositionPage(UUID.randomUUID().toString(), insertAt))
         }.mapIndexed { index, page -> page.copy(index = index) }
         val elements = project.elements.map { element ->
-            val shifted = if (element.transform.bounds.x >= insertAt) {
-                element.withTransform(element.transform.copy(bounds = element.transform.bounds.copy(x = element.transform.bounds.x + 1f)))
-            } else element
-            val withPage = if (shifted is CompositionElement.Video && shifted.pageIndex >= insertAt) {
-                shifted.copy(pageIndex = shifted.pageIndex + 1)
-            } else shifted
+            val origin = element.pageOrigin()
+            val delta = if (origin >= insertAt) 1 else 0
+            val shifted = element.withTransform(element.transform.copy(
+                bounds = element.transform.bounds.copy(x = element.transform.bounds.x + delta),
+                repeatOriginPage = if (element.repeatOnPages.isEmpty()) null else origin + delta,
+            ))
+            val withPage = if (shifted is CompositionElement.Video) shifted.copy(pageIndex = shifted.pageIndex + delta) else shifted
             withPage.withRepeatOnPages(withPage.repeatOnPages.mapTo(mutableSetOf()) { if (it >= insertAt) it + 1 else it })
         }
         commit { project.copy(pages = pages, elements = elements) }
@@ -325,19 +426,23 @@ open class ComposerEditorViewModel(
         if (!project.canReorderPage(index)) return notice(uiText(Res.string.composer_delete_page_blocked))
         val remaining = project.pages.filterNot { it.index == index }.mapIndexed { newIndex, page -> page.copy(index = newIndex) }
         val adjusted = project.elements.mapNotNull { element ->
-            val bounds = element.transform.bounds
-            when {
-                bounds.x >= index + 1f -> element.withTransform(element.transform.copy(bounds = bounds.copy(x = bounds.x - 1f)))
-                bounds.x >= index.toFloat() && bounds.right <= index + 1f -> null
-                else -> element
-            }
-        }.map { element ->
-            val withPage = if (element is CompositionElement.Video && element.pageIndex > index) {
-                element.copy(pageIndex = element.pageIndex - 1)
-            } else element
-            withPage.withRepeatOnPages(withPage.repeatOnPages.mapNotNullTo(mutableSetOf()) { page ->
+            val origin = element.pageOrigin()
+            val repeats = element.repeatOnPages.mapNotNullTo(mutableSetOf()) { page ->
                 when { page == index -> null; page > index -> page - 1; else -> page }
-            })
+            }
+            if (element.repeatOnPages.isNotEmpty() && repeats.isEmpty()) return@mapNotNull null
+            if (element.repeatOnPages.isEmpty() && origin == index) return@mapNotNull null
+            val newOrigin = when {
+                origin > index -> origin - 1
+                origin == index -> repeats.first()
+                else -> origin
+            }
+            val moved = element.withTransform(element.transform.copy(
+                bounds = element.transform.bounds.copy(x = element.transform.bounds.x + newOrigin - origin),
+                repeatOriginPage = if (repeats.isEmpty()) null else newOrigin,
+            ))
+            val withPage = if (moved is CompositionElement.Video) moved.copy(pageIndex = newOrigin) else moved
+            withPage.withRepeatOnPages(repeats)
         }
         commit { project.copy(pages = remaining, elements = adjusted) }
         selectPage(index.coerceAtMost(remaining.lastIndex))
@@ -351,25 +456,24 @@ open class ComposerEditorViewModel(
         if (!project.canReorderPage(minOf(from, to))) return notice(uiText(Res.string.composer_reorder_blocked))
         val pages = project.pages.toMutableList().apply { add(to, removeAt(from)) }
             .mapIndexed { index, page -> page.copy(index = index) }
-        fun remapPage(value: Float): Float {
-            val page = value.toInt()
-            val local = value - page
-            val mapped = when (page) { from -> to; to -> from; else -> page }
-            return mapped + local
-        }
+        fun remapPage(page: Int): Int = when (page) { from -> to; to -> from; else -> page }
         val elements = project.elements.map { element ->
-            val b = element.transform.bounds
-            val moved = if (b.x.toInt() == from || b.x.toInt() == to) {
-                element.withTransform(element.transform.copy(bounds = b.copy(x = remapPage(b.x))))
-            } else element
-            val withPage = if (moved is CompositionElement.Video) {
-                moved.copy(pageIndex = when (moved.pageIndex) { from -> to; to -> from; else -> moved.pageIndex })
-            } else moved
-            withPage.withRepeatOnPages(withPage.repeatOnPages.mapTo(mutableSetOf()) {
-                when (it) { from -> to; to -> from; else -> it }
-            })
+            val origin = element.pageOrigin()
+            val target = remapPage(origin)
+            val moved = element.withTransform(element.transform.copy(
+                bounds = element.transform.bounds.copy(x = element.transform.bounds.x + target - origin),
+                repeatOriginPage = if (element.repeatOnPages.isEmpty()) null else target,
+            ))
+            val withPage = if (moved is CompositionElement.Video) moved.copy(pageIndex = target) else moved
+            withPage.withRepeatOnPages(withPage.repeatOnPages.mapTo(mutableSetOf(), ::remapPage))
         }
         commit { project.copy(pages = pages, elements = elements) }; selectPage(to)
+    }
+
+    private fun CompositionElement.pageOrigin(): Int = when {
+        this is CompositionElement.Video -> pageIndex
+        repeatOnPages.isNotEmpty() -> repeatOriginPage()
+        else -> kotlin.math.floor(transform.bounds.x).toInt()
     }
 
     /** [placeholder] comes from the screen, already in the app language: it is saved in the project as its text. */
@@ -755,39 +859,23 @@ open class ComposerEditorViewModel(
                 selectedElementId = added.lastOrNull(),
                 selectedElementIds = added.toSet(),
                 backgroundSelected = false,
+                editingGroupId = null,
             )
         }
     }
 
     fun moveSelected(dx: Float, dy: Float) {
-        val block = resizableBlock() ?: return moveSingle(dx, dy)
+        if (resizableBlock() == null) return moveSingle(dx, dy)
         val project = requireProject()
         val ids = project.selectionMembers().filterNot(CompositionElement::locked).mapTo(mutableSetOf()) { it.id }
-        // Snapping belongs to the set and is measured by the outer edges. Done element by element, each
-        // one found its own guide — often the edge of the chosen neighbour — and the block deformed
-        // mid-drag instead of moving whole.
-        val outsiders = project.elements.filterNot { it.id in ids }
-        val pageCandidates = project.pages.indices.flatMap { page ->
-            listOf(page.toFloat(), page + .5f - block.width / 2f, page + 1f - block.width)
-        }
-        val x = snapCoordinate(
-            block.x + dx,
-            pageCandidates + outsiders.flatMap { listOf(it.transform.bounds.x, it.transform.bounds.right) },
-        )
-        val y = snapCoordinate(
-            block.y + dy,
-            listOf(0f, .5f - block.height / 2f, 1f - block.height) +
-                outsiders.flatMap { listOf(it.transform.bounds.y, it.transform.bounds.bottom) },
-        )
-        // The step is clamped once, against the block's limits. Leaving each element's `clampedBounds`
-        // to sort itself out pushed against the margin only what got there first.
-        val stepX = (x - block.x).coerceIn(-block.x, project.pages.size - block.right)
-        val stepY = (y - block.y).coerceIn(-block.y, 1f - block.bottom)
+        // Translate the complete set without applying a different edge constraint to each member.
+        val stepX = dx.takeIf { it.isFinite() } ?: 0f
+        val stepY = dy.takeIf { it.isFinite() } ?: 0f
         if (stepX == 0f && stepY == 0f) return
         commit { project.copy(elements = project.elements.map { element ->
             if (element.id !in ids) return@map element
             val b = element.transform.bounds
-            val moved = element.clampedBounds(b.copy(x = b.x + stepX, y = b.y + stepY), project.pages.size)
+            val moved = element.editableBounds(b.copy(x = b.x + stepX, y = b.y + stepY), project.pages.size)
             element.withTransform(element.transform.copy(bounds = moved))
         }) }
     }
@@ -795,19 +883,9 @@ open class ComposerEditorViewModel(
     private fun moveSingle(dx: Float, dy: Float) = transformSelectedElement { element, transform ->
         val project = requireProject()
         val b = transform.bounds
-        val pageCandidates = project.pages.indices.flatMap { page ->
-            listOf(page.toFloat(), page + .5f - b.width / 2f, page + 1f - b.width)
-        }
-        val otherEdges = project.elements.filterNot { it.id == element.id }
-            .flatMap { listOf(it.transform.bounds.x, it.transform.bounds.right) }
-        // Snapping runs **before** the final clamp. The other way round, `snapCoordinate` could throw the
-        // value outside the range the clamp had just guaranteed — that is how the rectangle left the
-        // canvas and the model's invariant blew up further on.
-        val x = snapCoordinate(b.x + dx, pageCandidates + otherEdges)
-        val y = snapCoordinate(b.y + dy, listOf(0f, .5f - b.height / 2f, 1f - b.height) + project.elements.flatMap {
-            if (it.id == element.id) emptyList() else listOf(it.transform.bounds.y, it.transform.bounds.bottom)
-        })
-        transform.copy(bounds = element.clampedBounds(b.copy(x = x, y = y), project.pages.size))
+        val x = b.x + (dx.takeIf { it.isFinite() } ?: 0f)
+        val y = b.y + (dy.takeIf { it.isFinite() } ?: 0f)
+        transform.copy(bounds = element.editableBounds(b.copy(x = x, y = y), project.pages.size))
     }
 
     /**
@@ -815,20 +893,42 @@ open class ComposerEditorViewModel(
      * counter-rotation happens in the overlay, which is what knows the stage's pixels.
      */
     fun resizeSelectedFromCorner(corner: ResizeCorner, dx: Float, dy: Float) {
-        val block = resizableBlock() ?: return transformSelectedElement { element, transform ->
-            val resized = transform.bounds.resizedFrom(corner, dx, dy)
-            transform.copy(bounds = element.clampedBounds(resized, requireProject().pages.size))
+        val project = requireProject()
+        state.value.manipulatedLayout()?.let { layout ->
+            val resized = listOf(layout.proxy()).resizedSelectionFromCorner(corner, dx, dy, project.pages.size, project.format.aspectRatio).single()
+            return setSelectedLayoutFrame(resized.transform)
         }
-        reshapeSelection(block, block.resizedFrom(corner, dx, dy))
+        applyResizedSelection(project.selectionMembers().resizedSelectionFromCorner(
+            corner, dx, dy, project.pages.size, project.format.aspectRatio))
     }
 
-    /** Scales around the centre, for the two-finger pinch. */
-    fun scaleSelected(factor: Float) {
-        val block = resizableBlock() ?: return transformSelectedElement { element, transform ->
-            val scaled = transform.bounds.scaledAboutCentre(factor)
-            transform.copy(bounds = element.clampedBounds(scaled, requireProject().pages.size))
+    private fun applyResizedSelection(resized: List<CompositionElement>) {
+        val project = requireProject()
+        if (state.value.manipulatedLayout() != null && resized.size == 1) return setSelectedLayoutFrame(resized.single().transform)
+        val transforms = resized.associate { it.id to it.transform }
+        val elements = project.elements.map { element ->
+            transforms[element.id]?.let { element.withTransform(it) } ?: element
         }
-        reshapeSelection(block, block.scaledAboutCentre(factor))
+        if (elements != project.elements) commit { project.copy(elements = elements) }
+    }
+
+    /** Scales the artwork around its centre, respecting each member's resource limits. */
+    fun scaleSelected(factor: Float) {
+        state.value.manipulatedLayout()?.let { layout ->
+            return setSelectedLayoutFrame(layout.frame.copy(bounds = layout.frame.bounds.scaledAboutCentre(factor,
+                maxWidth = requireProject().pages.size.toFloat(), maxHeight = 1f)))
+        }
+        val block = resizableBlock() ?: return transformSelectedElement { element, transform ->
+            val scaled = transform.bounds.scaledAboutCentre(factor,
+                maxWidth = if (element is CompositionElement.Video) 1f else requireProject().pages.size.toFloat(), maxHeight = 1f)
+            transform.copy(bounds = element.editableBounds(scaled, requireProject().pages.size))
+        }
+        val members = requireProject().selectionMembers()
+        val minimum = members.maxOf { maxOf(MIN_ELEMENT_SIZE / it.transform.bounds.width, MIN_ELEMENT_SIZE / it.transform.bounds.height) }
+        val maximum = members.minOf { minOf((if (it is CompositionElement.Video) 1f else requireProject().pages.size.toFloat()) /
+            it.transform.bounds.width, 1f / it.transform.bounds.height) }
+        val ratio = (factor.takeIf { it.isFinite() && it > 0f } ?: 1f).coerceIn(minimum, maximum)
+        reshapeSelection(block, block.scaledAboutCentre(ratio, maxSize = Float.MAX_VALUE))
     }
 
     /**
@@ -851,39 +951,45 @@ open class ComposerEditorViewModel(
      * — fattened them all by the same amount and undid the arrangement: two cards side by side ended up
      * overlapping, and the rectangle the handle showed was not what came out.
      *
-     * `clampedBounds` still runs per element. It is what keeps a video from leaving the page it belongs
-     * to, and that rule is each one's, not the block's.
+     * Size limits still apply; spatial movement never changes a clip's page or timing.
      */
     private fun reshapeSelection(box: NormalizedRect, target: NormalizedRect) {
         val project = requireProject()
-        val ids = project.selectionMembers()
-            .filterNot(CompositionElement::locked)
-            .mapTo(mutableSetOf()) { it.id }
+        val members = project.selectionMembers().filterNot(CompositionElement::locked)
+        val ids = members.mapTo(mutableSetOf()) { it.id }
         if (ids.isEmpty()) return
+        val minX = members.maxOf { MIN_ELEMENT_SIZE / it.transform.bounds.width }
+        val minY = members.maxOf { MIN_ELEMENT_SIZE / it.transform.bounds.height }
+        val maxX = members.minOf { (if (it is CompositionElement.Video) 1f else project.pages.size.toFloat()) / it.transform.bounds.width }
+        val maxY = members.minOf { 1f / it.transform.bounds.height }
+        val width = box.width * (target.width / box.width).coerceIn(minX, maxX)
+        val height = box.height * (target.height / box.height).coerceIn(minY, maxY)
+        fun anchor(before: Float, next: Float, originalSize: Float, wantedSize: Float, limitedSize: Float): Float {
+            val difference = wantedSize - originalSize
+            val fraction = if (kotlin.math.abs(difference) < .00001f) 0f else (before - next) / difference
+            return before - (limitedSize - originalSize) * fraction
+        }
+        val limited = NormalizedRect(anchor(box.x, target.x, box.width, target.width, width),
+            anchor(box.y, target.y, box.height, target.height, height), width, height)
         commit { project.copy(elements = project.elements.map { element ->
             if (element.id !in ids) return@map element
-            val next = element.transform.bounds.mappedBetween(box, target)
-            element.withTransform(element.transform.copy(bounds = element.clampedBounds(next, project.pages.size)))
+            val next = element.transform.bounds.mappedBetween(box, limited)
+            element.withTransform(element.transform.copy(bounds = element.editableBounds(next, project.pages.size)))
         }) }
     }
 
     /** Absolute rotation, for the handle and the slider. [snap] only when it comes from a gesture. */
     fun setSelectedRotation(degrees: Float, snap: Boolean = false) {
         val target = if (snap) snapRotation(degrees) else normalizeDegrees(degrees)
+        state.value.manipulatedLayout()?.let { layout ->
+            val primary = requireProject().elements.firstOrNull { it.id == state.value.selectedElementId } ?: return
+            return setSelectedLayoutFrame(layout.frame.copy(rotationDegrees = normalizeDegrees(layout.frame.rotationDegrees + target - primary.transform.rotationDegrees)))
+        }
         if (resizableBlock() == null) {
             return transformSelected { it.copy(rotationDegrees = target) }
         }
-        // The block keeps no angle in the model — it is a computed rectangle, not an element. What is
-        // kept here is only what the handle has already asked for, to turn an absolute angle into the
-        // difference left to apply.
-        val selection = state.value.selectedElementIds
-        if (selection != blockRotationOf) {
-            blockRotationOf = selection
-            blockRotation = 0f
-        }
-        val delta = target - blockRotation
-        blockRotation = target
-        rotateSelectionBlock(delta)
+        val primary = requireProject().elements.firstOrNull { it.id == state.value.selectedElementId } ?: return
+        rotateSelectionBlock(target - primary.transform.rotationDegrees)
     }
 
     /**
@@ -896,6 +1002,9 @@ open class ComposerEditorViewModel(
      * the value from one frame earlier whenever two touches of the gesture fell in the same UI frame.
      */
     fun rotateSelectedBy(deltaDegrees: Float) {
+        state.value.manipulatedLayout()?.let { layout ->
+            return setSelectedLayoutFrame(layout.frame.copy(rotationDegrees = normalizeDegrees(layout.frame.rotationDegrees + deltaDegrees)))
+        }
         if (resizableBlock() != null) return rotateSelectionBlock(deltaDegrees)
         transformSelected { it.copy(rotationDegrees = normalizeDegrees(it.rotationDegrees + deltaDegrees)) }
     }
@@ -913,15 +1022,15 @@ open class ComposerEditorViewModel(
         val block = resizableBlock() ?: return
         val project = requireProject()
         val ids = project.selectionMembers().filterNot(CompositionElement::locked).mapTo(mutableSetOf()) { it.id }
-        val centreX = block.x + block.width / 2f
-        val centreY = block.y + block.height / 2f
+        val centreX = groupRotationPivot?.first ?: (block.x + block.width / 2f)
+        val centreY = groupRotationPivot?.second ?: (block.y + block.height / 2f)
         val aspect = project.format.pixelWidth.toFloat() / project.format.pixelHeight
         commit { project.copy(elements = project.elements.map { element ->
             if (element.id !in ids) return@map element
             val next = element.transform.bounds.orbited(centreX, centreY, deltaDegrees, aspect)
             element.withTransform(
                 element.transform.copy(
-                    bounds = element.clampedBounds(next, project.pages.size),
+                    bounds = element.editableBounds(next, project.pages.size),
                     rotationDegrees = normalizeDegrees(element.transform.rotationDegrees + deltaDegrees),
                 ),
             )
@@ -930,11 +1039,33 @@ open class ComposerEditorViewModel(
 
     fun toggleMirrorHorizontal() = transformSelected { it.copy(mirrorHorizontal = !it.mirrorHorizontal) }
     fun toggleMirrorVertical() = transformSelected { it.copy(mirrorVertical = !it.mirrorVertical) }
-    fun setSelectedOpacity(value: Float) = transformSelected { it.copy(opacity = value.coerceIn(0.05f, 1f)) }
+    fun setSelectedOpacity(value: Float) {
+        val project = requireProject()
+        val ids = project.selectionMembers().map { it.id }.toSet()
+        if (ids.isEmpty()) return
+        val opacity = value.coerceIn(.05f, 1f)
+        val elements = project.elements.map { if (it.id in ids) it.withTransform(it.transform.copy(opacity = opacity)) else it }
+        val layouts = project.layouts.map { layout ->
+            if (state.value.editingGroupId == null && layout.root.memberIds().all(ids::contains)) layout.copy(frame = layout.frame.copy(opacity = opacity)) else layout
+        }
+        if (elements != project.elements || layouts != project.layouts) commit { project.copy(elements = elements, layouts = layouts) }
+    }
 
     fun setFrameCorner(value: Float) = mutateFrame { it.copy(cornerRadius = value.coerceIn(0f, MAX_FRAME_CORNER)) }
     fun setFrameBorder(value: Float) = mutateFrame { it.copy(borderWidth = value.coerceIn(0f, MAX_FRAME_BORDER)) }
     fun setFrameShadow(value: Float) = mutateFrame { it.copy(shadowRadius = value.coerceIn(0f, MAX_FRAME_SHADOW)) }
+
+    fun setMediaFrameDesign(cutout: MediaCutout, decoration: MediaFrameDecoration) {
+        val project = requireProject()
+        val members = state.value.frameDesignSelection()
+        if (members.isEmpty()) return
+        val ids = members.map { it.id }.toSet()
+        val elements = project.elements.map { element ->
+            val frame = element.mediaFrame()
+            if (element.id !in ids || frame == null) element else element.withMediaFrame(frame.copy(cutout = cutout, decoration = decoration))
+        }
+        if (elements != project.elements) commitDiscrete { project.copy(elements = elements) }
+    }
 
     /**
      * The frame outline's colour. It always existed in the model and on export — `borderArgb` — but
@@ -945,6 +1076,36 @@ open class ComposerEditorViewModel(
 
     fun setShapeFill(argb: Long) = mutateSelected { element ->
         if (element is CompositionElement.Shape) element.copy(fillArgb = argb) else element
+    }
+
+    fun setShapeNoFill() = mutateSelected { element ->
+        if (element is CompositionElement.Shape && element.isClosedShape()) element.copy(fillArgb = element.fillArgb.withColorAlpha(0f)) else element
+    }
+
+    fun setOutlineColor(argb: Long) = mutateOutline { _, style -> style.copy(borderArgb = argb) }
+    fun setOutlineOpacity(value: Float) = mutateOutline { _, style -> style.copy(borderArgb = style.borderArgb.withColorAlpha(value)) }
+    fun setOutlineWidth(value: Float) = mutateOutline { element, style ->
+        val minimum = if (element is CompositionElement.Shape) element.kind.minStroke() else 0f
+        style.copy(borderWidth = value.coerceIn(minimum, MAX_SHAPE_STROKE))
+    }
+    fun setOutlineCorner(value: Float) = mutateOutline { element, style ->
+        if (element.hasOutlineCorners()) style.copy(cornerRadius = value.coerceIn(0f, MAX_FRAME_CORNER)) else style
+    }
+
+    private fun mutateOutline(block: (CompositionElement, FrameStyle) -> FrameStyle) {
+        if (state.value.outlineSelection().isEmpty()) return
+        mutateSelected { element ->
+            val before = element.outlineStyle() ?: return@mutateSelected element
+            val style = block(element, before)
+            when (element) {
+                is CompositionElement.Shape -> element.copy(strokeArgb = style.borderArgb, strokeWidth = style.borderWidth,
+                    cornerRadius = if (element.kind == ShapeKind.RECTANGLE) style.cornerRadius else element.cornerRadius)
+                is CompositionElement.Photo -> element.copy(frame = style)
+                is CompositionElement.Video -> element.copy(frame = style)
+                is CompositionElement.MediaPlaceholder -> element.copy(frame = style)
+                else -> element
+            }
+        }
     }
 
     fun setShapeStroke(argb: Long) = mutateSelected { element ->
@@ -1011,29 +1172,52 @@ open class ComposerEditorViewModel(
      * It stopped requiring a group: choosing three things is enough. Three is the minimum that means
      * anything — with two there is nothing between them to space.
      */
-    fun distributeSelected(horizontal: Boolean) {
+    fun setArrangementReference(reference: CompositionArrangementReference) = mutableState.update { it.copy(arrangementReference = reference) }
+
+    private fun arrangementBounds(members: List<CompositionElement>): NormalizedRect? {
         val project = requireProject()
-        val members = project.selectionMembers()
-        if (members.size < 3) return notice(uiText(Res.string.composer_distribute_needs_three))
-        val sorted = if (horizontal) members.sortedBy { it.transform.bounds.x } else members.sortedBy { it.transform.bounds.y }
-        val first = sorted.first().transform.bounds
-        val last = sorted.last().transform.bounds
-        val totalSize = sorted.sumOf { if (horizontal) it.transform.bounds.width.toDouble() else it.transform.bounds.height.toDouble() }.toFloat()
-        val span = if (horizontal) last.right - first.x else last.bottom - first.y
-        val gap = (span - totalSize) / (sorted.size - 1)
-        var cursor = if (horizontal) first.x else first.y
-        val replacements = mutableMapOf<String, CompositionElement>()
-        sorted.forEach { element ->
-            val b = element.transform.bounds
-            val next = if (horizontal) b.copy(x = cursor) else b.copy(y = cursor)
-            replacements[element.id] = element.withTransform(
-                element.transform.copy(bounds = element.clampedBounds(next, project.pages.size)),
-            )
-            cursor += (if (horizontal) b.width else b.height) + gap
+        val units = members.selectionUnits(state.value.editingGroupId)
+        val reference = if (units.size < 2) CompositionArrangementReference.PAGE else state.value.arrangementReference
+        if (reference == CompositionArrangementReference.SELECTION) return arrangementRepresentatives(members).map { it.visualBounds(aspect = project.format.aspectRatio) }.boundingBox()
+        if (members.any { it is CompositionElement.Video && it.pageIndex != state.value.currentPage }) {
+            notice(uiText(Res.string.composer_arrange_video_page)); return null
         }
-        commit { project.copy(elements = project.elements.map { replacements[it.id] ?: it }) }
+        return NormalizedRect(state.value.currentPage.toFloat(), 0f, 1f, 1f)
     }
 
+    fun distributeSelected(horizontal: Boolean) {
+        val members = state.value.editableSelection()
+        val minimum = if (state.value.arrangementReference == CompositionArrangementReference.PAGE) 2 else 3
+        if (members.selectionUnits(state.value.editingGroupId).size < minimum) {
+            return notice(uiText(if (minimum == 2) Res.string.composer_distribute_needs_two else Res.string.composer_distribute_needs_three))
+        }
+        val bounds = arrangementBounds(members) ?: return
+        applyArrangedSelection(arrangementRepresentatives(members).distributedSelection(horizontal, bounds, requireProject().format.aspectRatio, state.value.editingGroupId))
+    }
+
+    private fun arrangementRepresentatives(members: List<CompositionElement>): List<CompositionElement> {
+        if (state.value.editingGroupId != null) return members
+        val ids = members.map { it.id }.toSet()
+        val layouts = requireProject().layouts.filter { it.root.memberIds().all(ids::contains) }
+        val layoutIds = layouts.flatMap { it.root.memberIds() }.toSet()
+        return members.filterNot { it.id in layoutIds } + layouts.map { it.proxy() }
+    }
+
+    private fun applyArrangedSelection(members: List<CompositionElement>) {
+        val project = requireProject()
+        val replacements = members.associateBy { it.id }
+        val offsets = if (state.value.editingGroupId != null) emptyMap() else project.layouts.mapNotNull { layout ->
+            val proxy = replacements[layout.root.memberIds().first()] ?: return@mapNotNull null
+            if (proxy is CompositionElement.MediaPlaceholder && proxy.groupId == layout.groupId && proxy.transform.bounds.width == layout.frame.bounds.width)
+                layout.groupId to (proxy.transform.bounds.x - layout.frame.bounds.x to proxy.transform.bounds.y - layout.frame.bounds.y) else null
+        }.toMap()
+        val elements = project.elements.map { element ->
+            val offset = offsets[element.groupId]
+            if (offset == null) replacements[element.id] ?: element else element.withTransform(element.transform.copy(
+                bounds = element.transform.bounds.copy(x = element.transform.bounds.x + offset.first, y = element.transform.bounds.y + offset.second)))
+        }
+        if (elements != project.elements) commitDiscrete { project.copy(elements = elements) }
+    }
     /**
      * The timeline's edits. They name the clip, and not the selection, because the timeline shows every
      * video on the page and any of them can be dragged; the one dragged becomes the selection.
@@ -1099,16 +1283,14 @@ open class ComposerEditorViewModel(
     }
     fun toggleVisible() = mutateSelected { it.withVisible(!it.visible) }
 
-    fun toggleElementLocked(id: String) {
+    fun toggleElementLocked(id: String, wholeGroup: Boolean = true) {
         val project = requireProject()
         val target = project.elements.firstOrNull { it.id == id } ?: return
         commit { project.copy(elements = project.elements.map {
-            if (it.id == id || target.groupId != null && it.groupId == target.groupId) it.withLocked(!target.locked) else it
+            if (it.id == id || wholeGroup && target.groupId != null && it.groupId == target.groupId) it.withLocked(!target.locked) else it
         }) }
         mutableState.update { current ->
-            val ids = current.selectedElementIds.filterTo(mutableSetOf()) { selected ->
-                current.project?.elements?.any { it.id == selected && !it.locked } == true
-            }
+            val ids = current.selectedElementIds.filterTo(mutableSetOf()) { selected -> current.canEditElement(selected) }
             current.copy(selectedElementIds = ids, selectedElementId = current.selectedElementId?.takeIf { it in ids } ?: ids.firstOrNull(),
                 multiSelect = current.multiSelect && ids.isNotEmpty())
         }
@@ -1121,9 +1303,7 @@ open class ComposerEditorViewModel(
     }
 
     internal fun canEdit(id: String): Boolean {
-        val elements = state.value.project?.elements ?: return false
-        val target = elements.firstOrNull { it.id == id } ?: return false
-        return !target.locked && (target.groupId == null || elements.none { it.groupId == target.groupId && it.locked })
+        return state.value.canEditElement(id)
     }
 
     fun moveElement(id: String, dx: Float, dy: Float) { if (canEdit(id)) { selectElement(id); moveSelected(dx, dy) } }
@@ -1135,14 +1315,8 @@ open class ComposerEditorViewModel(
         if (!canEdit(otherId)) return
         val selectedId = state.value.selectedElementId ?: return
         if (selectedId == otherId || !canEdit(selectedId)) return
-        val project = requireProject()
-        val selected = project.elements.firstOrNull { it.id == selectedId } ?: return
-        val other = project.elements.firstOrNull { it.id == otherId } ?: return
-        val group = selected.groupId ?: other.groupId ?: UUID.randomUUID().toString()
-        val members = setOfNotNull(selected.groupId, other.groupId)
-        commit { project.copy(elements = project.elements.map { element ->
-            if (element.id == selectedId || element.id == otherId || element.groupId in members) element.withGroupId(group) else element
-        }) }
+        mutableState.update { it.copy(selectedElementIds = setOf(selectedId, otherId), editingGroupId = null, multiSelect = true) }
+        groupSelection()
     }
 
     /**
@@ -1152,25 +1326,288 @@ open class ComposerEditorViewModel(
      * With several chosen the question is already answered.
      */
     fun groupSelection() {
+        if (state.value.editingGroupId != null) return notice(uiText(Res.string.composer_finish_group_editing))
+        val members = state.value.editableSelection()
+        if (members.selectionUnits().size < 2) return notice(uiText(Res.string.composer_group_needs_two))
+        if (members.any { it.groupId != null }) mutableState.update {
+            it.copy(groupMergeRequest = ComposerGroupMergeRequest(members.associate { member -> member.id to member.groupId }))
+        } else createGroup(members)
+    }
+
+    fun cancelGroupMerge() = mutableState.update { it.copy(groupMergeRequest = null) }
+
+    fun confirmGroupMerge() {
+        val request = state.value.groupMergeRequest ?: return
+        val members = state.value.editableSelection()
+        cancelGroupMerge()
+        if (members.associate { it.id to it.groupId } != request.members) return notice(uiText(Res.string.composer_group_selection_changed))
+        createGroup(members)
+    }
+
+    private fun createGroup(members: List<CompositionElement>) {
         val project = requireProject()
-        val members = project.selectionMembers()
-        if (members.size < 2) return notice(uiText(Res.string.composer_group_needs_two))
-        val group = members.firstNotNullOfOrNull { it.groupId } ?: UUID.randomUUID().toString()
-        val existing = members.mapNotNullTo(mutableSetOf()) { it.groupId }
+        val group = UUID.randomUUID().toString()
         val ids = members.mapTo(mutableSetOf()) { it.id }
-        commit { project.copy(elements = project.elements.map { element ->
-            if (element.id in ids || element.groupId in existing) element.withGroupId(group) else element
-        }) }
+        commitDiscrete { project.copy(elements = project.elements.map { if (it.id in ids) it.withGroupId(group) else it }) }
+        mutableState.update { it.copy(selectedElementIds = ids, multiSelect = false, editingGroupId = null) }
     }
 
     fun ungroupSelected() {
         val project = requireProject()
-        val selected = project.elements.firstOrNull { it.id == state.value.selectedElementId } ?: return
-        val group = selected.groupId ?: return
-        commit { project.copy(elements = project.elements.map { if (it.groupId == group) it.withGroupId(null) else it }) }
+        val selectedIds = state.value.selectionElements().mapTo(mutableSetOf()) { it.id }
+        val groups = state.value.selectionElements().mapNotNullTo(mutableSetOf()) { it.groupId }
+        if (groups.isEmpty()) return
+        val members = project.elements.filter { it.groupId in groups }
+        if (members.any { it.locked }) return notice(uiText(Res.string.composer_group_has_locked_members))
+        commitDiscrete { project.copy(elements = project.elements.map { if (it.groupId in groups) it.withGroupId(null) else it }) }
+        mutableState.update { it.copy(editingGroupId = null, selectedElementIds = selectedIds + members.map { member -> member.id }, multiSelect = true) }
     }
-    fun repeatOnAllPages() = mutateSelected { element ->
-        if (element is CompositionElement.Video) element else element.withRepeatOnPages(requireProject().pages.indices.toSet())
+
+    fun beginGrid() {
+        val project = requireProject()
+        val members = state.value.selectionElements()
+        if (members.size < 2 || state.value.editingGroupId != null) return
+        if (state.value.editableSelection().size != members.size) return notice(uiText(Res.string.composer_group_has_locked_members))
+        if (members.any { it.repeatOnPages.isNotEmpty() }) return notice(uiText(Res.string.composer_grid_repeated_notice))
+        val existing = state.value.selectedLayout()
+        val reference = if (existing == null) state.value.arrangementReference else CompositionArrangementReference.SELECTION
+        val box = existing?.frame?.bounds ?: if (reference == CompositionArrangementReference.PAGE)
+            NormalizedRect(state.value.currentPage.toFloat(), 0f, 1f, 1f) else members.map { it.visualBounds(aspect = project.format.aspectRatio) }.boundingBox()!!
+        if (members.filterIsInstance<CompositionElement.Video>().any { it.pageIndex != state.value.currentPage })
+            return notice(uiText(Res.string.composer_grid_video_page_notice))
+        val columns = kotlin.math.ceil(kotlin.math.sqrt(members.size.toDouble())).toInt()
+        val layout = existing ?: CompositionLayout(UUID.randomUUID().toString(), ElementTransform(box),
+            layoutTree(members.sortedBy { it.zIndex }.map { it.id }, CompositionLayoutKind.GRID, columns), columns = columns,
+            content = members.associate { it.id to LayoutContent(it.transform.bounds.width * project.format.aspectRatio / it.transform.bounds.height,
+                it.transform.rotationDegrees) })
+        val groups = members.mapNotNull { it.groupId }.distinct()
+        mutableState.update { it.copy(gridEditor = ComposerGridEditor(project, layout, reference, it.currentPage,
+            combinesGroups = existing == null && groups.isNotEmpty())) }
+    }
+
+    fun cancelGrid() = mutableState.update { it.copy(gridEditor = null) }
+
+    fun openGrid(groupId: String) {
+        val project = requireProject()
+        if (project.layouts.none { it.groupId == groupId } || project.elements.any { it.groupId == groupId && it.locked }) return
+        selectGroup(groupId)
+        beginGrid()
+    }
+
+    fun swapGridDraftMembers(first: String, second: String) {
+        val editor = state.value.gridEditor ?: return
+        if ((editor.base.elements + editor.addedElements).any { it.id in setOf(first, second) && it.locked }) return
+        val next = editor.layout.copy(root = editor.layout.root.swapMembers(first, second))
+        if (!gridVideoBoundsFit(next, editor.copy(layout = next).preview().elements)) return
+        updateGridDraft(next)
+    }
+
+    fun createGridFromMedia(media: List<ComposerMedia>, pageIndex: Int = state.value.currentPage) =
+        insertGridMedia(media, null, false, pageIndex)
+
+    fun addMediaToGrid(media: List<ComposerMedia>, groupId: String, draft: Boolean = false) =
+        insertGridMedia(media, groupId, draft, state.value.currentPage)
+
+    private fun insertGridMedia(media: List<ComposerMedia>, groupId: String?, draft: Boolean, pageIndex: Int) = viewModelScope.launch {
+        if (media.isEmpty()) return@launch
+        if (groupId == null && media.size < 2) return@launch notice(uiText(Res.string.composer_grid_choose_multiple))
+        val incoming = media.toInsertable(recipes)
+        val project = requireProject()
+        val editor = if (draft) state.value.gridEditor?.takeIf { it.layout.groupId == groupId } ?: return@launch else null
+        if (editor != null && editor.base != project) return@launch notice(uiText(Res.string.composer_grid_changed_notice))
+        val layout = editor?.layout ?: groupId?.let { id -> project.layouts.firstOrNull { it.groupId == id } ?: return@launch }
+        val source = editor?.preview() ?: project
+        if (groupId != null && source.elements.any { it.groupId == groupId && it.locked }) {
+            return@launch notice(uiText(Res.string.composer_group_has_locked_members))
+        }
+        if (groupId != null && source.elements.any { it.groupId == groupId && it.repeatOnPages.isNotEmpty() }) {
+            return@launch notice(uiText(Res.string.composer_grid_repeated_notice))
+        }
+        val videoPage = groupId?.let { id -> source.elements.filterIsInstance<CompositionElement.Video>().firstOrNull { it.groupId == id }?.pageIndex }
+        val page = (videoPage ?: editor?.pageIndex ?: layout?.frame?.bounds?.x?.let { floor(it).toInt() } ?: pageIndex).coerceIn(source.pages.indices)
+        if (incoming.count { it.isVideo } + source.elements.count { it is CompositionElement.Video && it.pageIndex == page } > MAX_VIDEOS_PER_PAGE) {
+            return@launch notice(uiText(Res.string.composer_videos_per_page_limit, MAX_VIDEOS_PER_PAGE))
+        }
+        // Keep existing videos for capacity checks, but never fill unrelated placeholders.
+        val insertion = source.copy(elements = source.elements.filterIsInstance<CompositionElement.Video>(), layouts = emptyList())
+            .withMedia(incoming, Instant.now().toString(), stackPage = page)
+        val existingIds = source.elements.mapTo(mutableSetOf()) { it.id }
+        val nextZ = (source.elements.maxOfOrNull { it.zIndex } ?: -1) + 1
+        val added = insertion.project.elements.filterNot { it.id in existingIds }.mapIndexed { index, element ->
+            element.withZIndex(nextZ + index).withTransform(element.transform.copy(opacity = layout?.frame?.opacity ?: 1f))
+        }
+        if (added.size != incoming.size) return@launch notice(uiText(Res.string.composer_videos_per_page_limit, MAX_VIDEOS_PER_PAGE))
+        val ids = layout?.root?.memberIds().orEmpty() + added.map { it.id }
+        val columns = layout?.columns ?: kotlin.math.ceil(kotlin.math.sqrt(ids.size.toDouble())).toInt()
+        val kind = layout?.kind ?: CompositionLayoutKind.GRID
+        val next = (layout ?: CompositionLayout(UUID.randomUUID().toString(), ElementTransform(NormalizedRect(page.toFloat(), 0f, 1f, 1f)),
+            layoutTree(ids, kind, columns), columns = columns)).let {
+            it.copy(root = layoutTree(ids, kind, columns, it.rows), content = it.content + added.associate { element ->
+                element.id to LayoutContent(element.transform.bounds.width * project.format.aspectRatio / element.transform.bounds.height)
+            })
+        }
+        val elements = next.applyTo(source.elements + added, source.format.aspectRatio)
+        if (!gridVideoBoundsFit(next, elements)) return@launch
+        if (editor != null) {
+            mutableState.update { it.copy(gridEditor = editor.copy(layout = next, addedElements = editor.addedElements + added, pages = insertion.project.pages)) }
+        } else {
+            commitDiscrete { source.copy(elements = elements, pages = insertion.project.pages,
+                layouts = source.layouts.filterNot { it.groupId == next.groupId } + next) }
+            selectGroup(next.groupId)
+        }
+    }
+
+    fun updateGridDraft(layout: CompositionLayout) {
+        val editor = state.value.gridEditor ?: return
+        if (layout.groupId != editor.layout.groupId || layout.root.memberIds().toSet() != editor.layout.root.memberIds().toSet()) return
+        mutableState.update { it.copy(gridEditor = editor.copy(layout = layout)) }
+    }
+
+    fun setGridKind(kind: CompositionLayoutKind, columns: Int? = null, rows: Int? = null) {
+        val editor = state.value.gridEditor ?: return
+        val count = (columns ?: editor.layout.columns).coerceIn(1, editor.layout.root.memberIds().size)
+        val rowCount = (rows ?: if (columns == null) editor.layout.rows else 0).coerceIn(0, editor.layout.root.memberIds().size)
+        updateGridDraft(editor.layout.copy(kind = kind, columns = count, rows = rowCount, root = layoutTree(editor.layout.root.memberIds(), kind, count, rowCount)))
+    }
+
+    fun setGridReference(reference: CompositionArrangementReference) {
+        val editor = state.value.gridEditor ?: return
+        val ids = editor.layout.root.memberIds().toSet()
+        val box = if (reference == CompositionArrangementReference.PAGE) NormalizedRect(editor.pageIndex.toFloat(), 0f, 1f, 1f)
+            else (editor.base.elements + editor.addedElements).filter { it.id in ids }.map { it.visualBounds(aspect = editor.base.format.aspectRatio) }.boundingBox()!!
+        mutableState.update { it.copy(gridEditor = editor.copy(reference = reference, layout = editor.layout.copy(frame = editor.layout.frame.copy(bounds = box, rotationDegrees = 0f)))) }
+    }
+
+    fun confirmGrid() {
+        val editor = state.value.gridEditor ?: return
+        val project = requireProject()
+        if (project != editor.base) { cancelGrid(); return notice(uiText(Res.string.composer_grid_changed_notice)) }
+        val ids = editor.layout.root.memberIds().toSet()
+        if (project.elements.any { it.id in ids && it.locked }) return notice(uiText(Res.string.composer_group_has_locked_members))
+        val preview = editor.preview()
+        if (!gridVideoBoundsFit(editor.layout, preview.elements)) return
+        if (preview.elements == project.elements && preview.layouts == project.layouts) { cancelGrid(); return }
+        commitDiscrete { preview }
+        if (state.value.project?.layouts?.any { it.groupId == editor.layout.groupId } == true) {
+            mutableState.update { it.copy(gridEditor = null, selectedElementId = ids.first(), selectedElementIds = ids,
+                editingGroupId = null, multiSelect = false) }
+        }
+    }
+
+    fun adjustGridDivider(groupId: String, splitId: String, index: Int, delta: Float) {
+        val project = requireProject()
+        val layout = project.layouts.firstOrNull { it.groupId == groupId } ?: return
+        if (project.elements.any { it.groupId == groupId && it.locked }) return
+        val root = layout.root.adjustDivider(splitId, index, delta)
+        if (root == layout.root) return
+        val next = layout.copy(root = root)
+        val elements = next.applyTo(project.elements, project.format.aspectRatio)
+        if (!gridVideoBoundsFit(next, elements)) return
+        commit { project.copy(elements = elements,
+            layouts = project.layouts.map { if (it.groupId == groupId) next else it }) }
+    }
+
+    private fun setSelectedLayoutFrame(frame: ElementTransform) {
+        val project = requireProject()
+        val layout = state.value.manipulatedLayout() ?: return
+        if (frame == layout.frame) return
+        val next = layout.copy(frame = frame)
+        val elements = next.applyTo(project.elements, project.format.aspectRatio)
+        if (!gridVideoBoundsFit(next, elements)) return
+        commit { project.copy(elements = elements,
+            layouts = project.layouts.map { if (it.groupId == layout.groupId) next else it }) }
+    }
+
+    private fun gridVideoBoundsFit(layout: CompositionLayout, elements: List<CompositionElement>): Boolean {
+        val ids = layout.root.memberIds().toSet()
+        if (elements.any { it.id in ids && it is CompositionElement.Video && (it.transform.bounds.width > 1f || it.transform.bounds.height > 1f) }) {
+            notice(uiText(Res.string.composer_grid_video_size_notice)); return false
+        }
+        return true
+    }
+
+    fun selectGroup(groupId: String) {
+        val member = requireProject().elements.firstOrNull { it.groupId == groupId } ?: return
+        val next = state.value.copy(editingGroupId = null)
+        if (!next.canEditElement(member.id)) return
+        mutableState.update { it.copy(editingGroupId = null) }
+        focusElement(member.id)
+    }
+
+    fun editGroup(groupId: String) {
+        val member = requireProject().elements.firstOrNull { it.groupId == groupId && !it.locked } ?: return
+        focusGroupMember(member.id)
+    }
+
+    fun focusGroupMember(id: String) {
+        val element = requireProject().elements.firstOrNull { it.id == id && !it.locked } ?: return
+        val group = element.groupId ?: return focusElement(id)
+        clearMovementGuides()
+        mutableState.update { it.copy(editingGroupId = group, selectedElementId = id, selectedElementIds = setOf(id),
+            multiSelect = false, backgroundSelected = false, revealSelectionRequest = it.revealSelectionRequest + 1) }
+    }
+
+    fun finishEditingGroup() {
+        val group = state.value.editingGroupId ?: return
+        if (requireProject().elements.any { it.groupId == group && it.locked }) clearSelection() else selectGroup(group)
+    }
+
+    fun beginGroupMemberMultiSelection(id: String) {
+        if (state.value.editingGroupId != requireProject().elements.firstOrNull { it.id == id }?.groupId) focusGroupMember(id)
+        beginMultiSelection(id)
+    }
+
+    fun deleteGroupMember(id: String) {
+        val project = requireProject()
+        if (project.elements.firstOrNull { it.id == id }?.locked != false) return
+        commitDiscrete { project.copy(elements = project.elements.filterNot { it.id == id }) }
+    }
+
+    fun deleteGroup(groupId: String) {
+        val project = requireProject()
+        val members = project.elements.filter { it.groupId == groupId }
+        if (members.isEmpty() || members.any { it.locked }) return
+        commitDiscrete { project.copy(elements = project.elements.filterNot { it.groupId == groupId }) }
+    }
+
+    fun toggleGroupLocked(groupId: String) {
+        val project = requireProject()
+        val members = project.elements.filter { it.groupId == groupId }
+        if (members.isEmpty()) return
+        val lock = members.none { it.locked }
+        commitDiscrete { project.copy(elements = project.elements.map { if (it.groupId == groupId) it.withLocked(lock) else it }) }
+        clearSelection()
+    }
+
+    fun toggleGroupVisible(groupId: String) {
+        val project = requireProject()
+        if (project.elements.none { it.groupId == groupId }) return
+        val show = project.elements.none { it.groupId == groupId && it.visible }
+        commitDiscrete { project.copy(elements = project.elements.map { if (it.groupId == groupId) it.withVisible(show) else it }) }
+    }
+    fun selectionRepeatsOnAllPages(): Boolean {
+        val project = state.value.project ?: return false
+        val members = project.selectionMembers().filterNot { it is CompositionElement.Video }
+        return members.isNotEmpty() && members.all { it.repeatOnPages == project.pages.indices.toSet() }
+    }
+
+    fun repeatOnAllPages() = changePageRepetition(true)
+    fun stopRepeatingSelected() = changePageRepetition(false)
+
+    private fun changePageRepetition(repeat: Boolean) {
+        val project = requireProject()
+        val selected = project.selectionMembers()
+        if (repeat && project.layouts.any { layout ->
+                val members = selected.filter { it.id in layout.root.memberIds() }
+                members.isNotEmpty() && (members.any { it is CompositionElement.Video } || members.map { it.repeatOriginPage() }.distinct().size > 1)
+            }) return notice(uiText(Res.string.composer_grid_repeat_notice))
+        val ids = project.selectionMembers().filterNot { it is CompositionElement.Video }.mapTo(mutableSetOf()) { it.id }
+        if (ids.isEmpty()) return
+        // A menu command must never be absorbed into a slider whose finish callback was lost.
+        endGesture()
+        val pages = if (repeat) project.pages.indices.toSet() else emptySet()
+        val elements = project.elements.map { if (it.id in ids) it.withRepeatOnPages(pages) else it }
+        if (elements != project.elements) commit { project.copy(elements = elements) }
     }
 
     fun bringForward() = moveSelectedLayer(1)
@@ -1186,21 +1623,27 @@ open class ComposerEditorViewModel(
     fun duplicateSelected() {
         val project = requireProject()
         val members = project.selectionMembers().ifEmpty { return }
-        val group = if (members.size > 1) UUID.randomUUID().toString() else null
+        val groups = members.mapNotNull { it.groupId }.distinct().associateWith { UUID.randomUUID().toString() }
+        val editing = state.value.editingGroupId
         var z = nextZ(project)
         val copies = members.map { element ->
             val bounds = element.transform.bounds
-            val shifted = element.clampedBounds(
+            val shifted = element.editableBounds(
                 bounds.copy(x = bounds.x + DUPLICATE_OFFSET, y = bounds.y + DUPLICATE_OFFSET),
                 project.pages.size,
             )
             element
                 .withId(UUID.randomUUID().toString())
                 .withTransform(element.transform.copy(bounds = shifted))
-                .withGroupId(group)
+                .withGroupId(element.groupId?.let { if (it == editing) it else groups[it] })
                 .withZIndex(z++)
         }
-        commit { project.copy(elements = project.elements + copies) }
+        val copiedIds = members.zip(copies).associate { (original, copy) -> original.id to copy.id }
+        val copiedLayouts = if (editing != null) emptyList() else project.layouts.mapNotNull { layout ->
+            val group = groups[layout.groupId] ?: return@mapNotNull null
+            if (layout.root.memberIds().any { it !in copiedIds }) null else layout.remap(group, copiedIds, DUPLICATE_OFFSET, DUPLICATE_OFFSET)
+        }
+        commitDiscrete { project.copy(elements = project.elements + copies, layouts = project.layouts + copiedLayouts) }
         // Only after `commit`: if the invariants refuse the copy, the selection has to stay on what still
         // exists instead of pointing to ids that never reached the project.
         if (state.value.project?.elements?.any { it.id == copies.first().id } == true) {
@@ -1218,17 +1661,19 @@ open class ComposerEditorViewModel(
         val project = requireProject()
         val ids = project.selectionMembers().mapTo(mutableSetOf()) { it.id }
         if (ids.isEmpty()) return
-        commit { project.copy(elements = project.elements.filterNot { it.id in ids }) }
+        commitDiscrete { project.copy(elements = project.elements.filterNot { it.id in ids }) }
         clearSelection()
     }
 
     fun undo() {
+        endGesture()
         if (historyIndex <= 0) return
         historyIndex--
         restoreHistory()
     }
 
     fun redo() {
+        endGesture()
         if (historyIndex >= history.lastIndex) return
         historyIndex++
         restoreHistory()
@@ -1412,18 +1857,8 @@ open class ComposerEditorViewModel(
      * The list comes from bottom to top (increasing zIndex) — the layers sheet shows it inverted.
      */
     private fun CompositionProject.layerUnits(): MutableList<MutableList<CompositionElement>> {
-        val units = mutableListOf<MutableList<CompositionElement>>()
-        elements.sortedWith(compareBy<CompositionElement> { it.zIndex }.thenBy { it.id }).forEach { element ->
-            val key = element.groupId ?: element.id
-            val existing = units.firstOrNull { (it.first().groupId ?: it.first().id) == key }
-            if (existing == null) units += mutableListOf(element) else existing += element
-        }
-        return units
-    }
-
-    private fun CompositionProject.withDenseZIndexes(units: List<List<CompositionElement>>): CompositionProject {
-        val zById = units.flatten().mapIndexed { index, element -> element.id to index }.toMap()
-        return copy(elements = elements.map { element -> zById[element.id]?.let(element::withZIndex) ?: element })
+        return elements.sortedWith(compareBy<CompositionElement> { it.zIndex }.thenBy { it.id })
+            .selectionUnits().mapTo(mutableListOf()) { it.members.toMutableList() }
     }
 
     /** Layer units, from top to bottom — the order the layers sheet shows. */
@@ -1437,22 +1872,42 @@ open class ComposerEditorViewModel(
         if (units.size < 2) return
         val from = units.lastIndex - fromTopIndex
         val to = units.lastIndex - toTopIndex
-        if (from !in units.indices || to !in units.indices || from == to || units[from].any { !canEdit(it.id) }) return
+        if (from !in units.indices || to !in units.indices || from == to) return
+        val first = minOf(from, to)
+        val last = maxOf(from, to)
+        val affected = units.subList(first, last + 1).flatten()
+        if (affected.any { it.locked }) return
+        val slots = affected.map { it.zIndex }.sorted()
         units.add(to, units.removeAt(from))
-        commit { project.withDenseZIndexes(units) }
+        val z = units.subList(first, last + 1).flatten().mapIndexed { index, element -> element.id to slots[index] }.toMap()
+        commitDiscrete { project.copy(elements = project.elements.map { element -> z[element.id]?.let(element::withZIndex) ?: element }) }
+    }
+
+    fun reorderGroupMember(groupId: String, from: Int, to: Int) {
+        val project = requireProject()
+        val members = project.elements.filter { it.groupId == groupId }.sortedByDescending { it.zIndex }
+        if (from !in members.indices || to !in members.indices || from == to) return
+        if (members.subList(minOf(from, to), maxOf(from, to) + 1).any { it.locked }) return
+        val reordered = members.toMutableList().apply { add(to, removeAt(from)) }
+        val z = reordered.mapIndexed { index, element -> element.id to members[index].zIndex }.toMap()
+        commitDiscrete { project.copy(elements = project.elements.map { element -> z[element.id]?.let(element::withZIndex) ?: element }) }
     }
 
     private fun moveSelectedLayer(direction: Int) {
         val project = requireProject()
         val selected = project.elements.firstOrNull { it.id == state.value.selectedElementId } ?: return
+        if (selected.groupId != null && selected.groupId == state.value.editingGroupId) {
+            val members = project.elements.filter { it.groupId == selected.groupId }.sortedByDescending { it.zIndex }
+            val index = members.indexOfFirst { it.id == selected.id }
+            reorderGroupMember(selected.groupId!!, index, index - direction)
+            return
+        }
         val units = project.layerUnits()
         if (!canEdit(selected.id)) return
-        val key = selected.groupId ?: selected.id
-        val from = units.indexOfFirst { (it.first().groupId ?: it.first().id) == key }
+        val from = units.indexOfFirst { unit -> unit.any { it.id == selected.id } }
         val to = from + direction
         if (from < 0 || to !in units.indices) return
-        java.util.Collections.swap(units, from, to)
-        commit { project.withDenseZIndexes(units) }
+        reorderLayer(units.lastIndex - from, units.lastIndex - to)
     }
 
     /**
@@ -1466,53 +1921,10 @@ open class ComposerEditorViewModel(
      * to stack them.
      */
     private fun alignSelected(horizontal: Int?, vertical: Int?) {
-        val project = requireProject()
-        val members = project.selectionMembers().ifEmpty { return }
-        val left = members.minOf { it.transform.bounds.x }
-        val right = members.maxOf { it.transform.bounds.right }
-        val top = members.minOf { it.transform.bounds.y }
-        val bottom = members.maxOf { it.transform.bounds.bottom }
-        val toEachOther = state.value.selectedElementIds.size > 1
-        val page = floor(left).toInt().coerceIn(project.pages.indices)
-        val targetLeft = if (toEachOther) left else page.toFloat()
-        val targetRight = if (toEachOther) right else page + 1f
-        val targetTop = if (toEachOther) top else 0f
-        val targetBottom = if (toEachOther) bottom else 1f
-
-        fun offsets(element: CompositionElement): Pair<Float, Float> {
-            val b = element.transform.bounds
-            // Aligned with each other, each element moves what it needs; aligned to the page, the whole
-            // set moves by the same amount and keeps its internal distances.
-            val fromLeft = if (toEachOther) b.x else left
-            val fromRight = if (toEachOther) b.right else right
-            val fromTop = if (toEachOther) b.y else top
-            val fromBottom = if (toEachOther) b.bottom else bottom
-            val dx = when (horizontal) {
-                -1 -> targetLeft - fromLeft
-                0 -> (targetLeft + targetRight) / 2f - (fromLeft + fromRight) / 2f
-                1 -> targetRight - fromRight
-                else -> 0f
-            }
-            val dy = when (vertical) {
-                -1 -> targetTop - fromTop
-                0 -> (targetTop + targetBottom) / 2f - (fromTop + fromBottom) / 2f
-                1 -> targetBottom - fromBottom
-                else -> 0f
-            }
-            return dx to dy
-        }
-
-        val ids = members.mapTo(mutableSetOf()) { it.id }
-        commit { project.copy(elements = project.elements.map { element ->
-            if (element.id in ids) {
-                val (dx, dy) = offsets(element)
-                val b = element.transform.bounds
-                val moved = element.clampedBounds(b.copy(x = b.x + dx, y = b.y + dy), project.pages.size)
-                element.withTransform(element.transform.copy(bounds = moved))
-            } else element
-        }) }
+        val members = state.value.editableSelection().ifEmpty { return }
+        val bounds = arrangementBounds(members) ?: return
+        applyArrangedSelection(arrangementRepresentatives(members).alignedSelection(horizontal, vertical, bounds, requireProject().format.aspectRatio, state.value.editingGroupId))
     }
-
     /**
      * Which elements a command acts on.
      *
@@ -1520,15 +1932,7 @@ open class ComposerEditorViewModel(
      * brings its group along, because aligning on its own a card that belongs to a group would split
      * the group into two positions without anyone asking.
      */
-    private fun CompositionProject.selectionMembers(): List<CompositionElement> {
-        val ids = state.value.selectedElementIds
-        val members = if (ids.size > 1) elements.filter { it.id in ids } else {
-            val primary = elements.firstOrNull { it.id == state.value.selectedElementId } ?: return emptyList()
-            if (primary.groupId == null) listOf(primary) else elements.filter { it.groupId == primary.groupId }
-        }
-        return members.takeIf { it.all { element -> canEdit(element.id) } }.orEmpty()
-    }
-
+    private fun CompositionProject.selectionMembers(): List<CompositionElement> = state.value.editableSelection(this)
     private fun mutateSelected(block: (CompositionElement) -> CompositionElement) {
         val project = requireProject()
         val ids = project.selectionMembers().mapTo(mutableSetOf()) { it.id }
@@ -1548,7 +1952,7 @@ open class ComposerEditorViewModel(
         // `build` runs **in here** on purpose. `CompositionProject.copy()` runs `init` again, and that is
         // where the invariants throw — if the project were built at the call site, the exception would
         // go up through the gesture callback before this method even started.
-        val stamped = runCatching { build().let { it.copy(revision = it.revision + 1, updatedAt = Instant.now().toString()) } }
+        val stamped = runCatching { build().reconcileLayouts(requireProject()).let { it.copy(revision = it.revision + 1, updatedAt = Instant.now().toString()) } }
             .getOrElse { error ->
                 notice(error.toUiText(Res.string.composer_change_failed))
                 return
@@ -1569,9 +1973,16 @@ open class ComposerEditorViewModel(
         scheduleSave(stamped)
     }
 
-    private fun restore(project: CompositionProject) = mutableState.update {
-        it.copy(project = project, canUndo = historyIndex > 0, canRedo = historyIndex < history.lastIndex)
+    private fun restore(project: CompositionProject) = mutableState.update { previous ->
+        val editing = previous.editingGroupId?.takeIf { group -> project.elements.any { it.groupId == group } }
+        val next = previous.copy(project = project, editingGroupId = editing)
+        val ids = previous.selectedElementIds.filterTo(mutableSetOf()) { id -> next.canEditElement(id) }
+        next.copy(selectedElementIds = ids, selectedElementId = previous.selectedElementId?.takeIf { it in ids } ?: ids.firstOrNull(),
+            multiSelect = previous.multiSelect && ids.isNotEmpty(), groupMergeRequest = null,
+            canUndo = historyIndex > 0, canRedo = historyIndex < history.lastIndex)
     }
+
+    private fun commitDiscrete(build: () -> CompositionProject) { endGesture(); commit(build) }
 
     private fun scheduleSave(project: CompositionProject) {
         saveJob?.cancel()

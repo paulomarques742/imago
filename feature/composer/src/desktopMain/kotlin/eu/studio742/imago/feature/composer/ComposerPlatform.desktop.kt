@@ -28,6 +28,8 @@ import eu.studio742.imago.core.immich.IMMICH_API_KEY_HEADER
 import java.io.File
 import java.net.URI
 
+internal actual val supportsVideoFrameOutlines: Boolean = true
+
 @Composable
 actual fun composerEditorViewModel(): ComposerEditorViewModel {
     val graph = LocalDesktopDataGraph.current
@@ -43,6 +45,12 @@ actual fun composerEditorViewModel(): ComposerEditorViewModel {
 actual fun composerHubViewModel(): ComposerHubViewModel {
     val graph = LocalDesktopDataGraph.current
     return viewModel { ComposerHubViewModel(graph.compositions, graph.compositionTemplates, graph.compositionMedia) }
+}
+
+@Composable
+actual fun composerFormatsViewModel(): ComposerFormatsViewModel {
+    val graph = LocalDesktopDataGraph.current
+    return viewModel { ComposerFormatsViewModel(graph.compositionFormats) }
 }
 
 @Composable

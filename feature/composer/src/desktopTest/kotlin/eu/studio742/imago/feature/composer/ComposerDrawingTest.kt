@@ -261,7 +261,7 @@ class ComposerDrawingTest {
         onNodeWithContentDescription(eyedropperLabel).performClick()
         // The dialog steps aside, and a touch on the page is a sample and not a stroke.
         onNodeWithContentDescription(eyedropperLabel).assertDoesNotExist()
-        onRoot().performTouchInput { click(Offset(150f, centerY)) }
+        onNodeWithTag("composer_page_0").performTouchInput { click(center) }
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription(eyedropperLabel).fetchSemanticsNodes().isNotEmpty() }
         // The page is the test project's background, #2B3A55.
         onAllNodes(hasText("2B3A55", substring = true, ignoreCase = true)).assertCountEquals(1)

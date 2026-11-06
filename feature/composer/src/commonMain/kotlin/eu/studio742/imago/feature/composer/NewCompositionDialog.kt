@@ -6,19 +6,19 @@ import eu.studio742.imago.feature.composer.resources.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +27,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +37,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -55,7 +59,9 @@ import eu.studio742.imago.core.composition.PageFormatPreset
 import eu.studio742.imago.core.composition.SlotKind
 import eu.studio742.imago.core.composition.slots
 import eu.studio742.imago.core.designsystem.ImagoChipRow
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
+import eu.studio742.imago.core.designsystem.ImagoUiPalette
+import eu.studio742.imago.core.designsystem.LocalImagoWindow
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 
@@ -79,27 +85,35 @@ internal fun NewCompositionDialog(
      * file" choice, and opens on it: a composition made from a photo most often wants its page.
      */
     fileFormat: PageFormat? = null,
+    formats: ComposerFormatsViewModel = composerFormatsViewModel(),
 ) {
+    val colors = ImagoUi.colors
+    val catalogue by formats.state.collectAsState()
+    LaunchedEffect(formats) { formats.reload() }
     var format by remember { mutableStateOf(fileFormat ?: PageFormat.Default) }
+    var customValid by remember { mutableStateOf(true) }
+    var customInputVersion by remember { mutableStateOf(0) }
     var tab by remember { mutableStateOf(if (fileFormat != null) FormatTab.FILE else FormatTab.SOCIAL) }
     val tabs = remember(fileFormat) { FormatTab.entries.filter { it != FormatTab.FILE || fileFormat != null } }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
-            color = ImagoColors.Surface,
+            color = colors.surface,
             shape = RoundedCornerShape(ImagoRadii.Panel),
-            modifier = Modifier.fillMaxWidth(0.94f).widthIn(max = 460.dp),
+            modifier = Modifier.widthIn(max = minOf(460.dp, LocalImagoWindow.current.width)).fillMaxWidth(0.94f)
+                .heightIn(max = LocalImagoWindow.current.height * .92f).testTag("new-composition-dialog"),
         ) {
             Column(Modifier.padding(vertical = ImagoSpacing.Xl)) {
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                 Text(
                     text = stringResource(Res.string.composer_new_composition),
                     style = MaterialTheme.typography.titleMedium,
-                    color = ImagoColors.TextPrimary,
+                    color = colors.text,
                     modifier = Modifier.padding(horizontal = ImagoSpacing.Xl),
                 )
                 Text(
                     text = stringResource(Res.string.composer_format),
                     style = MaterialTheme.typography.labelMedium,
-                    color = ImagoColors.TextTertiary,
+                    color = colors.tertiaryText,
                     modifier = Modifier.padding(
                         start = ImagoSpacing.Xl,
                         end = ImagoSpacing.Xl,
@@ -117,6 +131,7 @@ internal fun NewCompositionDialog(
                     label = { stringResource(it.label) },
                     onSelect = { chosen ->
                         tab = chosen
+                        customValid = true
                         chosen.category?.let { format = PageFormatPreset.of(it).first().format }
                         if (chosen == FormatTab.FILE && fileFormat != null) format = fileFormat
                     },
@@ -125,9 +140,9 @@ internal fun NewCompositionDialog(
                 val category = tab.category
                 if (tab == FormatTab.FILE) {
                     Text(
-                        text = "${format.pixelWidth} × ${format.pixelHeight} px",
+                        text = stringResource(Res.string.composer_size_dimensions, format.pixelWidth, format.pixelHeight),
                         style = MaterialTheme.typography.bodySmall,
-                        color = ImagoColors.TextTertiary,
+                        color = colors.tertiaryText,
                         modifier = Modifier.padding(horizontal = ImagoSpacing.Xl, vertical = ImagoSpacing.Sm),
                     )
                 } else if (category != null) {
@@ -140,18 +155,22 @@ internal fun NewCompositionDialog(
                         modifier = Modifier.padding(top = ImagoSpacing.Sm),
                     )
                     Text(
-                        text = "${format.pixelWidth} × ${format.pixelHeight} px",
+                        text = stringResource(Res.string.composer_size_dimensions, format.pixelWidth, format.pixelHeight),
                         style = MaterialTheme.typography.bodySmall,
-                        color = ImagoColors.TextTertiary,
+                        color = colors.tertiaryText,
                         modifier = Modifier.padding(horizontal = ImagoSpacing.Xl, vertical = ImagoSpacing.Xs),
                     )
                 } else {
-                    CustomFormatFields(format = format, onFormat = { format = it })
+                    CustomFormatFields(format = format, resetKey = customInputVersion,
+                        onFormat = { format = it }, onValidity = { customValid = it })
+                    SavedCompositionSizes(format, customValid, catalogue, formats) {
+                        format = it; customValid = true; customInputVersion++
+                    }
                 }
                 Text(
                     text = stringResource(Res.string.composer_initial_layout),
                     style = MaterialTheme.typography.labelMedium,
-                    color = ImagoColors.TextTertiary,
+                    color = colors.tertiaryText,
                     modifier = Modifier.padding(
                         start = ImagoSpacing.Xl,
                         end = ImagoSpacing.Xl,
@@ -159,22 +178,20 @@ internal fun NewCompositionDialog(
                         bottom = ImagoSpacing.Sm,
                     ),
                 )
-                // The limit is so the dialog does not grow past the screen on a phone: past it, the grid
-                // scrolls inside instead of pushing "Cancel" off.
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    modifier = Modifier.heightIn(max = 260.dp),
-                    contentPadding = PaddingValues(horizontal = ImagoSpacing.Xl),
-                    horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
-                    verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
-                ) {
-                    items(BuiltInLayout.entries, key = BuiltInLayout::name) { layout ->
-                        LayoutTile(
-                            layout = layout,
-                            format = format,
-                            onClick = { onCreate(format, layout) },
-                        )
+                // A single scroll reaches every layout on short windows; the footer stays outside it.
+                Column(Modifier.padding(horizontal = ImagoSpacing.Xl), verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
+                    BuiltInLayout.entries.chunked(3).forEach { row ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
+                            row.forEach { layout ->
+                                Box(Modifier.weight(1f)) {
+                                    LayoutTile(layout, format, enabled = tab != FormatTab.CUSTOM || customValid,
+                                        onClick = { onCreate(format, layout) })
+                                }
+                            }
+                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
                     }
+                }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(
@@ -215,51 +232,60 @@ private enum class FormatTab(val label: StringResource, val category: PageFormat
  * stuck without explanation.
  */
 @Composable
-private fun CustomFormatFields(format: PageFormat, onFormat: (PageFormat) -> Unit) {
-    var width by remember { mutableStateOf(format.pixelWidth.toString()) }
-    var height by remember { mutableStateOf(format.pixelHeight.toString()) }
+private fun CustomFormatFields(format: PageFormat, resetKey: Int, onFormat: (PageFormat) -> Unit, onValidity: (Boolean) -> Unit) {
+    val colors = ImagoUi.colors
+    var width by remember(format.pixelWidth, format.pixelHeight, resetKey) { mutableStateOf(format.pixelWidth.toString()) }
+    var height by remember(format.pixelWidth, format.pixelHeight, resetKey) { mutableStateOf(format.pixelHeight.toString()) }
+    val widthValid = (width.toIntOrNull() ?: -1) in MIN_PAGE_SIDE..MAX_PAGE_SIDE
+    val heightValid = (height.toIntOrNull() ?: -1) in MIN_PAGE_SIDE..MAX_PAGE_SIDE
     fun publish() {
-        val w = width.toIntOrNull() ?: return
-        val h = height.toIntOrNull() ?: return
-        if (w in MIN_PAGE_SIDE..MAX_PAGE_SIDE && h in MIN_PAGE_SIDE..MAX_PAGE_SIDE) onFormat(PageFormat.custom(w, h))
+        val w = width.toIntOrNull()
+        val h = height.toIntOrNull()
+        val valid = w != null && h != null && w in MIN_PAGE_SIDE..MAX_PAGE_SIDE && h in MIN_PAGE_SIDE..MAX_PAGE_SIDE
+        onValidity(valid)
+        if (valid) onFormat(PageFormat.custom(w!!, h!!))
     }
     Column(Modifier.padding(horizontal = ImagoSpacing.Xl, vertical = ImagoSpacing.Sm)) {
         Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
             OutlinedTextField(
                 value = width,
-                onValueChange = { width = it.filter(Char::isDigit).take(4); publish() },
+                onValueChange = { width = it.filter(Char::isDigit); publish() },
                 label = { Text(stringResource(Res.string.composer_width)) },
-                suffix = { Text("px") },
+                suffix = { Text(stringResource(Res.string.composer_pixels)) },
+                isError = !widthValid,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).testTag("composer-custom-width"),
             )
             OutlinedTextField(
                 value = height,
-                onValueChange = { height = it.filter(Char::isDigit).take(4); publish() },
+                onValueChange = { height = it.filter(Char::isDigit); publish() },
                 label = { Text(stringResource(Res.string.composer_height)) },
-                suffix = { Text("px") },
+                suffix = { Text(stringResource(Res.string.composer_pixels)) },
+                isError = !heightValid,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).testTag("composer-custom-height"),
             )
         }
         Text(
-            text = stringResource(Res.string.composer_custom_size_hint, MIN_PAGE_SIDE, MAX_PAGE_SIDE, format.pixelWidth, format.pixelHeight),
+            text = stringResource(Res.string.composer_size_limits, MIN_PAGE_SIDE, MAX_PAGE_SIDE),
             style = MaterialTheme.typography.bodySmall,
-            color = ImagoColors.TextTertiary,
+            color = colors.tertiaryText,
             modifier = Modifier.padding(top = ImagoSpacing.Xs),
         )
     }
 }
 
 @Composable
-private fun LayoutTile(layout: BuiltInLayout, format: PageFormat, onClick: () -> Unit) {
+private fun LayoutTile(layout: BuiltInLayout, format: PageFormat, enabled: Boolean = true, onClick: () -> Unit) {
+    val colors = ImagoUi.colors
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(ImagoRadii.Medium))
-            .background(ImagoColors.SurfaceElevated)
-            .clickable(role = Role.Button, onClick = onClick)
+            .background(colors.elevated)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .alpha(if (enabled) 1f else .45f).testTag("composer-layout-${layout.name}")
             .padding(ImagoSpacing.Sm),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -271,7 +297,7 @@ private fun LayoutTile(layout: BuiltInLayout, format: PageFormat, onClick: () ->
         Text(
             text = stringResource(layout.labelRes()),
             style = MaterialTheme.typography.labelSmall,
-            color = ImagoColors.TextSecondary,
+            color = colors.secondaryText,
             textAlign = TextAlign.Center,
             maxLines = 2,
             modifier = Modifier.padding(top = ImagoSpacing.Xs),
@@ -288,6 +314,7 @@ private fun LayoutTile(layout: BuiltInLayout, format: PageFormat, onClick: () ->
  */
 @Composable
 private fun LayoutDiagram(layout: BuiltInLayout, format: PageFormat, modifier: Modifier) {
+    val colors = ImagoUi.colors
     val slots = layout.slots()
     val pages = layout.minimumPages.coerceAtLeast(1)
     val pageAspect = format.aspectRatio
@@ -307,23 +334,23 @@ private fun LayoutDiagram(layout: BuiltInLayout, format: PageFormat, modifier: M
         val corner = CornerRadius(3.dp.toPx())
 
         drawRoundRect(
-            color = ImagoColors.Charcoal,
+            color = colors.workspace,
             topLeft = origin,
             size = Size(width, height),
             cornerRadius = corner,
         )
-        slots.forEach { slot -> drawSlot(slot, origin, pageWidth, height) }
+        slots.forEach { slot -> drawSlot(slot, origin, pageWidth, height, colors) }
         // The separations over the media: it is the page's cut, not a frame around the content.
         repeat(pages - 1) { index ->
             val x = origin.x + pageWidth * (index + 1)
             drawRect(
-                color = ImagoColors.SurfaceElevated,
+                color = colors.elevated,
                 topLeft = Offset(x - 1.dp.toPx(), origin.y),
                 size = Size(2.dp.toPx(), height),
             )
         }
         drawRoundRect(
-            color = ImagoColors.BorderVisible,
+            color = colors.border,
             topLeft = origin,
             size = Size(width, height),
             cornerRadius = corner,
@@ -333,13 +360,13 @@ private fun LayoutDiagram(layout: BuiltInLayout, format: PageFormat, modifier: M
 }
 
 /** Text boxes are lines and not patches: at a tenth of the size, that is what reads them as text. */
-private fun DrawScope.drawSlot(slot: LayoutSlot, origin: Offset, pageWidth: Float, height: Float) {
+private fun DrawScope.drawSlot(slot: LayoutSlot, origin: Offset, pageWidth: Float, height: Float, colors: ImagoUiPalette) {
     val bounds = slot.bounds
     val topLeft = Offset(origin.x + pageWidth * bounds.x, origin.y + height * bounds.y)
     val size = Size(pageWidth * bounds.width, height * bounds.height)
     when (slot.kind) {
         SlotKind.MEDIA -> drawRoundRect(
-            color = ImagoColors.BorderStrong,
+            color = colors.strongBorder,
             topLeft = topLeft,
             size = size,
             cornerRadius = CornerRadius(2.dp.toPx()),
@@ -352,7 +379,7 @@ private fun DrawScope.drawSlot(slot: LayoutSlot, origin: Offset, pageWidth: Floa
                 // The last line is shorter, like the last line of a paragraph.
                 val lineWidth = if (index == lines - 1) size.width * 0.6f else size.width
                 drawRect(
-                    color = ImagoColors.TextTertiary,
+                    color = colors.tertiaryText,
                     topLeft = Offset(topLeft.x, topLeft.y + (lineHeight + gap) * index),
                     size = Size(lineWidth, lineHeight),
                 )

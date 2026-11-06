@@ -19,7 +19,6 @@ import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.OverlaySettings
 import androidx.media3.effect.Presentation
-import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.effect.VideoCompositorSettings
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultEncoderFactory
@@ -47,6 +46,7 @@ import kotlinx.coroutines.withContext
 import eu.studio742.imago.core.composition.CompositionElement
 import eu.studio742.imago.core.composition.CompositionProject
 import eu.studio742.imago.core.composition.PageVideoPlan
+import eu.studio742.imago.core.composition.projectedFrame
 import eu.studio742.imago.core.data.CompositionMediaRepository
 
 /** The preview's longest side: 360 × 640 on a 9:16, as it always was. */
@@ -114,8 +114,15 @@ class Media3CompositionAdapter @Inject constructor(
                         placements += null
                     }
                     is PageVideoPlan.Layer.Clip -> {
-                        sequences += clipSequence(layer, checkNotNull(sources[layer.video.media.assetId]), { blank }, outputWidth, outputHeight)
+                        sequences += clipSequence(layer, checkNotNull(sources[layer.video.media.assetId]), { blank }, outputWidth, outputHeight, pageIndex)
                         placements += layer.video
+                    }
+                    is PageVideoPlan.Layer.Decoration -> {
+                        val image = staticRenderer.renderVideoDecorationToCache(project, pageIndex, layer.video, outputWidth, outputHeight).also { temporary += it }
+                        val fit = Presentation.createForWidthAndHeight(outputWidth, outputHeight, Presentation.LAYOUT_SCALE_TO_FIT)
+                        val items = layer.segments.map { segment -> imageItem(if (segment is PageVideoPlan.Segment.Source) image else blank, segment.durationMs, fit) }
+                        sequences += EditedMediaItemSequence(items)
+                        placements += null
                     }
                 }
             }
@@ -154,19 +161,14 @@ class Media3CompositionAdapter @Inject constructor(
         blank: () -> File,
         outputWidth: Int,
         outputHeight: Int,
+        pageIndex: Int,
     ): EditedMediaItemSequence {
         val video = clip.video
-        val bounds = video.transform.bounds
-        val targetWidth = max(2, (bounds.width * outputWidth).roundToInt())
-        val targetHeight = max(2, (bounds.height * outputHeight).roundToInt())
+        val projection = video.projectedFrame(pageIndex, outputWidth, outputHeight)
+        val targetWidth = projection.width
+        val targetHeight = projection.height
         val presentation = Presentation.createForWidthAndHeight(targetWidth, targetHeight, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP)
-        val videoEffects = mutableListOf<Effect>(presentation)
-        if (video.transform.mirrorHorizontal || video.transform.mirrorVertical) {
-            videoEffects += ScaleAndRotateTransformation.Builder().setScale(
-                if (video.transform.mirrorHorizontal) -1f else 1f,
-                if (video.transform.mirrorVertical) -1f else 1f,
-            ).build()
-        }
+        val videoEffects = listOf<Effect>(CompositionVideoFrameEffect(video, projection))
         val audio = if (!clip.audible || video.timing.volume == 1f) emptyList() else listOf<AudioProcessor>(PcmGainProcessor(video.timing.volume))
         val items = clip.segments.map { segment ->
             when (segment) {
@@ -244,19 +246,21 @@ private class PageVideoCompositorSettings(
     private val placements: List<CompositionElement.Video?>,
     private val pageIndex: Int,
 ) : VideoCompositorSettings {
+    private val defaultSettings = OverlaySettings.Builder().build()
+    private val settings = placements.map { video ->
+        if (video == null) defaultSettings else {
+            val placement = video.projectedFrame(pageIndex, width, height)
+            OverlaySettings.Builder()
+                .setBackgroundFrameAnchor(((placement.left + placement.width / 2f) / width * 2f - 1f).coerceIn(-1f, 1f),
+                    (1f - (placement.top + placement.height / 2f) / height * 2f).coerceIn(-1f, 1f))
+                .setAlphaScale(if (placement.visible) video.transform.opacity else 0f)
+                .build()
+        }
+    }
     override fun getOutputSize(inputSizes: MutableList<Size>): Size = Size(width, height)
 
     override fun getOverlaySettings(inputId: Int, presentationTimeUs: Long): OverlaySettings {
-        val video = placements.getOrNull(inputId) ?: return OverlaySettings.Builder().build()
-        val bounds = video.transform.bounds
-        val localCenterX = bounds.x - pageIndex + bounds.width / 2f
-        val centerY = bounds.y + bounds.height / 2f
-        return OverlaySettings.Builder()
-            .setBackgroundFrameAnchor(localCenterX * 2f - 1f, 1f - centerY * 2f)
-            .setOverlayFrameAnchor(0f, 0f)
-            .setAlphaScale(video.transform.opacity)
-            .setRotationDegrees(video.transform.rotationDegrees)
-            .build()
+        return settings.getOrElse(inputId) { defaultSettings }
     }
 }
 

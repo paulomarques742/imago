@@ -11,10 +11,16 @@ expect fun composerEditorViewModel(): ComposerEditorViewModel
 expect fun composerHubViewModel(): ComposerHubViewModel
 
 @Composable
+expect fun composerFormatsViewModel(): ComposerFormatsViewModel
+
+@Composable
 expect fun addToCompositionViewModel(): AddToCompositionViewModel
 
 @Composable
 expect fun brandKitViewModel(): BrandKitViewModel
+
+/** Frame controls are offered only where clip exports implement the same decoration as the stage. */
+internal expect val supportsVideoFrameOutlines: Boolean
 
 /** What to do with the exported pages: the share menu on the phone, the folder on the computer. */
 @Composable
