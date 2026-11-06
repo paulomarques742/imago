@@ -25,6 +25,21 @@ import javax.imageio.ImageIO
 class CompositionTextPainterDesktopTest {
     private val renderer = CompositionRenderer()
 
+    @Test fun `vertical alignment shifts exported ink by the shared layout distance`() = runBlocking {
+        val element = text()
+        val bytes = ComposerFontFiles.bytes(CompositionFonts.Inter)
+        val measure = measureCompositionText(element, 864f, 432f, 1f, bytes)
+        fun firstInk(alignment: eu.studio742.imago.core.composition.TextVerticalAlignment): Int {
+            val image = render(element.copy(verticalAlignment = alignment))
+            return (0 until image.height).first { y -> (0 until image.width).any { x -> image.getRGB(x, y) and 0xFFFFFF == 0xFFFFFF } }
+        }
+        val top = firstInk(eu.studio742.imago.core.composition.TextVerticalAlignment.TOP)
+        val center = firstInk(eu.studio742.imago.core.composition.TextVerticalAlignment.CENTER)
+        val bottom = firstInk(eu.studio742.imago.core.composition.TextVerticalAlignment.BOTTOM)
+        assertEquals((432f - measure.contentHeight) / 2f, (center - top).toFloat(), 2f)
+        assertEquals(432f - measure.contentHeight, (bottom - top).toFloat(), 2f)
+    }
+
     private fun render(text: CompositionElement.Text, width: Int = 1080, height: Int = 1080): BufferedImage = runBlocking {
         SkiaCompositionFonts.typeface(text.fontFamily, text.fontWeight)
         val project = CompositionProject(

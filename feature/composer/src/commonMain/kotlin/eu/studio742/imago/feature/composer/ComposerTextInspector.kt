@@ -68,6 +68,7 @@ internal fun TextStyleControls(
     actions: ComposerEditorViewModel,
     rail: Boolean,
     onPickColor: (PendingColor) -> Unit,
+    advanced: Boolean = true,
 ) {
     // While a value is being dragged only it stays on scene; the rest of these controls is chrome and
     // leaves with the panel.
@@ -100,28 +101,30 @@ internal fun TextStyleControls(
                 modifier = Modifier.alpha(chrome).padding(vertical = 4.dp),
             )
         }
-        InspectorSlider(stringResource(Res.string.composer_size), text.fontSize, MIN_TEXT_SIZE..MAX_TEXT_SIZE, DEFAULT_TEXT_SIZE, actions, actions::setTextSize)
-        InspectorSlider(
-            stringResource(Res.string.composer_tracking), text.letterSpacing * 1000f, MIN_TEXT_LETTER_SPACING * 1000f..MAX_TEXT_LETTER_SPACING * 1000f, 0f, actions,
-        ) { actions.setTextLetterSpacing(it / 1000f) }
-        InspectorSlider(stringResource(Res.string.composer_leading), text.lineSpacing, MIN_TEXT_LINE_SPACING..MAX_TEXT_LINE_SPACING, 1f, actions, actions::setTextLineSpacing)
-
-        TextEffect(stringResource(Res.string.composer_outline), stringResource(Res.string.composer_outline_color), text.strokeArgb, contrastingArgb(text.colorArgb), chrome, actions::setTextStroke, onPickColor) {
+        InspectorSlider(stringResource(Res.string.composer_size), text.fontSize, MIN_TEXT_SIZE..maxOf(MAX_TEXT_SIZE, text.fontSize), DEFAULT_TEXT_SIZE, actions, actions::setTextSize)
+        if (advanced) {
             InspectorSlider(
-                stringResource(Res.string.composer_thickness), text.strokeWidth * 100f, MIN_TEXT_STROKE_WIDTH * 100f..MAX_TEXT_STROKE_WIDTH * 100f, 6f, actions,
-            ) { actions.setTextStrokeWidth(it / 100f) }
-        }
-        TextEffect(stringResource(Res.string.composer_shadow), stringResource(Res.string.composer_shadow_color), text.shadowArgb, 0x99000000, chrome, actions::setTextShadow, onPickColor) {
-            InspectorSlider(stringResource(Res.string.composer_blur), text.shadowRadius, 0f..MAX_TEXT_SHADOW_RADIUS, 8f, actions, actions::setTextShadowRadius)
-            InspectorSlider(stringResource(Res.string.composer_offset_x), text.shadowOffsetX, -MAX_TEXT_SHADOW_OFFSET..MAX_TEXT_SHADOW_OFFSET, 0f, actions, actions::setTextShadowOffsetX)
-            InspectorSlider(stringResource(Res.string.composer_offset_y), text.shadowOffsetY, -MAX_TEXT_SHADOW_OFFSET..MAX_TEXT_SHADOW_OFFSET, 0f, actions, actions::setTextShadowOffsetY)
-        }
-        TextEffect(
-            stringResource(Res.string.composer_background), stringResource(Res.string.composer_background_color), text.backgroundArgb, contrastingArgb(text.colorArgb) and 0x00FFFFFF or 0xCC000000,
-            chrome, actions::setTextBackground, onPickColor,
-        ) {
-            InspectorSlider(stringResource(Res.string.composer_padding), text.backgroundPadding, 0f..MAX_TEXT_BACKGROUND_PADDING, 24f, actions, actions::setTextBackgroundPadding)
-            InspectorSlider(stringResource(Res.string.composer_corners), text.backgroundCornerRadius, 0f..MAX_TEXT_BACKGROUND_CORNER, 0f, actions, actions::setTextBackgroundCorner)
+                stringResource(Res.string.composer_tracking), text.letterSpacing * 1000f, MIN_TEXT_LETTER_SPACING * 1000f..MAX_TEXT_LETTER_SPACING * 1000f, 0f, actions,
+            ) { actions.setTextLetterSpacing(it / 1000f) }
+            InspectorSlider(stringResource(Res.string.composer_leading), text.lineSpacing, MIN_TEXT_LINE_SPACING..MAX_TEXT_LINE_SPACING, 1f, actions, actions::setTextLineSpacing)
+
+            TextEffect(stringResource(Res.string.composer_outline), stringResource(Res.string.composer_outline_color), text.strokeArgb, contrastingArgb(text.colorArgb), chrome, actions::setTextStroke, onPickColor) {
+                InspectorSlider(
+                    stringResource(Res.string.composer_thickness), text.strokeWidth * 100f, MIN_TEXT_STROKE_WIDTH * 100f..MAX_TEXT_STROKE_WIDTH * 100f, 6f, actions,
+                ) { actions.setTextStrokeWidth(it / 100f) }
+            }
+            TextEffect(stringResource(Res.string.composer_shadow), stringResource(Res.string.composer_shadow_color), text.shadowArgb, 0x99000000, chrome, actions::setTextShadow, onPickColor) {
+                InspectorSlider(stringResource(Res.string.composer_blur), text.shadowRadius, 0f..MAX_TEXT_SHADOW_RADIUS, 8f, actions, actions::setTextShadowRadius)
+                InspectorSlider(stringResource(Res.string.composer_offset_x), text.shadowOffsetX, -MAX_TEXT_SHADOW_OFFSET..MAX_TEXT_SHADOW_OFFSET, 0f, actions, actions::setTextShadowOffsetX)
+                InspectorSlider(stringResource(Res.string.composer_offset_y), text.shadowOffsetY, -MAX_TEXT_SHADOW_OFFSET..MAX_TEXT_SHADOW_OFFSET, 0f, actions, actions::setTextShadowOffsetY)
+            }
+            TextEffect(
+                stringResource(Res.string.composer_background), stringResource(Res.string.composer_background_color), text.backgroundArgb, contrastingArgb(text.colorArgb) and 0x00FFFFFF or 0xCC000000,
+                chrome, actions::setTextBackground, onPickColor,
+            ) {
+                InspectorSlider(stringResource(Res.string.composer_padding), text.backgroundPadding, 0f..MAX_TEXT_BACKGROUND_PADDING, 24f, actions, actions::setTextBackgroundPadding)
+                InspectorSlider(stringResource(Res.string.composer_corners), text.backgroundCornerRadius, 0f..MAX_TEXT_BACKGROUND_CORNER, 0f, actions, actions::setTextBackgroundCorner)
+            }
         }
     }
 }

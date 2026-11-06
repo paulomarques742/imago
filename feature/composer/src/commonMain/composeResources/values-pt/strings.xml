@@ -459,4 +459,12 @@
     <string name="composer_frame_remove">Retirar recorte e decoração</string>
     <string name="composer_frame_ratio_value">%1$s×</string>
     <string name="composer_frame_pixels_value">%1$d px</string>
+    <string name="composer_text_styles">Estilos de texto</string>
+    <string name="composer_copy_text_style">Copiar formatação</string>
+    <string name="composer_paste_text_style">Colar formatação</string>
+    <string name="composer_save_text_style">Guardar estilo</string>
+    <string name="composer_text_auto_height">Altura automática</string>
+    <string name="composer_text_vertical_alignment">Alinhamento vertical</string>
+    <string name="composer_text_box_height">Altura da caixa (%)</string>
+    <string name="composer_text_draft">A editar texto</string>
 </resources>

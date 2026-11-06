@@ -243,6 +243,8 @@ data class VideoTiming(
 
 @Serializable
 enum class TextAlignment { START, CENTER, END }
+@Serializable
+enum class TextVerticalAlignment { TOP, CENTER, BOTTOM }
 
 @Serializable
 enum class ShapeKind { RECTANGLE, ELLIPSE, LINE, ARROW }
@@ -390,6 +392,8 @@ sealed class CompositionElement {
         override val locked: Boolean = false,
         override val visible: Boolean = true,
         override val repeatOnPages: Set<Int> = emptySet(),
+        val autoHeight: Boolean = false,
+        val verticalAlignment: TextVerticalAlignment = TextVerticalAlignment.CENTER,
     ) : CompositionElement()
 
     @Serializable
@@ -506,6 +510,7 @@ data class BrandKit(
     val primaryFont: String = CompositionFonts.Default.id,
     val secondaryFont: String = CompositionFonts.Lora.id,
     val logos: List<MediaReference> = emptyList(),
+    val textStyles: List<NamedCompositionTextStyle> = emptyList(),
     val updatedAt: String,
 ) {
     companion object {

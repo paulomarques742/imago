@@ -164,6 +164,8 @@ data class ComposerEditorUiState(
     val arrangementReference: CompositionArrangementReference = CompositionArrangementReference.SELECTION,
     val groupMergeRequest: ComposerGroupMergeRequest? = null,
     val gridEditor: ComposerGridEditor? = null,
+    val textSession: ComposerTextSession? = null,
+    val copiedTextStyle: CompositionTextStyle? = null,
     val revealSelectionRequest: Int = 0,
     /** The background is a layer like the others: either it or an element, never both. */
     val backgroundSelected: Boolean = false,
@@ -210,6 +212,7 @@ open class ComposerEditorViewModel(
      */
     private var persisted: CompositionProject? = null
     private val saveMutex = Mutex()
+    private val textStyleMutex = Mutex()
     private var exportJob: Job? = null
     private var proxyJob: Job? = null
     private var proxyFile: java.io.File? = null
@@ -217,6 +220,7 @@ open class ComposerEditorViewModel(
     private var gestureCommitted = false
     private var moveSnapping: CompositionMoveSnapping? = null
     private var resizeSnapping: CompositionResizeSnapping? = null
+    private val pendingTextMetrics = mutableMapOf<String, CompositionElement.Text>()
     /** The absolute angle the handle has already asked of the block, and the selection it belongs to. */
     private var groupRotationPivot: Pair<Float, Float>? = null
 
@@ -255,6 +259,7 @@ open class ComposerEditorViewModel(
     }
 
     fun selectElement(id: String?) {
+        if (state.value.textSession?.draft?.id != id) confirmTextEditing()
         val target = state.value.project?.elements?.firstOrNull { it.id == id }
         val editing = state.value.editingGroupId?.takeIf { it == target?.groupId }
         val next = state.value.copy(editingGroupId = editing)
@@ -305,6 +310,7 @@ open class ComposerEditorViewModel(
     }
 
     fun selectBackground() {
+        confirmTextEditing()
         clearMovementGuides()
         mutableState.update {
             it.copy(selectedElementId = null, selectedElementIds = emptySet(), multiSelect = false, backgroundSelected = true,
@@ -313,6 +319,7 @@ open class ComposerEditorViewModel(
     }
 
     fun clearSelection() {
+        confirmTextEditing()
         clearMovementGuides()
         mutableState.update {
             it.copy(selectedElementId = null, selectedElementIds = emptySet(), multiSelect = false, backgroundSelected = false,
@@ -361,8 +368,27 @@ open class ComposerEditorViewModel(
         beginGesture()
         val project = state.value.manipulationProject()
         val ids = state.value.manipulationIds()
-        if (ids.isNotEmpty()) moveSnapping = CompositionMoveSnapping(project, ids, instanceOffsetX)
+        if (ids.isNotEmpty()) moveSnapping = CompositionMoveSnapping(project, ids, instanceOffsetX, textBaselines(project))
     }
+
+    private fun textBaselines(project: CompositionProject): Map<String, List<CompositionTextBaseline>> =
+        project.elements.filterIsInstance<CompositionElement.Text>().filter {
+            it.visible && it.transform.opacity > 0f && !it.transform.mirrorVertical &&
+                angleDistance(it.transform.rotationDegrees, 0f) < .01f
+        }.mapNotNull { text ->
+            val bounds = text.transform.bounds
+            val bytes = ComposerFontFiles.loadedOrNull(CompositionFonts.resolve(text.fontFamily)) ?: return@mapNotNull null
+            val layout = measureCompositionText(text, bounds.width * REFERENCE_PAGE_WIDTH,
+                bounds.height * REFERENCE_PAGE_WIDTH / project.format.aspectRatio, 1f,
+                bytes)
+            val offsets = if (text.repeatOnPages.isEmpty()) listOf(0f) else text.repeatOnPages.sorted().map { page ->
+                text.boundsOnPage(page).x - bounds.x }
+            text.id to offsets.flatMap { offset -> layout.lines.map { line ->
+                CompositionTextBaseline(bounds.y + line.baseline * project.format.aspectRatio / REFERENCE_PAGE_WIDTH,
+                    bounds.x + offset + line.x / REFERENCE_PAGE_WIDTH,
+                    bounds.x + offset + (line.x + line.width.coerceAtLeast(1f)) / REFERENCE_PAGE_WIDTH)
+            } }
+        }.toMap()
 
     fun moveSelectedWithGuides(dx: Float, dy: Float, toleranceX: Float, toleranceY: Float) {
         val snapping = moveSnapping ?: return
@@ -477,14 +503,19 @@ open class ComposerEditorViewModel(
     }
 
     /** [placeholder] comes from the screen, already in the app language: it is saved in the project as its text. */
-    fun addText(placeholder: String) {
+    fun addText(placeholder: String, edit: Boolean = false) {
+        confirmTextEditing()
         val project = requireProject()
         val id = UUID.randomUUID().toString()
         val page = state.value.currentPage.toFloat()
-        commit { project.copy(elements = project.elements + CompositionElement.Text(
+        val text = fitTextHeight(CompositionElement.Text(
             id, ElementTransform(NormalizedRect(page + .12f, .38f, .76f, .22f)), nextZ(project), placeholder,
-        )) }
-        selectElement(id)
+            autoHeight = true, verticalAlignment = TextVerticalAlignment.TOP,
+        ), project)
+        if (edit) startTextSession(null, text) else {
+            commit { project.copy(elements = project.elements + text) }
+            selectElement(id)
+        }
     }
 
     /**
@@ -905,15 +936,22 @@ open class ComposerEditorViewModel(
     private fun applyResizedSelection(resized: List<CompositionElement>) {
         val project = requireProject()
         if (state.value.manipulatedLayout() != null && resized.size == 1) return setSelectedLayoutFrame(resized.single().transform)
-        val transforms = resized.associate { it.id to it.transform }
+        val replacements = resized.associateBy { it.id }
         val elements = project.elements.map { element ->
-            transforms[element.id]?.let { element.withTransform(it) } ?: element
+            replacements[element.id] ?: element
         }
         if (elements != project.elements) commit { project.copy(elements = elements) }
     }
 
     /** Scales the artwork around its centre, respecting each member's resource limits. */
     fun scaleSelected(factor: Float) {
+        val text = state.value.editableSelection().singleOrNull() as? CompositionElement.Text
+        if (text != null && state.value.manipulatedLayout() == null) {
+            val bounds = text.transform.bounds.scaledAboutCentre(factor,
+                maxWidth = requireProject().pages.size.toFloat(), maxHeight = 1f)
+            return applyResizedSelection(listOf(text.scaledTypography(bounds.width / text.transform.bounds.width)
+                .copy(transform = text.transform.copy(bounds = bounds))))
+        }
         state.value.manipulatedLayout()?.let { layout ->
             return setSelectedLayoutFrame(layout.frame.copy(bounds = layout.frame.bounds.scaledAboutCentre(factor,
                 maxWidth = requireProject().pages.size.toFloat(), maxHeight = 1f)))
@@ -974,7 +1012,8 @@ open class ComposerEditorViewModel(
         commit { project.copy(elements = project.elements.map { element ->
             if (element.id !in ids) return@map element
             val next = element.transform.bounds.mappedBetween(box, limited)
-            element.withTransform(element.transform.copy(bounds = element.editableBounds(next, project.pages.size)))
+            val resized = element.withTransform(element.transform.copy(bounds = element.editableBounds(next, project.pages.size)))
+            if (resized is CompositionElement.Text) resized.scaledTypography(limited.width / box.width) else resized
         }) }
     }
 
@@ -1137,12 +1176,56 @@ open class ComposerEditorViewModel(
     }
 
     fun setTextSize(value: Float) = mutateSelected { element ->
-        if (element is CompositionElement.Text) element.copy(fontSize = value.coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE)) else element
+        if (element is CompositionElement.Text && value.isFinite()) element.copy(fontSize = value.coerceAtLeast(MIN_TEXT_SIZE)) else element
     }
 
     fun setTextFont(fontId: String) = mutateText { it.withFont(fontId) }
     fun setTextWeight(weight: Int) = mutateText { it.withWeight(weight) }
     fun setTextAlignment(alignment: TextAlignment) = mutateText { it.copy(alignment = alignment) }
+    fun setTextVerticalAlignment(alignment: TextVerticalAlignment) = mutateText { it.copy(verticalAlignment = alignment) }
+    fun setTextAutoHeight(enabled: Boolean) = mutateText { it.copy(autoHeight = enabled) }
+    fun setTextBoxHeight(value: Float) = mutateText {
+        if (!value.isFinite()) it else it.copy(autoHeight = false,
+            transform = it.transform.withAnchoredTextBounds(it.transform.bounds.width, value.coerceAtLeast(MIN_ELEMENT_SIZE),
+                aspect = requireProject().format.aspectRatio))
+    }
+
+    fun copyTextStyle() {
+        val text = state.value.editableSelection().singleOrNull() as? CompositionElement.Text ?: return
+        mutableState.update { it.copy(copiedTextStyle = text.textStyle()) }
+    }
+
+    fun pasteTextStyle() { state.value.copiedTextStyle?.let { style -> mutateText { it.withTextStyle(style) } } }
+    fun applyTextStyle(style: CompositionTextStyle) = mutateText { it.withTextStyle(style) }
+
+    fun saveTextStyle(name: String) {
+        val text = state.value.editableSelection().singleOrNull() as? CompositionElement.Text ?: return
+        if (name.isBlank()) return
+        updateTextStyles { it + NamedCompositionTextStyle(UUID.randomUUID().toString(), name.trim(), text.textStyle()) }
+    }
+
+    fun renameTextStyle(id: String, name: String) {
+        if (name.isNotBlank()) updateTextStyles { styles -> styles.map { if (it.id == id) it.copy(name = name.trim()) else it } }
+    }
+
+    fun deleteTextStyle(id: String) = updateTextStyles { it.filterNot { it.id == id } }
+
+    private fun updateTextStyles(update: (List<NamedCompositionTextStyle>) -> List<NamedCompositionTextStyle>) {
+        viewModelScope.launch {
+            textStyleMutex.withLock {
+            val kit = state.value.brandKit ?: BrandKit(updatedAt = Instant.now().toString())
+            val changed = kit.copy(textStyles = update(kit.textStyles), updatedAt = Instant.now().toString())
+            runCatching { brandKits.save(changed) }
+                .onSuccess { mutableState.update { it.copy(brandKit = changed) } }
+                .onFailure { error -> notice(error.toUiText(Res.string.composer_save_failed)) }
+            }
+        }
+    }
+
+    fun resizeTextWidth(dx: Float, fromLeft: Boolean) = mutateText {
+        it.withTextWidth((it.transform.bounds.width + if (fromLeft) -dx else dx)
+            .coerceAtMost(requireProject().pages.size.toFloat()), fromLeft, requireProject().format.aspectRatio)
+    }
     fun toggleTextAllCaps() = mutateText { it.copy(allCaps = !it.allCaps) }
     fun setTextLetterSpacing(value: Float) = mutateText { it.withLetterSpacing(value) }
     fun setTextLineSpacing(value: Float) = mutateText { it.withLineSpacing(value) }
@@ -1667,6 +1750,7 @@ open class ComposerEditorViewModel(
     }
 
     fun undo() {
+        if (state.value.textSession != null) { cancelTextEditing(); return }
         endGesture()
         if (historyIndex <= 0) return
         historyIndex--
@@ -1674,6 +1758,7 @@ open class ComposerEditorViewModel(
     }
 
     fun redo() {
+        confirmTextEditing()
         endGesture()
         if (historyIndex >= history.lastIndex) return
         historyIndex++
@@ -1690,10 +1775,12 @@ open class ComposerEditorViewModel(
     }
 
     fun saveNow() {
+        confirmTextEditing()
         requestSave(false)
     }
 
     fun saveDraft() {
+        confirmTextEditing()
         requestSave(true)
     }
 
@@ -1746,6 +1833,7 @@ open class ComposerEditorViewModel(
         videoQuality: VideoExportQuality = VideoExportQuality.Default,
     ) {
         if (exportJob?.isActive == true) return
+        confirmTextEditing()
         val project = requireProject()
         val pageIndex = state.value.currentPage.takeIf { currentPageOnly }
         exportJob = viewModelScope.launch {
@@ -1800,6 +1888,7 @@ open class ComposerEditorViewModel(
     }
 
     fun previewCurrentPage() {
+        confirmTextEditing()
         if (proxyJob?.isActive == true) return
         val project = requireProject()
         val page = state.value.currentPage
@@ -1935,10 +2024,103 @@ open class ComposerEditorViewModel(
      */
     private fun CompositionProject.selectionMembers(): List<CompositionElement> = state.value.editableSelection(this)
     private fun mutateSelected(block: (CompositionElement) -> CompositionElement) {
+        state.value.textSession?.let { session ->
+            val draft = block(session.draft) as? CompositionElement.Text ?: return
+            mutableState.update { it.copy(textSession = session.copy(draft = fitTextHeight(draft, requireProject()))) }
+            return
+        }
         val project = requireProject()
         val ids = project.selectionMembers().mapTo(mutableSetOf()) { it.id }
         if (ids.isEmpty()) return
-        commit { project.copy(elements = project.elements.map { if (it.id in ids) block(it) else it }) }
+        commit { project.copy(elements = project.elements.map { if (it.id in ids) {
+            val changed = block(it)
+            if (changed is CompositionElement.Text) fitTextHeight(changed, project) else changed
+        } else it }) }
+    }
+
+    private fun fitTextHeight(text: CompositionElement.Text, project: CompositionProject): CompositionElement.Text {
+        if (!text.autoHeight || project.layouts.any { it.groupId == text.groupId }) return text
+        val bounds = text.transform.bounds
+        val bytes = ComposerFontFiles.loadedOrNull(CompositionFonts.resolve(text.fontFamily))
+        if (bytes == null) { pendingTextMetrics[text.id] = text; return text }
+        val result = measureCompositionText(text, bounds.width * REFERENCE_PAGE_WIDTH,
+            bounds.height * REFERENCE_PAGE_WIDTH / project.format.aspectRatio, 1f,
+            bytes)
+        val fitted = text.withAutomaticTextHeight(result.contentHeight * project.format.aspectRatio / REFERENCE_PAGE_WIDTH,
+            project.format.aspectRatio)
+        pendingTextMetrics.remove(text.id)
+        return fitted
+    }
+
+    private fun startTextSession(original: CompositionElement.Text?, draft: CompositionElement.Text, content: Boolean = true) {
+        endGesture()
+        val previous = state.value
+        mutableState.update { it.copy(textSession = ComposerTextSession(original, draft,
+            previous.selectedElementIds, previous.selectedElementId, content), selectedElementId = draft.id,
+            selectedElementIds = setOf(draft.id), multiSelect = false, backgroundSelected = false, movementGuides = emptyList()) }
+    }
+
+    fun beginTextEditing(id: String? = state.value.selectedElementId) {
+        if (state.value.textSession?.draft?.id == id) {
+            mutableState.update { it.copy(textSession = it.textSession?.copy(contentEditing = true)) }; return
+        }
+        confirmTextEditing()
+        if (id == null || !state.value.canEditElement(id)) return
+        val text = requireProject().elements.firstOrNull { it.id == id } as? CompositionElement.Text ?: return
+        startTextSession(text, text)
+    }
+
+    fun updateTextDraft(value: String) = mutateText { it.copy(text = value) }
+
+    fun confirmTextEditing() {
+        val session = state.value.textSession ?: return
+        mutableState.update { it.copy(textSession = null) }
+        val project = requireProject()
+        if (session.original == session.draft) return
+        if (session.original != null && project.elements.firstOrNull { it.id == session.draft.id } != session.original) return
+        commitDiscrete { project.copy(elements = if (session.original == null) project.elements + session.draft
+            else project.elements.map { if (it.id == session.draft.id) session.draft else it }) }
+        mutableState.update { it.copy(selectedElementId = session.draft.id, selectedElementIds = setOf(session.draft.id)) }
+    }
+
+    fun cancelTextEditing() {
+        val session = state.value.textSession ?: return
+        mutableState.update { it.copy(textSession = null, selectedElementId = session.selectedId,
+            selectedElementIds = session.selectedIds) }
+    }
+
+    fun beginFontPreview() {
+        if (state.value.textSession?.fontBeforePreview != null) return
+        if (state.value.textSession == null) {
+            val text = state.value.editableSelection().singleOrNull() as? CompositionElement.Text ?: return
+            startTextSession(text, text, content = false)
+        }
+        mutableState.update { it.copy(textSession = it.textSession?.let { session ->
+            session.copy(fontBeforePreview = session.draft.fontFamily to session.draft.fontWeight) }) }
+    }
+
+    fun finishFontPreview(apply: Boolean) {
+        val session = state.value.textSession ?: return
+        if (!session.contentEditing) {
+            if (apply) confirmTextEditing() else cancelTextEditing()
+        } else {
+            val draft = if (!apply && session.fontBeforePreview != null)
+                session.draft.copy(fontFamily = session.fontBeforePreview.first, fontWeight = session.fontBeforePreview.second) else session.draft
+            mutableState.update { it.copy(textSession = session.copy(draft = fitTextHeight(draft, requireProject()), fontBeforePreview = null)) }
+        }
+    }
+
+    fun refreshTextMetrics(id: String) {
+        state.value.textSession?.takeIf { it.draft.id == id }?.let { session ->
+            mutableState.update { it.copy(textSession = session.copy(draft = fitTextHeight(session.draft, requireProject()))) }
+            return
+        }
+        val pending = pendingTextMetrics[id] ?: return
+        val project = requireProject()
+        if (project.elements.firstOrNull { it.id == id } != pending ||
+            ComposerFontFiles.loadedOrNull(CompositionFonts.resolve(pending.fontFamily)) == null) return
+        val fitted = fitTextHeight(pending, project)
+        if (fitted != pending) commit(replaceCurrent = true) { project.copy(elements = project.elements.map { if (it.id == id) fitted else it }) }
     }
 
     /**
@@ -1949,7 +2131,7 @@ open class ComposerEditorViewModel(
      * it. The clamps in [CompositionGeometry] deal with that at the source; this guarantees that a
      * forgotten path gives a message instead of a crash.
      */
-    private fun commit(build: () -> CompositionProject) {
+    private fun commit(replaceCurrent: Boolean = false, build: () -> CompositionProject) {
         // `build` runs **in here** on purpose. `CompositionProject.copy()` runs `init` again, and that is
         // where the invariants throw — if the project were built at the call site, the exception would
         // go up through the gesture callback before this method even started.
@@ -1959,7 +2141,7 @@ open class ComposerEditorViewModel(
                 return
             }
         if (historyIndex < history.lastIndex) history.subList(historyIndex + 1, history.size).clear()
-        if (gestureActive && gestureCommitted && historyIndex in history.indices) {
+        if ((replaceCurrent || gestureActive && gestureCommitted) && historyIndex in history.indices) {
             // A continuous gesture is a single edit: it replaces the top instead of stacking per frame.
             history[historyIndex] = stamped
         } else {
@@ -1983,7 +2165,7 @@ open class ComposerEditorViewModel(
             canUndo = historyIndex > 0, canRedo = historyIndex < history.lastIndex)
     }
 
-    private fun commitDiscrete(build: () -> CompositionProject) { endGesture(); commit(build) }
+    private fun commitDiscrete(build: () -> CompositionProject) { endGesture(); commit(build = build) }
 
     private fun scheduleSave(project: CompositionProject) {
         saveJob?.cancel()

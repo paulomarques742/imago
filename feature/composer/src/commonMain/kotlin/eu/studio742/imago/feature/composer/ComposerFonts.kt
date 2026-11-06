@@ -88,13 +88,15 @@ private val ReadyFamilies = HashMap<String, FontFamily>()
 internal fun rememberCompositionFontFamily(fontName: String?, weight: Int): FontFamily {
     val font = remember(fontName) { CompositionFonts.resolve(fontName) }
     val resolvedWeight = font.weight(weight)
-    val key = "${font.id}@$resolvedWeight"
-    val family by produceState(ReadyFamilies[key] ?: FontFamily.Default, key) {
-        value = ReadyFamilies[key] ?: withContext(Dispatchers.Default) {
-            platformFontFamily(font, resolvedWeight, ComposerFontFiles.bytes(font))
-        }.also { ReadyFamilies[key] = it }
+    val cacheKey = "${font.id}@$resolvedWeight"
+    return androidx.compose.runtime.key(cacheKey) {
+        val family by produceState(ReadyFamilies[cacheKey] ?: FontFamily.Default, cacheKey) {
+            value = ReadyFamilies[cacheKey] ?: withContext(Dispatchers.Default) {
+                platformFontFamily(font, resolvedWeight, ComposerFontFiles.bytes(font))
+            }.also { ReadyFamilies[cacheKey] = it }
+        }
+        family
     }
-    return family
 }
 
 /**
@@ -104,8 +106,12 @@ internal fun rememberCompositionFontFamily(fontName: String?, weight: Int): Font
 @Composable
 internal fun rememberCompositionFontBytes(fontName: String?): ByteArray? {
     val font = remember(fontName) { CompositionFonts.resolve(fontName) }
-    val bytes by produceState(ComposerFontFiles.loadedOrNull(font), font) {
-        value = withContext(Dispatchers.Default) { ComposerFontFiles.bytes(font) }
+    // A new producer key alone retains the previous state until its coroutine runs.
+    // The state itself must belong to the family, or those bytes poison the native font cache.
+    return androidx.compose.runtime.key(font.id) {
+        val bytes by produceState(ComposerFontFiles.loadedOrNull(font), font) {
+            value = withContext(Dispatchers.Default) { ComposerFontFiles.bytes(font) }
+        }
+        bytes
     }
-    return bytes
 }

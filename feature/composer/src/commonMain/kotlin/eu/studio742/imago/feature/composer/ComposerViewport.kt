@@ -19,6 +19,14 @@ internal class ComposerViewport {
     var navigating by mutableStateOf(false)
     private var previousSize = Size.Zero
 
+    data class Snapshot(val scale: Float, val origin: Offset, val size: Size)
+    fun snapshot() = Snapshot(scale, origin, previousSize)
+    fun restore(snapshot: Snapshot) {
+        scale = snapshot.scale
+        origin = snapshot.origin + Offset((previousSize.width - snapshot.size.width) / 2f,
+            (previousSize.height - snapshot.size.height) / 2f)
+    }
+
     fun resize(size: Size, fitScale: Float, page: Int, pageSize: Size, top: Float, bottom: Float) {
         if (scale == 0f) fit(size, fitScale, page, pageSize, top, bottom)
         else origin += Offset((size.width - previousSize.width) / 2f, (size.height - previousSize.height) / 2f)

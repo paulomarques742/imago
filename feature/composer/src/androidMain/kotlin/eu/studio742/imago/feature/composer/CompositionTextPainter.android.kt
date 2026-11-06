@@ -20,6 +20,15 @@ import eu.studio742.imago.core.composition.CompositionTextLayout
  */
 internal object AndroidTextPainter {
 
+    fun measure(element: CompositionElement.Text, width: Float, height: Float, scale: Float, face: Typeface): CompositionTextLayout.Result {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = face; textSize = element.fontSize * scale; letterSpacing = element.letterSpacing
+        }
+        val metrics = paint.fontMetrics
+        return CompositionTextLayout.measure(element, width, height, scale,
+            CompositionTextLayout.Metrics(metrics.ascent, metrics.descent), paint::measureText)
+    }
+
     /**
      * Draws [element] in a box of [width] by [height] with the corner at (0, 0). [alpha] is the
      * element's opacity. It is applied to the whole text in a layer, like the stage's `graphicsLayer`,
@@ -38,12 +47,7 @@ internal object AndroidTextPainter {
             val corner = element.backgroundCornerRadius * scale
             canvas.drawRoundRect(0f, 0f, width, height, corner, corner, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = argb.toInt() })
         }
-        val metrics = paint.fontMetrics
-        val lines = CompositionTextLayout.layout(
-            element, width, height, scale,
-            CompositionTextLayout.Metrics(metrics.ascent, metrics.descent),
-            paint::measureText,
-        )
+        val lines = measure(element, width, height, scale, face).lines
         val strokeWidth = element.strokeWidth * fontSize
         element.shadowArgb?.let { argb ->
             paint.color = argb.toInt()
@@ -69,6 +73,13 @@ internal object AndroidTextPainter {
         lines.forEach { canvas.drawText(it.text, it.x, it.baseline, paint) }
         canvas.restoreToCount(checkpoint)
     }
+}
+
+internal actual fun measureCompositionText(element: CompositionElement.Text, width: Float, height: Float,
+    scale: Float, fontBytes: ByteArray?): CompositionTextLayout.Result {
+    val font = CompositionFonts.resolve(element.fontFamily)
+    val face = fontBytes?.let { AndroidCompositionFonts.typeface(font, font.weight(element.fontWeight), it) } ?: Typeface.DEFAULT
+    return AndroidTextPainter.measure(element, width, height, scale, face)
 }
 
 internal actual fun DrawScope.drawCompositionText(element: CompositionElement.Text, scale: Float, fontBytes: ByteArray?) {

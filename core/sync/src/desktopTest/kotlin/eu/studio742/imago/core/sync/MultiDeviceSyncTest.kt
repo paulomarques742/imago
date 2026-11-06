@@ -59,6 +59,25 @@ class MultiDeviceSyncTest {
     }
 
     @Test
+    fun `text geometry vertical alignment and named styles survive sync to another database`() = runBlocking {
+        val edited = "2026-11-06T12:00:00Z"
+        val text = CompositionElement.Text("text", ElementTransform(NormalizedRect(.1f, .3f, .7f, .24f), rotationDegrees = 17f),
+            0, "A title\nwith two lines", fontFamily = CompositionFonts.Lora.id, fontSize = 74f,
+            autoHeight = true, verticalAlignment = TextVerticalAlignment.BOTTOM, letterSpacing = .04f)
+        val project = CompositionProject(id = "text-project", name = "Text", format = PageFormatPreset.SQUARE_1_1.format,
+            pages = listOf(CompositionPage("page", 0)), elements = listOf(text), createdAt = edited, updatedAt = edited)
+        val kit = BrandKit(updatedAt = edited, textStyles = listOf(NamedCompositionTextStyle("heading", "Heading", text.textStyle())))
+        phone.database.compositionProjectDao().upsert(CompositionProjectEntity(GLOBAL_LIBRARY_ID, project.id, project.name,
+            json.encodeToString(project), project.revision, edited, edited, SyncState().edited(edited)))
+        phone.database.brandKitDao().upsert(BrandKitEntity(GLOBAL_LIBRARY_ID, json.encodeToString(kit), edited, SyncState().edited(edited)))
+        assertTrue(phone.engine.syncNow()); assertTrue(computer.engine.syncNow())
+        val restored = json.decodeFromString<CompositionProject>(computer.database.compositionProjectDao().get(GLOBAL_LIBRARY_ID, project.id)!!.projectJson)
+        val restoredKit = json.decodeFromString<BrandKit>(computer.database.brandKitDao().getAny(GLOBAL_LIBRARY_ID)!!.kitJson)
+        assertEquals(text, restored.elements.single()); assertEquals(kit, restoredKit)
+        assertFalse(json.encodeToString(restoredKit).contains(text.text))
+    }
+
+    @Test
     fun `hollow rounded outlines survive project and template sync to another device`() = runBlocking {
         val edited = "2026-11-04T12:00:00Z"
         val shape = CompositionElement.Shape("shape", ElementTransform(NormalizedRect(.2f, .3f, .4f, .3f), opacity = .65f),

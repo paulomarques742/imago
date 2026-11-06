@@ -2,6 +2,7 @@ package eu.studio742.imago.feature.composer
 
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import eu.studio742.imago.core.composition.CompositionElement
+import eu.studio742.imago.core.composition.CompositionTextLayout
 
 /**
  * Draws a text on the stage with this platform's exporter painter: Android's `Paint` on one side,
@@ -13,6 +14,9 @@ import eu.studio742.imago.core.composition.CompositionElement
  * then the text comes out in the system font.
  */
 internal expect fun DrawScope.drawCompositionText(element: CompositionElement.Text, scale: Float, fontBytes: ByteArray?)
+
+internal expect fun measureCompositionText(element: CompositionElement.Text, width: Float, height: Float,
+    scale: Float, fontBytes: ByteArray?): CompositionTextLayout.Result
 
 /**
  * The standard deviation of a blur with [radius] pixels.

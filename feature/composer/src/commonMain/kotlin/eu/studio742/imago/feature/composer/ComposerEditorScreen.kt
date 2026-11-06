@@ -51,6 +51,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -520,13 +521,13 @@ private fun ComposerEditorScreenBody(
     }
     var saveMenu by remember { mutableStateOf(false) }
     var templateDialog by rememberSaveable { mutableStateOf(false) }
-    var textDialog by rememberSaveable { mutableStateOf(false) }
     var exportDialog by rememberSaveable { mutableStateOf(false) }
     var layersSheet by rememberSaveable { mutableStateOf(false) }
     var groupDialog by rememberSaveable { mutableStateOf(false) }
     var brandKitDialog by rememberSaveable { mutableStateOf(false) }
     var brandEditor by rememberSaveable { mutableStateOf(false) }
-    val project = state.project
+    val project = state.displayProject()
+    BackHandler(enabled = state.textSession != null) { actions.cancelTextEditing() }
     val requestedContext = ComposerContext(when {
         drawing || shapeKind != null -> ComposerContextKind.NONE
         addingElements -> ComposerContextKind.INSERT
@@ -586,10 +587,18 @@ private fun ComposerEditorScreenBody(
     CompositionLocalProvider(LocalComposerFocus provides focusState) {
         Scaffold(
             modifier = Modifier
+                .imePadding()
                 .focusRequester(keyboardFocus)
                 .focusable()
                 .onKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                    if (state.textSession != null) {
+                        return@onKeyEvent when {
+                            event.key == Key.Escape -> { actions.cancelTextEditing(); true }
+                            event.isCtrlPressed && event.key == Key.Enter -> { actions.confirmTextEditing(); true }
+                            else -> false
+                        }
+                    }
                     val hasSelection = state.selectedElementId != null
                     val step = if (event.isShiftPressed) NUDGE_STEP_COARSE else NUDGE_STEP
                     when {
@@ -642,6 +651,8 @@ private fun ComposerEditorScreenBody(
                     actions = {
                         if (state.saveFailed) {
                             TextButton(onClick = actions::saveDraft) { Text(stringResource(Res.string.composer_retry_save), color = uiColors.error) }
+                        } else if (state.textSession != null) {
+                            Text(stringResource(Res.string.composer_text_draft), color = uiColors.secondaryText, style = MaterialTheme.typography.labelSmall)
                         } else AutoSaveStatus(
                             isSaving = state.isSaving,
                             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
@@ -693,7 +704,7 @@ private fun ComposerEditorScreenBody(
                                             onTogglePositioning = toggleBackgroundPositioning,
                                             onTogglePositioningMedia = toggleMediaPositioning,
                                             onPickImage = { mediaPicker = MediaPickerTarget.Background(it) },
-                                            onEditText = { textDialog = true }, onEditPhoto = { onEditPhotoId(state.selectedElementId) },
+                                            onEditText = { actions.beginTextEditing() }, onEditPhoto = { onEditPhotoId(state.selectedElementId) },
                                             outlineActive = outlining, onOutline = toggleOutline,
                                             onRequestGroup = { groupDialog = true }, onDeleted = {})
                                     }
@@ -714,7 +725,7 @@ private fun ComposerEditorScreenBody(
                                         stopDrawing()
                                         mediaPicker = MediaPickerTarget.NewGrid(state.currentPage)
                                     }
-                                    ToolButton(stringResource(Res.string.composer_text), Icons.Outlined.TextFields, onClick = { stopDrawing(); actions.addText(textPlaceholder) })
+                                    ToolButton(stringResource(Res.string.composer_text), Icons.Outlined.TextFields, onClick = { stopDrawing(); actions.addText(textPlaceholder, edit = true) })
                                     ToolMenuButton(stringResource(Res.string.composer_shape), Icons.Outlined.Rectangle, onOpen = stopDrawing) { dismiss ->
                                         ToolMenuItem(stringResource(Res.string.composer_rectangle), Icons.Outlined.Rectangle, dismiss) { startShape(ShapeKind.RECTANGLE) }
                                         ToolMenuItem(stringResource(Res.string.composer_circle), Icons.Outlined.Circle, dismiss) { startShape(ShapeKind.ELLIPSE) }
@@ -740,7 +751,7 @@ private fun ComposerEditorScreenBody(
                                     onTogglePositioning = toggleBackgroundPositioning,
                                     onTogglePositioningMedia = toggleMediaPositioning,
                                     onPickImage = { currentPageOnly -> mediaPicker = MediaPickerTarget.Background(currentPageOnly) },
-                                    onEditText = { textDialog = true },
+                                    onEditText = { actions.beginTextEditing() },
                                     onEditPhoto = { onEditPhotoId(state.selectedElementId) },
                                     outlineActive = outlining,
                                     onOutline = toggleOutline,
@@ -767,7 +778,7 @@ private fun ComposerEditorScreenBody(
                         }
                     },
                     navigation = {
-                        ComposerNavigationBar(
+                        if (state.textSession?.contentEditing != true) ComposerNavigationBar(
                             onAdd = { stopDrawing(); pageTools = false; addingElements = !addingElements },
                             immersive = adjusting || stageBusy,
                             modifier = Modifier.alpha(chromeAlpha),
@@ -900,7 +911,7 @@ private fun ComposerEditorScreenBody(
                                 onTogglePositioning = toggleBackgroundPositioning,
                                 onTogglePositioningMedia = toggleMediaPositioning,
                                 onPickImage = { currentPageOnly -> mediaPicker = MediaPickerTarget.Background(currentPageOnly) },
-                                onEditText = { textDialog = true },
+                                onEditText = { actions.beginTextEditing() },
                                 onEditPhoto = { onEditPhotoId(state.selectedElementId) },
                                 outlineActive = outlining,
                                 onOutline = toggleOutline,
@@ -1133,15 +1144,7 @@ private fun ComposerEditorScreenBody(
     if (mediaPicker == null) ComposerGridDialog(state, actions, actions::thumbnailUrl, actions::apiKey,
         onAddMedia = { group -> mediaPicker = MediaPickerTarget.Grid(group, draft = true) })
     val selectedText = project?.elements?.firstOrNull { it.id == state.selectedElementId } as? CompositionElement.Text
-    if (textDialog && selectedText != null) {
-        var value by remember(selectedText.id) { mutableStateOf(selectedText.text) }
-        AlertDialog(
-            onDismissRequest = { textDialog = false }, title = { Text(stringResource(Res.string.composer_edit_text)) },
-            text = { TextField(value, { value = it }, minLines = 3) },
-            confirmButton = { TextButton(onClick = { actions.updateSelectedText(value); textDialog = false }) { Text(stringResource(Res.string.composer_apply)) } },
-            dismissButton = { TextButton(onClick = { textDialog = false }) { Text(stringResource(Res.string.composer_cancel)) } },
-        )
-    }
+
 }
 
 /** The hairline that separates a column from the stage. */
@@ -1179,7 +1182,7 @@ private fun ComposerInspector(
     onDeleted: (String) -> Unit,
 ) {
     val uiColors = ImagoUi.colors
-    val selected = state.project?.elements?.firstOrNull { it.id == state.selectedElementId }
+    val selected = state.displayProject()?.elements?.firstOrNull { it.id == state.selectedElementId }
     when {
         state.backgroundSelected -> BackgroundInspector(
             state,
@@ -1232,7 +1235,7 @@ private fun BrandKitDialog(
 ) {
     val uiColors = ImagoUi.colors
     val kit = state.brandKit ?: BrandKit(updatedAt = "")
-    val selected = state.project?.elements?.firstOrNull { it.id == state.selectedElementId }
+    val selected = state.displayProject()?.elements?.firstOrNull { it.id == state.selectedElementId }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.composer_brand)) },
@@ -1696,10 +1699,11 @@ internal fun ComposerCanvas(
         val key = layout?.let { "grid:${it.groupId}" } ?: id
         val now = System.currentTimeMillis()
         when {
-            target == null || target.locked || multiSelect || (layout == null && target.placementCrop() == null) -> lastTapId = null
+            target == null || target.locked || multiSelect || (layout == null && target.placementCrop() == null && target !is CompositionElement.Text) -> lastTapId = null
             key == lastTapId && now - lastTapAt <= DoubleTapWindowMs -> {
                 lastTapId = null
-                if (layout != null) actions.openGrid(layout.groupId) else onFrameMedia()
+                if (layout != null) actions.openGrid(layout.groupId)
+                else if (target is CompositionElement.Text) actions.beginTextEditing(id) else onFrameMedia()
             }
             else -> {
                 lastTapId = key
@@ -1708,6 +1712,11 @@ internal fun ComposerCanvas(
         }
     }
     val viewport = remember(project.id) { ComposerViewport() }
+    var textViewport by remember(project.id) { mutableStateOf<ComposerViewport.Snapshot?>(null) }
+    LaunchedEffect(state.textSession?.draft?.id) {
+        if (state.textSession != null && textViewport == null) textViewport = viewport.snapshot()
+        else if (state.textSession == null) { textViewport?.let(viewport::restore); textViewport = null }
+    }
     val selectedElementId = state.selectedElementId
     var contextMenuFor by remember(project.id) { mutableStateOf<String?>(null) }
     BoxWithConstraints(modifier.background(uiColors.background).clipToBounds().testTag("composer_stage")) {
@@ -1992,8 +2001,8 @@ internal fun ComposerCanvas(
                 // (`drawing`, `positioningBackground`) can no longer both be true at the same time —
                 // whoever turns one on turns the other off — but keeping them separate avoids turning
                 // one on restarting the other's gesture halfway.
-                .composerHandleGestures(state, pageWidthPx, pageHeightPx, gridEditor == null && !armed && !positioningBackground && !positioningMedia, actions, stageOrigin)
-                .composerGridDividerGestures(gridEditor?.layout ?: state.manipulatedLayout()?.takeIf { !armed && !positioningBackground && !positioningMedia && !state.multiSelect },
+                .composerHandleGestures(state, pageWidthPx, pageHeightPx, state.textSession == null && gridEditor == null && !armed && !positioningBackground && !positioningMedia, actions, stageOrigin)
+                .composerGridDividerGestures(gridEditor?.layout ?: state.manipulatedLayout()?.takeIf { state.textSession == null && !armed && !positioningBackground && !positioningMedia && !state.multiSelect },
                     project.format.aspectRatio, stageOrigin, pageWidthPx, pageHeightPx,
                     { if (gridEditor == null) actions.beginGesture() }, { if (gridEditor == null) actions.endGesture() },
                     { split, index, delta ->
@@ -2149,8 +2158,13 @@ internal fun ComposerCanvas(
                         onTap = { onMediaTap(element.id) },
                         previewUrl = previewUrl, thumbnailUrl = thumbnailUrl, videoPlaybackUrl = videoPlaybackUrl, apiKey = apiKey,
                         actions = actions,
-                        interactive = gridEditor == null,
+                        interactive = gridEditor == null && state.textSession?.draft?.id != element.id,
                     )
+                }
+            }
+            state.textSession?.takeIf { it.contentEditing }?.let { session ->
+                ComposerInlineTextEditor(session, pageWidthPx, pageHeightPx, stageOrigin, actions) { caret ->
+                    viewport.reveal(caret, modelSize, viewportSize, topPx, bottomPx, marginPx)
                 }
             }
             ComposerMovementGuides(state.movementGuides, stageOrigin, pageWidthPx, pageHeightPx)
@@ -2180,7 +2194,7 @@ internal fun ComposerCanvas(
                 ?: state.selectionElements().firstOrNull { it.visible }
             val block = state.selectionElements()
                 .takeIf { it.size > 1 }
-            if (selected != null && selected.visible && !armed) {
+            if (selected != null && selected.visible && !armed && state.textSession?.contentEditing != true) {
                 // With several chosen the frame wraps the set, and not the last one tapped: it is the
                 // set the handles resize, and a frame around a single one promised something else.
                 // Without rotation, because the block has no angle of its own.
@@ -2201,7 +2215,8 @@ internal fun ComposerCanvas(
                     origin = stageOrigin,
                     rotationDegrees = layoutFrame?.rotationDegrees ?: if (frame != null) 0f else selected.transform.rotationDegrees,
                     locked = !state.canEditElement(selected.id),
-                    positioning = positioningMedia,
+                    positioning = positioningMedia || state.textSession != null,
+                    textWidthHandles = selected is CompositionElement.Text && block == null && layoutFrame == null,
                     pageWidthPx = pageWidthPx,
                     pageHeightPx = pageHeightPx,
                     onBeginGesture = actions::beginGesture,
@@ -2216,7 +2231,7 @@ internal fun ComposerCanvas(
                     onTap = { onMediaTap(selected.id) },
                 )
             }
-            if (!armed && !positioningMedia && state.editingGroupId == null && !state.multiSelect) {
+            if (state.textSession == null && !armed && !positioningMedia && state.editingGroupId == null && !state.multiSelect) {
                 state.selectedLayout()?.takeIf { layout -> project.elements.none { it.groupId == layout.groupId && it.locked } }?.let { layout ->
                     ComposerGridDividers(layout, project.format.aspectRatio, stageOrigin, pageWidthPx, pageHeightPx,
                         onBegin = { actions.beginGesture() }, onEnd = { actions.endGesture() },
@@ -2620,6 +2635,7 @@ private fun CompositionElementView(
         // shadow or background.
         is CompositionElement.Text -> {
             val fontBytes = rememberCompositionFontBytes(element.fontFamily)
+            LaunchedEffect(fontBytes, element.id) { if (fontBytes != null) actions.refreshTextMetrics(element.id) }
             Canvas(common) { drawCompositionText(element, pageWidthPx / REFERENCE_PAGE_WIDTH, fontBytes) }
         }
         // Fill **and** outline, like the exporter. The stage painted lines and arrows with `fillArgb`
@@ -2879,8 +2895,12 @@ private fun SelectedInspector(
     onDeleted: (String) -> Unit,
 ) {
     val uiColors = ImagoUi.colors
-    val selected = state.project?.elements?.firstOrNull { it.id == state.selectedElementId } ?: return
+    val selected = state.displayProject()?.elements?.firstOrNull { it.id == state.selectedElementId } ?: return
     val chosen = state.selectedElementIds.size
+    if (selected is CompositionElement.Text && !state.hasSelectionTools()) {
+        ComposerTextTools(selected, state, actions, rail)
+        return
+    }
     val outlineElements = state.outlineSelection()
     val isMedia = selected is CompositionElement.Photo ||
         selected is CompositionElement.Video ||
@@ -3015,7 +3035,7 @@ private fun SelectedInspector(
         // Right under the tools and outside the drawer: with a video in hand, when it plays is what one
         // came for. Every video on the page is there, so the selected one is lined up against the rest.
         if (chosen <= 1 && selected is CompositionElement.Video) {
-            PageVideoTimeline(state.project, selected.pageIndex, selected.id, actions, Modifier.alpha(chrome))
+            PageVideoTimeline(checkNotNull(state.project), selected.pageIndex, selected.id, actions, Modifier.alpha(chrome))
         }
         if (positioning) {
             Text(

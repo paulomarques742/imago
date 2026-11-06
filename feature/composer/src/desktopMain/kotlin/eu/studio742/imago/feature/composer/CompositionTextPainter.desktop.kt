@@ -61,6 +61,16 @@ internal object SkiaTextPainter {
     }
 
     /** Draws [element] in a box of [width] by [height] with the corner at (0, 0), like [AndroidTextPainter]. */
+    fun measure(element: CompositionElement.Text, width: Float, height: Float, scale: Float, face: Typeface?): CompositionTextLayout.Result {
+        val typeface = face ?: checkNotNull(systemFace)
+        val fontSize = element.fontSize * scale
+        val metrics = Font(typeface, fontSize).use { it.metrics }
+        return Paint().use { paint -> CompositionTextLayout.measure(element, width, height, scale,
+            CompositionTextLayout.Metrics(metrics.ascent, metrics.descent)) { text ->
+            paragraph(text, typeface, fontSize, element.letterSpacing * fontSize, paint).use { it.maxIntrinsicWidth }
+        } }
+    }
+
     fun draw(canvas: Canvas, element: CompositionElement.Text, width: Float, height: Float, scale: Float, face: Typeface?, alpha: Int = 255) {
         if (alpha <= 0) return
         val typeface = face ?: systemFace ?: return
@@ -77,13 +87,7 @@ internal object SkiaTextPainter {
                 canvas.drawRRect(RRect.makeXYWH(0f, 0f, width, height, corner), paint)
             }
         }
-        val metrics = Font(typeface, fontSize).use { it.metrics }
-        val measurePaint = Paint()
-        val lines = CompositionTextLayout.layout(
-            element, width, height, scale,
-            CompositionTextLayout.Metrics(metrics.ascent, metrics.descent),
-        ) { text -> paragraph(text, typeface, fontSize, spacing, measurePaint).use { it.maxIntrinsicWidth } }
-        measurePaint.close()
+        val lines = measure(element, width, height, scale, typeface).lines
         val strokeWidth = element.strokeWidth * fontSize
 
         fun pass(argb: Long, mode: PaintMode, dx: Float = 0f, dy: Float = 0f, blur: Float = 0f) = Paint().use { paint ->
@@ -113,6 +117,13 @@ internal object SkiaTextPainter {
         pass(element.colorArgb, PaintMode.FILL)
         canvas.restoreToCount(checkpoint)
     }
+}
+
+internal actual fun measureCompositionText(element: CompositionElement.Text, width: Float, height: Float,
+    scale: Float, fontBytes: ByteArray?): CompositionTextLayout.Result {
+    val font = CompositionFonts.resolve(element.fontFamily)
+    val face = fontBytes?.let { SkiaCompositionFonts.typeface(font, font.weight(element.fontWeight), it) }
+    return SkiaTextPainter.measure(element, width, height, scale, face)
 }
 
 internal actual fun DrawScope.drawCompositionText(element: CompositionElement.Text, scale: Float, fontBytes: ByteArray?) {

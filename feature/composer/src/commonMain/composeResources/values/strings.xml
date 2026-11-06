@@ -459,4 +459,12 @@
     <string name="composer_frame_remove">Remove cutout and decoration</string>
     <string name="composer_frame_ratio_value">%1$s×</string>
     <string name="composer_frame_pixels_value">%1$d px</string>
+    <string name="composer_text_styles">Text styles</string>
+    <string name="composer_copy_text_style">Copy formatting</string>
+    <string name="composer_paste_text_style">Paste formatting</string>
+    <string name="composer_save_text_style">Save style</string>
+    <string name="composer_text_auto_height">Automatic height</string>
+    <string name="composer_text_vertical_alignment">Vertical alignment</string>
+    <string name="composer_text_box_height">Box height (%)</string>
+    <string name="composer_text_draft">Editing text</string>
 </resources>

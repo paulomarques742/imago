@@ -26,17 +26,21 @@ const val MAX_TEXT_BACKGROUND_CORNER = 120f
  *   fit, and a word wider than the box breaks where it stops fitting;
  * - the distance between lines is the font's natural height times
  *   [CompositionElement.Text.lineSpacing];
- * - the block is centred vertically in the box, and is not clipped if it overflows;
+ * - the block follows its vertical alignment (centred for legacy text), without clipping overflow;
  * - with the background on, the text is inset by [CompositionElement.Text.backgroundPadding] on each
  *   side.
  */
 object CompositionTextLayout {
+    private val grapheme = Regex("\\X")
 
     /** A line ready to draw: [x] is the left and [baseline] the baseline, in the box. */
-    data class Line(val text: String, val x: Float, val baseline: Float, val width: Float)
+    data class Line(val text: String, val x: Float, val baseline: Float, val width: Float,
+        val startOffset: Int = 0, val endOffset: Int = text.length)
 
     /** What the platform knows about the font at the drawing size. [ascent] is negative, as on Android and Skia. */
     data class Metrics(val ascent: Float, val descent: Float)
+
+    data class Result(val lines: List<Line>, val metrics: Metrics, val contentHeight: Float)
 
     /** The text as it is drawn. */
     fun displayText(element: CompositionElement.Text): String =
@@ -56,23 +60,42 @@ object CompositionTextLayout {
         scale: Float,
         metrics: Metrics,
         measure: (String) -> Float,
-    ): List<Line> {
+    ): List<Line> = measure(element, boxWidth, boxHeight, scale, metrics, measure).lines
+
+    fun measure(
+        element: CompositionElement.Text, boxWidth: Float, boxHeight: Float, scale: Float,
+        metrics: Metrics, measure: (String) -> Float,
+    ): Result {
         val inset = if (element.backgroundArgb != null) element.backgroundPadding * scale else 0f
         val available = max(boxWidth - 2 * inset, 1f)
-        val texts = displayText(element).split('\n').flatMap { wrap(it, available, measure) }
+        var paragraphStart = 0
+        val texts = displayText(element).split('\n').flatMap { paragraph ->
+            var cursor = 0
+            wrap(paragraph, available, measure).map { text ->
+                val start = paragraph.indexOf(text, cursor).coerceAtLeast(cursor)
+                cursor = start + text.length
+                Triple(text, paragraphStart + start, paragraphStart + cursor)
+            }.also { paragraphStart += paragraph.length + 1 }
+        }
         val natural = metrics.descent - metrics.ascent
         val pitch = natural * element.lineSpacing
         val blockHeight = pitch * (texts.size - 1) + natural
-        val firstBaseline = (boxHeight - blockHeight) / 2 - metrics.ascent
-        return texts.mapIndexed { index, text ->
+        val top = when (element.verticalAlignment) {
+            TextVerticalAlignment.TOP -> inset
+            TextVerticalAlignment.CENTER -> (boxHeight - blockHeight) / 2
+            TextVerticalAlignment.BOTTOM -> boxHeight - inset - blockHeight
+        }
+        val firstBaseline = top - metrics.ascent
+        val lines = texts.mapIndexed { index, (text, start, end) ->
             val width = measure(text)
             val x = when (element.alignment) {
                 TextAlignment.START -> inset
                 TextAlignment.CENTER -> inset + (available - width) / 2
                 TextAlignment.END -> inset + available - width
             }
-            Line(text, x, firstBaseline + index * pitch, width)
+            Line(text, x, firstBaseline + index * pitch, width, start, end)
         }
+        return Result(lines, metrics, blockHeight + 2 * inset)
     }
 
     /**
@@ -104,11 +127,10 @@ object CompositionTextLayout {
     private fun breakWord(word: String, available: Float, measure: (String) -> Float, into: MutableList<String>): String {
         var rest = word
         while (measure(rest) > available) {
-            // At least one character per line, so a very narrow box does not trap the loop.
-            // It advances by code point so the two halves of an emoji are never split.
-            var cut = rest.offsetByCodePoints(0, 1)
+            // A narrow box still advances one complete accent or emoji sequence.
+            var cut = checkNotNull(grapheme.find(rest)).range.last + 1
             while (cut < rest.length) {
-                val next = rest.offsetByCodePoints(cut, 1)
+                val next = checkNotNull(grapheme.find(rest, cut)).range.last + 1
                 if (measure(rest.substring(0, next)) > available) break
                 cut = next
             }

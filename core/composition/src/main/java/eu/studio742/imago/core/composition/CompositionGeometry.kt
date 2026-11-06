@@ -176,6 +176,19 @@ fun List<CompositionElement>.resizedSelectionFromCorner(
     if (size == 1) {
         val element = single()
         val before = element.transform.bounds
+        if (element is CompositionElement.Text) {
+            val sx = if (corner == ResizeCorner.TOP_LEFT || corner == ResizeCorner.BOTTOM_LEFT) -1f else 1f
+            val sy = if (corner == ResizeCorner.TOP_LEFT || corner == ResizeCorner.TOP_RIGHT) -1f else 1f
+            val w = before.width * aspect
+            val h = before.height
+            val minimum = maxOf(MIN_ELEMENT_SIZE / before.width, MIN_ELEMENT_SIZE / before.height)
+            val maximum = minOf(pageCount / before.width, 1f / before.height)
+            val ratio = (1f + (dx * aspect * sx * w + dy * sy * h) / (w * w + h * h))
+                .coerceIn(minimum.coerceAtMost(maximum), maximum)
+            return listOf(element.scaledTypography(ratio).copy(transform = element.transform.withAnchoredTextBounds(
+                before.width * ratio, before.height * ratio, if (sx < 0f) 1f else 0f,
+                if (sy < 0f) 1f else 0f, aspect)))
+        }
         val resized = before.resizedFrom(corner, dx, dy,
             maxWidth = if (element is CompositionElement.Video) 1f else pageCount.toFloat(), maxHeight = 1f)
         val localX = resized.x + resized.width / 2f - before.x - before.width / 2f
@@ -196,8 +209,11 @@ fun List<CompositionElement>.resizedSelectionFromCorner(
     val top = corner == ResizeCorner.TOP_LEFT || corner == ResizeCorner.TOP_RIGHT
     val limited = NormalizedRect(if (left) box.right - width else box.x,
         if (top) box.bottom - height else box.y, width, height)
-    return map { element -> element.withTransform(element.transform.copy(
-        bounds = element.editableBounds(element.transform.bounds.mappedBetween(box, limited), pageCount))) }
+    return map { element ->
+        val resized = element.withTransform(element.transform.copy(
+            bounds = element.editableBounds(element.transform.bounds.mappedBetween(box, limited), pageCount)))
+        if (resized is CompositionElement.Text) resized.scaledTypography(limited.width / box.width) else resized
+    }
 }
 
 /**

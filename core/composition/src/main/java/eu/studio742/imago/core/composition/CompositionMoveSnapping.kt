@@ -5,6 +5,8 @@ import kotlin.math.floor
 
 enum class GuideAxis { X, Y }
 
+data class CompositionTextBaseline(val y: Float, val from: Float, val to: Float)
+
 /** Transient stage geometry; these guides are never part of a saved project. */
 sealed interface CompositionGuide {
     data class Alignment(val axis: GuideAxis, val coordinate: Float, val from: Float, val to: Float) : CompositionGuide
@@ -27,11 +29,15 @@ class CompositionMoveSnapping(
     project: CompositionProject,
     val elementIds: Set<String>,
     instanceOffsetX: Float = 0f,
+    textBaselines: Map<String, List<CompositionTextBaseline>> = emptyMap(),
 ) {
     private val initial = checkNotNull(project.elements.filter { it.id in elementIds }
         .map { it.visualBounds(aspect = project.format.aspectRatio) }.boundingBox())
         .let { it.copy(x = it.x + instanceOffsetX.takeIf(Float::isFinite).orZero()) }
     private val pageCount = project.pages.size
+    private val movingBaselines = textBaselines.filterKeys { it in elementIds }.values.flatten()
+        .map { it.copy(from = it.from + instanceOffsetX, to = it.to + instanceOffsetX) }
+    private val referenceBaselines = textBaselines.filterKeys { it !in elementIds }.values.flatten()
     private val references = project.elements.filter { it.id !in elementIds && it.visible && it.transform.opacity > 0f }
         .flatMap { element ->
             if (element.repeatOnPages.isEmpty()) listOf(element.visualBounds(aspect = project.format.aspectRatio))
@@ -92,6 +98,16 @@ class CompositionMoveSnapping(
     }
 
     private fun candidates(axis: GuideAxis, moving: NormalizedRect): List<Candidate> = buildList<Candidate> {
+        if (axis == GuideAxis.Y) movingBaselines.forEach { baseline ->
+            referenceBaselines.filter { reference -> floor(reference.from) <= floor(moving.right - EPSILON) &&
+                floor(reference.to - EPSILON) >= floor(moving.x) }.forEach { reference ->
+                add(Candidate(reference.y - (baseline.y - initial.y), -1) { placed ->
+                    val shift = placed.x - initial.x
+                    listOf(CompositionGuide.Alignment(GuideAxis.Y, reference.y,
+                        minOf(reference.from, baseline.from + shift), maxOf(reference.to, baseline.to + shift)))
+                })
+            }
+        }
         val firstPage = floor(moving.x).toInt().coerceIn(0, pageCount - 1)
         val lastPage = floor(moving.right - EPSILON).toInt().coerceIn(firstPage, pageCount - 1)
         for (page in firstPage..lastPage) {

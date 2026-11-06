@@ -42,6 +42,7 @@ private enum class SelectionHandle(val corner: ResizeCorner?) {
     BOTTOM_LEFT(ResizeCorner.BOTTOM_LEFT),
     BOTTOM_RIGHT(ResizeCorner.BOTTOM_RIGHT),
     ROTATE(null),
+    LEFT(null), RIGHT(null),
 }
 
 /**
@@ -68,6 +69,7 @@ internal fun ComposerSelectionOverlay(
      * `fillMaxSize` box with `pointerInput` would keep catching everything first.
      */
     positioning: Boolean,
+    textWidthHandles: Boolean = false,
     pageWidthPx: Float,
     pageHeightPx: Float,
     onBeginGesture: () -> Unit,
@@ -105,13 +107,13 @@ internal fun ComposerSelectionOverlay(
 
                 val rotationHandle = Offset(centre.x, topLeft.y - rotationGapPx)
                 drawLine(uiColors.accent, Offset(centre.x, topLeft.y), rotationHandle, strokeWidth = 2.dp.toPx())
-                listOf(
+                (listOf(
                     topLeft,
                     Offset(topLeft.x + elementSize.width, topLeft.y),
                     Offset(topLeft.x, topLeft.y + elementSize.height),
                     Offset(topLeft.x + elementSize.width, topLeft.y + elementSize.height),
                     rotationHandle,
-                ).forEach { handle ->
+                ) + if (textWidthHandles) listOf(Offset(topLeft.x, centre.y), Offset(topLeft.x + elementSize.width, centre.y)) else emptyList()).forEach { handle ->
                     drawCircle(uiColors.workspace.copy(alpha = .45f), handleRadiusPx + 1.dp.toPx(), handle)
                     drawCircle(uiColors.text, handleRadiusPx, handle)
                     drawCircle(uiColors.accent, handleRadiusPx, handle, style = Stroke(width = 2.dp.toPx()))
@@ -155,7 +157,8 @@ internal fun Modifier.composerHandleGestures(
             val down = awaitFirstDown(requireUnconsumed = true, pass = PointerEventPass.Initial)
             val initial = frame() ?: return@awaitEachGesture
             val handle = handleAt(down.position - liveOrigin, stageCentre(initial.first, width, height),
-                stageSize(initial.first, width, height), initial.second, rotationGap, touchRadius)
+                stageSize(initial.first, width, height), initial.second, rotationGap, touchRadius,
+                liveState.editableSelection().singleOrNull() is eu.studio742.imago.core.composition.CompositionElement.Text && liveState.manipulatedLayout() == null)
                 ?: return@awaitEachGesture
             down.consume()
             if (handle.corner == null) actions.beginGesture() else actions.beginResizeGesture(handle.corner)
@@ -179,6 +182,10 @@ internal fun Modifier.composerHandleGestures(
                         actions.rotateSelectedBy(((target - appliedAngle + 540f) % 360f) - 180f)
                         previousAngle = nextAngle
                         appliedAngle = target
+                    } else if (handle == SelectionHandle.LEFT || handle == SelectionHandle.RIGHT) {
+                        val delta = change.positionChange()
+                        val (x, _) = rotateVector(delta.x, delta.y, -current.second)
+                        actions.resizeTextWidth(x / width, fromLeft = handle == SelectionHandle.LEFT)
                     } else {
                         val delta = change.positionChange()
                         val (x, y) = rotateVector(delta.x, delta.y, -current.second)
@@ -226,6 +233,7 @@ private fun handleAt(
     rotationDegrees: Float,
     rotationGapPx: Float,
     touchRadiusPx: Float,
+    textWidthHandles: Boolean = false,
 ): SelectionHandle? {
     val halfWidth = size.width / 2f
     val halfHeight = size.height / 2f
@@ -235,7 +243,7 @@ private fun handleAt(
         SelectionHandle.BOTTOM_LEFT to Offset(-halfWidth, halfHeight),
         SelectionHandle.BOTTOM_RIGHT to Offset(halfWidth, halfHeight),
         SelectionHandle.ROTATE to Offset(0f, -halfHeight - rotationGapPx),
-    )
+    ) + if (textWidthHandles) listOf(SelectionHandle.LEFT to Offset(-halfWidth, 0f), SelectionHandle.RIGHT to Offset(halfWidth, 0f)) else emptyList()
     return candidates.map { (handle, local) ->
         val (screenX, screenY) = rotateVector(local.x, local.y, rotationDegrees)
         handle to (position - Offset(centre.x + screenX, centre.y + screenY)).getDistance()

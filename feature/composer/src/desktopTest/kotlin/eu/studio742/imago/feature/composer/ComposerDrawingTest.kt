@@ -233,7 +233,7 @@ class ComposerDrawingTest {
         onNodeWithContentDescription(addLabel).performClick()
         onNodeWithContentDescription(textLabel).performScrollTo().performClick()
         onNodeWithContentDescription(exitLabel).assertDoesNotExist()
-        assertEquals(1, viewModel.state.value.project!!.elements.filterIsInstance<CompositionElement.Text>().size)
+        assertEquals(1, viewModel.state.value.displayProject()!!.elements.filterIsInstance<CompositionElement.Text>().size)
     }
 
     @Test(timeout = 30_000)
