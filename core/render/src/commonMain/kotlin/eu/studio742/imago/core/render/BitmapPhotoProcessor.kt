@@ -218,9 +218,17 @@ object BitmapPhotoProcessor {
         val airlight = pyramid?.airlight ?: 1f
         // The tent reads the row above and the row below as they came out of the first pass. On a
         // single strip, the row below has not been written yet when it is read; in parallel, the
-        // neighbour may already have written it — so there the reads come from a copy, and the result
-        // is the same pixel for pixel.
-        val input: PixelSurface = if (rowsRunInParallel(bitmap)) (bitmap as PixelBuffer).copy() else bitmap
+        // neighbour may already have written the rows at the edges of a strip — so those are kept before
+        // anything starts, and the result is the same pixel for pixel. A copy of the image would be the
+        // same too, and on a 26 Mpx RAW a hundred and fifty megabytes.
+        val edges = HashMap<Int, FloatArray>()
+        val strips = rowBands(bitmap)
+        if (strips.size > 1) {
+            val read = IntArray(width)
+            for (strip in strips) for (row in listOf(strip.first - 1, strip.last + 1)) {
+                if (row in 0 until height && row !in edges) edges[row] = FloatArray(width * 4).also { bitmap.readRgbaRow(row, it, read) }
+            }
+        }
 
         forEachRowBand(bitmap) { fromRow, untilRow ->
             val above = FloatArray(width * 4)
@@ -238,9 +246,14 @@ object BitmapPhotoProcessor {
             var clarity = parameters.clarity / 100f
             var dehaze = parameters.dehaze / 100f
 
-            input.readRgbaRow(fromRow, current, scratch)
-            if (fromRow > 0) input.readRgbaRow(fromRow - 1, above, scratch) else current.copyInto(above)
-            if (fromRow + 1 < height) input.readRgbaRow(fromRow + 1, below, scratch) else current.copyInto(below)
+            fun readRow(row: Int, into: FloatArray) {
+                val kept = if (row < fromRow || row >= untilRow) edges[row] else null
+                if (kept != null) kept.copyInto(into) else bitmap.readRgbaRow(row, into, scratch)
+            }
+
+            readRow(fromRow, current)
+            if (fromRow > 0) readRow(fromRow - 1, above) else current.copyInto(above)
+            if (fromRow + 1 < height) readRow(fromRow + 1, below) else current.copyInto(below)
 
             for (y in fromRow until untilRow) {
                 val v = (y + 0.5f) / height
@@ -341,7 +354,7 @@ object BitmapPhotoProcessor {
                 below.copyInto(current)
                 val nextRow = y + 2
                 if (nextRow < height) {
-                    input.readRgbaRow(nextRow, below, scratch)
+                    readRow(nextRow, below)
                 }
             }
         }
@@ -414,17 +427,19 @@ object BitmapPhotoProcessor {
             green = calibrated[1]
             blue = calibrated[2]
         }
-        val exposure = 2f.pow(tone.exposure)
+        val exposure = tone.exposureGain()
         red *= exposure
         green *= exposure
         blue *= exposure
 
-        val linearLuminance = luminance(red, green, blue)
-        val lift = tone.blacks / 100f * (1f - smoothstep(0f, 0.35f, linearLuminance)) * 0.18f +
-            tone.whites / 100f * smoothstep(0.55f, 1f, linearLuminance) * 0.22f
-        red += lift
-        green += lift
-        blue += lift
+        if (tone.blacks != 0f || tone.whites != 0f) {
+            val linearLuminance = luminance(red, green, blue)
+            val lift = tone.blacks / 100f * (1f - smoothstep(0f, 0.35f, linearLuminance)) * 0.18f +
+                tone.whites / 100f * smoothstep(0.55f, 1f, linearLuminance) * 0.22f
+            red += lift
+            green += lift
+            blue += lift
+        }
 
         if (linearInput && tone.rawProfile != RawProfile.NONE) {
             RawProfile.toDisplay(red, green, blue, tone.rawProfile, rgb)
@@ -467,50 +482,69 @@ object BitmapPhotoProcessor {
         linearInput: Boolean = false,
     ) {
         applyBaseTone(base, tone, linearInput)
+        // Only a linear source has anything above white to recover; a JPEG's band ends at 1.
+        val ceiling = if (linearInput && tone.rawProfile != RawProfile.NONE) tone.highlightCeiling else 1f
+        // A band at 0 maps every value to itself; only its clamp is left, and no exponential per pixel.
+        val shadowed = tonal(base, ceiling)
+        remapLuminance(base, if (tone.shadows == 0f) shadowed else locallyAdaptedShadows(shadowed, localBase, tone.shadows / 100f, ceiling))
+        val highlighted = tonal(base, ceiling)
+        remapLuminance(base, if (tone.highlights == 0f) highlighted else locallyAdaptedHighlights(highlighted, localBase, tone.highlights / 100f, ceiling, tone.wideHighlights))
+        val tonalLuminance = luminance(base[0], base[1], base[2]).coerceIn(0f, 1f)
+        remapLuminance(base, midtoneContrastLuminance(tonalLuminance, tone.contrast / 100f))
+
         var red = base[0]
         var green = base[1]
         var blue = base[2]
-
-        fun remapLuminance(target: Float) {
-            val current = luminance(red, green, blue)
-            if (current <= 0.00001f) return
-            val scale = target / current
-            red *= scale
-            green *= scale
-            blue *= scale
+        // Curves and HSL at rest leave a colour as it is, clamped: this runs for every pixel of a photo,
+        // and most photos have touched neither.
+        if (parameters.channelCurvesAtRest) {
+            red = red.coerceIn(0f, 1f)
+            green = green.coerceIn(0f, 1f)
+            blue = blue.coerceIn(0f, 1f)
+        } else {
+            val curves = parameters.channelToneCurves
+            red = channelCurveSample(curves, red, 0)
+            green = channelCurveSample(curves, green, 1)
+            blue = channelCurveSample(curves, blue, 2)
+        }
+        if (!parameters.hslAtRest) {
+            val hslColor = applyHslBands(floatArrayOf(red, green, blue), parameters.hslBands)
+            red = hslColor[0]
+            green = hslColor[1]
+            blue = hslColor[2]
         }
 
-        // Only a linear source has anything above white to recover; a JPEG's band ends at 1.
-        val ceiling = if (linearInput && tone.rawProfile != RawProfile.NONE) tone.highlightCeiling else 1f
-        fun tonal() = if (ceiling > 1f) max(luminance(red, green, blue), 0f) else luminance(red, green, blue).coerceIn(0f, 1f)
-        remapLuminance(locallyAdaptedShadows(tonal(), localBase, tone.shadows / 100f, ceiling))
-        remapLuminance(locallyAdaptedHighlights(tonal(), localBase, tone.highlights / 100f, ceiling, tone.wideHighlights))
-        val tonalLuminance = luminance(red, green, blue).coerceIn(0f, 1f)
-        remapLuminance(midtoneContrastLuminance(tonalLuminance, tone.contrast / 100f))
-
-        val curves = parameters.channelToneCurves
-        red = channelCurveSample(curves, red, 0)
-        green = channelCurveSample(curves, green, 1)
-        blue = channelCurveSample(curves, blue, 2)
-        val hslColor = applyHslBands(floatArrayOf(red, green, blue), parameters.hslBands)
-        red = hslColor[0]
-        green = hslColor[1]
-        blue = hslColor[2]
-
-        val perceived = luminance(red, green, blue)
-        val saturation = 1f + tone.saturation / 100f
-        red = mix(perceived, red, saturation)
-        green = mix(perceived, green, saturation)
-        blue = mix(perceived, blue, saturation)
-        val chroma = max(red, max(green, blue)) - min(red, min(green, blue))
-        val vibrance = 1f + tone.vibrance / 100f * (1f - chroma.coerceIn(0f, 1f))
-        red = mix(perceived, red, vibrance)
-        green = mix(perceived, green, vibrance)
-        blue = mix(perceived, blue, vibrance)
+        if (tone.saturation != 0f || tone.vibrance != 0f) {
+            val perceived = luminance(red, green, blue)
+            val saturation = 1f + tone.saturation / 100f
+            red = mix(perceived, red, saturation)
+            green = mix(perceived, green, saturation)
+            blue = mix(perceived, blue, saturation)
+            val chroma = max(red, max(green, blue)) - min(red, min(green, blue))
+            val vibrance = 1f + tone.vibrance / 100f * (1f - chroma.coerceIn(0f, 1f))
+            red = mix(perceived, red, vibrance)
+            green = mix(perceived, green, vibrance)
+            blue = mix(perceived, blue, vibrance)
+        }
 
         base[0] = red.coerceIn(0f, 1f)
         base[1] = green.coerceIn(0f, 1f)
         base[2] = blue.coerceIn(0f, 1f)
+    }
+
+    /** The colour scaled to [target] luminance, its hue and saturation kept. */
+    private fun remapLuminance(rgb: FloatArray, target: Float) {
+        val current = luminance(rgb[0], rgb[1], rgb[2])
+        if (current <= 0.00001f) return
+        val scale = target / current
+        rgb[0] *= scale
+        rgb[1] *= scale
+        rgb[2] *= scale
+    }
+
+    private fun tonal(rgb: FloatArray, ceiling: Float): Float {
+        val value = luminance(rgb[0], rgb[1], rgb[2])
+        return if (ceiling > 1f) max(value, 0f) else value.coerceIn(0f, 1f)
     }
 
     private fun applyHslBands(rgb: FloatArray, bands: List<HslRenderBand>): FloatArray {

@@ -5,6 +5,15 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 24 reduces a RAW's noise before the tone, against the noise measured on the photo, in four bands and with
+ * a colour reduction that no longer takes the noise for colour edges (`RawNoiseReduction`). The same six
+ * sliders do much more at high ISO, so an app at 23 would draw a new recipe noisy: it asks to be updated.
+ * A JPEG keeps process 21's noise reduction.
+ *
+ * 23 develops a RAW with the lens corrections its camera wrote into it ([RawDevelopment.lensCorrection]):
+ * distortion, lateral chromatic aberration and vignetting. An app at 22 would develop such a recipe's
+ * original without them, with the lines bent and the framing off, so it has to ask to be updated instead.
+ *
  * 22 activates [retouches], the Remove tool's corrections, step 1a of the pipeline. An app at 21
  * decodes them and draws the photo as if they were not there, so it has to ask to be updated instead.
  * 18 was meant for them and never shipped: the corrections were written before 19 to 21 and only
@@ -72,7 +81,13 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 22
+const val CURRENT_PROCESS_VERSION = 24
+
+/** Process 24 reduces a RAW's noise on its linear development ([Detail]'s six noise sliders). */
+const val RAW_NOISE_REDUCTION_PROCESS_VERSION = 24
+
+/** Process 23 reads [RawDevelopment.lensCorrection]. */
+const val FILE_LENS_CORRECTION_PROCESS_VERSION = 23
 
 /** Process 21 reads [Calibration]; an app before it would draw the photo without it, and asks to be updated. */
 const val CALIBRATION_PROCESS_VERSION = 21
@@ -138,12 +153,17 @@ val RAW_PROFILES = listOf(RAW_PROFILE_COLOR, RAW_PROFILE_NEUTRAL, RAW_PROFILE_VI
  * [exposure] is what made the development as bright as the JPEG the camera stored in the file, in
  * stops, measured once when the photo was first developed and kept: the same on every device, and not
  * changed by a better measurement later. Only rendering 2 has it; the Exposure slider is on top of it.
+ *
+ * [lensCorrection] develops the original with the lens corrections its camera wrote into it, when it
+ * has them. A development recorded before process 23 lacks the field and keeps the lens as it was; one
+ * made for the first time since starts with it on.
  */
 @Serializable
 data class RawDevelopment(
     val engine: String = RAW_ENGINE_1,
     val rendering: Int = RAW_RENDERING_LINEAR,
     val exposure: Float = 0f,
+    val lensCorrection: Boolean = false,
 )
 
 /**
@@ -159,6 +179,13 @@ fun EditRecipe.rawEngine(): String =
 
 /** LibRaw's `highlight` for [rawEngine]: 1 for engine 1, as it was, and 2 from engine 2. */
 fun EditRecipe.rawHighlightMode(): Int = if (rawEngine() == RAW_ENGINE_1) 1 else 2
+
+/**
+ * Whether the original is developed with the lens corrections it carries, which the decoder has to know.
+ * A development not made yet gets them under the current rendering, as [developedAsRaw] will record.
+ */
+fun EditRecipe.appliesFileLensCorrection(): Boolean =
+    rawDevelopment?.lensCorrection ?: (rawRendering() >= RAW_RENDERING_HEADROOM)
 
 /** Whether the original is developed at its DNG BaselineExposure, which the decoder has to know. */
 fun EditRecipe.appliesBaselineExposure(): Boolean = rawRendering() >= RAW_RENDERING_PROFILED
@@ -184,6 +211,7 @@ fun EditRecipe.developedAsRaw(rendering: Int = rawRendering(), exposure: Float =
         engine = if (rendering >= RAW_RENDERING_HEADROOM) CURRENT_RAW_ENGINE else RAW_ENGINE_1,
         rendering = rendering,
         exposure = if (rendering >= RAW_RENDERING_PROFILED) exposure else 0f,
+        lensCorrection = rendering >= RAW_RENDERING_HEADROOM,
     ),
 )
 

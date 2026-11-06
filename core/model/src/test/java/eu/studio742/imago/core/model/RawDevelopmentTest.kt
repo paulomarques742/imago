@@ -41,13 +41,42 @@ class RawDevelopmentTest {
         val fresh = older.copy(processVersion = CURRENT_PROCESS_VERSION)
         assertEquals(RAW_RENDERING_HEADROOM, fresh.rawRendering())
         assertTrue(fresh.appliesBaselineExposure())
-        assertEquals(RawDevelopment(engine = CURRENT_RAW_ENGINE, rendering = RAW_RENDERING_HEADROOM), fresh.developedAsRaw().rawDevelopment)
+        assertEquals(
+            RawDevelopment(engine = CURRENT_RAW_ENGINE, rendering = RAW_RENDERING_HEADROOM, lensCorrection = true),
+            fresh.developedAsRaw().rawDevelopment,
+        )
         // A photo already developed at rendering 2 stays there: its Highlights end at white, as they did.
         val kept = fresh.copy(rawDevelopment = RawDevelopment(rendering = RAW_RENDERING_PROFILED))
         assertEquals(RAW_RENDERING_PROFILED, kept.developedAsRaw().rawRendering())
         assertFalse(kept.needsNewerRawRendering())
         // The decision made before decoding wins over the process the editor stamps afterwards.
         assertEquals(RAW_RENDERING_LINEAR, fresh.developedAsRaw(RAW_RENDERING_LINEAR).rawRendering())
+    }
+
+    @Test fun `a new development starts with the file's lens corrections and a recorded one keeps the lens as it was`() {
+        val fresh = EditRecipe(assetId = "raw", originalChecksum = "", createdAt = "", updatedAt = "")
+        assertTrue(fresh.appliesFileLensCorrection())
+        assertTrue(fresh.developedAsRaw().rawDevelopment!!.lensCorrection)
+        assertTrue(fresh.developedAsRaw().appliesFileLensCorrection())
+        // Written by process 22, before the field: the photo opens as it was edited.
+        val stored = Json.decodeFromString<EditRecipe>(
+            """{"assetId":"raw","originalChecksum":"","createdAt":"","updatedAt":"","processVersion":22,
+               "rawDevelopment":{"engine":"libraw-0.22.2-imago-2","rendering":3,"exposure":0.4}}""")
+        assertFalse(stored.appliesFileLensCorrection())
+        assertFalse(stored.developedAsRaw().appliesFileLensCorrection())
+        // A recipe from before the RAW development, opened as a RAW for the first time on rendering 1, keeps that too.
+        val older = EditRecipe(assetId = "raw", originalChecksum = "", createdAt = "", updatedAt = "", processVersion = 19)
+        assertFalse(older.appliesFileLensCorrection())
+        assertFalse(older.developedAsRaw().rawDevelopment!!.lensCorrection)
+    }
+
+    @Test fun `the lens correction survives synchronisation and needs process 23`() {
+        val recipe = EditRecipe(assetId = "raw", originalChecksum = "", createdAt = "", updatedAt = "").developedAsRaw()
+        val restored = Json.decodeFromString<EditRecipe>(Json.encodeToString(recipe))
+        assertTrue(restored.rawDevelopment!!.lensCorrection)
+        assertTrue(restored.processVersion >= FILE_LENS_CORRECTION_PROCESS_VERSION)
+        val off = restored.copy(rawDevelopment = restored.rawDevelopment!!.copy(lensCorrection = false))
+        assertFalse(Json.decodeFromString<EditRecipe>(Json.encodeToString(off)).appliesFileLensCorrection())
     }
 
     @Test fun `engine 1 keeps its highlight mode and a new development gets engine 2`() {

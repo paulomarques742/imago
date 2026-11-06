@@ -58,7 +58,7 @@ object RawDevelopmentUpgrade {
             return recipe.copy(
                 tone = recipe.tone.copy(exposure = exposureFor(recipe.tone.exposure, baseline, measured)),
                 profile = RAW_PROFILE_COLOR,
-                rawDevelopment = RawDevelopment(CURRENT_RAW_ENGINE, CURRENT_RAW_RENDERING, measured),
+                rawDevelopment = RawDevelopment(CURRENT_RAW_ENGINE, CURRENT_RAW_RENDERING, measured, lensCorrection = old.lensCorrection),
             )
         }
         return recipe.copy(

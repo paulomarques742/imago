@@ -70,6 +70,21 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     private var plainOf: Bitmap? = null
     /** The corrections now in [sourceTexture]; null before the first upload. */
     private var uploadedRetouches: List<Retouch>? = null
+    /**
+     * A RAW's noise reduction, from process 24, is the export's own ([RawNoiseReduction]), run on the CPU
+     * over the development and uploaded in its place: the preview shows what the export will write, and
+     * a slider moved anywhere else finds it ready, since nothing before it changes. In the editor it is
+     * worked out on [noiseWorker] while the last result stays on screen, and [onNoiseReady] asks for the
+     * frame that shows it; a frame drawn off screen, which must be right the first time, works it out on
+     * the spot ([synchronousNoise]).
+     */
+    @Volatile var onNoiseReady: (() -> Unit)? = null
+    var synchronousNoise = false
+    private val noiseWorker = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "imago-noise").apply { isDaemon = true } }
+    @Volatile private var noiseReady: Pair<List<Any>, FloatPixelBuffer>? = null
+    @Volatile private var noisePending: List<Any>? = null
+    /** The noise reduction now in [sourceTexture]; null when it holds the development without it. */
+    private var uploadedNoise: List<Any>? = null
     /** Visualize Spots: the map that takes the photo's place in [sourceTexture], and the sensitivity it was drawn at. */
     private val spotsView = SpotsView()
     private var uploadedSpots: Float? = null
@@ -220,10 +235,15 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         val source = bitmap ?: return
         val edited = if (showOriginal) parameters.original else parameters
         val spotsNow = spots
+        val developed = if (spotsNow == null) highPrecisionSource?.let { retouched.of(it, edited.retouches) } else null
+        val noiseKey = developed?.takeIf { it.linear && RawNoiseReduction.isActive(edited) }?.let { noiseKeyOf(edited, it) }
+        val denoised = if (noiseKey != null) denoisedFor(noiseKey, checkNotNull(developed), edited) else null
+        // A reduction still being worked out leaves the last one on screen until it is ready.
+        val noiseChanged = noiseKey != uploadedNoise && (noiseKey == null || denoised != null)
         // "Before" has no corrections: the texture goes back to the bare photo, and forward again after.
-        if (pendingUpload || edited.retouches != uploadedRetouches || spotsNow != uploadedSpots) {
+        if (pendingUpload || edited.retouches != uploadedRetouches || spotsNow != uploadedSpots || noiseChanged) {
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, sourceTexture)
-            val raw = if (spotsNow == null) highPrecisionSource?.let { retouched.of(it, edited.retouches) } else null
+            val raw = denoised ?: developed
             if (spotsNow != null) {
                 // The map is worked out on the GL thread, as the corrections are, and kept between sensitivities.
                 val map = spotsView.render(retouched.of(plainPixels(source), edited.retouches), spotsNow)
@@ -248,10 +268,16 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
             imageHeight = (if (spotsNow != null) spotsView.height else source.height).coerceAtLeast(1)
             uploadedRetouches = edited.retouches
             uploadedSpots = spotsNow
+            uploadedNoise = if (denoised != null) noiseKey else null
             pendingUpload = false
         }
-        // The map is drawn as it is, only framed: the photo's tones have nothing to say about it.
-        val active = if (spotsNow != null) edited.framing else edited
+        // The map is drawn as it is, only framed: the photo's tones have nothing to say about it. A RAW's
+        // noise is in the texture already, or about to be: step 10 does not run on top of it.
+        val active = when {
+            spotsNow != null -> edited.framing
+            noiseKey != null -> edited.copy(noiseLuminance = 0f, noiseColor = 0f)
+            else -> edited
+        }
 
         if (!ensureStage()) return
         val maskFields = if (active.needsMaskField) buildMaskField(active) else 0
@@ -262,6 +288,34 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         val detail = active.needsDetailStage && buildDetailPyramid(active)
         val sharpen = active.needsSharpenStage && buildSharpening(active)
         renderComposite(active, detail, sharpen, maskFields)
+    }
+
+    private fun noiseKeyOf(parameters: RenderParameters, source: FloatPixelBuffer): List<Any> = listOf(
+        parameters.noiseLuminance, parameters.noiseLuminanceDetail, parameters.noiseContrast,
+        parameters.noiseColor, parameters.noiseColorDetail, parameters.noiseColorSmoothness,
+        System.identityHashCode(source), System.identityHashCode(highPrecisionSource),
+    )
+
+    /** [source] without its noise for [key], when it is ready; otherwise null, and it is on its way. */
+    private fun denoisedFor(key: List<Any>, source: FloatPixelBuffer, parameters: RenderParameters): FloatPixelBuffer? {
+        noiseReady?.let { (ready, result) -> if (ready == key) return result }
+        val profileOf = highPrecisionSource ?: source
+        if (synchronousNoise) {
+            return RawNoiseReduction.apply(source, parameters, consume = false, profileOf = profileOf).also { noiseReady = key to it }
+        }
+        if (noisePending != key) {
+            noisePending = key
+            noiseWorker.execute {
+                // A slider still moving queues many; only the last one asked for is worked out.
+                if (noisePending != key) return@execute
+                val result = runCatching { RawNoiseReduction.apply(source, parameters, consume = false, profileOf = profileOf) }
+                    .onFailure { android.util.Log.w("imago-gl", "The noise reduction failed", it) }
+                    .getOrNull() ?: return@execute
+                noiseReady = key to result
+                onNoiseReady?.invoke()
+            }
+        }
+        return null
     }
 
     /**

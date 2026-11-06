@@ -1,5 +1,6 @@
 package eu.studio742.imago.core.render
 
+import java.util.stream.IntStream
 import kotlin.math.max
 import kotlin.math.min
 
@@ -139,54 +140,82 @@ internal class DetailPyramid private constructor(
             val radius = weights.lastIndex
             if (radius < 1 || width < 1 || height < 1) return
 
-            val line = FloatArray(width)
-            for (y in 0 until height) {
-                val base = y * width
-                System.arraycopy(data, base, line, 0, width)
-                for (x in 0 until width) {
-                    var total = line[x] * weights[0]
-                    for (offset in 1..radius) {
-                        total += (line[max(x - offset, 0)] + line[min(x + offset, width - 1)]) * weights[offset]
-                    }
-                    data[base + x] = total
+            // Rows are independent of each other, and the columns of the second pass too: each strip of
+            // columns runs on a core with a ring of its own, and the sums are the same, in the same order.
+            val rowsPerTask = 64
+            IntStream.range(0, (height + rowsPerTask - 1) / rowsPerTask).parallel().forEach { task ->
+                val line = FloatArray(width)
+                for (y in task * rowsPerTask until min((task + 1) * rowsPerTask, height)) {
+                    val base = y * width
+                    System.arraycopy(data, base, line, 0, width)
+                    blurLine(line, data, base, width, weights, radius)
                 }
             }
-
-            // The last row is kept because, from a certain point, the window only wants the replicated
-            // margin and by then the original row has already been replaced by the result.
-            val edge = FloatArray(width)
-            System.arraycopy(data, (height - 1) * width, edge, 0, width)
 
             val ringSize = radius * 2 + 1
-            val ring = FloatArray(ringSize * width)
-            for (index in -radius..radius) {
-                val sourceRow = index.coerceIn(0, height - 1)
-                System.arraycopy(data, sourceRow * width, ring, ringSlot(index, ringSize) * width, width)
-            }
+            val columns = BLUR_STRIP_COLUMNS
+            IntStream.range(0, (width + columns - 1) / columns).parallel().forEach { strip ->
+                val left = strip * columns
+                val stripWidth = min(columns, width - left)
+                // The last row is kept because, from a certain point, the window only wants the replicated
+                // margin and by then the original row has already been replaced by the result.
+                val edge = FloatArray(stripWidth)
+                System.arraycopy(data, (height - 1) * width + left, edge, 0, stripWidth)
 
-            val output = FloatArray(width)
-            for (y in 0 until height) {
-                for (x in 0 until width) {
-                    var total = ring[ringSlot(y, ringSize) * width + x] * weights[0]
-                    for (offset in 1..radius) {
-                        val above = ring[ringSlot(y - offset, ringSize) * width + x]
-                        val below = ring[ringSlot(y + offset, ringSize) * width + x]
-                        total += (above + below) * weights[offset]
-                    }
-                    output[x] = total
+                val ring = FloatArray(ringSize * stripWidth)
+                for (index in -radius..radius) {
+                    val sourceRow = index.coerceIn(0, height - 1)
+                    System.arraycopy(data, sourceRow * width + left, ring, ringSlot(index, ringSize) * stripWidth, stripWidth)
                 }
-                System.arraycopy(output, 0, data, y * width, width)
-                // The slot of `y - radius` is no longer needed and now hosts `y + radius + 1`, which is
-                // still to be written and so is still the original row.
-                val incoming = y + radius + 1
-                val slot = ringSlot(incoming, ringSize) * width
-                if (incoming < height) {
-                    System.arraycopy(data, incoming * width, ring, slot, width)
-                } else {
-                    System.arraycopy(edge, 0, ring, slot, width)
+
+                val slots = IntArray(ringSize)
+                for (y in 0 until height) {
+                    for (index in -radius..radius) slots[index + radius] = ringSlot(y + index, ringSize) * stripWidth
+                    val centre = slots[radius]
+                    val base = y * width + left
+                    for (x in 0 until stripWidth) {
+                        var total = ring[centre + x] * weights[0]
+                        for (offset in 1..radius) {
+                            total += (ring[slots[radius - offset] + x] + ring[slots[radius + offset] + x]) * weights[offset]
+                        }
+                        data[base + x] = total
+                    }
+                    // The slot of `y - radius` is no longer needed and now hosts `y + radius + 1`, which is
+                    // still to be written and so is still the original row.
+                    val incoming = y + radius + 1
+                    val slot = ringSlot(incoming, ringSize) * stripWidth
+                    if (incoming < height) {
+                        System.arraycopy(data, incoming * width + left, ring, slot, stripWidth)
+                    } else {
+                        System.arraycopy(edge, 0, ring, slot, stripWidth)
+                    }
                 }
             }
         }
+
+        /** One row of the Gaussian, from [line] into [out] at [base]: only the ends need their taps clamped. */
+        internal fun blurLine(line: FloatArray, out: FloatArray, base: Int, width: Int, weights: FloatArray, radius: Int) {
+            val first = weights[0]
+            val head = min(radius, width)
+            val tail = max(width - radius, head)
+            for (x in 0 until head) {
+                var total = line[x] * first
+                for (offset in 1..radius) total += (line[max(x - offset, 0)] + line[min(x + offset, width - 1)]) * weights[offset]
+                out[base + x] = total
+            }
+            for (x in head until tail) {
+                var total = line[x] * first
+                for (offset in 1..radius) total += (line[x - offset] + line[x + offset]) * weights[offset]
+                out[base + x] = total
+            }
+            for (x in tail until width) {
+                var total = line[x] * first
+                for (offset in 1..radius) total += (line[max(x - offset, 0)] + line[min(x + offset, width - 1)]) * weights[offset]
+                out[base + x] = total
+            }
+        }
+
+        private const val BLUR_STRIP_COLUMNS = 128
 
         private fun ringSlot(row: Int, ringSize: Int): Int = ((row % ringSize) + ringSize) % ringSize
 

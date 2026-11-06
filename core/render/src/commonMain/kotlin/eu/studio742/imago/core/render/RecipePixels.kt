@@ -48,7 +48,22 @@ object RecipePixels {
             else -> Retouching.apply(original, params.retouches)
         }
         // A copy made here for the corrections is this call's to consume; one the cache keeps is not.
-        val consume = if (source === original) consumeSource else retouched == null
+        var consume = if (source === original) consumeSource else retouched == null
+        // A RAW's noise goes before anything else reads it, on the development as it came; the copy a
+        // preview keeps between frames is not this call's to consume.
+        val rawNoise = source.linear && RawNoiseReduction.isActive(params)
+        val denoised = if (rawNoise) RawNoiseReduction.apply(source, params, consume, profileOf = original) else source
+        if (denoised !== source) consume = false
+        return renderPrepared(denoised, if (rawNoise) params.copy(noiseLuminance = 0f, noiseColor = 0f) else params, renderScale, brushes, consume)
+    }
+
+    private fun renderPrepared(
+        source: FloatPixelBuffer,
+        params: RenderParameters,
+        renderScale: Float,
+        brushes: BrushRasters?,
+        consume: Boolean,
+    ): FloatPixelBuffer {
         val rasters = brushes ?: BrushRasters.of(params, source)
         val frame = params.frameGeometry(source.width, source.height)
         val turns = params.normalizedQuarterTurns()
@@ -78,6 +93,7 @@ object RecipePixels {
         val width = (source.width * scale).roundToInt().coerceAtLeast(1)
         val height = (source.height * scale).roundToInt().coerceAtLeast(1)
         return FloatPixelBuffer(width, height, linear = source.linear).also { output ->
+            output.sourceScale = source.sourceScale * width / source.width
             IntStream.range(0, height).parallel().forEach { y ->
                 for (x in 0 until width) sampleFloat(source, (x + .5f) / scale - .5f, (y + .5f) / scale - .5f, output, (y * width + x) * 3)
             }

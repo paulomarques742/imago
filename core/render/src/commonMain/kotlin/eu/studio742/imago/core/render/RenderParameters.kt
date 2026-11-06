@@ -59,6 +59,12 @@ data class RenderParameters(
     val noiseColor: Float = 0f,
     val noiseColorDetail: Float = 50f,
     val noiseColorSmoothness: Float = 50f,
+    /**
+     * Which noise reduction the amounts drive: 1 is step 10 of process 21 ([NoiseReduction]), on the toned
+     * image; from process 24 a RAW is reduced before the tone ([RawNoiseReduction]). A source that is not
+     * linear keeps step 10 either way.
+     */
+    val noiseModel: Int = 1,
     /** Calibration, a RAW's own and from process 21: the shadows' tint, and each primary's hue and saturation. */
     val calibrationShadowsTint: Float = 0f,
     val calibrationRedHue: Float = 0f,
@@ -138,6 +144,18 @@ data class RenderParameters(
     val needsCalibration: Boolean
         get() = calibrationMatrix != null || calibrationShadowsTint != 0f
 
+    /** Every band of the HSL at 0, which leaves any colour as it is. */
+    val hslAtRest: Boolean = hslBands.all { it.hue == 0f && it.saturation == 0f && it.luminance == 0f }
+
+    /** The curves map every value to itself. */
+    val channelCurvesAtRest: Boolean by lazy {
+        val tables = channelToneCurves
+        (0 until CURVE_SAMPLE_COUNT).all { sample ->
+            val identity = sample / (CURVE_SAMPLE_COUNT - 1f)
+            (0..2).all { abs(tables[sample * 3 + it] - identity) < 1e-6f }
+        }
+    }
+
     val channelToneCurves: FloatArray by lazy {
         val tables = FloatArray(CURVE_SAMPLE_COUNT * 3)
         for (sample in 0 until CURVE_SAMPLE_COUNT) {
@@ -182,7 +200,9 @@ data class RenderParameters(
     // Either white balance model does nothing at 0, 0: which one it is says nothing about neutrality.
     // Nor does the profile, which only a linear RAW reads, and a linear source is always processed.
     val isNeutral: Boolean
-        get() = copy(lightWhiteBalance = true, rawProfile = RawProfile.NONE, rawExposure = 0f, highlightCeiling = 1f, wideHighlights = false) == RenderParameters()
+        get() = copy(lightWhiteBalance = true, rawProfile = RawProfile.NONE, rawExposure = 0f, highlightCeiling = 1f, wideHighlights = false,
+            // Which noise reduction the amounts drive says nothing while they are at 0.
+            noiseModel = 1) == RenderParameters()
 
     val isColorNeutral: Boolean
         get() = copy(
@@ -202,6 +222,7 @@ data class RenderParameters(
             wideHighlights = false,
             // Already in the pixels the processor is given.
             retouches = emptyList(),
+            noiseModel = 1,
         ) == RenderParameters()
 
     /**

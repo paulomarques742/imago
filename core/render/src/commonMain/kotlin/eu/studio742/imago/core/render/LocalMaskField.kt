@@ -2,6 +2,7 @@ package eu.studio742.imago.core.render
 
 import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.pow
 import eu.studio742.imago.core.model.MAX_LOCAL_MASKS
 import eu.studio742.imago.core.model.MaskShape
 
@@ -255,6 +256,17 @@ internal class EffectiveTone {
     private var matrixTemperature = Float.NaN
     private var matrixTint = Float.NaN
     private var matrix = FloatArray(9)
+    private var gainExposure = Float.NaN
+    private var gain = 1f
+
+    /** `2^exposure`, kept while the exposure repeats: without masks, for the whole photo. */
+    fun exposureGain(): Float {
+        if (exposure != gainExposure) {
+            gain = 2f.pow(exposure)
+            gainExposure = exposure
+        }
+        return gain
+    }
 
     /**
      * The white balance matrix for this pixel's Temperature and Tint. Kept while they repeat — the

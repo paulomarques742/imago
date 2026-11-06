@@ -33,7 +33,8 @@ class OffscreenRecipeRenderer(
     private val highPrecisionSource: FloatPixelBuffer? = null,
 ) : AutoCloseable {
     private val thread = Executors.newSingleThreadExecutor { Thread(it, "imago-offscreen-gl") }
-    private val renderer = PhotoRenderer()
+    // One frame read back must already have its noise reduction.
+    private val renderer = PhotoRenderer().apply { synchronousNoise = true }
     private var display: EGLDisplay = EGL14.EGL_NO_DISPLAY
     private var context: EGLContext = EGL14.EGL_NO_CONTEXT
     private var config: EGLConfig? = null

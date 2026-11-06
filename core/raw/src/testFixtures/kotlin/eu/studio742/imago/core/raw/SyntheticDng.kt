@@ -12,6 +12,7 @@ internal fun syntheticDng(
     monochrome: Boolean = false,
     warmWhiteBalance: Boolean = false,
     baselineExposure: Int? = null,
+    signedShortTags: Map<Int, IntArray> = emptyMap(),
 ): ByteArray {
     data class Tag(val id: Int, val type: Int, val count: Int, val data: ByteArray)
     fun shorts(vararg values: Int) = ByteBuffer.allocate(values.size * 2).order(ByteOrder.LITTLE_ENDIAN)
@@ -58,6 +59,8 @@ internal fun syntheticDng(
     tags += Tag(50721, 10, 9, longs(*matrix.flatMap { listOf(it, 1000000) }.toIntArray()))
     tags += Tag(50728, 5, 3, if (warmWhiteBalance) longs(1, 4, 1, 1, 1, 2) else longs(1, 1, 1, 1, 1, 1))
     baselineExposure?.let { tags += Tag(50730, 10, 1, longs(it, 1)) }
+    // SSHORT tags in IFD0, as a DNG converted from an ARW keeps Sony's lens corrections.
+    for ((id, values) in signedShortTags) tags += Tag(id, 8, values.size, shorts(*values))
     short(50778, 21)
     tags.sortBy { it.id }
     val directoryEnd = 8 + 2 + tags.size * 12 + 4

@@ -456,6 +456,7 @@ fun EditorRoute(
                 onPreset = viewModel::selectWhiteBalancePreset,
                 onProfile = viewModel::selectProfile,
                 onUpgradeDevelopment = viewModel::upgradeDevelopment,
+                onFileLensCorrection = viewModel::setFileLensCorrection,
             )
         },
         perspectiveActions = remember(viewModel) {
@@ -2746,6 +2747,14 @@ private fun AdjustmentPanel(
                                     modifier = Modifier.alpha(if (editingKey == null) 1f else 0f),
                                 )
                             }
+                            if (state.panel == EditorPanel.OPTICS && state.showsFileLensCorrection && recipe != null) {
+                                FileLensCorrectionRow(
+                                    checked = recipe.rawDevelopment?.lensCorrection == true,
+                                    working = state.isRedeveloping,
+                                    onCheckedChange = whiteBalanceActions.onFileLensCorrection,
+                                    modifier = Modifier.alpha(if (editingKey == null) 1f else 0f),
+                                )
+                            }
                             if (state.panel == EditorPanel.LIGHT && state.showsRawProfile && recipe != null) {
                                 ProfileRow(
                                     assetId = state.asset?.id,
@@ -3830,6 +3839,8 @@ data class WhiteBalancePickActions(
     val onProfile: (RawProfileChoice) -> Unit,
     /** Moves an old RAW edit to the current development. */
     val onUpgradeDevelopment: () -> Unit,
+    /** The lens corrections the RAW carries, at the top of the Optics panel. */
+    val onFileLensCorrection: (Boolean) -> Unit,
 )
 
 /** What the perspective sheet asks of the screen besides the sliders, which go the way of all others. */
@@ -3988,6 +3999,38 @@ private fun ConstrainCropRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+) = SwitchRow(
+    title = stringResource(Res.string.editor_constrain_crop),
+    hint = stringResource(Res.string.editor_constrain_crop_hint),
+    checked = checked,
+    onCheckedChange = onCheckedChange,
+    modifier = modifier,
+)
+
+/** The lens corrections the RAW carries, at the top of the Optics panel; a spinner while the photo develops again. */
+@Composable
+private fun FileLensCorrectionRow(
+    checked: Boolean,
+    working: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) = SwitchRow(
+    title = stringResource(Res.string.editor_file_lens_correction),
+    hint = stringResource(Res.string.editor_file_lens_correction_hint),
+    checked = checked,
+    onCheckedChange = onCheckedChange,
+    working = working,
+    modifier = modifier,
+)
+
+@Composable
+private fun SwitchRow(
+    title: String,
+    hint: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    working: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -4001,15 +4044,18 @@ private fun ConstrainCropRow(
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                text = stringResource(Res.string.editor_constrain_crop),
+                text = title,
                 style = MaterialTheme.typography.bodyMedium,
                 color = ImagoColors.TextPrimary,
             )
             Text(
-                text = stringResource(Res.string.editor_constrain_crop_hint),
+                text = hint,
                 style = MaterialTheme.typography.bodySmall,
                 color = ImagoColors.TextTertiary,
             )
+        }
+        if (working) {
+            CircularProgressIndicator(color = ImagoColors.Gold, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
         }
         // The row is the control: the switch only shows its state, so the touch is not counted twice.
         Switch(

@@ -3,6 +3,7 @@ package eu.studio742.imago.core.render
 import eu.studio742.imago.core.model.CropRect
 import eu.studio742.imago.core.model.CurvePoint
 import eu.studio742.imago.core.model.EditRecipe
+import eu.studio742.imago.core.model.RAW_NOISE_REDUCTION_PROCESS_VERSION
 import eu.studio742.imago.core.model.Geometry
 import eu.studio742.imago.core.model.LocalMask
 import eu.studio742.imago.core.model.BRUSH_MASKS_PROCESS_VERSION
@@ -110,6 +111,7 @@ fun EditRecipe.toRenderParameters(
     noiseColor = if (reducesNoise(processVersion)) detail.noiseReductionColor.coerceIn(0f, 100f) else 0f,
     noiseColorDetail = if (reducesNoise(processVersion) && detail.noiseReductionColor > 0f) detail.noiseReductionColorDetail.coerceIn(0f, 100f) else 50f,
     noiseColorSmoothness = if (reducesNoise(processVersion) && detail.noiseReductionColor > 0f) detail.noiseReductionColorSmoothness.coerceIn(0f, 100f) else 50f,
+    noiseModel = if (processVersion >= RAW_NOISE_REDUCTION_PROCESS_VERSION) RawNoiseReduction.RAW_NOISE_MODEL else 1,
     // Calibration is a RAW's: a JPEG has no camera primaries to move, and neither has a process before 21.
     calibrationShadowsTint = if (calibrates(processVersion, rawRendering)) calibration.shadowsTint.coerceIn(-100f, 100f) else 0f,
     calibrationRedHue = if (calibrates(processVersion, rawRendering)) calibration.redHue.coerceIn(-100f, 100f) else 0f,

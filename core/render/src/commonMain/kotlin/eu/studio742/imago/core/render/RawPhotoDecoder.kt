@@ -13,6 +13,7 @@ import eu.studio742.imago.core.model.RAW_INITIAL_SHARPEN_AMOUNT
 import eu.studio742.imago.core.model.rawHighlightMode
 import eu.studio742.imago.core.model.RAW_RENDERING_PROFILED
 import eu.studio742.imago.core.model.appliesBaselineExposure
+import eu.studio742.imago.core.model.appliesFileLensCorrection
 import eu.studio742.imago.core.model.rawRendering
 import eu.studio742.imago.core.raw.RawDecoder
 import java.io.File
@@ -24,9 +25,10 @@ internal val rawRecipeKey = Extras.Key<EditRecipe?>(null)
 
 /**
  * The develop of a RAW with no recipe, for [RecipeRenderCache]. Raised whenever what that develop does
- * changes — the engine's highlight mode, the profile, the first sharpening — so that old entries miss.
+ * changes — the engine's highlight mode, the profile, the first sharpening, the file's lens corrections —
+ * so that old entries miss.
  */
-const val RAW_DEFAULT_DEVELOPMENT_KEY = "default3"
+const val RAW_DEFAULT_DEVELOPMENT_KEY = "default5"
 
 /** A render read back from [RecipeRenderCache]; null when the bytes do not decode. */
 internal expect fun decodeRenderCacheBytes(bytes: ByteArray): coil3.Bitmap?
@@ -65,7 +67,13 @@ class RawPhotoDecoder private constructor(private val file: File, private val op
                 return DecodeResult(cached.asImage(), isSampled = true)
             }
         }
-        val raw = decodeRawPreview(file, side, recipe?.appliesBaselineExposure() ?: true, recipe?.rawHighlightMode() ?: CURRENT_RAW_HIGHLIGHT) ?: return null
+        val raw = decodeRawPreview(
+            file,
+            side,
+            recipe?.appliesBaselineExposure() ?: true,
+            recipe?.rawHighlightMode() ?: CURRENT_RAW_HIGHLIGHT,
+            recipe?.appliesFileLensCorrection() ?: true,
+        ) ?: return null
         // A photo the editor has not developed yet is matched to its camera's JPEG here, as the editor
         // will when it opens it; a developed one keeps the exposure its recipe recorded.
         val matched = if (recipe?.rawDevelopment == null && (recipe?.rawRendering() ?: CURRENT_RAW_RENDERING) >= RAW_RENDERING_PROFILED) {

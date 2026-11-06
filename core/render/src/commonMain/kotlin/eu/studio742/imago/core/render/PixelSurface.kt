@@ -39,22 +39,33 @@ class PixelBuffer(
 /**
  * Runs [band] over strips of rows that together cover the image.
  *
- * Only a [PixelBuffer] is split across cores: different rows are different zones of the same array.
- * Android's `Bitmap` does not promise concurrent writes, and export on the phone already runs off the
- * interface — there it stays a single strip, the whole image, as it always was.
+ * A [PixelBuffer] and a [FloatPixelBuffer] are split across cores: different rows are different zones of
+ * the same array. Android's `Bitmap` does not promise concurrent writes: a JPEG's export on the phone
+ * stays a single strip, the whole image, as it always was.
  */
 internal fun forEachRowBand(surface: PixelSurface, band: (fromRow: Int, untilRow: Int) -> Unit) {
-    if (!rowsRunInParallel(surface)) return band(0, surface.height)
-    val bands = minOf(Runtime.getRuntime().availableProcessors(), surface.height / MIN_ROWS_PER_BAND)
+    val bands = rowBands(surface)
+    if (bands.size == 1) return band(0, surface.height)
+    IntStream.range(0, bands.size).parallel().forEach { index -> band(bands[index].first, bands[index].last + 1) }
+}
+
+/** The strips [forEachRowBand] runs over. */
+internal fun rowBands(surface: PixelSurface): List<IntRange> {
+    if (!rowsRunInParallel(surface)) return listOf(0 until surface.height)
+    // Many more strips than cores: a phone's cores are not equal, and with one strip each the whole image
+    // waits for the slowest.
+    val bands = minOf(Runtime.getRuntime().availableProcessors() * STRIPS_PER_CORE, surface.height / MIN_ROWS_PER_BAND)
     val rows = (surface.height + bands - 1) / bands
-    IntStream.range(0, bands).parallel().forEach { index ->
-        val from = index * rows
-        if (from < surface.height) band(from, minOf(from + rows, surface.height))
-    }
+    return (0 until bands).map { it * rows }.filter { it < surface.height }.map { it until minOf(it + rows, surface.height) }
 }
 
 internal fun rowsRunInParallel(surface: PixelSurface): Boolean =
-    surface is PixelBuffer && Runtime.getRuntime().availableProcessors() > 1 && surface.height >= 2 * MIN_ROWS_PER_BAND
+    parallelRows && (surface is PixelBuffer || surface is FloatPixelBuffer) &&
+        Runtime.getRuntime().availableProcessors() > 1 && surface.height >= 2 * MIN_ROWS_PER_BAND
+
+/** Off for a test to compare the strips with one pass over the image. */
+internal var parallelRows = true
 
 /** Below this, splitting costs more than it saves. */
 private const val MIN_ROWS_PER_BAND = 32
+private const val STRIPS_PER_CORE = 6

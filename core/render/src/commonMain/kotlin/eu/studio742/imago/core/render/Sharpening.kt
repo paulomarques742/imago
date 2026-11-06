@@ -75,41 +75,55 @@ internal class SharpenField private constructor(private val delta: FloatArray, p
             val width = bitmap.width
             val height = bitmap.height
             val field = FloatArray(width * height)
-            val pixels = FloatArray(width * 4)
-            val scratch = IntArray(width)
-            for (y in 0 until height) {
-                bitmap.readRgbaRow(y, pixels, scratch)
-                val base = y * width
-                for (x in 0 until width) {
-                    field[base + x] = PhotoEffects.luminance(pixels[x * 4], pixels[x * 4 + 1], pixels[x * 4 + 2])
+            forEachRowBand(bitmap) { from, until ->
+                val pixels = FloatArray(width * 4)
+                val scratch = IntArray(width)
+                for (y in from until until) {
+                    bitmap.readRgbaRow(y, pixels, scratch)
+                    val base = y * width
+                    for (x in 0 until width) {
+                        field[base + x] = PhotoEffects.luminance(pixels[x * 4], pixels[x * 4 + 1], pixels[x * 4 + 2])
+                    }
                 }
             }
             DetailPyramid.blurInPlace(field, width, height, parameters.sharpenRadius)
 
-            var above = FloatArray(width)
-            var here = FloatArray(width)
-            for (y in 0 until height) {
-                val base = y * width
-                field.copyInto(here, 0, base, base + width)
-                if (y == 0) here.copyInto(above)
-                val below = min(y + 1, height - 1) * width
-                bitmap.readRgbaRow(y, pixels, scratch)
-                for (x in 0 until width) {
-                    val dx = here[min(x + 1, width - 1)] - here[max(x - 1, 0)]
-                    val dy = field[below + x] - above[x]
-                    val gradient = 0.5f * sqrt(dx * dx + dy * dy)
-                    field[base + x] = Sharpening.delta(
-                        luminance = PhotoEffects.luminance(pixels[x * 4], pixels[x * 4 + 1], pixels[x * 4 + 2]),
-                        blurred = here[x],
-                        gradient = gradient,
-                        amount = parameters.sharpenAmount,
-                        detail = parameters.sharpenDetail,
-                        masking = parameters.sharpenMasking,
-                    )
+            // The blur of the rows either side of each strip, kept before a neighbour turns them into deltas.
+            val edges = HashMap<Int, FloatArray>()
+            val strips = rowBands(bitmap)
+            if (strips.size > 1) for (strip in strips) for (row in listOf(strip.first - 1, strip.last + 1)) {
+                if (row in 0 until height && row !in edges) edges[row] = field.copyOfRange(row * width, (row + 1) * width)
+            }
+            forEachRowBand(bitmap) { from, until ->
+                val pixels = FloatArray(width * 4)
+                val scratch = IntArray(width)
+                var above = FloatArray(width)
+                var here = FloatArray(width)
+                if (from > 0) edges[from - 1]?.copyInto(above)
+                for (y in from until until) {
+                    val base = y * width
+                    field.copyInto(here, 0, base, base + width)
+                    if (y == 0) here.copyInto(above)
+                    val below = min(y + 1, height - 1)
+                    val keptBelow = if (below >= until) edges[below] else null
+                    bitmap.readRgbaRow(y, pixels, scratch)
+                    for (x in 0 until width) {
+                        val dx = here[min(x + 1, width - 1)] - here[max(x - 1, 0)]
+                        val dy = (if (keptBelow != null) keptBelow[x] else field[below * width + x]) - above[x]
+                        val gradient = 0.5f * sqrt(dx * dx + dy * dy)
+                        field[base + x] = Sharpening.delta(
+                            luminance = PhotoEffects.luminance(pixels[x * 4], pixels[x * 4 + 1], pixels[x * 4 + 2]),
+                            blurred = here[x],
+                            gradient = gradient,
+                            amount = parameters.sharpenAmount,
+                            detail = parameters.sharpenDetail,
+                            masking = parameters.sharpenMasking,
+                        )
+                    }
+                    val written = above
+                    above = here
+                    here = written
                 }
-                val written = above
-                above = here
-                here = written
             }
             return SharpenField(field, width)
         }

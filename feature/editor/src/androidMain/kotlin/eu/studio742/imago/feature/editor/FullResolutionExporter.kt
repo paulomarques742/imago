@@ -16,6 +16,7 @@ import eu.studio742.imago.core.data.ConfigurationRepository
 import eu.studio742.imago.core.immich.ImmichApi
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.appliesBaselineExposure
+import eu.studio742.imago.core.model.appliesFileLensCorrection
 import eu.studio742.imago.core.model.rawHighlightMode
 import eu.studio742.imago.core.model.Geometry
 import eu.studio742.imago.core.render.BitmapPhotoProcessor
@@ -56,7 +57,7 @@ class FullResolutionExporter @Inject constructor(
             onPhase(uiText(Res.string.editor_phase_decoding))
             val exif = runCatching { ExifInterface(source.absolutePath) }.getOrNull()
             requireRawEngine(recipe)
-            var raw = decodeRawPhoto(source, recipe.appliesBaselineExposure(), highlight = recipe.rawHighlightMode())
+            var raw = decodeRawPhoto(source, recipe.appliesBaselineExposure(), highlight = recipe.rawHighlightMode(), lensCorrection = recipe.appliesFileLensCorrection())
             if (raw != null) {
                 onPhase(uiText(Res.string.editor_phase_processing, raw.width, raw.height))
                 bitmap = withContext(Dispatchers.Default) { RecipePixels.render(checkNotNull(raw), recipe, consumeSource = true).toPlatformBitmap() }

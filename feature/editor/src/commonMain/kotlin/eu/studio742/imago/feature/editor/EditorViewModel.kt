@@ -5,6 +5,9 @@ import eu.studio742.imago.core.designsystem.i18n.appString
 import eu.studio742.imago.core.designsystem.i18n.uiText
 import eu.studio742.imago.core.designsystem.i18n.asUiText
 import eu.studio742.imago.core.designsystem.i18n.toUiText
+import eu.studio742.imago.core.model.diagnostics.DiagnosticArea
+import eu.studio742.imago.core.model.diagnostics.DiagnosticOperation
+import eu.studio742.imago.core.model.diagnostics.LocalDiagnostics
 import eu.studio742.imago.core.designsystem.i18n.LocalizedException
 import eu.studio742.imago.core.designsystem.i18n.resolveNow
 import eu.studio742.imago.feature.editor.resources.*
@@ -116,6 +119,7 @@ import eu.studio742.imago.core.render.LibraryRawEdits
 import eu.studio742.imago.core.render.createPhotoTempFile
 import eu.studio742.imago.core.render.toPlatformBitmap
 import eu.studio742.imago.core.model.appliesBaselineExposure
+import eu.studio742.imago.core.model.appliesFileLensCorrection
 import eu.studio742.imago.core.model.CURRENT_RAW_RENDERING
 import eu.studio742.imago.core.model.RAW_PROFILE_COLOR
 import eu.studio742.imago.core.model.RAW_PROFILE_MONOCHROME
@@ -629,6 +633,10 @@ data class EditorUiState(
     val recipeEdit: RecipeEditState? = null,
     /** The development is being redone for the new rendering. */
     val isUpgradingDevelopment: Boolean = false,
+    /** The RAW on screen carries its camera's lens corrections, whether or not they are applied. */
+    val fileLensCorrection: Boolean = false,
+    /** The original is being developed again for a change of its development, after undo or a switch. */
+    val isRedeveloping: Boolean = false,
     /** The saved recipe, read before the photo is: the editor shows the edit as the library does while it develops. */
     val placeholderRecipe: EditRecipe? = null,
     val error: UiText? = null,
@@ -639,6 +647,10 @@ data class EditorUiState(
      */
     val showsRawProfile: Boolean
         get() = highPrecisionSource?.linear == true && recipe?.let { it.rawRendering() >= RAW_RENDERING_PROFILED } == true
+
+    /** A RAW whose camera wrote its lens corrections into it: the switch that applies them. */
+    val showsFileLensCorrection: Boolean
+        get() = highPrecisionSource?.linear == true && fileLensCorrection && recipe?.rawDevelopment != null
 
     /** A RAW kept under an older development, with a newer one to move it to. */
     val canUpgradeDevelopment: Boolean
@@ -775,7 +787,7 @@ open class EditorViewModel(
     private var redevelopJob: Job? = null
 
     /** The rendering and engine the pixels on screen were decoded for. */
-    private var developedSource: Pair<Int, String>? = null
+    private var developedSource: DevelopedSource? = null
     private var conflictsJob: Job? = null
     private var saveJob: Job? = null
     private val geometryMirror = ImmichGeometryMirror(immichApi, configuration)
@@ -933,7 +945,8 @@ open class EditorViewModel(
                         val profiled = rendering.await() >= RAW_RENDERING_PROFILED
                         // A development already recorded keeps its exposure: nothing to measure.
                         loadPhoto(asset, profiled, measure = profiled && development.await()?.rawDevelopment == null,
-                            highlight = development.await()?.rawHighlightMode() ?: CURRENT_RAW_HIGHLIGHT)
+                            highlight = development.await()?.rawHighlightMode() ?: CURRENT_RAW_HIGHLIGHT,
+                            lensCorrection = development.await()?.appliesFileLensCorrection() ?: true)
                     }
                     val appliedParts = (target as? PhotoEditTarget.Recipe)?.source?.appliedParts ?: RecipePart.entries.toSet()
                     val now = Instant.now().toString()
@@ -965,7 +978,7 @@ open class EditorViewModel(
                 }
             }.onSuccess { (bitmap, recipe, existed) ->
                 shouldPersist = target is PhotoEditTarget.Asset && existed
-                developedSource = recipe.rawRendering() to recipe.rawEngine()
+                developedSource = DevelopedSource.of(recipe)
                 // The recipe the photo opens with is the history's zero point, whether or not it has
                 // adjustments from an earlier session: this is where "Delete all" goes back to.
                 history.reset(
@@ -984,6 +997,7 @@ open class EditorViewModel(
                         bitmap = bitmap.bitmap,
                         highPrecisionSource = bitmap.raw,
                         cameraLight = bitmap.light,
+                        fileLensCorrection = bitmap.fileLensCorrection,
                         recipe = recipe,
                         isLoading = false,
                         history = history.all,
@@ -1009,7 +1023,7 @@ open class EditorViewModel(
                 }
             }.onFailure { error ->
                 mutableState.update {
-                    it.copy(isLoading = false, error = error.toUiText(Res.string.editor_open_failed))
+                    it.copy(isLoading = false, error = error.toUiText(Res.string.editor_open_failed, DiagnosticArea.EDITOR, DiagnosticOperation.OPEN_PHOTO))
                 }
             }
         }
@@ -1022,10 +1036,14 @@ open class EditorViewModel(
         loadJob?.cancel()
         mutableState.update { it.copy(asset = target.asset, bitmap = null, highPrecisionSource = null, cameraLight = null, isLoading = true, error = null) }
         loadJob = viewModelScope.launch {
-            runCatching { loadPhoto(target.asset, state.value.recipe?.appliesBaselineExposure() ?: true, measure = false).bitmap }
+            runCatching {
+                val recipe = state.value.recipe
+                loadPhoto(target.asset, recipe?.appliesBaselineExposure() ?: true, measure = false,
+                    lensCorrection = recipe?.appliesFileLensCorrection() ?: true).bitmap
+            }
                 .onSuccess { bitmap -> mutableState.update { it.copy(bitmap = bitmap, isLoading = false) } }
                 .onFailure { error ->
-                    mutableState.update { it.copy(isLoading = false, error = error.toUiText(Res.string.editor_open_failed)) }
+                    mutableState.update { it.copy(isLoading = false, error = error.toUiText(Res.string.editor_open_failed, DiagnosticArea.EDITOR, DiagnosticOperation.OPEN_PHOTO)) }
                 }
         }
     }
@@ -1127,7 +1145,7 @@ open class EditorViewModel(
                     refreshSavedRecipes()
                     onDeleted()
                 }
-                .onFailure { error -> mutableState.update { it.copy(recipeNotice = error.toUiText()) } }
+                .onFailure { error -> mutableState.update { it.copy(recipeNotice = error.toUiText(area = DiagnosticArea.EDITOR, operation = DiagnosticOperation.RECIPE_LIBRARY)) } }
         }
     }
 
@@ -1143,7 +1161,7 @@ open class EditorViewModel(
                         )
                     }
                 }
-                .onFailure { error -> mutableState.update { it.copy(recipeNotice = error.toUiText()) } }
+                .onFailure { error -> mutableState.update { it.copy(recipeNotice = error.toUiText(area = DiagnosticArea.EDITOR, operation = DiagnosticOperation.RECIPE_LIBRARY)) } }
         }
     }
 
@@ -1281,6 +1299,38 @@ open class EditorViewModel(
     }
 
     /**
+     * The lens corrections the camera wrote into the RAW, on or off: part of the photo's development, so
+     * the original is developed again. A step of the history like any other.
+     */
+    fun setFileLensCorrection(enabled: Boolean) {
+        val current = state.value.recipe ?: return
+        val development = current.rawDevelopment ?: return
+        if (!state.value.showsFileLensCorrection || development.lensCorrection == enabled) return
+        finishAdjustment()
+        editStart = null
+        pendingChange = null
+        val updated = current.copy(
+            processVersion = CURRENT_PROCESS_VERSION,
+            geometry = current.geometry.activeAtProcess(current.processVersion),
+            rawDevelopment = development.copy(lensCorrection = enabled),
+            updatedAt = Instant.now().toString(),
+        )
+        setRecipeAndSave(updated)
+        pushHistory(
+            HistoryEntry(
+                id = UUID.randomUUID().toString(),
+                label = uiText(Res.string.editor_file_lens_correction),
+                detail = uiText(if (enabled) Res.string.editor_switch_on else Res.string.editor_switch_off),
+                valueText = null,
+                icon = HistoryIcon.RECIPE,
+                timestamp = Instant.now().toString(),
+                recipe = updated,
+            ),
+        )
+        redevelopIfNeeded(updated)
+    }
+
+    /**
      * Lightroom's white balance menu for a JPEG. As Shot is the photo as it came; Auto finds the light
      * on the photo, and is remembered as Auto so that the recipe finds it again on any other photo it
      * goes to; Custom keeps the values and lets go of Auto.
@@ -1393,7 +1443,11 @@ open class EditorViewModel(
             processVersion = CURRENT_PROCESS_VERSION,
             updatedAt = Instant.now().toString(),
         )
-        mutableState.update { it.copy(recipe = updated, isSaving = true) }
+        // The red hides the result being judged, so the first change of a mask slider turns it off;
+        // "Show mask" brings it back.
+        mutableState.update {
+            it.copy(recipe = updated, isSaving = true, maskOverlayPinned = it.maskOverlayPinned && maskId == null)
+        }
         scheduleSave(updated)
     }
 
@@ -2090,7 +2144,7 @@ open class EditorViewModel(
                     refreshSavedRecipes()
                     mutableState.update { it.copy(recipeNotice = uiText(Res.string.editor_recipe_saved)) }
                 }
-                .onFailure { error -> mutableState.update { it.copy(recipeNotice = error.toUiText()) } }
+                .onFailure { error -> mutableState.update { it.copy(recipeNotice = error.toUiText(area = DiagnosticArea.EDITOR, operation = DiagnosticOperation.RECIPE_LIBRARY)) } }
         }
     }
 
@@ -2107,7 +2161,7 @@ open class EditorViewModel(
         viewModelScope.launch {
             runCatching { savedRecipes.save(updated) }
                 .onSuccess { refreshSavedRecipes() }
-                .onFailure { error -> mutableState.update { it.copy(recipeNotice = error.toUiText()) } }
+                .onFailure { error -> mutableState.update { it.copy(recipeNotice = error.toUiText(area = DiagnosticArea.EDITOR, operation = DiagnosticOperation.RECIPE_LIBRARY)) } }
         }
     }
 
@@ -2119,7 +2173,7 @@ open class EditorViewModel(
                     refreshSavedRecipes()
                     mutableState.update { it.copy(recipeNotice = uiText(Res.string.editor_recipe_deleted, name)) }
                 }
-                .onFailure { error -> mutableState.update { it.copy(recipeNotice = error.toUiText()) } }
+                .onFailure { error -> mutableState.update { it.copy(recipeNotice = error.toUiText(area = DiagnosticArea.EDITOR, operation = DiagnosticOperation.RECIPE_LIBRARY)) } }
         }
     }
 
@@ -2155,19 +2209,26 @@ open class EditorViewModel(
     private fun redevelopIfNeeded(recipe: EditRecipe) {
         val asset = state.value.asset ?: return
         if (state.value.highPrecisionSource?.linear != true) return
-        val wanted = recipe.rawRendering() to recipe.rawEngine()
+        val wanted = DevelopedSource.of(recipe)
         if (wanted == developedSource) return
         developedSource = wanted
         redevelopJob?.cancel()
+        mutableState.update { it.copy(isRedeveloping = true) }
         redevelopJob = viewModelScope.launch {
             runCatching {
-                loadPhoto(asset, recipe.appliesBaselineExposure(), measure = false, highlight = recipe.rawHighlightMode())
+                loadPhoto(asset, recipe.appliesBaselineExposure(), measure = false, highlight = recipe.rawHighlightMode(),
+                    lensCorrection = recipe.appliesFileLensCorrection())
             }.onSuccess { loaded ->
                 mutableState.update {
-                    it.copy(bitmap = loaded.bitmap, highPrecisionSource = loaded.raw ?: it.highPrecisionSource, cameraLight = loaded.light ?: it.cameraLight)
+                    it.copy(bitmap = loaded.bitmap, highPrecisionSource = loaded.raw ?: it.highPrecisionSource, cameraLight = loaded.light ?: it.cameraLight,
+                        isRedeveloping = false)
                 }
             }.onFailure { error ->
-                mutableState.update { it.copy(recipeNotice = error.toUiText(Res.string.editor_open_failed)) }
+                // Replaced by a newer development, which says when it is done: nothing went wrong.
+                if (error is CancellationException) return@onFailure
+                mutableState.update {
+                    it.copy(isRedeveloping = false, recipeNotice = error.toUiText(Res.string.editor_open_failed, DiagnosticArea.EDITOR, DiagnosticOperation.READ_RECIPE))
+                }
             }
         }
     }
@@ -2187,7 +2248,8 @@ open class EditorViewModel(
         viewModelScope.launch {
             runCatching {
                 // Rendering 1 needs the original measured; from rendering 2 on, the exposure is already kept.
-                loadPhoto(asset, baselineExposure = true, measure = current.rawRendering() == RAW_RENDERING_LINEAR, highlight = CURRENT_RAW_HIGHLIGHT)
+                loadPhoto(asset, baselineExposure = true, measure = current.rawRendering() == RAW_RENDERING_LINEAR, highlight = CURRENT_RAW_HIGHLIGHT,
+                    lensCorrection = current.appliesFileLensCorrection())
             }.onSuccess { loaded ->
                 val latest = state.value.recipe ?: current
                 val upgraded = RawDevelopmentUpgrade.upgrade(latest, loaded.rawExposure, loaded.baselineExposure)
@@ -2196,7 +2258,7 @@ open class EditorViewModel(
                     return@onSuccess
                 }
                 val stamped = upgraded.copy(updatedAt = Instant.now().toString())
-                developedSource = stamped.rawRendering() to stamped.rawEngine()
+                developedSource = DevelopedSource.of(stamped)
                 mutableState.update {
                     it.copy(bitmap = loaded.bitmap, highPrecisionSource = loaded.raw, cameraLight = loaded.light ?: it.cameraLight, isUpgradingDevelopment = false)
                 }
@@ -2213,7 +2275,7 @@ open class EditorViewModel(
                     ),
                 )
             }.onFailure { error ->
-                mutableState.update { it.copy(isUpgradingDevelopment = false, recipeNotice = error.toUiText(Res.string.editor_open_failed)) }
+                mutableState.update { it.copy(isUpgradingDevelopment = false, recipeNotice = error.toUiText(Res.string.editor_open_failed, DiagnosticArea.EDITOR, DiagnosticOperation.READ_RECIPE)) }
             }
         }
     }
@@ -2232,6 +2294,11 @@ open class EditorViewModel(
             viewModelScope.launch {
                 runCatching { recipes.save(recipe) }
                     .onSuccess { mutableState.update { it.copy(isSaving = false) } }
+                    .onFailure { error ->
+                        if (error is CancellationException) throw error
+                        mutableState.update { it.copy(isSaving = false,
+                            error = error.toUiText(area = DiagnosticArea.EDITOR, operation = DiagnosticOperation.SAVE_RECIPE)) }
+                    }
             }
             keepServerRawEdit(recipe)
         }
@@ -2306,7 +2373,11 @@ open class EditorViewModel(
     }
 
     fun consumeExportResult() = mutableState.update { it.copy(exportMessage = null, exportError = null) }
-    fun reportExportError(message: UiText) = mutableState.update { it.copy(exportError = message) }
+    fun reportExportError(message: UiText) {
+        LocalDiagnostics.record(eu.studio742.imago.core.model.diagnostics.DiagnosticEvent(
+            DiagnosticArea.EXPORT, eu.studio742.imago.core.model.diagnostics.DiagnosticOutcome.PERMISSION, DiagnosticOperation.PHOTO_EXPORT))
+        mutableState.update { it.copy(exportError = message) }
+    }
 
     /**
      * [background]: the export carries on when the editor is left ([PhotoExports]), with a notification. A
@@ -2350,7 +2421,7 @@ open class EditorViewModel(
                     it.copy(
                         isExporting = false,
                         exportPhase = null,
-                        exportError = if (error is CancellationException) null else error.toUiText(Res.string.editor_export_failed),
+                        exportError = if (error is CancellationException) null else error.toUiText(Res.string.editor_export_failed, DiagnosticArea.EXPORT, DiagnosticOperation.PHOTO_EXPORT),
                     )
                 }
             }
@@ -3175,7 +3246,7 @@ open class EditorViewModel(
                 }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(isRecipeLibraryLoading = false, recipeNotice = error.toUiText())
+                        it.copy(isRecipeLibraryLoading = false, recipeNotice = error.toUiText(area = DiagnosticArea.EDITOR, operation = DiagnosticOperation.RECIPE_LIBRARY))
                     }
                 }
         }
@@ -3209,7 +3280,7 @@ open class EditorViewModel(
                 // a quick series of adjustments on a slow save (an Immich photo) showed an error.
                 throw cancelled
             } catch (error: Exception) {
-                mutableState.update { it.copy(error = error.toUiText(), isSaving = false) }
+                mutableState.update { it.copy(error = error.toUiText(area = DiagnosticArea.EDITOR, operation = DiagnosticOperation.SAVE_RECIPE), isSaving = false) }
             }
         }
     }
@@ -3246,25 +3317,41 @@ open class EditorViewModel(
         val rawExposure: Float = 0f,
         val light: CameraLight? = null,
         val baselineExposure: Float = 0f,
+        val fileLensCorrection: Boolean = false,
     )
+
+    /** What the pixels on screen were developed for: a recipe that wants otherwise is developed again. */
+    private data class DevelopedSource(val rendering: Int, val engine: String, val lensCorrection: Boolean) {
+        companion object {
+            fun of(recipe: EditRecipe) = DevelopedSource(recipe.rawRendering(), recipe.rawEngine(), recipe.appliesFileLensCorrection())
+        }
+    }
 
     /** The RAWs developed lately, for opening the same photo again without developing it again. */
     private val recentRaws get() = RecentRaws
 
     /** [baselineExposure] is the recipe's [appliesBaselineExposure]; a JPEG ignores it. */
-    private suspend fun loadPhoto(asset: EditorAsset, baselineExposure: Boolean, measure: Boolean = baselineExposure, highlight: Int = CURRENT_RAW_HIGHLIGHT): LoadedPhoto {
+    private suspend fun loadPhoto(
+        asset: EditorAsset,
+        baselineExposure: Boolean,
+        measure: Boolean = baselineExposure,
+        highlight: Int = CURRENT_RAW_HIGHLIGHT,
+        lensCorrection: Boolean = true,
+    ): LoadedPhoto {
         if (library != null && shouldInspectRawOriginal(asset.fileName)) {
-            val key = "${asset.id}|${asset.checksum}|$baselineExposure|$highlight|$measure"
+            val key = "${asset.id}|${asset.checksum}|$baselineExposure|$highlight|$measure|$lensCorrection"
             recentRaws.get(key)?.let { return it }
             val original = createPhotoTempFile(context)
             try {
                 library.downloadOriginal(asset.id, original)
-                val preview = decodeRawEditorPreview(original, maxSide = 2048, baselineExposure = baselineExposure, highlight = highlight)
+                val preview = decodeRawEditorPreview(original, maxSide = 2048, baselineExposure = baselineExposure, highlight = highlight,
+                    lensCorrection = lensCorrection)
                 val raw = preview?.pixels
                 if (raw != null) {
                     // Measured before the original is deleted; only a development made now uses it.
                     val matched = if (measure) CameraExposureMatch.of(original, raw) else 0f
-                    return LoadedPhoto(withContext(Dispatchers.Default) { raw.toPixelBuffer().toPlatformBitmap() }, raw, matched, preview.light, preview.baselineExposure)
+                    return LoadedPhoto(withContext(Dispatchers.Default) { raw.toPixelBuffer().toPlatformBitmap() }, raw, matched, preview.light,
+                        preview.baselineExposure, preview.fileLensCorrection)
                         .also { recentRaws.put(key, it) }
                 }
             } finally { original.delete() }

@@ -42,6 +42,26 @@ the developed values by 2^BaselineExposure when asked (`baselineExposure = true`
 value found in `RawImage.baselineExposure`. Whether to apply it is the recipe's choice: recipes from
 before process 20 were edited without it.
 
+## Lens corrections from the file
+
+Sony writes the corrections it applies to its own JPEG into the ARW: `DistortionCorrParams` (0x7037),
+`ChromaticAberrationCorrParams` (0x7035) and `VignettingCorrParams` (0x7032), each a count followed by
+signed 16-bit knots spaced evenly from the centre to the half-diagonal. LibRaw does not read them.
+`EmbeddedLensCorrection.read` finds them in IFD0 or its sub-IFDs without reading image data, using the
+scales of darktable's "embedded metadata" correction (version 2): distortion `1 + d·2⁻¹⁴`, aberration
+`1 + c·2⁻²¹` on top of it, vignetting gain `2^(½ − 2^(v·2⁻¹³ − 1))`, and the zoom that keeps the frame filled.
+
+`decode(..., lensCorrection = true)` applies them inside the native development, with no second image in
+memory: the aberration moves a Bayer sensor's red and blue sites before demosaicing, and the distortion and
+vignetting resample the camera channels while they are copied out. After demosaicing the aberration can no
+longer be taken out cleanly, because the interpolation borrows red's and blue's detail from green. A half-size
+development has no demosaicing, so there each channel is moved as it is copied out. On an
+ILCE-6700 ARW with a Tamron 18-300 at 18 mm, measured against the JPEG the file carries, the geometry
+residual went from 10.8 px to 1.0 px (at 2048 px) and the red and blue fringes from up to 2.6 px to under
+0.4 px (at full resolution). `RawImage.fileLensCorrection` says whether the file has them, applied or not.
+
+Other makers' tags (Fujifilm, OM/Olympus, Panasonic) are not read yet.
+
 ## Native builds
 
 Android uses the pinned NDK and CMake versions in `build.gradle.kts`, packaged through the render

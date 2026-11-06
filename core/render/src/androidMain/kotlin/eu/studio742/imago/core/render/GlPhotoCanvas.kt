@@ -39,6 +39,8 @@ fun GlPhotoCanvas(
     DisposableEffect(stage) { onDispose { stage.release() } }
     val shown = rememberUpdatedState(onFirstFrame)
     remember(stage) { stage.onFirstFrame = { shown.value() } }
+    // A RAW's noise reduction is worked out off the GL thread; when it is ready, a frame shows it.
+    remember(stage) { renderer.onNoiseReady = { stage.requestRender() } }
 
     AndroidView(
         modifier = modifier,

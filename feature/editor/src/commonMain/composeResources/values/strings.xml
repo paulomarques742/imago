@@ -104,6 +104,10 @@
     <string name="editor_panel_optics">Optics</string>
     <string name="editor_group_lens_vignette">Lens vignetting</string>
     <string name="editor_group_defringe">Defringe</string>
+    <string name="editor_file_lens_correction">Lens corrections from the file</string>
+    <string name="editor_file_lens_correction_hint">Distortion, chromatic aberration and vignetting, with the values the camera wrote into the file.</string>
+    <string name="editor_switch_on">On</string>
+    <string name="editor_switch_off">Off</string>
     <string name="editor_defringe_purple">Purple amount</string>
     <string name="editor_defringe_green">Green amount</string>
     <string name="editor_defringe_range">Hue range</string>

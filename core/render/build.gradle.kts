@@ -55,6 +55,8 @@ android {
         minSdk = 31
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    // Play Protect blocks a test APK left at the library's minSdk as an app for an old Android.
+    testOptions { targetSdk = 36 }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

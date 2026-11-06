@@ -104,6 +104,10 @@
     <string name="editor_panel_optics">Óptica</string>
     <string name="editor_group_lens_vignette">Vinhetagem da lente</string>
     <string name="editor_group_defringe">Franjas</string>
+    <string name="editor_file_lens_correction">Correcções da lente do ficheiro</string>
+    <string name="editor_file_lens_correction_hint">Distorção, aberração cromática e vinhetagem, com os valores que a câmara gravou no ficheiro.</string>
+    <string name="editor_switch_on">Ligado</string>
+    <string name="editor_switch_off">Desligado</string>
     <string name="editor_defringe_purple">Intensidade do roxo</string>
     <string name="editor_defringe_green">Intensidade do verde</string>
     <string name="editor_defringe_range">Intervalo de matiz</string>

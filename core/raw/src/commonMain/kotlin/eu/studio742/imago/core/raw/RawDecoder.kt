@@ -14,7 +14,10 @@ import java.util.concurrent.locks.ReentrantLock
  * [baselineExposure] is the DNG's BaselineExposure in stops, 0 when the file has none, whether or not
  * the decode applied it. [xyzToDeveloped] (row-major 3×3, up to a scale) takes a light's CIE XYZ to the
  * colour it has in this development, as-shot white balance included; null when the camera's colour
- * matrix is unknown or the sensor is monochrome.
+ * matrix is unknown or the sensor is monochrome. [fileLensCorrection] says whether the original carries
+ * the camera's lens corrections ([EmbeddedLensCorrection]), whether or not this development applied them.
+ * [fullWidth] and [fullHeight] are the full development's size, oriented as this one: a reduced decode
+ * says how far it is from the original, which is what pixel-sized filters are measured against.
  */
 class RawImage(
     val width: Int,
@@ -24,6 +27,9 @@ class RawImage(
     val cameraModel: String,
     val baselineExposure: Float = 0f,
     val xyzToDeveloped: FloatArray? = null,
+    val fileLensCorrection: Boolean = false,
+    val fullWidth: Int = width,
+    val fullHeight: Int = height,
 ) {
     init {
         require(width > 0 && height > 0)
@@ -55,11 +61,17 @@ object RawDecoder {
      * Native file I/O keeps large originals out of the JVM heap.
      *
      * [baselineExposure] scales the developed values by the DNG's BaselineExposure, which LibRaw only
-     * reads; whether to is the recipe's choice, not the decoder's.
+     * reads; whether to is the recipe's choice, not the decoder's. So is [lensCorrection]: the lens
+     * corrections the file carries ([EmbeddedLensCorrection]) are applied while the development is
+     * copied out, so that a full-resolution export needs no second image in memory.
      */
-    fun decode(file: File, halfSize: Boolean = false, baselineExposure: Boolean = false, highlight: Int = LEGACY_HIGHLIGHT): RawImage? {
-        return RawDecodeQueue.run { RawThreads.decode { NativeRaw.decode(file.absolutePath, halfSize, 0, baselineExposure, highlight) } }
-    }
+    fun decode(
+        file: File,
+        halfSize: Boolean = false,
+        baselineExposure: Boolean = false,
+        highlight: Int = LEGACY_HIGHLIGHT,
+        lensCorrection: Boolean = false,
+    ): RawImage? = develop(file, halfSize, 0, baselineExposure, highlight, lensCorrection)
 
     /**
      * The JPEG the camera rendered and stored inside the original, or null when the file has none
@@ -68,9 +80,23 @@ object RawDecoder {
     fun embeddedJpeg(file: File): ByteArray? = RawThreads.read { NativeRaw.embeddedJpeg(file.absolutePath) }
 
     /** Bounds the JVM buffer before allocation, retaining linear precision and highlight headroom. */
-    fun decodePreview(file: File, maxSide: Int, baselineExposure: Boolean = false, highlight: Int = LEGACY_HIGHLIGHT): RawImage? {
+    fun decodePreview(
+        file: File,
+        maxSide: Int,
+        baselineExposure: Boolean = false,
+        highlight: Int = LEGACY_HIGHLIGHT,
+        lensCorrection: Boolean = false,
+    ): RawImage? {
         require(maxSide > 0)
-        return RawDecodeQueue.run { RawThreads.decode { NativeRaw.decode(file.absolutePath, true, maxSide, baselineExposure, highlight) } }
+        return develop(file, true, maxSide, baselineExposure, highlight, lensCorrection)
+    }
+
+    private fun develop(file: File, halfSize: Boolean, maxSide: Int, baselineExposure: Boolean, highlight: Int, lensCorrection: Boolean): RawImage? {
+        val corrections = EmbeddedLensCorrection.read(file)
+        val table = if (lensCorrection) corrections?.table() else null
+        return RawDecodeQueue.run {
+            RawThreads.decode { NativeRaw.decode(file.absolutePath, halfSize, maxSide, baselineExposure, highlight, table, corrections != null) }
+        }
     }
 }
 
@@ -139,7 +165,15 @@ internal object NativeRaw {
     external fun cameras(): Array<String>
     external fun identify(path: String): RawInfo?
     external fun embeddedJpeg(path: String): ByteArray?
-    external fun decode(path: String, halfSize: Boolean, maxSide: Int, baselineExposure: Boolean, highlight: Int): RawImage?
+    external fun decode(
+        path: String,
+        halfSize: Boolean,
+        maxSide: Int,
+        baselineExposure: Boolean,
+        highlight: Int,
+        lensCorrection: FloatArray?,
+        fileLensCorrection: Boolean,
+    ): RawImage?
 }
 
 internal expect fun loadRawLibrary()

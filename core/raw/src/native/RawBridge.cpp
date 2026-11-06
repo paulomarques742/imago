@@ -5,11 +5,32 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <thread>
 
 namespace {
+// Runs fn(i) for every i below count on every core. The workers never touch the JVM: what needs JNI
+// happens between calls, on the caller's thread.
+template <class Fn> void parallelFor(int count, Fn fn) {
+    const int workers = std::min(static_cast<int>(std::max(1u, std::thread::hardware_concurrency())), count);
+    if (workers <= 1) {
+        for (int i = 0; i < count; ++i) fn(i);
+        return;
+    }
+    std::atomic<int> next{0};
+    auto run = [&]() {
+        for (int i = next.fetch_add(1); i < count; i = next.fetch_add(1)) fn(i);
+    };
+    std::vector<std::thread> pool;
+    pool.reserve(static_cast<size_t>(workers - 1));
+    for (int w = 1; w < workers; ++w) pool.emplace_back(run);
+    run();
+    for (auto &thread : pool) thread.join();
+}
+
 unsigned short halfFloat(float value) {
     uint32_t bits;
     std::memcpy(&bits, &value, sizeof(bits));
@@ -84,6 +105,125 @@ void cameraToXyz(const libraw_colordata_t &color, int colors, float out[4][3]) {
                 value += (calibrated ? dng.calibration[c][k] : (c == k ? 1.f : 0.f)) * dng.colormatrix[k][j];
             out[c][j] = value;
         }
+}
+
+// The file's lens corrections (EmbeddedLensCorrection.table): radial curves in fractions of the
+// half-diagonal. Each channel is sampled at its own radius, which is what takes the lateral
+// chromatic aberration away, and the vignetting gain is that of the point sampled.
+struct LensCorrection {
+    int knots = 0;
+    float knot[16] = {};
+    float distortionKnot[16] = {};
+    float factor[3][16] = {};
+    float gain[16] = {};
+    // Red and blue against green, before the zoom: the aberration alone, for the sensor's own sites.
+    float aberration[2][16] = {};
+
+    static float interpolate(const float *x, const float *y, int n, float at) {
+        if (at < x[0]) return y[0];
+        for (int i = 1; i < n; ++i)
+            if (at <= x[i]) return y[i - 1] + (at - x[i - 1]) * (y[i] - y[i - 1]) / (x[i] - x[i - 1]);
+        return y[n - 1];
+    }
+
+    // False when the table is not one EmbeddedLensCorrection writes.
+    bool read(JNIEnv *env, jfloatArray table, unsigned width, unsigned height) {
+        const jsize size = env->GetArrayLength(table);
+        if (size < 1) return false;
+        float count = 0.f;
+        env->GetFloatArrayRegion(table, 0, 1, &count);
+        knots = static_cast<int>(count);
+        if (knots < 2 || knots > 16 || size != 1 + knots * 5) return false;
+        std::vector<float> values(static_cast<size_t>(size));
+        env->GetFloatArrayRegion(table, 0, size, values.data());
+        for (int i = 0; i < knots; ++i) {
+            knot[i] = values[1 + i];
+            for (int c = 0; c < 3; ++c) factor[c][i] = values[1 + knots * (1 + c) + i];
+            gain[i] = std::max(values[1 + knots * 4 + i], 1e-4f);
+            if (!(factor[1][i] > 0.f)) return false;
+            aberration[0][i] = factor[0][i] / factor[1][i];
+            aberration[1][i] = factor[2][i] / factor[1][i];
+        }
+        for (int i = 1; i < knots; ++i) if (!(knot[i] > knot[i - 1])) return false;
+        // The zoom that keeps the frame filled, as EmbeddedLensCorrection.scale computes it.
+        const float shortSide = std::min(width, height) / std::hypot(static_cast<float>(width), static_cast<float>(height));
+        float scale = 0.f;
+        for (int i = 0; i < 200; ++i) {
+            const float radius = shortSide + (1.f - shortSide) * i / 199.f;
+            for (int c = 0; c < 3; ++c) scale = std::max(scale, interpolate(knot, factor[c], knots, radius));
+        }
+        if (!(scale > 0.5f && scale < 2.f)) return false;
+        for (int i = 0; i < knots; ++i) {
+            distortionKnot[i] = knot[i] * scale;
+            for (int c = 0; c < 3; ++c) factor[c][i] /= scale;
+        }
+        return true;
+    }
+
+    float sampled(int channel, float radius) const { return interpolate(distortionKnot, factor[channel], knots, radius); }
+    float gainAt(float radius) const { return interpolate(knot, gain, knots, radius); }
+    float aberrationAt(bool blue, float radius) const { return interpolate(knot, aberration[blue ? 1 : 0], knots, radius); }
+};
+
+// Rows worked on at a time: enough for every core, and few enough to answer a cancellation in time.
+constexpr unsigned ROW_BLOCK = 128;
+
+// Takes the lateral chromatic aberration out of a Bayer sensor before demosaicing: each red and blue
+// site takes its value from where its colour landed, read from the sites of that colour. After
+// demosaicing it is too late: the interpolation borrows the detail of red and blue from green, so the
+// edges are half aligned already and moving the channels then overcorrects the detail. False when the
+// sensor is not a 2×2 Bayer pattern, and nothing is changed.
+bool correctBayerAberration(LibRaw &decoder, const LensCorrection &lens, Cancellation &cancel) {
+    auto &sizes = decoder.imgdata.sizes;
+    auto *raw = decoder.imgdata.rawdata.raw_image;
+    const auto filters = decoder.imgdata.idata.filters;
+    if (!raw || filters < 1000 || sizes.width < 4 || sizes.height < 4) return false;
+    int colour[2][2];
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 2; ++x) {
+            const int c = decoder.COLOR(y, x);
+            if (c < 0 || c > 3) return false;
+            const char name = decoder.imgdata.idata.cdesc[c];
+            colour[y][x] = name == 'R' ? 0 : name == 'B' ? 2 : 1;
+            for (int dy = 0; dy < 8; dy += 2)
+                for (int dx = 0; dx < 8; dx += 2)
+                    if (decoder.COLOR(y + dy, x + dx) != c) return false;
+        }
+    const unsigned width = sizes.width, height = sizes.height;
+    const size_t pitch = sizes.raw_pitch / 2;
+    unsigned short *visible = raw + static_cast<size_t>(sizes.top_margin) * pitch + sizes.left_margin;
+    std::vector<unsigned short> original(static_cast<size_t>(width) * height);
+    for (unsigned y = 0; y < height; ++y)
+        std::memcpy(&original[static_cast<size_t>(y) * width], visible + y * pitch, width * sizeof(unsigned short));
+    const float centreX = width / 2.f, centreY = height / 2.f;
+    const float inverseDiagonal = 1.f / std::hypot(centreX, centreY);
+    auto correctRow = [&](unsigned y) {
+        const unsigned py = y & 1;
+        for (unsigned x = 0; x < width; ++x) {
+            const unsigned px = x & 1;
+            const int c = colour[py][px];
+            if (c == 1) continue;
+            const float dx = x + .5f - centreX, dy = y + .5f - centreY;
+            const float ratio = lens.aberrationAt(c == 2, std::hypot(dx, dy) * inverseDiagonal);
+            // The same colour's lattice, every other site in each direction.
+            const float u = std::clamp((centreX + dx * ratio - .5f - px) / 2.f, 0.f, (width - 1 - px) / 2.f);
+            const float v = std::clamp((centreY + dy * ratio - .5f - py) / 2.f, 0.f, (height - 1 - py) / 2.f);
+            const auto i0 = static_cast<unsigned>(u), j0 = static_cast<unsigned>(v);
+            const unsigned i1 = std::min(i0 + 1, (width - 1 - px) / 2), j1 = std::min(j0 + 1, (height - 1 - py) / 2);
+            const float fu = u - i0, fv = v - j0;
+            auto at = [&](unsigned i, unsigned j) {
+                return static_cast<float>(original[static_cast<size_t>(py + 2 * j) * width + px + 2 * i]);
+            };
+            const float value = (at(i0, j0) * (1.f - fu) + at(i1, j0) * fu) * (1.f - fv) + (at(i0, j1) * (1.f - fu) + at(i1, j1) * fu) * fv;
+            visible[y * pitch + x] = static_cast<unsigned short>(std::clamp(value + .5f, 0.f, 65535.f));
+        }
+    };
+    for (unsigned from = 0; from < height; from += ROW_BLOCK) {
+        if (progress(&cancel, LIBRAW_PROGRESS_RAW2_IMAGE, from, height)) return false;
+        const int rows = static_cast<int>(std::min(ROW_BLOCK, height - from));
+        parallelFor(rows, [&](int i) { correctRow(from + static_cast<unsigned>(i)); });
+    }
+    return true;
 }
 
 int openPath(JNIEnv *env, LibRaw &decoder, jstring path) {
@@ -174,7 +314,7 @@ Java_eu_studio742_imago_core_raw_NativeRaw_embeddedJpeg(JNIEnv *env, jobject, js
 
 extern "C" JNIEXPORT jobject JNICALL
 Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring path, jboolean halfSize, jint maxSide,
-    jboolean baselineExposure, jint highlight) {
+    jboolean baselineExposure, jint highlight, jfloatArray lensTable, jboolean fileLensCorrection) {
     try {
         LibRaw decoder;
         auto threadClass = env->FindClass("java/lang/Thread");
@@ -200,6 +340,17 @@ Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring 
         params.adjust_maximum_thr = 0;
         params.half_size = halfSize ? 1 : 0;
         code = decoder.unpack();
+        LensCorrection lens;
+        bool corrected = false;
+        bool bayerCorrected = false;
+        if (code == LIBRAW_SUCCESS && lensTable) {
+            corrected = lens.read(env, lensTable, decoder.imgdata.sizes.width, decoder.imgdata.sizes.height);
+            if (env->ExceptionCheck()) return nullptr;
+            // At half size there is no demosaicing: each channel comes straight from its own sites, and
+            // moving the channels as they are copied out is exact, for a fraction of the work.
+            if (corrected && !halfSize) bayerCorrected = correctBayerAberration(decoder, lens, cancel);
+            if (progress(&cancel, LIBRAW_PROGRESS_RAW2_IMAGE, 1, 1)) { failure(env, LIBRAW_CANCELLED_BY_CALLBACK); return nullptr; }
+        }
         if (code == LIBRAW_SUCCESS) code = decoder.dcraw_process();
         if (code != LIBRAW_SUCCESS) { failure(env, code); return nullptr; }
         std::unique_ptr<libraw_processed_image_t, decltype(&LibRaw::dcraw_clear_mem)> image(
@@ -233,7 +384,6 @@ Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring 
         const float foundBaseline = std::isfinite(baseline) && baseline > -100.f ? std::clamp(baseline, -10.f, 10.f) : 0.f;
         const float exposure = baselineExposure ? std::exp2(foundBaseline) : 1.f;
         const float normalization = exposure / (65535.f * minGain);
-        std::vector<jshort> row(static_cast<size_t>(width) * 3);
         const auto source = reinterpret_cast<const unsigned short *>(image->data);
         auto channel = [&](unsigned x, unsigned y, unsigned c) {
             const auto pixel = source + (static_cast<size_t>(y) * image->width + x) * image->colors;
@@ -243,30 +393,103 @@ Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring 
                 value += color.rgb_cam[c][cameraChannel] * pixel[cameraChannel];
             return value * normalization;
         };
-        for (unsigned y = 0; y < height; ++y) {
-            if (progress(&cancel, LIBRAW_PROGRESS_CONVERT_RGB, y, height)) {
-                failure(env, LIBRAW_CANCELLED_BY_CALLBACK); return nullptr;
-            }
+        // Sample scene-linear channels before FP16 storage, never an embedded JPEG.
+        auto bilinear = [&](float centreX, float centreY, unsigned c) {
+            const float sx = std::clamp(centreX - .5f, 0.f, image->width - 1.f);
+            const float sy = std::clamp(centreY - .5f, 0.f, image->height - 1.f);
+            const auto x0 = static_cast<unsigned>(sx), y0 = static_cast<unsigned>(sy);
+            const auto x1 = std::min(x0 + 1, image->width - 1u), y1 = std::min(y0 + 1, image->height - 1u);
+            const float fx = sx - x0, fy = sy - y0;
+            const float top = channel(x0, y0, c) * (1.f - fx) + channel(x1, y0, c) * fx;
+            const float bottom = channel(x0, y1, c) * (1.f - fx) + channel(x1, y1, c) * fx;
+            return top * (1.f - fy) + bottom * fy;
+        };
+        // The lens bent the camera's own channels, so they are corrected before the matrix to sRGB
+        // mixes them: done after it, the blue that the matrix builds from camera blue minus green
+        // moves by more than the camera's blue did, and the aberration stays.
+        auto cameraBilinear = [&](float centreX, float centreY, unsigned k) {
+            const float sx = std::clamp(centreX - .5f, 0.f, image->width - 1.f);
+            const float sy = std::clamp(centreY - .5f, 0.f, image->height - 1.f);
+            const auto x0 = static_cast<unsigned>(sx), y0 = static_cast<unsigned>(sy);
+            const auto x1 = std::min(x0 + 1, image->width - 1u), y1 = std::min(y0 + 1, image->height - 1u);
+            const float fx = sx - x0, fy = sy - y0;
+            auto at = [&](unsigned x, unsigned y) {
+                return static_cast<float>(source[(static_cast<size_t>(y) * image->width + x) * image->colors + k]);
+            };
+            const float top = at(x0, y0) * (1.f - fx) + at(x1, y0) * fx;
+            const float bottom = at(x0, y1) * (1.f - fx) + at(x1, y1) * fx;
+            return top * (1.f - fy) + bottom * fy;
+        };
+        // Which of the lens's curves each camera channel follows: red and blue their own, the rest green's,
+        // and all of them green's once the sensor's sites were corrected.
+        int lensChannel[4] = {1, 1, 1, 1};
+        for (unsigned k = 0; k < image->colors && image->colors > 1 && !bayerCorrected; ++k) {
+            const char name = decoder.imgdata.idata.cdesc[k];
+            lensChannel[k] = name == 'R' ? 0 : name == 'B' ? 2 : 1;
+        }
+        const float halfWidth = image->width / 2.f, halfHeight = image->height / 2.f;
+        const float inverseDiagonal = 1.f / std::hypot(halfWidth, halfHeight);
+        auto convertRow = [&](unsigned y, jshort *row) {
+            float camera[4] = {};
             for (unsigned x = 0; x < width; ++x) {
-                for (unsigned c = 0; c < 3; ++c) {
-                    float value;
-                    if (scale == 1.f) {
-                        value = channel(x, y, c);
-                    } else {
-                        // Sample scene-linear channels before FP16 storage, never an embedded JPEG.
-                        const float sx = std::clamp((x + .5f) / scale - .5f, 0.f, image->width - 1.f);
-                        const float sy = std::clamp((y + .5f) / scale - .5f, 0.f, image->height - 1.f);
+                const float px = (x + .5f) / scale, py = (y + .5f) / scale;
+                if (corrected) {
+                    // A point of the corrected frame comes from the original along its radius, each
+                    // channel at its own distance; the gain is the vignetting at the point it came from.
+                    const float dx = px - halfWidth, dy = py - halfHeight;
+                    const float radius = std::hypot(dx, dy) * inverseDiagonal;
+                    if (bayerCorrected || image->colors == 1) {
+                        // One position for every channel: the weights and the gain are worked out once.
+                        const float f = lens.sampled(1, radius);
+                        const float gain = lens.gainAt(radius * f);
+                        const float sx = std::clamp(halfWidth + dx * f - .5f, 0.f, image->width - 1.f);
+                        const float sy = std::clamp(halfHeight + dy * f - .5f, 0.f, image->height - 1.f);
                         const auto x0 = static_cast<unsigned>(sx), y0 = static_cast<unsigned>(sy);
                         const auto x1 = std::min(x0 + 1, image->width - 1u), y1 = std::min(y0 + 1, image->height - 1u);
                         const float fx = sx - x0, fy = sy - y0;
-                        const float top = channel(x0, y0, c) * (1.f - fx) + channel(x1, y0, c) * fx;
-                        const float bottom = channel(x0, y1, c) * (1.f - fx) + channel(x1, y1, c) * fx;
-                        value = top * (1.f - fy) + bottom * fy;
+                        const float w00 = (1.f - fx) * (1.f - fy) / gain, w10 = fx * (1.f - fy) / gain;
+                        const float w01 = (1.f - fx) * fy / gain, w11 = fx * fy / gain;
+                        const auto p00 = source + (static_cast<size_t>(y0) * image->width + x0) * image->colors;
+                        const auto p10 = source + (static_cast<size_t>(y0) * image->width + x1) * image->colors;
+                        const auto p01 = source + (static_cast<size_t>(y1) * image->width + x0) * image->colors;
+                        const auto p11 = source + (static_cast<size_t>(y1) * image->width + x1) * image->colors;
+                        for (unsigned k = 0; k < image->colors; ++k)
+                            camera[k] = p00[k] * w00 + p10[k] * w10 + p01[k] * w01 + p11[k] * w11;
+                    } else {
+                        for (unsigned k = 0; k < image->colors; ++k) {
+                            const float f = lens.sampled(lensChannel[k], radius);
+                            camera[k] = cameraBilinear(halfWidth + dx * f, halfHeight + dy * f, k) / lens.gainAt(radius * f);
+                        }
                     }
+                    for (unsigned c = 0; c < 3; ++c) {
+                        float value;
+                        if (image->colors == 1) {
+                            value = camera[0] * exposure / 65535.f;
+                        } else {
+                            value = 0.f;
+                            for (unsigned k = 0; k < image->colors; ++k) value += color.rgb_cam[c][k] * camera[k];
+                            value *= normalization;
+                        }
+                        row[x * 3 + c] = static_cast<jshort>(halfFloat(value));
+                    }
+                    continue;
+                }
+                for (unsigned c = 0; c < 3; ++c) {
+                    const float value = scale == 1.f ? channel(x, y, c) : bilinear(px, py, c);
                     row[x * 3 + c] = static_cast<jshort>(halfFloat(value));
                 }
             }
-            env->SetShortArrayRegion(pixels, static_cast<jsize>(y * row.size()), static_cast<jsize>(row.size()), row.data());
+        };
+        // A block of rows on every core, then into the array and a look at the cancellation, on this thread.
+        const size_t rowSize = static_cast<size_t>(width) * 3;
+        std::vector<jshort> block(rowSize * ROW_BLOCK);
+        for (unsigned from = 0; from < height; from += ROW_BLOCK) {
+            if (progress(&cancel, LIBRAW_PROGRESS_CONVERT_RGB, from, height)) {
+                failure(env, LIBRAW_CANCELLED_BY_CALLBACK); return nullptr;
+            }
+            const unsigned rows = std::min(ROW_BLOCK, height - from);
+            parallelFor(static_cast<int>(rows), [&](int i) { convertRow(from + static_cast<unsigned>(i), block.data() + rowSize * static_cast<size_t>(i)); });
+            env->SetShortArrayRegion(pixels, static_cast<jsize>(from * rowSize), static_cast<jsize>(rows * rowSize), block.data());
             if (env->ExceptionCheck()) return nullptr;
         }
         // A light's XYZ to the colour it takes in this development: the camera's response (cam_xyz),
@@ -297,10 +520,15 @@ Java_eu_studio742_imago_core_raw_NativeRaw_decode(JNIEnv *env, jobject, jstring 
             }
         }
         auto cls = env->FindClass("eu/studio742/imago/core/raw/RawImage");
-        auto ctor = env->GetMethodID(cls, "<init>", "(II[SLjava/lang/String;Ljava/lang/String;F[F)V");
+        // The full development's size, oriented as this one: a half-size decode is half of it.
+        const auto &sizes = decoder.imgdata.sizes;
+        const bool turned = (sizes.flip & 4) != 0;
+        const jint fullWidth = static_cast<jint>(turned ? sizes.height : sizes.width);
+        const jint fullHeight = static_cast<jint>(turned ? sizes.width : sizes.height);
+        auto ctor = env->GetMethodID(cls, "<init>", "(II[SLjava/lang/String;Ljava/lang/String;F[FZII)V");
         return env->NewObject(cls, ctor, static_cast<jint>(width), static_cast<jint>(height), pixels,
             env->NewStringUTF(decoder.imgdata.idata.make), env->NewStringUTF(decoder.imgdata.idata.model),
-            static_cast<jfloat>(foundBaseline), xyzToDeveloped);
+            static_cast<jfloat>(foundBaseline), xyzToDeveloped, fileLensCorrection, fullWidth, fullHeight);
     } catch (const std::bad_alloc &) {
         env->ThrowNew(env->FindClass("java/lang/OutOfMemoryError"), "Not enough memory to decode the RAW image.");
     } catch (...) {

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- A 26 MP development needs the heap the app has. -->
+    <application android:largeHeap="true" />
+</manifest>
