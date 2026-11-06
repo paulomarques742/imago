@@ -77,17 +77,17 @@ class ComposerGridInteractionUiTest {
     private var pickerTarget: MediaPickerTarget? = null
     private var picked: ((List<ComposerMedia>) -> Unit)? = null
     private var dismiss: (() -> Unit)? = null
-    @Composable private fun screen(vm: ComposerEditorViewModel) {
+    @Composable private fun screen(vm: ComposerEditorViewModel, width: Int = 420, height: Int = 800) {
         gridLabel = stringResource(Res.string.composer_grid); addLabel = stringResource(Res.string.composer_add_elements)
         cancelLabel = stringResource(Res.string.composer_cancel)
         gridAddLabel = stringResource(Res.string.composer_grid_add_elements)
         ImagoTheme {
-            CompositionLocalProvider(LocalImagoWindow provides ImagoWindow(ImagoBreakpoints.classify(420.dp), 420.dp, 800.dp),
+            CompositionLocalProvider(LocalImagoWindow provides ImagoWindow(ImagoBreakpoints.classify(width.dp), width.dp, height.dp),
                 LocalHapticFeedback provides feedback, LocalComposerMediaPicker provides { target, onDismiss, onPicked ->
                     pickerTarget = target; picked = onPicked; dismiss = onDismiss
                     Surface(Modifier.fillMaxSize().testTag("sample-media-picker")) {}
                 }) {
-                Box(Modifier.size(420.dp, 800.dp).testTag("grid-interaction-review")) {
+                Box(Modifier.size(width.dp, height.dp).testTag("grid-interaction-review")) {
                     ComposerEditorScreen(vm.state.collectAsState().value, remember { SnackbarHostState() }, {}, vm, null, {})
                 }
             }
@@ -120,11 +120,18 @@ class ComposerGridInteractionUiTest {
         vm.undo(); assertEquals(before.elements, vm.state.value.project!!.elements)
     }
 
-    @Test(timeout = 30_000) fun `double tap on an unselected grid opens its editor instead of framing a member`() = runComposeUiTest {
+    @Test(timeout = 30_000) fun `double tap on an unselected grid opens a full screen stage without the modal or group selection`() = runComposeUiTest {
         val vm = model(); vm.grid(); vm.clearSelection()
         setContent { screen(vm) }
         onNodeWithTag("composer_element_a").performTouchInput { doubleClick() }
-        onNodeWithTag("composer-grid-dialog").assertIsDisplayed()
+        onNodeWithTag("composer-grid-editor").assertIsDisplayed()
+        onNodeWithTag("composer-grid-dialog").assertDoesNotExist()
+        onNodeWithTag("composer-multiselection-hint").assertDoesNotExist()
+        assertEquals(onNodeWithTag("grid-interaction-review").fetchSemanticsNode().boundsInRoot,
+            onNodeWithTag("composer-grid-editor").fetchSemanticsNode().boundsInRoot)
+        assertTrue(onNodeWithTag("grid-preview").fetchSemanticsNode().boundsInRoot.height > 550f)
+        assertFalse(vm.state.value.multiSelect)
+        assertNull(vm.state.value.editingGroupId)
         assertNotNull(vm.state.value.gridEditor)
     }
 
@@ -136,7 +143,10 @@ class ComposerGridInteractionUiTest {
         val to = onNodeWithTag("grid-cell-b").fetchSemanticsNode().boundsInRoot.center - preview.topLeft
         onNodeWithTag("grid-preview").performTouchInput { down(from); advanceEventTime(650); moveTo((from + to) / 2f) }
         onNodeWithTag("grid-swap-feedback").assertIsDisplayed()
-        capture(onNodeWithTag("composer-grid-dialog"), "grid-photo-swap-drag.png")
+        onNodeWithTag("composer-multiselection-hint").assertDoesNotExist()
+        assertFalse(vm.state.value.multiSelect)
+        assertNull(vm.state.value.editingGroupId)
+        capture(onNodeWithTag("composer-grid-editor"), "grid-photo-swap-drag.png")
         onNodeWithTag("grid-preview").performTouchInput { moveTo(to); up() }
         assertTrue(haptics.contains(HapticFeedbackType.LongPress))
         assertEquals(before.layouts.single().root.memberIds().reversed(), vm.state.value.gridEditor!!.layout.root.memberIds())
@@ -147,13 +157,13 @@ class ComposerGridInteractionUiTest {
     @Test(timeout = 30_000) fun `grid editor adds chosen media provisionally and picker cancellation retains the draft`() = runComposeUiTest {
         val vm = model(); val group = vm.grid(); val before = vm.state.value.project!!; vm.openGrid(group)
         setContent { screen(vm) }
-        onNodeWithTag("grid-add-elements").performScrollTo().performClick()
+        onNodeWithTag("grid-add-elements").performClick()
         onNodeWithTag("sample-media-picker").assertIsDisplayed()
         assertEquals(MediaPickerTarget.Grid(group, draft = true), pickerTarget)
-        runOnIdle { dismiss!!.invoke() }; onNodeWithTag("composer-grid-dialog").assertIsDisplayed()
-        onNodeWithTag("grid-add-elements").performScrollTo().performClick()
+        runOnIdle { dismiss!!.invoke() }; onNodeWithTag("composer-grid-editor").assertIsDisplayed()
+        onNodeWithTag("grid-add-elements").performClick()
         runOnIdle { picked!!.invoke(listOf(incoming("c"))) }
-        onNodeWithTag("composer-grid-dialog").assertIsDisplayed()
+        onNodeWithTag("composer-grid-editor").assertIsDisplayed()
         assertEquals(3, vm.state.value.gridEditor!!.layout.root.memberIds().size)
         assertEquals(before, vm.state.value.project)
         onNodeWithTag("grid-confirm").performClick()
@@ -171,6 +181,42 @@ class ComposerGridInteractionUiTest {
         onNodeWithTag("grid-preview").performTouchInput { down(from); advanceEventTime(650); moveTo(Offset(-10f, -10f)); up() }
         assertEquals(before, vm.state.value.gridEditor)
         onNodeWithTag("grid-swap-feedback").assertDoesNotExist()
+    }
+
+    @Test(timeout = 30_000) fun `holding a cell without dragging never enters multi selection and pinch navigates only the editing stage`() = runComposeUiTest {
+        val vm = model(); val group = vm.grid(); vm.openGrid(group)
+        val before = vm.state.value.project; val draft = vm.state.value.gridEditor
+        setContent { screen(vm) }
+        val bounds = onNodeWithTag("grid-preview").fetchSemanticsNode().boundsInRoot
+        val cell = onNodeWithTag("grid-cell-a").fetchSemanticsNode().boundsInRoot.center - bounds.topLeft
+        onNodeWithTag("grid-preview").performTouchInput { down(cell); advanceEventTime(650); up() }
+        assertFalse(vm.state.value.multiSelect); assertNull(vm.state.value.editingGroupId)
+        onNodeWithTag("composer-multiselection-hint").assertDoesNotExist()
+        val page = onNodeWithTag("composer_page_0").fetchSemanticsNode().boundsInRoot
+        onNodeWithTag("grid-preview").performTouchInput {
+            down(0, center - Offset(20f, 0f)); down(1, center + Offset(20f, 0f))
+            moveBy(0, Offset(-15f, 0f)); moveBy(1, Offset(15f, 0f)); move()
+            moveBy(0, Offset(-10f, 0f)); moveBy(1, Offset(10f, 0f)); move(); up(0); up(1)
+        }
+        assertNotEquals(page, onNodeWithTag("composer_page_0").fetchSemanticsNode().boundsInRoot)
+        assertEquals(before, vm.state.value.project); assertEquals(draft, vm.state.value.gridEditor)
+    }
+
+    @Test(timeout = 30_000) fun `full screen settings keep the stage and confirmation reachable in a small window`() = runComposeUiTest {
+        val vm = model(); val group = vm.grid(); vm.openGrid(group); val before = vm.state.value.project!!
+        setContent { screen(vm, width = 356, height = 560) }
+        onNodeWithTag("grid-toggle-settings").performClick()
+        onNodeWithTag("grid-kind-COLUMN").performScrollTo().performClick()
+        onNodeWithTag("grid-preview").assertIsDisplayed()
+        onNodeWithTag("grid-confirm").assertIsDisplayed()
+        onNodeWithText(cancelLabel).assertIsDisplayed()
+        capture(onNodeWithTag("composer-grid-editor"), "grid-fullscreen-small-window.png")
+        assertEquals(before, vm.state.value.project)
+        onNodeWithTag("grid-confirm").performClick()
+        assertNull(vm.state.value.gridEditor)
+        assertEquals(CompositionLayoutKind.COLUMN, vm.state.value.project!!.layouts.single().kind)
+        vm.undo(); assertEquals(before.elements, vm.state.value.project!!.elements)
+        assertEquals(before.layouts, vm.state.value.project!!.layouts)
     }
 
     @Test(timeout = 30_000) fun `selected grid submenu adds media directly without opening a draft`() = runComposeUiTest {

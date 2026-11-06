@@ -129,7 +129,8 @@ class ComposerGridUiTest {
         setContent { screen(vm, width = 1000, palette = palette) }
         capture(onNodeWithTag("grid-ui-review"), "grid-selected-tablet-alternate.png")
         runOnIdle { vm.beginGrid() }
-        capture(onNodeWithTag("composer-grid-dialog"), "grid-preview-tablet-alternate.png")
+        onNodeWithTag("composer-grid-dialog").assertDoesNotExist()
+        capture(onNodeWithTag("composer-grid-editor"), "grid-preview-tablet-alternate.png")
         assertArrayEquals(before, CompositionRenderer().render(vm.state.value.project!!, 0, emptyMap(), 240))
     }
 

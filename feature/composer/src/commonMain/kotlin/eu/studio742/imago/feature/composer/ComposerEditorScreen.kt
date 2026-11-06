@@ -235,6 +235,7 @@ import eu.studio742.imago.core.composition.repeatOriginPage
 import eu.studio742.imago.core.composition.visualBounds
 import eu.studio742.imago.core.composition.renderElements
 import eu.studio742.imago.core.composition.memberIds
+import eu.studio742.imago.core.composition.adjustDivider
 import eu.studio742.imago.core.composition.mediaFrame
 import eu.studio742.imago.core.composition.boundingBox
 import eu.studio742.imago.core.composition.CompositionElement
@@ -567,6 +568,11 @@ private fun ComposerEditorScreenBody(
             onCompositionCommit = actions::updateSelectedPhotoRecipe,
             onBack = { onEditPhotoId(null) },
         )
+        return
+    }
+    val gridEditor = state.gridEditor
+    if (gridEditor != null && gridEditor.base.layouts.any { it.groupId == gridEditor.layout.groupId }) {
+        ComposerGridEditScreen(state, actions, snackbar)
         return
     }
     // The physical keyboard stops being decoration on a tablet with a cover. Focus is requested once so
@@ -1666,8 +1672,12 @@ internal fun ComposerCanvas(
     /** A colour picker asked for a colour from the page: a touch samples it instead of acting. */
     eyedropper: Boolean = false,
     onSample: (Long?) -> Unit = {},
+    /** Grid editing owns cell gestures while the artwork uses the normal stage renderer. */
+    gridEditor: ComposerGridEditor? = null,
 ) {
     val uiColors = ImagoUi.colors
+    val gridFeedback = LocalHapticFeedback.current
+    var gridSwapDrag by remember(gridEditor?.layout?.groupId) { mutableStateOf<GridSwapDrag?>(null) }
     // Drawing and placing a shape both own the stage's finger: scrolling, selecting and the elements'
     // own gestures stand aside for either.
     val armed = drawing || shapeKind != null || eyedropper
@@ -1710,7 +1720,9 @@ internal fun ComposerCanvas(
         val fit = minOf((viewportSize.width - marginPx * 2).coerceAtLeast(1f) / modelSize.width,
             (viewportSize.height - topPx - bottomPx - marginPx * 2).coerceAtLeast(1f) / modelSize.height)
         LaunchedEffect(viewportSize, project.format) {
-            viewport.resize(viewportSize, fit, state.currentPage, modelSize, topPx, bottomPx)
+            if (gridEditor != null && viewport.scale == 0f) {
+                viewport.fitBounds(viewportSize, modelSize, gridEditor.layout.proxy().visualBounds(aspect = project.format.aspectRatio), marginPx)
+            } else viewport.resize(viewportSize, fit, state.currentPage, modelSize, topPx, bottomPx)
         }
         val scale = viewport.scale.takeIf { it > 0f } ?: fit
         val pageWidthPx = modelSize.width * scale
@@ -1980,11 +1992,17 @@ internal fun ComposerCanvas(
                 // (`drawing`, `positioningBackground`) can no longer both be true at the same time —
                 // whoever turns one on turns the other off — but keeping them separate avoids turning
                 // one on restarting the other's gesture halfway.
-                .composerHandleGestures(state, pageWidthPx, pageHeightPx, !armed && !positioningBackground && !positioningMedia, actions, stageOrigin)
-                .composerGridDividerGestures(state.manipulatedLayout()?.takeIf { !armed && !positioningBackground && !positioningMedia && !state.multiSelect },
+                .composerHandleGestures(state, pageWidthPx, pageHeightPx, gridEditor == null && !armed && !positioningBackground && !positioningMedia, actions, stageOrigin)
+                .composerGridDividerGestures(gridEditor?.layout ?: state.manipulatedLayout()?.takeIf { !armed && !positioningBackground && !positioningMedia && !state.multiSelect },
                     project.format.aspectRatio, stageOrigin, pageWidthPx, pageHeightPx,
-                    { actions.beginGesture() }, { actions.endGesture() },
-                    { split, index, delta -> state.manipulatedLayout()?.let { actions.adjustGridDivider(it.groupId, split, index, delta) } })
+                    { if (gridEditor == null) actions.beginGesture() }, { if (gridEditor == null) actions.endGesture() },
+                    { split, index, delta ->
+                        if (gridEditor != null) actions.updateGridDraft(gridEditor.layout.copy(root = gridEditor.layout.root.adjustDivider(split, index, delta)))
+                        else state.manipulatedLayout()?.let { actions.adjustGridDivider(it.groupId, split, index, delta) }
+                    })
+                .then(if (gridEditor == null) Modifier else Modifier.composerGridSwapGestures(project, gridEditor.layout,
+                    stageOrigin, pageWidthPx, pageHeightPx, { gridSwapDrag = it }, actions::swapGridDraftMembers,
+                    { gridFeedback.performHapticFeedback(HapticFeedbackType.LongPress) }))
                 .pointerInput(positioningBackground, eyedropper, project.pages.size) {
                     if (positioningBackground && !eyedropper) detectDragGestures(
                         onDragStart = { actions.beginGesture() },
@@ -2011,7 +2029,8 @@ internal fun ComposerCanvas(
                 // `awaitFirstDown(requireUnconsumed = true)` — the same guard that already protects
                 // `composerElementGestures` and the overlay — guarantees, and not just makes likely,
                 // that tapping inside an element or on a handle never gets here.
-                .pointerInput(armed, positioningBackground) {
+                .pointerInput(armed, positioningBackground, gridEditor != null) {
+                    if (gridEditor != null) return@pointerInput
                     // The mode check sits outside `awaitEachGesture`. Inside, the block returned without
                     // suspending, and once the finger was up `awaitEachGesture` looped straight back
                     // into it with nothing to wait for: a busy loop on the main thread, and the app
@@ -2130,10 +2149,17 @@ internal fun ComposerCanvas(
                         onTap = { onMediaTap(element.id) },
                         previewUrl = previewUrl, thumbnailUrl = thumbnailUrl, videoPlaybackUrl = videoPlaybackUrl, apiKey = apiKey,
                         actions = actions,
+                        interactive = gridEditor == null,
                     )
                 }
             }
             ComposerMovementGuides(state.movementGuides, stageOrigin, pageWidthPx, pageHeightPx)
+            gridEditor?.let { editor ->
+                ComposerGridDividers(editor.layout, project.format.aspectRatio, stageOrigin, pageWidthPx, pageHeightPx, {}, {},
+                    { split, index, delta -> actions.updateGridDraft(editor.layout.copy(root = editor.layout.root.adjustDivider(split, index, delta))) })
+                ComposerGridSwapOverlay(project, editor.layout, stageOrigin, pageWidthPx, pageHeightPx, gridSwapDrag,
+                    thumbnailUrl, apiKey, actions::swapGridDraftMembers)
+            }
             // In a multiple selection the secondaries only get an outline: the handles belong to the
             // primary, which is what the gestures move and resize.
             if (state.selectedElementIds.size > 1) {
@@ -2402,6 +2428,7 @@ private fun CompositionElementView(
     videoPlaybackUrl: (String) -> String,
     apiKey: (String) -> String,
     actions: ComposerEditorViewModel,
+    interactive: Boolean = true,
 ) {
     val uiColors = ImagoUi.colors
     val b = element.transform.bounds
@@ -2461,7 +2488,7 @@ private fun CompositionElementView(
             alpha = if (element.mediaFrame() == null) element.transform.opacity else 1f
         }
         .then(
-            if (!actions.canEdit(element.id)) Modifier else if (positioning) {
+            if (!interactive || !actions.canEdit(element.id)) Modifier else if (positioning) {
                 Modifier.mediaFramingGestures(
                     elementId = element.id,
                     boxWidthPx = { liveBoxWidth },
@@ -2508,7 +2535,7 @@ private fun CompositionElementView(
             role = Role.Button
             // In a media slot TalkBack's double tap is worth what the tap on the stage is worth:
             // opening the library. Choosing an empty slot leads nowhere.
-            if (actions.canEdit(element.id)) {
+            if (interactive && actions.canEdit(element.id)) {
                 onClick(label = if (onPickMedia != null) pickMediaLabel else selectLabel) {
                     onSelectTap()
                     if (!multiSelect) onPickMedia?.invoke()

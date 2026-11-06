@@ -1382,7 +1382,8 @@ open class ComposerEditorViewModel(
                 it.transform.rotationDegrees) })
         val groups = members.mapNotNull { it.groupId }.distinct()
         mutableState.update { it.copy(gridEditor = ComposerGridEditor(project, layout, reference, it.currentPage,
-            combinesGroups = existing == null && groups.isNotEmpty())) }
+            combinesGroups = existing == null && groups.isNotEmpty()), multiSelect = existing == null && it.multiSelect, editingGroupId = null,
+            groupMergeRequest = null) }
     }
 
     fun cancelGrid() = mutableState.update { it.copy(gridEditor = null) }

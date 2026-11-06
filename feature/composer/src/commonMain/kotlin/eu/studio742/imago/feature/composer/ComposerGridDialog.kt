@@ -100,54 +100,7 @@ internal fun ComposerGridDialog(state: ComposerEditorUiState, actions: ComposerE
                     if (onAddMedia != null) OutlinedButton(onClick = { onAddMedia(layout.groupId) }, modifier = Modifier.testTag("grid-add-elements")) {
                         Text(stringResource(Res.string.composer_grid_add_elements))
                     }
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CompositionLayoutKind.entries.forEach { kind ->
-                            val title = stringResource(kind.label())
-                            Surface(shape = MaterialTheme.shapes.small, color = if (layout.kind == kind) colors.selectedSurface else colors.elevated,
-                                modifier = Modifier.width(92.dp).selectable(layout.kind == kind, role = Role.RadioButton, onClick = { actions.setGridKind(kind) })
-                                    .testTag("grid-kind-${kind.name}")) {
-                                Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    val schematic = remember(layout.root.memberIds(), kind) {
-                                        layout.copy(frame = ElementTransform(NormalizedRect(0f, 0f, 1f, 1f)),
-                                            root = layoutTree(layout.root.memberIds(), kind, layout.columns))
-                                    }
-                                    Canvas(Modifier.fillMaxWidth().height(44.dp)) {
-                                        schematic.geometry(1.5f).cells.values.forEachIndexed { index, cell ->
-                                            drawRect(if (index == 0) colors.accent else colors.secondaryText,
-                                                Offset(cell.x * size.width, cell.y * size.height), Size(cell.width * size.width, cell.height * size.height))
-                                        }
-                                    }
-                                    Text(title, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
-                                }
-                            }
-                        }
-                    }
-                    if (layout.kind == CompositionLayoutKind.GRID) {
-                        val count = layout.root.memberIds().size
-                        GridSlider(stringResource(Res.string.composer_grid_columns), layout.columns.toFloat(), 1f..count.toFloat(), "grid-columns", integer = true) {
-                            actions.setGridKind(layout.kind, columns = it.roundToInt())
-                        }
-                        val rows = maxOf(layout.rows, ceil(count.toDouble() / layout.columns).toInt())
-                        GridSlider(stringResource(Res.string.composer_grid_rows), rows.toFloat(), 1f..count.toFloat(), "grid-rows", integer = true) {
-                            val wanted = it.roundToInt().coerceIn(1, count)
-                            actions.setGridKind(layout.kind, columns = ceil(count.toDouble() / wanted).toInt(), rows = wanted)
-                        }
-                    }
-                    GridSlider(stringResource(Res.string.composer_grid_margin), layout.margin, 0f.. .2f, "grid-margin") { update(layout.copy(margin = it)) }
-                    GridSlider(stringResource(Res.string.composer_grid_spacing), layout.gap, 0f.. .15f, "grid-spacing") { update(layout.copy(gap = it)) }
-                    GridStrokeControls(stringResource(Res.string.composer_grid_separators), layout.separators, "separators",
-                        onColor = { pickingOutline = false }, onChange = { update(layout.copy(separators = it)) })
-                    GridStrokeControls(stringResource(Res.string.composer_grid_outer_outline), layout.outline, "outer",
-                        onColor = { pickingOutline = true }, onChange = { update(layout.copy(outline = it)) })
-                    if (editor.combinesGroups) Text(stringResource(Res.string.composer_grid_combines_groups),
-                        style = MaterialTheme.typography.bodySmall, color = colors.secondaryText, modifier = Modifier.testTag("grid-combines-groups"))
-                    val hasFrames = editor.base.elements.any { it.id in layout.root.memberIds() && when (it) {
-                        is CompositionElement.Photo -> it.frame.borderWidth > 0f
-                        is CompositionElement.Video -> it.frame.borderWidth > 0f
-                        is CompositionElement.MediaPlaceholder -> it.frame.borderWidth > 0f
-                        else -> false
-                    } }
-                    if (hasFrames) Text(stringResource(Res.string.composer_grid_frames_notice), style = MaterialTheme.typography.bodySmall, color = colors.secondaryText)
+                    GridLayoutControls(state, actions) { pickingOutline = it }
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = actions::cancelGrid) { Text(stringResource(Res.string.composer_cancel)) }
@@ -156,6 +109,62 @@ internal fun ComposerGridDialog(state: ComposerEditorUiState, actions: ComposerE
             }
         }
     }
+}
+
+@Composable
+internal fun GridLayoutControls(state: ComposerEditorUiState, actions: ComposerEditorViewModel, onPickOutline: (Boolean) -> Unit) {
+    val editor = state.gridEditor ?: return
+    val layout = editor.layout
+    val colors = ImagoUi.colors
+    fun update(next: CompositionLayout) = actions.updateGridDraft(next)
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        CompositionLayoutKind.entries.forEach { kind ->
+            val title = stringResource(kind.label())
+            Surface(shape = MaterialTheme.shapes.small, color = if (layout.kind == kind) colors.selectedSurface else colors.elevated,
+                modifier = Modifier.width(92.dp).selectable(layout.kind == kind, role = Role.RadioButton, onClick = { actions.setGridKind(kind) })
+                    .testTag("grid-kind-${kind.name}")) {
+                Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    val schematic = remember(layout.root.memberIds(), kind) {
+                        layout.copy(frame = ElementTransform(NormalizedRect(0f, 0f, 1f, 1f)),
+                            root = layoutTree(layout.root.memberIds(), kind, layout.columns))
+                    }
+                    Canvas(Modifier.fillMaxWidth().height(44.dp)) {
+                        schematic.geometry(1.5f).cells.values.forEachIndexed { index, cell ->
+                            drawRect(if (index == 0) colors.accent else colors.secondaryText,
+                                Offset(cell.x * size.width, cell.y * size.height), Size(cell.width * size.width, cell.height * size.height))
+                        }
+                    }
+                    Text(title, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
+        }
+    }
+    if (layout.kind == CompositionLayoutKind.GRID) {
+        val count = layout.root.memberIds().size
+        GridSlider(stringResource(Res.string.composer_grid_columns), layout.columns.toFloat(), 1f..count.toFloat(), "grid-columns", integer = true) {
+            actions.setGridKind(layout.kind, columns = it.roundToInt())
+        }
+        val rows = maxOf(layout.rows, ceil(count.toDouble() / layout.columns).toInt())
+        GridSlider(stringResource(Res.string.composer_grid_rows), rows.toFloat(), 1f..count.toFloat(), "grid-rows", integer = true) {
+            val wanted = it.roundToInt().coerceIn(1, count)
+            actions.setGridKind(layout.kind, columns = ceil(count.toDouble() / wanted).toInt(), rows = wanted)
+        }
+    }
+    GridSlider(stringResource(Res.string.composer_grid_margin), layout.margin, 0f.. .2f, "grid-margin") { update(layout.copy(margin = it)) }
+    GridSlider(stringResource(Res.string.composer_grid_spacing), layout.gap, 0f.. .15f, "grid-spacing") { update(layout.copy(gap = it)) }
+    GridStrokeControls(stringResource(Res.string.composer_grid_separators), layout.separators, "separators",
+        onColor = { onPickOutline(false) }, onChange = { update(layout.copy(separators = it)) })
+    GridStrokeControls(stringResource(Res.string.composer_grid_outer_outline), layout.outline, "outer",
+        onColor = { onPickOutline(true) }, onChange = { update(layout.copy(outline = it)) })
+    if (editor.combinesGroups) Text(stringResource(Res.string.composer_grid_combines_groups),
+        style = MaterialTheme.typography.bodySmall, color = colors.secondaryText, modifier = Modifier.testTag("grid-combines-groups"))
+    val hasFrames = editor.base.elements.any { it.id in layout.root.memberIds() && when (it) {
+        is CompositionElement.Photo -> it.frame.borderWidth > 0f
+        is CompositionElement.Video -> it.frame.borderWidth > 0f
+        is CompositionElement.MediaPlaceholder -> it.frame.borderWidth > 0f
+        else -> false
+    } }
+    if (hasFrames) Text(stringResource(Res.string.composer_grid_frames_notice), style = MaterialTheme.typography.bodySmall, color = colors.secondaryText)
 }
 
 private fun CompositionLayoutKind.label(): StringResource = when (this) {

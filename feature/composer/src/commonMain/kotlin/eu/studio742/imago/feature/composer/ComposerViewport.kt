@@ -31,6 +31,14 @@ internal class ComposerViewport {
             top + (size.height - top - bottom - pageSize.height * scale) / 2f)
     }
 
+    fun fitBounds(size: Size, pageSize: Size, bounds: NormalizedRect, margin: Float) {
+        scale = minOf((size.width - margin * 2).coerceAtLeast(1f) / (bounds.width * pageSize.width),
+            (size.height - margin * 2).coerceAtLeast(1f) / (bounds.height * pageSize.height))
+        origin = Offset(size.width / 2f - (bounds.x + bounds.width / 2f) * pageSize.width * scale,
+            size.height / 2f - (bounds.y + bounds.height / 2f) * pageSize.height * scale)
+        previousSize = size
+    }
+
     fun pan(delta: Offset) {
         if (delta.x.isFinite() && delta.y.isFinite()) origin += delta
     }

@@ -133,4 +133,17 @@ class ComposerGridInteractionTest {
         val before = vm.project(); vm.addMediaToGrid(listOf(incoming("new")), group); vm.openGrid(group)
         assertEquals(before, vm.project()); assertNull(vm.state.value.gridEditor)
     }
+
+    @Test fun `opening an existing grid leaves multi selection and member editing before a provisional swap`() {
+        val vm = model(); val group = vm.grid(); val before = vm.project()
+        vm.editGroup(group); vm.beginMultiSelection("a")
+        assertTrue(vm.state.value.multiSelect); assertEquals(group, vm.state.value.editingGroupId)
+        vm.openGrid(group)
+        assertNotNull(vm.state.value.gridEditor)
+        assertFalse(vm.state.value.multiSelect); assertNull(vm.state.value.editingGroupId)
+        vm.swapGridDraftMembers("a", "b")
+        assertFalse(vm.state.value.multiSelect); assertNull(vm.state.value.editingGroupId)
+        assertEquals(before, vm.project())
+        vm.cancelGrid(); assertEquals(before, vm.project())
+    }
 }
