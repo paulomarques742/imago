@@ -99,6 +99,7 @@ fun <T> ImagoChipRow(
     /** More than one chip can be lit when a row's chips are independent slices; by default only [selected] is. */
     isActive: (T) -> Boolean = { it == selected },
 ) {
+    val colors = ImagoUi.colors
     val scrollState = rememberScrollState()
     val itemOffsets = remember { mutableStateMapOf<T, Int>() }
     var viewportWidth by remember { mutableIntStateOf(0) }
@@ -123,13 +124,13 @@ fun <T> ImagoChipRow(
                 modifier = Modifier
                     .onPlaced { itemOffsets[option] = it.positionInParent().x.toInt() }
                     .clip(RoundedCornerShape(ImagoRadii.Pill))
-                    .background(if (isSelected) ImagoColors.BrandWhite else ImagoColors.Charcoal)
+                    .background(if (isSelected) colors.selectedChoiceSurface else colors.choiceSurface)
                     .selectable(selected = isSelected, role = Role.Tab, onClick = { onSelect(option) })
                     .sizeIn(minHeight = ImagoSizes.TouchTarget)
                     .padding(horizontal = ImagoSpacing.Xl),
                 contentAlignment = Alignment.Center,
             ) {
-                val color = if (isSelected) ImagoColors.BrandBlack else ImagoColors.TextSecondary
+                val color = if (isSelected) colors.onSelectedChoiceSurface else colors.secondaryText
                 val vector = icon(option)
                 if (vector != null) {
                     Icon(vector, contentDescription = label(option), tint = color, modifier = Modifier.size(20.dp))

@@ -16,6 +16,9 @@ data class ImagoUiPalette(
     val navigation: Color = ImagoColors.NavBar,
     val glass: Color = ImagoColors.Glass,
     val selectedSurface: Color = ImagoColors.Graphite,
+    val choiceSurface: Color = ImagoColors.Charcoal,
+    val selectedChoiceSurface: Color = ImagoColors.BrandWhite,
+    val onSelectedChoiceSurface: Color = ImagoColors.BrandBlack,
     val text: Color = ImagoColors.TextPrimary,
     val secondaryText: Color = ImagoColors.TextSecondary,
     val tertiaryText: Color = ImagoColors.TextTertiary,
@@ -28,6 +31,9 @@ data class ImagoUiPalette(
     val error: Color = ImagoColors.Error,
     val danger: Color = ImagoColors.Danger,
     val scrim: Color = ImagoColors.Scrim,
+    val outsidePageContentAlpha: Float = .4f,
+    val alignmentGuide: Color = ImagoColors.Gold,
+    val spacingGuide: Color = ImagoColors.Gold,
 )
 
 val LocalImagoUiPalette = staticCompositionLocalOf { ImagoUiPalette() }

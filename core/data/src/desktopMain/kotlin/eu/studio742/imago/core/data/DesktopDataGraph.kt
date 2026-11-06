@@ -100,6 +100,7 @@ class DesktopDataGraph(
     )
 
     val preferences: SecurePreferences = WindowsSecurePreferences(root.resolve(PREFERENCES_FILE))
+    val compositionFormats: CompositionFormatRepository = LocalCompositionFormatRepository(preferences)
     val configuration = EncryptedConfigurationRepository(preferences, api, database, endpointTriggers)
     val folders = FolderLibraryRepository(database, preferences, trash)
     val library: LibraryRepository = SourceLibraryRepository(configuration, database, api, folders)

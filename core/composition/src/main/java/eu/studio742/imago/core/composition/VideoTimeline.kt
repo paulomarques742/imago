@@ -88,6 +88,9 @@ data class PageVideoPlan(val durationMs: Long, val layers: List<Layer>) {
         /** Everything that does not move, between two clips. The bottom one carries the background. */
         data class Still(val includesBackground: Boolean, val elementIds: Set<String>) : Layer
 
+        /** Static frame artwork follows the owning clip's visible intervals, including loops and gaps. */
+        data class Decoration(val video: CompositionElement.Video, val segments: List<Segment>) : Layer
+
         /**
          * One video, as a run of [segments] that add up to the page's duration exactly.
          *
@@ -133,9 +136,9 @@ data class PageVideoPlan(val durationMs: Long, val layers: List<Layer>) {
          */
         fun of(project: CompositionProject, pageIndex: Int): PageVideoPlan {
             val duration = project.pages[pageIndex].durationMs
-            val ordered = project.elements.filter { it.visible }
+            val ordered = project.renderElements().filter { it.visible }
                 .filter { it !is CompositionElement.Video || it.pageIndex == pageIndex }
-                .sortedWith(compareBy<CompositionElement> { it.zIndex }.thenBy { it.id })
+                .sortedBy { it.zIndex }
             val videos = ordered.filterIsInstance<CompositionElement.Video>()
             val soloActive = videos.any { it.timing.solo }
             val layers = mutableListOf<Layer>()
@@ -151,9 +154,11 @@ data class PageVideoPlan(val durationMs: Long, val layers: List<Layer>) {
                 if (element is CompositionElement.Video) {
                     flush()
                     val timing = element.timing
+                    val sequence = segments(timing, duration)
+                    if (element.frame.hasVideoDecoration()) layers += Layer.Decoration(element, sequence)
                     layers += Layer.Clip(
                         video = element,
-                        segments = segments(timing, duration),
+                        segments = sequence,
                         audible = !timing.muted && timing.volume > 0f && (!soloActive || timing.solo),
                     )
                 } else {

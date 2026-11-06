@@ -100,6 +100,7 @@ class VideoTimelineTest {
                 when (layer) {
                     is Layer.Still -> "still(${listOfNotNull("bg".takeIf { layer.includesBackground }).plus(layer.elementIds).joinToString()})"
                     is Layer.Clip -> "clip ${layer.video.id}"
+                    is Layer.Decoration -> "frame ${layer.video.id}"
                 }
             },
         )

@@ -84,4 +84,10 @@
         <item quantity="one">%1$s pasta</item>
         <item quantity="other">%1$s pastas</item>
     </plurals>
+    <string name="message_composition_format_name_required">Dê um nome a este tamanho.</string>
+    <string name="message_composition_format_name_taken">Já existe um tamanho guardado com este nome.</string>
+    <string name="message_composition_format_size_invalid">Cada lado deve ter entre %1$d e %2$d px.</string>
+    <string name="message_composition_format_size_exists">Estas dimensões já estão guardadas como %1$s.</string>
+    <string name="message_composition_format_missing">Este tamanho guardado já não existe. Escolha outro tamanho.</string>
+    <string name="message_composition_formats_unavailable">Não foi possível carregar os tamanhos guardados. Tente novamente antes de fazer alterações.</string>
 </resources>

@@ -39,6 +39,7 @@ import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.GLOBAL_LIBRARY_ID
 import eu.studio742.imago.core.model.Tone
+import eu.studio742.imago.core.composition.*
 import java.security.MessageDigest
 import java.util.Base64
 
@@ -55,6 +56,74 @@ class MultiDeviceSyncTest {
     fun tearDown() {
         phone.close()
         computer.close()
+    }
+
+    @Test
+    fun `hollow rounded outlines survive project and template sync to another device`() = runBlocking {
+        val edited = "2026-11-04T12:00:00Z"
+        val shape = CompositionElement.Shape("shape", ElementTransform(NormalizedRect(.2f, .3f, .4f, .3f), opacity = .65f),
+            0, ShapeKind.RECTANGLE, fillArgb = 0x002A6B8C, strokeArgb = 0x8044AA77, strokeWidth = 120f, cornerRadius = .25f)
+        val project = CompositionProject(id = "outline", name = "Outline", format = PageFormatPreset.SQUARE_1_1.format,
+            pages = listOf(CompositionPage("page", 0)), elements = listOf(shape), createdAt = edited, updatedAt = edited)
+        val template = CompositionTemplate("outline-template", "Outline", project, false, edited, edited)
+        phone.database.compositionProjectDao().upsert(CompositionProjectEntity(GLOBAL_LIBRARY_ID, project.id, project.name,
+            json.encodeToString(project), project.revision, edited, edited, SyncState().edited(edited)))
+        phone.database.compositionTemplateDao().upsert(CompositionTemplateEntity(GLOBAL_LIBRARY_ID, template.id, template.name,
+            json.encodeToString(template), edited, edited, SyncState().edited(edited)))
+        assertTrue(phone.engine.syncNow())
+        assertTrue(computer.engine.syncNow())
+        val restored = json.decodeFromString<CompositionProject>(computer.database.compositionProjectDao()
+            .get(GLOBAL_LIBRARY_ID, project.id)!!.projectJson)
+        val restoredTemplate = json.decodeFromString<CompositionTemplate>(computer.database.compositionTemplateDao()
+            .get(GLOBAL_LIBRARY_ID, template.id)!!.templateJson)
+        assertEquals(shape, restored.elements.single())
+        assertEquals(shape, restoredTemplate.project.elements.single())
+    }
+
+    @Test
+    fun `group layouts membership member locks and geometry survive project and template sync`() = runBlocking {
+        val edited = "2026-11-04T12:00:00Z"
+        val first = CompositionElement.Shape("member-a", ElementTransform(NormalizedRect(.1f, .2f, .2f, .3f), rotationDegrees = 15f),
+            0, ShapeKind.RECTANGLE, fillArgb = 0x804488AA, groupId = "persistent-group")
+        val second = first.copy(id = "member-b", zIndex = 1, locked = true,
+            transform = first.transform.copy(bounds = NormalizedRect(.5f, .4f, .3f, .2f)))
+        val project = CompositionProject(id = "grouped", name = "Grouped", format = PageFormatPreset.SQUARE_1_1.format,
+            pages = listOf(CompositionPage("page", 0)), elements = listOf(first, second), createdAt = edited, updatedAt = edited,
+            layouts = listOf(eu.studio742.imago.core.composition.CompositionLayout("persistent-group", ElementTransform(NormalizedRect(.1f, .2f, .7f, .6f)),
+                eu.studio742.imago.core.composition.layoutTree(listOf(first.id, second.id), eu.studio742.imago.core.composition.CompositionLayoutKind.ROW),
+                outline = eu.studio742.imago.core.composition.LayoutStroke(0xFF557799, .4f, .02f))))
+        val template = CompositionTemplate("grouped-template", "Grouped", project, false, edited, edited)
+        phone.database.compositionProjectDao().upsert(CompositionProjectEntity(GLOBAL_LIBRARY_ID, project.id, project.name,
+            json.encodeToString(project), project.revision, edited, edited, SyncState().edited(edited)))
+        phone.database.compositionTemplateDao().upsert(CompositionTemplateEntity(GLOBAL_LIBRARY_ID, template.id, template.name,
+            json.encodeToString(template), edited, edited, SyncState().edited(edited)))
+        assertTrue(phone.engine.syncNow()); assertTrue(computer.engine.syncNow())
+        val restored = json.decodeFromString<CompositionProject>(computer.database.compositionProjectDao().get(GLOBAL_LIBRARY_ID, project.id)!!.projectJson)
+        val restoredTemplate = json.decodeFromString<CompositionTemplate>(computer.database.compositionTemplateDao().get(GLOBAL_LIBRARY_ID, template.id)!!.templateJson)
+        assertEquals(project.elements, restored.elements)
+        assertEquals(project.elements, restoredTemplate.project.elements)
+        assertEquals(project.layouts, restored.layouts)
+        assertEquals(project.layouts, restoredTemplate.project.layouts)
+    }
+
+    @Test
+    fun `procedural frame parameters retain their stable edge through project and template sync`() = runBlocking {
+        val edited = "2026-11-05T05:00:00Z"
+        val frame = eu.studio742.imago.core.composition.FrameStyle(cutout = eu.studio742.imago.core.composition.MediaCutout.TORN_PAPER,
+            decoration = eu.studio742.imago.core.composition.MediaFrameDecoration(eu.studio742.imago.core.composition.MediaFrameKind.POLAROID,
+                width = 32f, colorArgb = 0xCCAABB88, opacity = .6f, bottomWeight = 3f, roughness = .7f, seed = 773))
+        val element = CompositionElement.MediaPlaceholder("frame-slot", ElementTransform(NormalizedRect(.2f, .2f, .5f, .5f)), 0, frame = frame)
+        val project = CompositionProject(id = "framed", name = "Framed", format = PageFormatPreset.SQUARE_1_1.format,
+            pages = listOf(CompositionPage("page", 0)), elements = listOf(element), createdAt = edited, updatedAt = edited)
+        val template = CompositionTemplate("framed-template", "Framed", project, false, edited, edited)
+        phone.database.compositionProjectDao().upsert(CompositionProjectEntity(GLOBAL_LIBRARY_ID, project.id, project.name,
+            json.encodeToString(project), project.revision, edited, edited, SyncState().edited(edited)))
+        phone.database.compositionTemplateDao().upsert(CompositionTemplateEntity(GLOBAL_LIBRARY_ID, template.id, template.name,
+            json.encodeToString(template), edited, edited, SyncState().edited(edited)))
+        assertTrue(phone.engine.syncNow()); assertTrue(computer.engine.syncNow())
+        assertEquals(project.elements, json.decodeFromString<CompositionProject>(computer.database.compositionProjectDao().get(GLOBAL_LIBRARY_ID, project.id)!!.projectJson).elements)
+        assertEquals(frame, (json.decodeFromString<CompositionTemplate>(computer.database.compositionTemplateDao().get(GLOBAL_LIBRARY_ID, template.id)!!.templateJson)
+            .project.elements.single() as CompositionElement.MediaPlaceholder).frame)
     }
 
     @Test

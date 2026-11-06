@@ -55,6 +55,11 @@ abstract class DataBindings {
 object DataProviders {
     @Provides
     @Singleton
+    fun compositionFormats(@ApplicationContext context: Context): eu.studio742.imago.core.data.CompositionFormatRepository =
+        eu.studio742.imago.core.data.LocalCompositionFormatRepository(eu.studio742.imago.core.data.encryptedPreferences(context))
+
+    @Provides
+    @Singleton
     fun configuration(
         @ApplicationContext context: Context,
         api: ImmichApi,

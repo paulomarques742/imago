@@ -89,10 +89,9 @@ class CompositionRoundTripTest {
     }
 
     @Test
-    fun `video cannot cross a page separator`() {
+    fun `video outside its page round trips without changing page or timing`() {
         val now = Instant.EPOCH.toString()
-        assertThrows(IllegalArgumentException::class.java) {
-            CompositionProject(
+        val project = CompositionProject(
                 id = "invalid",
                 name = "Invalid",
                 format = PageFormatPreset.SQUARE_1_1.format,
@@ -110,6 +109,8 @@ class CompositionRoundTripTest {
                 createdAt = now,
                 updatedAt = now,
             )
-        }
+        val restored = Json.decodeFromString<CompositionProject>(Json.encodeToString(project))
+        assertEquals(project, restored)
+        assertEquals(0, (restored.elements.single() as CompositionElement.Video).pageIndex)
     }
 }

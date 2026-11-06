@@ -30,6 +30,7 @@ kotlin {
             implementation(libs.androidx.lifecycle.process)
         }
         getByName("desktopTest").dependencies {
+            implementation(project(":core:composition"))
             implementation(libs.junit4)
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.androidx.sqlite.bundled)

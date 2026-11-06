@@ -24,6 +24,7 @@ fun CompositionProject.usedColors(): List<Long> {
     }
     fun add(frame: FrameStyle) {
         if (frame.borderWidth > 0f) add(frame.borderArgb)
+        if (frame.decoration.kind != MediaFrameKind.NONE && frame.decoration.width > 0f) add(frame.decoration.colorArgb)
     }
     add(background)
     pages.forEach { add(it.backgroundOverride) }
@@ -38,6 +39,10 @@ fun CompositionProject.usedColors(): List<Long> {
             is CompositionElement.Video -> add(element.frame)
             is CompositionElement.MediaPlaceholder -> add(element.frame)
         }
+    }
+    layouts.forEach { layout ->
+        if (layout.outline.width > 0f) add(layout.outline.argb)
+        if (layout.separators.width > 0f) add(layout.separators.argb)
     }
     return found.take(MAX_COMPOSITION_COLORS)
 }

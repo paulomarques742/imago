@@ -29,6 +29,12 @@ private fun UserMessage.resource(): StringResource = when (this) {
     UserMessage.ACCOUNT_UNCONFIRMED -> Res.string.message_account_unconfirmed
     UserMessage.LIBRARY_NOT_LINKED -> Res.string.message_library_not_linked
     UserMessage.CONFIGURATION_NOT_SAVED -> Res.string.message_configuration_not_saved
+    UserMessage.COMPOSITION_FORMAT_NAME_REQUIRED -> Res.string.message_composition_format_name_required
+    UserMessage.COMPOSITION_FORMAT_NAME_TAKEN -> Res.string.message_composition_format_name_taken
+    UserMessage.COMPOSITION_FORMAT_SIZE_INVALID -> Res.string.message_composition_format_size_invalid
+    UserMessage.COMPOSITION_FORMAT_SIZE_EXISTS -> Res.string.message_composition_format_size_exists
+    UserMessage.COMPOSITION_FORMAT_MISSING -> Res.string.message_composition_format_missing
+    UserMessage.COMPOSITION_FORMATS_UNAVAILABLE -> Res.string.message_composition_formats_unavailable
     UserMessage.SYNC_FAILED -> Res.string.message_sync_failed
     UserMessage.SYNC_CHANGE_REJECTED -> Res.string.message_sync_change_rejected
     UserMessage.LIBRARY_NAME_REQUIRED -> Res.string.message_library_name_required

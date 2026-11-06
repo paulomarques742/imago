@@ -17,7 +17,8 @@ fun CompositionElement.crossedBoundaries(): Set<Int> {
 }
 
 fun CompositionProject.canReorderPage(pageIndex: Int): Boolean =
-    pageIndex in pages.indices && elements.none { pageIndex in it.crossedBoundaries() || pageIndex + 1 in it.crossedBoundaries() }
+    pageIndex in pages.indices && elements.none { pageIndex in it.crossedBoundaries() || pageIndex + 1 in it.crossedBoundaries() } &&
+        layouts.none { it.crossesBoundary(pageIndex, format.aspectRatio) || it.crossesBoundary(pageIndex + 1, format.aspectRatio) }
 
 data class PageSlice(val sourceLeft: Float, val sourceRight: Float)
 
@@ -80,12 +81,7 @@ fun NormalizedRect.clampedToCanvas(pageCount: Int, minSize: Float = MIN_ELEMENT_
 }
 
 /**
- * The same fit, but within a single page.
- *
- * `CompositionProject.init` requires a video to stay confined to its page, and that requirement was
- * checked *after* the gesture had already written the value: dragging a video over the separator
- * threw from inside `pointerInput`, with nobody to catch it. Going through here makes the invariant
- * impossible to break instead of validating it too late.
+ * Fits an initial placement within one page. Interactive editing uses [editableBounds] instead.
  */
 fun NormalizedRect.confinedToPage(pageIndex: Int, minSize: Float = MIN_ELEMENT_SIZE): NormalizedRect {
     val page = pageIndex.coerceAtLeast(0).toFloat()
@@ -123,17 +119,86 @@ fun NormalizedRect.clampedWithBleed(pageCount: Int, minSize: Float = MIN_ELEMENT
     )
 }
 
-/**
- * Fits the element by its type: a video lives on one page, a shape may hang off the canvas, and
- * everything else stays on it.
- */
-fun CompositionElement.clampedBounds(bounds: NormalizedRect, pageCount: Int): NormalizedRect = when (this) {
-    is CompositionElement.Video -> bounds.confinedToPage(pageIndex)
-    is CompositionElement.Shape -> bounds.clampedWithBleed(pageCount)
-    else -> bounds.clampedToCanvas(pageCount)
+/** Editing preserves finite positions outside the page while retaining the existing size limits. */
+fun CompositionElement.editableBounds(bounds: NormalizedRect, pageCount: Int): NormalizedRect = NormalizedRect(
+    x = bounds.x.orFallback(transform.bounds.x),
+    y = bounds.y.orFallback(transform.bounds.y),
+    width = bounds.width.orFallback(MIN_ELEMENT_SIZE).coerceIn(MIN_ELEMENT_SIZE,
+        if (this is CompositionElement.Video) 1f else pageCount.coerceAtLeast(1).toFloat()),
+    height = bounds.height.orFallback(MIN_ELEMENT_SIZE).coerceIn(MIN_ELEMENT_SIZE, 1f),
+)
+
+fun CompositionElement.repeatOriginPage(): Int = transform.repeatOriginPage
+    ?: kotlin.math.floor(transform.bounds.x).toInt()
+
+/** The placement for a particular repeat; crossing a page boundary must not wrap its local offset. */
+fun CompositionElement.boundsOnPage(pageIndex: Int): NormalizedRect = if (repeatOnPages.isEmpty()) transform.bounds
+    else transform.bounds.copy(x = pageIndex + transform.bounds.x - repeatOriginPage())
+
+/** Axis-aligned coverage after rotation, in the page's anisotropic coordinate space. */
+fun CompositionElement.visualBounds(bounds: NormalizedRect = transform.bounds, aspect: Float): NormalizedRect {
+    val angle = Math.toRadians(transform.rotationDegrees.toDouble())
+    val width = (abs(cos(angle)) * bounds.width + abs(sin(angle)) * bounds.height / aspect).toFloat()
+    val height = (abs(sin(angle)) * bounds.width * aspect + abs(cos(angle)) * bounds.height).toFloat()
+    return NormalizedRect(bounds.x + (bounds.width - width) / 2f, bounds.y + (bounds.height - height) / 2f,
+        width.coerceAtLeast(.0001f), height.coerceAtLeast(.0001f))
+}
+
+/** Paint may extend beyond the manipulation frame; culling must keep thick outside outlines visible. */
+fun CompositionElement.paintedBounds(bounds: NormalizedRect = transform.bounds, aspect: Float): NormalizedRect {
+    val frame = when (this) {
+        is CompositionElement.Photo -> frame
+        is CompositionElement.Video -> frame
+        is CompositionElement.MediaPlaceholder -> frame
+        else -> null
+    }
+    val extent = when (this) {
+        is CompositionElement.Shape -> strokeWidth.coerceAtLeast(0f) *
+            if (kind == ShapeKind.LINE || kind == ShapeKind.ARROW) .5f else 1f
+        else -> frame?.let {
+            val paper = it.decorationInsets()
+            maxOf(it.borderWidth, maxOf(paper.left, paper.top, paper.right, paper.bottom) + it.shadowRadius * 3f)
+        } ?: 0f
+    }
+    val paddingX = extent / 1080f
+    val paddingY = paddingX * aspect
+    return visualBounds(bounds.copy(x = bounds.x - paddingX, y = bounds.y - paddingY,
+        width = bounds.width + paddingX * 2f, height = bounds.height + paddingY * 2f), aspect)
 }
 
 enum class ResizeCorner { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
+
+/** Resizes around the opposite corner in physical page space, including rotated artwork and groups. */
+fun List<CompositionElement>.resizedSelectionFromCorner(
+    corner: ResizeCorner, dx: Float, dy: Float, pageCount: Int, aspect: Float,
+): List<CompositionElement> {
+    if (isEmpty()) return this
+    if (size == 1) {
+        val element = single()
+        val before = element.transform.bounds
+        val resized = before.resizedFrom(corner, dx, dy,
+            maxWidth = if (element is CompositionElement.Video) 1f else pageCount.toFloat(), maxHeight = 1f)
+        val localX = resized.x + resized.width / 2f - before.x - before.width / 2f
+        val localY = resized.y + resized.height / 2f - before.y - before.height / 2f
+        val (turnedX, turnedY) = rotateVector(localX * aspect, localY, element.transform.rotationDegrees)
+        val anchored = resized.copy(x = resized.x + turnedX / aspect - localX, y = resized.y + turnedY - localY)
+        return listOf(element.withTransform(element.transform.copy(bounds = element.editableBounds(anchored, pageCount))))
+    }
+    val box = map { it.transform.bounds }.boundingBox()!!
+    val target = box.resizedFrom(corner, dx, dy, maxWidth = Float.MAX_VALUE, maxHeight = Float.MAX_VALUE)
+    val minX = maxOf { MIN_ELEMENT_SIZE / it.transform.bounds.width }
+    val minY = maxOf { MIN_ELEMENT_SIZE / it.transform.bounds.height }
+    val maxX = minOf { (if (it is CompositionElement.Video) 1f else pageCount.toFloat()) / it.transform.bounds.width }
+    val maxY = minOf { 1f / it.transform.bounds.height }
+    val width = box.width * (target.width / box.width).coerceIn(minX, maxX)
+    val height = box.height * (target.height / box.height).coerceIn(minY, maxY)
+    val left = corner == ResizeCorner.TOP_LEFT || corner == ResizeCorner.BOTTOM_LEFT
+    val top = corner == ResizeCorner.TOP_LEFT || corner == ResizeCorner.TOP_RIGHT
+    val limited = NormalizedRect(if (left) box.right - width else box.x,
+        if (top) box.bottom - height else box.y, width, height)
+    return map { element -> element.withTransform(element.transform.copy(
+        bounds = element.editableBounds(element.transform.bounds.mappedBetween(box, limited), pageCount))) }
+}
 
 /**
  * Resizes from a corner, keeping the opposite corner still.
@@ -146,14 +211,18 @@ fun NormalizedRect.resizedFrom(
     dx: Float,
     dy: Float,
     minSize: Float = MIN_ELEMENT_SIZE,
+    maxWidth: Float = MAX_ELEMENT_SIZE,
+    maxHeight: Float = MAX_ELEMENT_SIZE,
 ): NormalizedRect {
     val movesLeftEdge = corner == ResizeCorner.TOP_LEFT || corner == ResizeCorner.BOTTOM_LEFT
     val movesTopEdge = corner == ResizeCorner.TOP_LEFT || corner == ResizeCorner.TOP_RIGHT
     val safeMin = minSize.coerceIn(.001f, 1f)
     // The delta is clamped before touching the rectangle. Without this, the dragged edge passes over
     // the anchor, the width goes negative and NormalizedRect's `require` throws.
-    val stepX = dx.orFallback(0f).let { if (movesLeftEdge) it.coerceAtMost(width - safeMin) else it.coerceAtLeast(safeMin - width) }
-    val stepY = dy.orFallback(0f).let { if (movesTopEdge) it.coerceAtMost(height - safeMin) else it.coerceAtLeast(safeMin - height) }
+    val stepX = dx.orFallback(0f).let { if (movesLeftEdge) it.coerceIn(width - maxWidth, width - safeMin)
+        else it.coerceIn(safeMin - width, maxWidth - width) }
+    val stepY = dy.orFallback(0f).let { if (movesTopEdge) it.coerceIn(height - maxHeight, height - safeMin)
+        else it.coerceIn(safeMin - height, maxHeight - height) }
     return NormalizedRect(
         x = if (movesLeftEdge) x + stepX else x,
         y = if (movesTopEdge) y + stepY else y,
@@ -167,12 +236,16 @@ fun NormalizedRect.scaledAboutCentre(
     factor: Float,
     minSize: Float = MIN_ELEMENT_SIZE,
     maxSize: Float = MAX_ELEMENT_SIZE,
+    maxWidth: Float = maxSize,
+    maxHeight: Float = maxSize,
 ): NormalizedRect {
     val safeFactor = if (factor.isFinite() && factor > 0f) factor else 1f
     val safeMin = minSize.coerceIn(.001f, 1f)
-    val safeMax = maxSize.coerceAtLeast(safeMin)
-    val scaledWidth = (width * safeFactor).orFallback(safeMin).coerceIn(safeMin, safeMax)
-    val scaledHeight = (height * safeFactor).orFallback(safeMin).coerceIn(safeMin, safeMax)
+    val minimum = maxOf(safeMin / width, safeMin / height)
+    val maximum = minOf(maxWidth.coerceAtLeast(safeMin) / width, maxHeight.coerceAtLeast(safeMin) / height)
+    val ratio = safeFactor.coerceIn(minimum.coerceAtMost(maximum), maximum)
+    val scaledWidth = width * ratio
+    val scaledHeight = height * ratio
     return NormalizedRect(
         x = x + (width - scaledWidth) / 2f,
         y = y + (height - scaledHeight) / 2f,

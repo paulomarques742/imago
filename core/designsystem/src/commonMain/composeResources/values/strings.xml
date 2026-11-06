@@ -88,4 +88,10 @@
         <item quantity="one">%1$s folder</item>
         <item quantity="other">%1$s folders</item>
     </plurals>
+    <string name="message_composition_format_name_required">Give this size a name.</string>
+    <string name="message_composition_format_name_taken">A saved size already uses this name.</string>
+    <string name="message_composition_format_size_invalid">Each side must be between %1$d and %2$d px.</string>
+    <string name="message_composition_format_size_exists">These dimensions are already saved as %1$s.</string>
+    <string name="message_composition_format_missing">This saved size no longer exists. Choose another size.</string>
+    <string name="message_composition_formats_unavailable">Saved sizes couldn’t be loaded. Try again before making changes.</string>
 </resources>

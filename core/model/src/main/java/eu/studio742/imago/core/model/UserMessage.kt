@@ -41,6 +41,12 @@ enum class UserMessage {
 
     /** Saving the configuration on the device failed. */
     CONFIGURATION_NOT_SAVED,
+    COMPOSITION_FORMAT_NAME_REQUIRED,
+    COMPOSITION_FORMAT_NAME_TAKEN,
+    COMPOSITION_FORMAT_SIZE_INVALID,
+    COMPOSITION_FORMAT_SIZE_EXISTS,
+    COMPOSITION_FORMAT_MISSING,
+    COMPOSITION_FORMATS_UNAVAILABLE,
 
     /** Sync failed, without a more precise reason. */
     SYNC_FAILED,

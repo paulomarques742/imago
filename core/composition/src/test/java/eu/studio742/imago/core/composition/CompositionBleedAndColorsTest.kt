@@ -16,20 +16,20 @@ class CompositionBleedAndColorsTest {
     )
 
     @Test
-    fun `a shape may hang off the page but keeps a quarter of itself on it`() {
+    fun `a shape can move wholly outside the page without changing its size`() {
         val shape = shape()
-        val left = shape.clampedBounds(NormalizedRect(-5f, .2f, .4f, .4f), 1)
-        assertEquals(-.3f, left.x, .0001f)
-        val bottom = shape.clampedBounds(NormalizedRect(.2f, 5f, .4f, .4f), 1)
-        assertEquals(.9f, bottom.y, .0001f)
-        val inside = shape.clampedBounds(NormalizedRect(-.1f, .2f, .4f, .4f), 1)
+        val left = shape.editableBounds(NormalizedRect(-5f, .2f, .4f, .4f), 1)
+        assertEquals(-5f, left.x, .0001f)
+        val bottom = shape.editableBounds(NormalizedRect(.2f, 5f, .4f, .4f), 1)
+        assertEquals(5f, bottom.y, .0001f)
+        val inside = shape.editableBounds(NormalizedRect(-.1f, .2f, .4f, .4f), 1)
         assertEquals(-.1f, inside.x, .0001f)
     }
 
     @Test
-    fun `a text still stays inside the page`() {
+    fun `text has the same freedom of position as other artwork`() {
         val text = CompositionElement.Text("t", ElementTransform(NormalizedRect(.2f, .2f, .4f, .4f)), 0, "x")
-        assertEquals(0f, text.clampedBounds(NormalizedRect(-5f, .2f, .4f, .4f), 1).x, 0f)
+        assertEquals(-5f, text.editableBounds(NormalizedRect(-5f, .2f, .4f, .4f), 1).x, 0f)
     }
 
     @Test

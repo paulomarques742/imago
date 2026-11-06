@@ -183,6 +183,8 @@ data class ElementTransform(
     val opacity: Float = 1f,
     val mirrorHorizontal: Boolean = false,
     val mirrorVertical: Boolean = false,
+    /** Stable page-relative origin for repeated artwork, even when it is moved off that page. */
+    val repeatOriginPage: Int? = null,
 )
 
 @Serializable
@@ -211,6 +213,8 @@ data class FrameStyle(
     val borderWidth: Float = 0f,
     val borderArgb: Long = 0xFFFFFFFF,
     val shadowRadius: Float = 0f,
+    val cutout: MediaCutout = MediaCutout.RECTANGLE,
+    val decoration: MediaFrameDecoration = MediaFrameDecoration(),
 )
 
 @Serializable
@@ -402,6 +406,7 @@ sealed class CompositionElement {
         override val locked: Boolean = false,
         override val visible: Boolean = true,
         override val repeatOnPages: Set<Int> = emptySet(),
+        val cornerRadius: Float = 0f,
     ) : CompositionElement()
 
     @Serializable
@@ -467,6 +472,7 @@ data class CompositionProject(
     val revision: Long = 1,
     val createdAt: String,
     val updatedAt: String,
+    val layouts: List<CompositionLayout> = emptyList(),
 ) {
     init {
         require(pages.size in 1..MAX_COMPOSITION_PAGES)
@@ -478,9 +484,6 @@ data class CompositionProject(
             .forEach { (_, count) -> require(count <= MAX_VIDEOS_PER_PAGE) }
         elements.filterIsInstance<CompositionElement.Video>().forEach { video ->
             require(video.pageIndex in pages.indices)
-            require(video.transform.bounds.x >= video.pageIndex && video.transform.bounds.right <= video.pageIndex + 1f) {
-                "Videos have to stay confined to one page."
-            }
             require(video.repeatOnPages.isEmpty())
         }
     }

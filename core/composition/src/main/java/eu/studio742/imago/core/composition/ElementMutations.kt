@@ -1,6 +1,12 @@
 package eu.studio742.imago.core.composition
 
-fun CompositionElement.withTransform(value: ElementTransform): CompositionElement = when (this) {
+fun CompositionElement.withTransform(value: ElementTransform): CompositionElement {
+    val anchored = if (repeatOnPages.isNotEmpty() && value.repeatOriginPage == null)
+        value.copy(repeatOriginPage = repeatOriginPage()) else value
+    return withRawTransform(anchored)
+}
+
+private fun CompositionElement.withRawTransform(value: ElementTransform): CompositionElement = when (this) {
     is CompositionElement.MediaPlaceholder -> copy(transform = value)
     is CompositionElement.Photo -> copy(transform = value)
     is CompositionElement.Video -> copy(transform = value)
@@ -36,7 +42,14 @@ fun CompositionElement.withZIndex(value: Int): CompositionElement = when (this) 
     is CompositionElement.Drawing -> copy(zIndex = value)
 }
 
-fun CompositionElement.withRepeatOnPages(value: Set<Int>): CompositionElement = when (this) {
+fun CompositionElement.withRepeatOnPages(value: Set<Int>): CompositionElement {
+    if (this is CompositionElement.Video) return this
+    val anchored = withRawTransform(transform.copy(repeatOriginPage =
+        if (value.isEmpty()) null else repeatOriginPage()))
+    return anchored.withRawRepeatOnPages(value)
+}
+
+private fun CompositionElement.withRawRepeatOnPages(value: Set<Int>): CompositionElement = when (this) {
     is CompositionElement.MediaPlaceholder -> copy(repeatOnPages = value)
     is CompositionElement.Photo -> copy(repeatOnPages = value)
     is CompositionElement.Video -> this
