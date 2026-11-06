@@ -11,3 +11,9 @@ artifacts/
 
 # Kotlin daemon logs
 .kotlin/
+
+# Python bytecode
+__pycache__/
+
+# Full-size originals of the sample photos; the reduced ones are versioned
+Docs/fotosexemplo/original/
