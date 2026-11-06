@@ -76,7 +76,8 @@ fun layoutTree(ids: List<String>, kind: CompositionLayoutKind, columns: Int = 2,
 
 data class LayoutDivider(val splitId: String, val index: Int, val axis: LayoutAxis,
     val x1: Float, val y1: Float, val x2: Float, val y2: Float, val parent: NormalizedRect)
-data class LayoutGeometry(val cells: Map<String, NormalizedRect>, val dividers: List<LayoutDivider>)
+data class LayoutGeometry(val cells: Map<String, NormalizedRect>, val dividers: List<LayoutDivider>,
+    val separators: List<LayoutDivider>, val area: NormalizedRect)
 
 /** Spacing uses the shorter physical side, so portrait pages do not produce wider vertical gaps. */
 fun CompositionLayout.geometry(pageAspect: Float): LayoutGeometry {
@@ -86,7 +87,8 @@ fun CompositionLayout.geometry(pageAspect: Float): LayoutGeometry {
     val mx = margin.coerceIn(0f, .2f) * shortX; val my = margin.coerceIn(0f, .2f) * shortY
     val gx = gap.coerceIn(0f, .15f) * shortX; val gy = gap.coerceIn(0f, .15f) * shortY
     val cells = linkedMapOf<String, NormalizedRect>(); val dividers = mutableListOf<LayoutDivider>()
-    fun visit(node: LayoutNode, box: NormalizedRect) {
+    val separators = mutableListOf<LayoutDivider>()
+    fun visit(node: LayoutNode, box: NormalizedRect, partition: NormalizedRect) {
         when (node) {
             is LayoutNode.Cell -> cells[node.elementId] = box
             is LayoutNode.Split -> {
@@ -100,20 +102,30 @@ fun CompositionLayout.geometry(pageAspect: Float): LayoutGeometry {
                 var cursor = if (horizontal) box.x else box.y
                 node.children.forEachIndexed { index, child ->
                     val size = available * weights[index] / total
-                    visit(child, if (horizontal) NormalizedRect(cursor, box.y, size, box.height) else NormalizedRect(box.x, cursor, box.width, size))
+                    val start = if (index == 0) { if (horizontal) partition.x else partition.y } else cursor - spacing / 2f
+                    val end = if (index == node.children.lastIndex) { if (horizontal) partition.right else partition.bottom }
+                        else cursor + size + spacing / 2f
+                    // Media stop at the gap; separator branches meet at its centre regardless of stroke width.
+                    val childPartition = if (horizontal) NormalizedRect(start, partition.y, end - start, partition.height)
+                        else NormalizedRect(partition.x, start, partition.width, end - start)
+                    visit(child, if (horizontal) NormalizedRect(cursor, box.y, size, box.height) else NormalizedRect(box.x, cursor, box.width, size), childPartition)
                     cursor += size
                     if (index < node.children.lastIndex) {
                         val position = cursor + spacing / 2f
-                        dividers += if (horizontal) LayoutDivider(node.id, index, node.axis, position, box.y, position, box.bottom, box)
+                        val divider = if (horizontal) LayoutDivider(node.id, index, node.axis, position, box.y, position, box.bottom, box)
                             else LayoutDivider(node.id, index, node.axis, box.x, position, box.right, position, box)
+                        dividers += divider
+                        separators += if (horizontal) divider.copy(y1 = partition.y, y2 = partition.bottom, parent = partition)
+                            else divider.copy(x1 = partition.x, x2 = partition.right, parent = partition)
                         cursor += spacing
                     }
                 }
             }
         }
     }
-    visit(root, NormalizedRect(mx, my, 1f - 2 * mx, 1f - 2 * my))
-    return LayoutGeometry(cells, dividers)
+    val area = NormalizedRect(mx, my, 1f - 2 * mx, 1f - 2 * my)
+    visit(root, area, area)
+    return LayoutGeometry(cells, dividers, separators, area)
 }
 
 fun LayoutNode.adjustDivider(splitId: String, index: Int, delta: Float): LayoutNode = when (this) {
@@ -183,15 +195,21 @@ fun CompositionProject.renderElements(): List<CompositionElement> {
         val shortSide = min(layout.frame.bounds.width, layout.frame.bounds.height / format.aspectRatio)
         val repeat = members.first().repeatOnPages.takeIf { pages -> members.all { it.repeatOnPages == pages } }.orEmpty()
         val transform = layout.frame.copy(repeatOriginPage = if (repeat.isEmpty()) null else members.first().repeatOriginPage())
-        fun stroke(suffix: String, style: LayoutStroke, points: List<StrokePoint>): CompositionElement.Drawing =
-            CompositionElement.Drawing("layout-decoration:${layout.groupId}:$suffix", transform.copy(opacity = transform.opacity * style.opacity),
-                z, StrokeKind.PEN, points, style.argb, style.width * shortSide * 1080f, locked = true, repeatOnPages = repeat)
+        fun stroke(suffix: String, style: LayoutStroke, points: List<StrokePoint>, area: NormalizedRect? = null): CompositionElement.Drawing {
+            val bounds = transform.bounds
+            val placed = if (area == null) transform else transform.copy(bounds = NormalizedRect(bounds.x + area.x * bounds.width,
+                bounds.y + area.y * bounds.height, area.width * bounds.width, area.height * bounds.height))
+            val local = if (area == null) points else points.map { it.copy(x = ((it.x - area.x) / area.width).coerceIn(0f, 1f),
+                y = ((it.y - area.y) / area.height).coerceIn(0f, 1f)) }
+            return CompositionElement.Drawing("layout-decoration:${layout.groupId}:$suffix", placed.copy(opacity = transform.opacity * style.opacity),
+                z, StrokeKind.PEN, local, style.argb, style.width * shortSide * 1080f, locked = true, repeatOnPages = repeat)
+        }
         buildList {
             if (layout.outline.width > 0f) add(stroke("outline", layout.outline, listOf(
                 StrokePoint(0f, 0f), StrokePoint(1f, 0f), StrokePoint(1f, 1f), StrokePoint(0f, 1f), StrokePoint(0f, 0f))))
-            if (layout.separators.width > 0f) add(stroke("separators", layout.separators, geometry.dividers.flatMap {
+            if (layout.separators.width > 0f) add(stroke("separators", layout.separators, geometry.separators.flatMap {
                 listOf(StrokePoint(it.x1, it.y1, startsStroke = true), StrokePoint(it.x2, it.y2))
-            }))
+            }, geometry.area))
         }
     }
 }

@@ -2626,7 +2626,9 @@ private fun CompositionElementView(
         // and ignored `strokeArgb`, so the shape changed colour on export.
         is CompositionElement.Shape -> Canvas(common) { drawCompositionShape(element, pageWidthPx / REFERENCE_PAGE_WIDTH) }
         is CompositionElement.Drawing -> Canvas(common) {
-            if (element.points.size > 1) {
+            if (element.id.startsWith("layout-decoration:")) {
+                drawCompositionLayoutStroke(element, pageWidthPx / REFERENCE_PAGE_WIDTH)
+            } else if (element.points.size > 1) {
                 val strokeColor =
                     if (element.kind == StrokeKind.ERASER) Color.Transparent else Color(element.colorArgb)
                 val strokeAlpha = if (element.kind == StrokeKind.MARKER) .45f else 1f

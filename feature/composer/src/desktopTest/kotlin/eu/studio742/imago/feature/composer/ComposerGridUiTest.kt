@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asSkiaBitmap
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
@@ -85,6 +86,23 @@ class ComposerGridUiTest {
         capture(onNodeWithTag("composer-grid-dialog"), "grid-feature-preview-phone.png")
         onNodeWithText(cancel).performClick()
         assertEquals(original, vm.state.value.project); assertFalse(vm.state.value.canUndo)
+    }
+
+    @Test(timeout = 30_000) fun `thin separators join on the full screen stage even when the media gutter is wider`() = runComposeUiTest {
+        val vm = model(); vm.beginGrid()
+        val draft = vm.state.value.gridEditor!!.layout.copy(margin = .05f, gap = .12f, separators = LayoutStroke(width = .01f))
+        vm.updateGridDraft(draft); vm.confirmGrid(); vm.openGrid(draft.groupId)
+        setContent { screen(vm) }
+        val page = onNodeWithTag("composer_page_0").fetchSemanticsNode().boundsInRoot
+        val stage = onNodeWithTag("composer_stage").fetchSemanticsNode().boundsInRoot
+        val geometry = draft.geometry(1f)
+        val upper = geometry.dividers.single { it.splitId == "row-0" }
+        val middle = geometry.separators.single { it.splitId == "rows" }
+        val x = (page.left - stage.left + upper.x1 * page.width).toInt()
+        val y = (page.top - stage.top + (upper.y2 + middle.y1) / 2f * page.height).toInt()
+        val pixel = onNodeWithTag("composer_stage").captureToImage().toPixelMap()[x, y]
+        assertTrue("The stage separator broke at its media gutter", pixel.red > .8f && pixel.green > .8f && pixel.blue > .8f)
+        capture(onNodeWithTag("composer-grid-editor"), "grid-continuous-separators-phone.png")
     }
 
     @Test(timeout = 30_000) fun `confirming the preview exposes editable grid handles and undo restores free elements`() = runComposeUiTest {

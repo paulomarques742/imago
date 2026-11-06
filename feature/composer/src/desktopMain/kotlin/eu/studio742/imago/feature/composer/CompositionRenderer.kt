@@ -68,25 +68,29 @@ class CompositionRenderer {
                         }
                         is CompositionElement.Text -> drawText(canvas, element, local, w, paint)
                         is CompositionElement.Drawing -> {
-                            paint.color = element.colorArgb.toInt(); paint.mode = PaintMode.STROKE; paint.strokeCap = PaintStrokeCap.ROUND
-                            paint.alpha = (element.transform.opacity.coerceIn(0f, 1f) * (element.colorArgb ushr 24 and 255)).roundToInt()
-                            if (element.kind == StrokeKind.ERASER) paint.blendMode = BlendMode.CLEAR
-                            if (element.kind == StrokeKind.MARKER) paint.alpha = (paint.alpha * .45f).toInt()
-                            if (!element.points.hasVariablePressure() && element.points.isNotEmpty()) {
-                                paint.strokeWidth = element.strokeWidth * w / REFERENCE_PAGE_WIDTH
-                                paint.strokeJoin = PaintStrokeJoin.ROUND
-                                Path().use { path ->
-                                    path.moveTo(element.points.first().x * local.width, element.points.first().y * local.height)
-                                    element.points.drop(1).forEach { point ->
-                                        if (point.startsStroke) path.moveTo(point.x * local.width, point.y * local.height)
-                                        else path.lineTo(point.x * local.width, point.y * local.height)
+                            if (element.id.startsWith("layout-decoration:")) {
+                                drawContent(canvas, local) { drawCompositionLayoutStroke(element, w / REFERENCE_PAGE_WIDTH, element.transform.opacity) }
+                            } else {
+                                paint.color = element.colorArgb.toInt(); paint.mode = PaintMode.STROKE; paint.strokeCap = PaintStrokeCap.ROUND
+                                paint.alpha = (element.transform.opacity.coerceIn(0f, 1f) * (element.colorArgb ushr 24 and 255)).roundToInt()
+                                if (element.kind == StrokeKind.ERASER) paint.blendMode = BlendMode.CLEAR
+                                if (element.kind == StrokeKind.MARKER) paint.alpha = (paint.alpha * .45f).toInt()
+                                if (!element.points.hasVariablePressure() && element.points.isNotEmpty()) {
+                                    paint.strokeWidth = element.strokeWidth * w / REFERENCE_PAGE_WIDTH
+                                    paint.strokeJoin = PaintStrokeJoin.ROUND
+                                    Path().use { path ->
+                                        path.moveTo(element.points.first().x * local.width, element.points.first().y * local.height)
+                                        element.points.drop(1).forEach { point ->
+                                            if (point.startsStroke) path.moveTo(point.x * local.width, point.y * local.height)
+                                            else path.lineTo(point.x * local.width, point.y * local.height)
+                                        }
+                                        canvas.drawPath(path, paint)
                                     }
-                                    canvas.drawPath(path, paint)
-                                }
-                            } else element.points.zipWithNext().forEach { (a, b) ->
-                                if (!b.startsStroke) {
-                                    paint.strokeWidth = strokeWidthAt(element.strokeWidth * w / REFERENCE_PAGE_WIDTH, (a.pressure + b.pressure) / 2)
-                                    canvas.drawLine(a.x * local.width, a.y * local.height, b.x * local.width, b.y * local.height, paint)
+                                } else element.points.zipWithNext().forEach { (a, b) ->
+                                    if (!b.startsStroke) {
+                                        paint.strokeWidth = strokeWidthAt(element.strokeWidth * w / REFERENCE_PAGE_WIDTH, (a.pressure + b.pressure) / 2)
+                                        canvas.drawLine(a.x * local.width, a.y * local.height, b.x * local.width, b.y * local.height, paint)
+                                    }
                                 }
                             }
                         }

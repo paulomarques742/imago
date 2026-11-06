@@ -332,6 +332,11 @@ class CompositionStaticExporter @Inject constructor(
 
     private fun drawStroke(canvas: Canvas, element: CompositionElement.Drawing, rect: RectF, opacity: Int) {
         if (element.points.size < 2 || element.kind == StrokeKind.ERASER) return
+        if (element.id.startsWith("layout-decoration:")) {
+            val unit = canvas.width / REFERENCE_PAGE_WIDTH
+            drawContent(canvas, rect) { drawCompositionLayoutStroke(element, unit, element.transform.opacity) }
+            return
+        }
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = element.colorArgb.toInt()
             alpha = (opacity * (element.colorArgb ushr 24 and 255) / 255f * if (element.kind == StrokeKind.MARKER) .45f else 1f).roundToInt()
