@@ -285,4 +285,13 @@ interface LibraryRepository {
 
     /** The original file, for sharing. */
     suspend fun downloadOriginal(assetId: String, destination: File)
+
+    /** The camera RAW that [url], one of this library's image URLs, shows; null for anything else. */
+    suspend fun serverRawAt(url: String): ServerRaw? = null
+
+    /** The first [bytes] of an original, without downloading the rest. */
+    suspend fun readOriginalHead(assetId: String, bytes: Int): ByteArray = ByteArray(0)
 }
+
+/** A RAW of a server library, by the id this repository knows it by and the checksum of its original. */
+data class ServerRaw(val assetId: String, val checksum: String)

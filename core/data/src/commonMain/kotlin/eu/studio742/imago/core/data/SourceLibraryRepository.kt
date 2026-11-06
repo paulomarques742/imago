@@ -317,4 +317,15 @@ class SourceLibraryRepository @Inject constructor(
     override suspend fun downloadOriginal(assetId: String, destination: File) {
         val ref = AssetReference.parse(assetId); provider(ref.libraryId).downloadOriginal(ref.localId, destination)
     }
+    override suspend fun serverRawAt(url: String): ServerRaw? {
+        for (source in configuration.libraries.value) {
+            if (source.isDevice || source.isUnified || !source.isConnected) continue
+            val raw = provider(source.id).serverRawAt(url) ?: continue
+            return raw.copy(assetId = AssetReference(source.id, raw.assetId).encode())
+        }
+        return null
+    }
+    override suspend fun readOriginalHead(assetId: String, bytes: Int): ByteArray {
+        val ref = AssetReference.parse(assetId); return provider(ref.libraryId).readOriginalHead(ref.localId, bytes)
+    }
 }

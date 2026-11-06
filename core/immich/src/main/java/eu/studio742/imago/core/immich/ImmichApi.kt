@@ -197,6 +197,10 @@ interface ImmichApi {
 
     suspend fun downloadOriginal(connection: ImmichConnection, assetId: String, destination: File)
 
+    /** The first [bytes] of the original, or all of it if it is shorter. */
+    suspend fun readOriginalHead(connection: ImmichConnection, assetId: String, bytes: Int): ByteArray =
+        error("Reading part of an original is unavailable")
+
     /** The server's own edits of the photo — crop, rotation, mirror — in the order it applies them. */
     suspend fun getAssetEdits(connection: ImmichConnection, assetId: String): List<ImmichEdit> =
         error("Immich edits unavailable")

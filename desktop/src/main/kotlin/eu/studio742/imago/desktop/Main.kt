@@ -86,6 +86,10 @@ fun main(args: Array<String>) {
             add(eu.studio742.imago.core.render.DiagnosticImageInterceptor())
             add(eu.studio742.imago.core.render.RawPhotoDecoder.Factory())
             add(eu.studio742.imago.core.render.LibraryRawInterceptor())
+            add(eu.studio742.imago.core.render.ServerRawToneInterceptor(
+                rawAt = { url -> graph.library.serverRawAt(url)?.let { eu.studio742.imago.core.render.LibraryRaw(it.assetId, it.checksum) } },
+                head = { id, bytes -> graph.library.readOriginalHead(id, bytes) },
+            ))
             // Before the network: an edited RAW of the server is developed from its original, and
             // read back from the cache once it has been.
             add(eu.studio742.imago.core.render.CachedRawTileFetcher.Factory())

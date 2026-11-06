@@ -30,6 +30,7 @@ import eu.studio742.imago.core.immich.ImmichApi
 import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
 import eu.studio742.imago.core.immich.requirePermission
 import eu.studio742.imago.core.model.ImmichAsset
+import eu.studio742.imago.core.model.isRawOriginal
 import eu.studio742.imago.core.model.ImmichAssetDetail
 import eu.studio742.imago.core.model.ImmichAlbum
 import eu.studio742.imago.core.model.ImmichPerson
@@ -729,10 +730,24 @@ class RoomLibraryRepository @Inject constructor(
         }
     }
 
+    override suspend fun serverRawAt(url: String): ServerRaw? {
+        val id = ASSET_IMAGE.find(url)?.groupValues?.get(1) ?: return null
+        val connection = configuration.currentConnection() ?: return null
+        if (url != api.thumbnailUrl(connection, id) && url != api.previewUrl(connection, id)) return null
+        val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
+        val asset = database.assetDao().asset(libraryKey, id) ?: return null
+        return if (isRawOriginal(asset.mimeType, asset.originalFileName)) ServerRaw(id, asset.checksum) else null
+    }
+
+    override suspend fun readOriginalHead(assetId: String, bytes: Int): ByteArray =
+        api.readOriginalHead(requireConnection(), assetId, bytes)
+
     private fun requireConnection(): ImmichConnection =
         checkNotNull(configuration.currentConnection()) { "Immich connection is not configured" }
 
     private companion object {
+        /** The id in an asset's image URL. */
+        val ASSET_IMAGE = Regex("/assets/([^/?]+)/thumbnail\\?")
         const val PAGE_SIZE = 100
         /** Long enough to cover one opening of the library, short enough for a pull to ask again. */
         const val BUCKETS_FRESH_MILLIS = 5_000L

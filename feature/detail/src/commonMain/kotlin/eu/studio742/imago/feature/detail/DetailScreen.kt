@@ -1372,7 +1372,7 @@ private enum class RawSource { PHONE, SERVER_EDIT }
 
 /**
  * Null for a photo that is shown as it is served: not a RAW, or a RAW of the server with no edit, whose
- * server image is the camera's look.
+ * server image is brought to the camera's tones on its way here ([ServerRawToneInterceptor]).
  */
 private fun rawSource(fileName: String, thumbnailUrl: String, apiKey: String, recipe: EditRecipe?): RawSource? = when {
     !isRawOriginal(null, fileName) -> null

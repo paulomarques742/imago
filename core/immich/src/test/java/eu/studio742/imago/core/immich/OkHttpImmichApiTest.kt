@@ -272,6 +272,34 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun readsOnlyTheHeadOfAnOriginal() = runTest {
+        server.enqueue(MockResponse().setResponseCode(206).setBody("head"))
+
+        val head = api.readOriginalHead(connection(), "asset-1", 4)
+
+        val request = server.takeRequest()
+        assertEquals("/api/assets/asset-1/original", request.path)
+        assertEquals("secret", request.getHeader("x-api-key"))
+        assertEquals("bytes=0-3", request.getHeader("Range"))
+        assertEquals("identity", request.getHeader("Accept-Encoding"))
+        assertEquals("head", String(head))
+    }
+
+    @Test
+    fun aServerThatIgnoresTheRangeGivesNoMoreThanTheHead() = runTest {
+        server.enqueue(MockResponse().setBody("the whole original"))
+
+        assertEquals("the ", String(api.readOriginalHead(connection(), "asset-1", 4)))
+    }
+
+    @Test
+    fun anOriginalShorterThanTheHeadComesWhole() = runTest {
+        server.enqueue(MockResponse().setResponseCode(206).setBody("ab"))
+
+        assertEquals("ab", String(api.readOriginalHead(connection(), "asset-1", 16)))
+    }
+
+    @Test
     fun loadsOwnedAndSharedAlbumsWithoutDuplicates() = runTest {
         server.enqueue(
             MockResponse().setBody(

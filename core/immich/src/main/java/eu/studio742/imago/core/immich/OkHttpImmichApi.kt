@@ -674,6 +674,36 @@ class OkHttpImmichApi(
         }
     }
 
+    override suspend fun readOriginalHead(
+        connection: ImmichConnection,
+        assetId: String,
+        bytes: Int,
+    ): ByteArray = withContext(Dispatchers.IO) {
+        val path = ImmichContract.DOWNLOAD_ASSET.replace("{id}", assetId)
+        execute(
+            request = Request.Builder().url(endpoint(connection, path)).get()
+                .header("Range", "bytes=0-${bytes - 1}")
+                // A compressed answer would not be the file's bytes.
+                .header("Accept-Encoding", "identity")
+                .build(),
+            apiKey = connection.apiKey,
+            permission = ImmichKeyPermissions.DOWNLOAD_ASSET,
+        ).use { response ->
+            val body = checkNotNull(response.body) { "Immich returned an empty original." }
+            // A proxy that ignores the range sends the whole file: closing here leaves the rest unread.
+            val head = ByteArray(bytes)
+            var filled = 0
+            body.byteStream().use { input ->
+                while (filled < bytes) {
+                    val read = input.read(head, filled, bytes - filled)
+                    if (read < 0) break
+                    filled += read
+                }
+            }
+            head.copyOf(filled)
+        }
+    }
+
     override suspend fun exportEditedAsset(
         connection: ImmichConnection,
         originalAssetId: String,

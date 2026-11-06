@@ -49,6 +49,10 @@ class ImmichRoomApplication : Application(), SingletonImageLoader.Factory {
             add(LibraryImageInterceptor())
             // After it: it sets the memory cache key that this one adds to.
             add(eu.studio742.imago.core.render.LibraryRawInterceptor())
+            add(eu.studio742.imago.core.render.ServerRawToneInterceptor(
+                rawAt = { url -> library.serverRawAt(url)?.let { eu.studio742.imago.core.render.LibraryRaw(it.assetId, it.checksum) } },
+                head = { id, bytes -> library.readOriginalHead(id, bytes) },
+            ))
             // Before the network and the one that reads the RAW: a tile that was developed already is
             // answered from the cache. Then an edited RAW of the server comes from its original.
             add(eu.studio742.imago.core.render.CachedRawTileFetcher.Factory())
