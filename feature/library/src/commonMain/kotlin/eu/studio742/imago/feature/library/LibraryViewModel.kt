@@ -305,10 +305,11 @@ open class LibraryViewModel(
     ) { chips, month, album, query, byContent ->
         // Only the chip of the view being shown reaches the query, so choosing one in an album does
         // not reload the timeline behind it, and the reverse.
-        AssetQuery(if (album != null) chips.second else chips.first, month, album, query, chips.third, byContent)
+        val (activeFilter, activeType) = if (album != null) chips.second else chips.first
+        AssetQuery(activeFilter, activeType, month, album, query, chips.third, byContent)
     }
         .distinctUntilChanged()
-        .pagingForEachQuery(viewModelScope) { (activeFilter, month, album, query, source, byContent) ->
+        .pagingForEachQuery(viewModelScope) { (activeFilter, activeType, month, album, query, source, byContent) ->
             val albumId = album?.let { gridAlbumId(it, source.id) }
             val pages = if (album?.isPerson == true) {
                 library.personAssets(album.id, activeFilter)
@@ -324,6 +325,7 @@ open class LibraryViewModel(
                     month = month.takeIf { album == null },
                     albumId = albumId,
                     query = query.takeIf(String::isNotEmpty),
+                    mediaType = activeType,
                 )
             }
             pages.map { pagingData -> pagingData.map { asset -> asset.toAssetUiModel(library, asset.localRecipe()) } }
@@ -343,9 +345,9 @@ open class LibraryViewModel(
                 navigationJob?.cancel()
                 val restored = navigationStates[id]
                 filter.value = restored?.first ?: LibraryFilter.ALL
+                mediaType.value = MediaTypeFilter.ANY
                 uiState.value = (restored?.second ?: LibraryUiState()).copy(revealingHiddenAlbums = false)
                 previous = id
-                mediaType.value = MediaTypeFilter.ANY
                 uiState.update {
                     it.copy(
                         hasPeople = library.hasPeople,
@@ -439,6 +441,7 @@ open class LibraryViewModel(
                 filter = filter.value,
                 month = uiState.value.selectedMonth,
                 query = uiState.value.query.trim().takeIf(String::isNotEmpty),
+                mediaType = mediaType.value,
             )
         }.getOrNull()
     }
@@ -450,6 +453,7 @@ open class LibraryViewModel(
             filter = filter.value,
             month = uiState.value.selectedMonth,
             query = uiState.value.query.trim().takeIf(String::isNotEmpty),
+            mediaType = mediaType.value,
         )
     }.getOrNull()
 
@@ -497,10 +501,6 @@ open class LibraryViewModel(
         uiState.update { it.copy(selectedMonth = null, selectedAlbum = null, showingPeople = false) }
     }
 
-    /** The people chip: the faces in place of the grid, read again each time it is chosen. */
-    fun showPeople() {
-        filter.value = LibraryFilter.ALL
-        uiState.update { it.copy(showingPeople = true, selectedMonth = null, selectedAlbum = null) }
     fun selectMediaType(value: MediaTypeFilter) {
         if (uiState.value.selectedAlbum != null) {
             albumMediaType.value = value
@@ -510,10 +510,14 @@ open class LibraryViewModel(
         uiState.update { it.copy(selectedMonth = null, selectedAlbum = null, showingPeople = false) }
     }
 
+    /** The people chip: the faces in place of the grid, read again each time it is chosen. */
+    fun showPeople() {
+        filter.value = LibraryFilter.ALL
+        mediaType.value = MediaTypeFilter.ANY
+        uiState.update { it.copy(showingPeople = true, selectedMonth = null, selectedAlbum = null) }
         loadPeople()
     }
 
-        mediaType.value = MediaTypeFilter.ANY
     private var peopleJob: kotlinx.coroutines.Job? = null
 
     fun loadPeople() {
@@ -772,7 +776,10 @@ open class LibraryViewModel(
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (_: Exception) {
+                } catch (error: Exception) {
+                    eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                        eu.studio742.imago.core.model.diagnostics.DiagnosticArea.EXPORT, error,
+                        eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.PHOTO_EXPORT)
                     failed++
                 }
             }
@@ -927,6 +934,7 @@ open class LibraryViewModel(
             val created = if (transfer != null) library.createFolderAlbum(name, ids, transfer, place) else library.createAlbum(name, ids)
             val album = created.toUiModel()
             albumFilter.value = LibraryFilter.ALL
+            albumMediaType.value = MediaTypeFilter.ANY
             uiState.update { it.copy(section = LibrarySection.ALBUMS, selectedAlbum = album, selectedMonth = null) }
             albumChanged(album)
             uiPlural(Res.plurals.library_album_created, assets.size, album.name, assets.size)
@@ -934,7 +942,6 @@ open class LibraryViewModel(
     }
 
     fun renameOpenAlbum(name: String) {
-            albumMediaType.value = MediaTypeFilter.ANY
         val album = uiState.value.selectedAlbum ?: return
         runOnSelection(uiText(Res.string.library_selection_working), Res.string.library_album_failed, needsSelection = false) {
             // A folder's id is where it is, and changes with the name.
@@ -1022,6 +1029,7 @@ open class LibraryViewModel(
      */
     fun jumpToDate(date: LocalDate) {
         filter.value = LibraryFilter.ALL
+        mediaType.value = MediaTypeFilter.ANY
         uiState.update {
             it.copy(
                 section = LibrarySection.TIMELINE,
@@ -1029,7 +1037,6 @@ open class LibraryViewModel(
                 // a date is scrolling to its index — and the grid stays the whole library, instead of
                 // being stuck in a month with a chip explaining it.
                 selectedMonth = null,
-        mediaType.value = MediaTypeFilter.ANY
                 selectedAlbum = null,
                 showingPeople = false,
                 isSearching = false,
@@ -1047,6 +1054,7 @@ open class LibraryViewModel(
      */
     fun openAlbum(album: AlbumUiModel) {
         albumFilter.value = LibraryFilter.ALL
+        albumMediaType.value = MediaTypeFilter.ANY
         openAlbumState(album)
     }
 
@@ -1054,7 +1062,6 @@ open class LibraryViewModel(
         it.copy(section = LibrarySection.ALBUMS, selectedAlbum = album, selectedMonth = null, isSearching = false, query = "")
     }
 
-        albumMediaType.value = MediaTypeFilter.ANY
     fun closeAlbum() = uiState.update { it.copy(selectedAlbum = null) }
 
     /** Puts the hidden albums in the grid for now; leaving the albums takes them out again. */

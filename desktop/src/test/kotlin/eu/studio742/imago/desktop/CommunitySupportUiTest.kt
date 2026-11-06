@@ -19,6 +19,7 @@ import eu.studio742.imago.core.designsystem.ImagoTheme
 import eu.studio742.imago.core.designsystem.i18n.LanguagePreference
 import eu.studio742.imago.core.designsystem.i18n.ProvideAppLanguage
 import eu.studio742.imago.core.sync.*
+import eu.studio742.imago.core.model.diagnostics.*
 import eu.studio742.imago.feature.library.LibrarySettingsRoute
 import eu.studio742.imago.feature.library.LibrarySettingsViewModel
 import eu.studio742.imago.feature.library.CommunityReplyNotice
@@ -34,6 +35,51 @@ import java.util.Locale
 /** Real settings at phone width, with local forum fixtures and intercepted browser links. */
 @OptIn(ExperimentalTestApi::class)
 class CommunitySupportUiTest {
+    @Test fun supportReportShowsAnonymousSettingsBeforeAnyEmailIsOpened() {
+        val previousLocale = Locale.getDefault()
+        Locale.setDefault(Locale.ENGLISH)
+        val root = Files.createTempDirectory("support-report-ui")
+        val graph = DesktopDataGraph(root)
+        val owner = object : LifecycleOwner {
+            override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
+        }
+        val settings = LibrarySettingsViewModel(graph.configuration, graph.folders, graph.library)
+        LocalDiagnostics.start(DiagnosticStore(root.resolve("diagnostics").toFile()), mapOf("Platform" to "Windows"))
+        try {
+            runDesktopComposeUiTest(width = 390, height = 844) {
+                setContent {
+                    CompositionLocalProvider(LocalLifecycleOwner provides owner, LocalDesktopDataGraph provides graph) {
+                        ProvideAppLanguage(LanguagePreference.ENGLISH, Locale.ENGLISH) {
+                            ImagoTheme { Surface(Modifier.fillMaxSize()) { LibrarySettingsRoute({}, viewModel = settings) } }
+                        }
+                    }
+                }
+                onNodeWithText("Support and diagnostics").performScrollTo().performClick()
+                onNodeWithText("Contact support").performScrollTo().performClick()
+                onNode(hasSetTextAction()).performScrollTo().performTextInput("A photo failed to open")
+                onNodeWithText("Review report").performClick()
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("IMAGO local diagnostics", substring = true).fetchSemanticsNodes().isNotEmpty() }
+                onNode(hasScrollToIndexAction()).performScrollToNode(hasText("selectedLibrary=DEVICE", substring = true))
+                onNodeWithText("selectedLibrary=DEVICE", substring = true).assertIsDisplayed()
+                onNode(hasScrollToIndexAction()).performScrollToNode(hasText("mediaAccess=FOLDERS", substring = true))
+                onNodeWithText("mediaAccess=FOLDERS", substring = true).assertIsDisplayed()
+                onNodeWithText("Open email").assertIsDisplayed()
+                capture("support-report-review-en")
+                onNodeWithText("Edit description").performClick()
+                onNodeWithText("Cancel").performClick()
+                val report = root.resolve("diagnostics/reports").toFile().listFiles()!!.single().readText()
+                assertTrue(report.contains("selectedLibrary=DEVICE"))
+                assertTrue(report.contains("effectiveLanguage=ENGLISH"))
+                assertFalse(report.contains(root.toString()))
+            }
+        } finally {
+            LocalDiagnostics.stop()
+            graph.close()
+            root.toFile().deleteRecursively()
+            Locale.setDefault(previousLocale)
+        }
+    }
+
     @Test fun supportLinksAndOwnTopicRepliesInEnglish() = checkSupport(false)
     @Test fun supportLinksAndOwnTopicRepliesInPortuguese() = checkSupport(true)
     @Test fun publicForumLinkStaysVisibleWithoutCommunityBackendInEnglish() = checkSupport(false, withCommunity = false)

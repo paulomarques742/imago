@@ -171,6 +171,9 @@ internal class GlTextureStage(private val renderer: PhotoRenderer) : TextureView
                 try {
                     work()
                 } catch (failure: Exception) {
+                    eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                        eu.studio742.imago.core.model.diagnostics.DiagnosticArea.IMAGE, failure,
+                        eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.RENDER_PHOTO)
                     Log.w(LOG_TAG, "GL work failed", failure)
                 }
             }

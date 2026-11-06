@@ -74,7 +74,13 @@ class DesktopCompositionExports(
             mimeTypes += if (hasVideo) "video/mp4" else format.mimeType
             if (targetLibraryId != null) {
                 runCatching { media.uploadComposition(targetLibraryId, file, file.name, if (hasVideo) "video/mp4" else format.mimeType, project.createdAt) }
-                    .onFailure { uploadFailures++ }
+                    .onFailure {
+                        if (it is kotlinx.coroutines.CancellationException) throw it
+                        eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                            eu.studio742.imago.core.model.diagnostics.DiagnosticArea.EXPORT, it,
+                            eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.UPLOAD)
+                        uploadFailures++
+                    }
             }
             onProgress(position + 1, pages.size)
         }

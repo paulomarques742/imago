@@ -20,6 +20,7 @@ kotlin {
             // This module's texts, in composeResources.
             implementation(compose.components.resources)
             implementation(project(":core:sync"))
+            implementation(project(":core:model"))
             implementation(project(":core:designsystem"))
             implementation(compose.materialIconsExtended)
             implementation(libs.compose.backhandler)
@@ -32,6 +33,7 @@ kotlin {
             implementation(libs.hilt.navigation.compose)
             implementation(libs.kotlinx.coroutines.android)
         }
+        getByName("desktopTest").dependencies { implementation(libs.junit4) }
     }
 }
 

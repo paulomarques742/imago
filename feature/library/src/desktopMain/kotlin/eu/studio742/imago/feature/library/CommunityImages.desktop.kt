@@ -2,6 +2,7 @@ package eu.studio742.imago.feature.library
 
 import androidx.compose.runtime.*
 import eu.studio742.imago.core.sync.ForumImage
+import eu.studio742.imago.core.model.diagnostics.*
 import eu.studio742.imago.feature.library.resources.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +43,7 @@ internal actual fun rememberCommunityImages(onImages: (List<ForumImage>) -> Unit
                         receive(withContext(Dispatchers.IO) { files.map(::prepareCommunityImage) })
                     }
                 } catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) { fail() }
+                catch (error: Exception) { LocalDiagnostics.failure(DiagnosticArea.COMMUNITY, error, DiagnosticOperation.COMMUNITY_IMAGES); fail() }
                 finally { picking = false; busy(false) }
             }
         }

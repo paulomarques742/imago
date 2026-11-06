@@ -31,10 +31,15 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
+import eu.studio742.imago.core.model.diagnostics.*
 import org.junit.Test
 import java.io.File
 
 class ImmichGeometryMirrorTest {
+    @get:Rule val temporary = TemporaryFolder()
     private val api = FakeEditsApi()
     private val logged = mutableListOf<String>()
     private val mirror = ImmichGeometryMirror(api, FakeLibraries, logged::add)
@@ -118,10 +123,15 @@ class ImmichGeometryMirrorTest {
     @Test
     fun aRefusedWriteDoesNotFailTheEditor() = runBlocking {
         api.refuseWrites = true
-
-        mirror.mirror(recipe(Geometry(rotation = 90)))
-
-        assertTrue(logged.single().startsWith("could not mirror"))
+        val store = DiagnosticStore(temporary.newFolder())
+        LocalDiagnostics.start(store, emptyMap())
+        try {
+            mirror.mirror(recipe(Geometry(rotation = 90)))
+            assertTrue(logged.single().startsWith("could not mirror"))
+            val report = store.report(emptyMap(), "Issue", DiagnosticAccess.UNKNOWN, emptyList()).readText()
+            assertTrue(report.contains("EDITOR GEOMETRY_MIRROR FAILURE"))
+            assertFalse(report.contains(LIBRARY_ID))
+        } finally { LocalDiagnostics.stop() }
     }
 
     /** The detail's and the selection's rotation: the editor's quarter turn, saved and sent to the server. */

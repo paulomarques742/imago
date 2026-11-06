@@ -5,7 +5,7 @@
     <string name="library_settings_preferences">Preferences</string>
     <string name="library_support_title">Support and diagnostics</string>
     <string name="library_support_contact">Contact support</string>
-    <string name="library_support_privacy">Technical logs stay on this device for up to 24 hours, with a storage limit. They exclude server addresses, API keys and photo content. Nothing is sent automatically. Review the report, then choose whether to send it by email to hello@742studio.eu.</string>
+    <string name="library_support_privacy">Technical logs stay on this device for up to 24 hours, with a storage limit. Reports include app settings and the selected library’s type and local position, without library names or identifiers. They exclude server addresses, API keys and photo content. Nothing is sent automatically. Review the report, then choose whether to send it by email to hello@742studio.eu.</string>
     <string name="library_support_description">Briefly describe the problem</string>
     <string name="library_support_connection">How do you access Immich?</string>
     <string name="library_support_access_unknown">Not sure / not using Immich</string>

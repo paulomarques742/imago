@@ -140,6 +140,9 @@ class ShareUploadViewModel @Inject constructor(
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (unreadable: Exception) {
+                    eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                        eu.studio742.imago.core.model.diagnostics.DiagnosticArea.IMAGE, unreadable,
+                        eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.UPLOAD)
                     // A file the other app no longer serves is left out; the others go on.
                     copy.delete()
                 }

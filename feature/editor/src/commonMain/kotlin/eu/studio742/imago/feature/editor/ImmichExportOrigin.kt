@@ -63,7 +63,10 @@ internal class ExportOriginChecker(
                 if (externalLibraryId(assetId).isNullOrBlank()) ImmichExportOrigin.OTHER else ImmichExportOrigin.EXTERNAL
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticArea.EXPORT, error,
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.ASSET)
                 ImmichExportOrigin.UNAVAILABLE
             }
             // A late response for a previous photo cannot change the current export's warning.

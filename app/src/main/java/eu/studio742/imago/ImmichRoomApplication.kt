@@ -44,6 +44,7 @@ class ImmichRoomApplication : Application(), SingletonImageLoader.Factory {
     // did in Coil 2: Immich thumbnails stay on disk.
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
         .components {
+            add(eu.studio742.imago.core.render.DiagnosticImageInterceptor())
             add(eu.studio742.imago.core.render.RawPhotoDecoder.Factory())
             add(LibraryImageInterceptor())
             // After it: it sets the memory cache key that this one adds to.

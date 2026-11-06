@@ -86,7 +86,15 @@ internal data class AlbumOutcome(val message: UiText, val failed: Boolean)
 
 /** [transfer] is how photos went into a folder album; null for a server's, where they are added. */
 internal fun albumAdditionOutcome(result: AlbumAddition, albumName: String, transfer: FolderTransfer? = null): AlbumOutcome = when {
-    result.failed > 0 -> AlbumOutcome(uiPlural(Res.plurals.library_album_add_failed, result.failed, result.failed, albumName), failed = true)
+    result.failed > 0 -> {
+        eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.record(
+            eu.studio742.imago.core.model.diagnostics.DiagnosticEvent(
+                eu.studio742.imago.core.model.diagnostics.DiagnosticArea.IMAGE,
+                eu.studio742.imago.core.model.diagnostics.DiagnosticOutcome.FAILURE,
+                eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.ALBUMS,
+                itemCount = result.failed))
+        AlbumOutcome(uiPlural(Res.plurals.library_album_add_failed, result.failed, result.failed, albumName), failed = true)
+    }
     result.added == 0 -> AlbumOutcome(uiText(Res.string.library_album_all_there, albumName), failed = false)
     transfer == FolderTransfer.MOVE ->
         AlbumOutcome(uiPlural(Res.plurals.library_album_moved, result.added, result.added, albumName), failed = false)

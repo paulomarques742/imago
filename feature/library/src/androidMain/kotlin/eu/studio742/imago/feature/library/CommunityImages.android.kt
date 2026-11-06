@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import eu.studio742.imago.core.sync.ForumImage
+import eu.studio742.imago.core.model.diagnostics.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,13 +51,13 @@ internal actual fun rememberCommunityImages(onImages: (List<ForumImage>) -> Unit
                 } }
                 receive(images)
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { fail() }
+            catch (error: Exception) { LocalDiagnostics.failure(DiagnosticArea.COMMUNITY, error, DiagnosticOperation.COMMUNITY_IMAGES); fail() }
             finally { busy(false) }
         } else busy(false)
     }
     return {
         busy(true)
         try { launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-        catch (_: Exception) { busy(false); fail() }
+        catch (error: Exception) { LocalDiagnostics.failure(DiagnosticArea.COMMUNITY, error, DiagnosticOperation.COMMUNITY_IMAGES); busy(false); fail() }
     }
 }

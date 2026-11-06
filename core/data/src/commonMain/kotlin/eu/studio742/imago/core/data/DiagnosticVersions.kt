@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 
 /** Observe versions during normal app startup/configuration changes, never when exporting a report. */
 suspend fun ConfigurationRepository.observeDiagnosticVersions() {
+    LocalDiagnostics.selectedLibrary = { diagnosticLibrary(selectedLibraryId.value) }
     libraries.map { sources -> sources.filter { !it.isDevice && !it.isUnified && it.isConnected && it.serverUrl != null }.map { it.connection() } }
         .distinctUntilChanged().collectLatest { connections ->
             coroutineScope {

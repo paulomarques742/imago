@@ -1,6 +1,8 @@
 package eu.studio742.imago.core.model.diagnostics
 
 import eu.studio742.imago.core.model.ServerVersion
+import eu.studio742.imago.core.model.UserMessage
+import eu.studio742.imago.core.model.UserMessageException
 import java.io.File
 import java.io.IOException
 import java.net.ConnectException
@@ -11,8 +13,8 @@ import java.time.Instant
 import java.util.concurrent.CancellationException
 import javax.net.ssl.SSLException
 
-enum class DiagnosticArea { APP, IMMICH, IMAGE, VIDEO, INTERFACE, EXPORT, SYNC, COMMUNITY }
-enum class DiagnosticOutcome { START, SUCCESS, HTTP_ERROR, DNS, TIMEOUT, TLS, CONNECTION, PERMISSION, INVALID_RESPONSE, CANCELLED, FAILURE, CRASH }
+enum class DiagnosticArea { APP, IMMICH, IMAGE, VIDEO, INTERFACE, EXPORT, SYNC, COMMUNITY, EDITOR, ACCOUNT }
+enum class DiagnosticOutcome { START, SUCCESS, HTTP_ERROR, DNS, TIMEOUT, TLS, CONNECTION, PERMISSION, INVALID_RESPONSE, CANCELLED, FAILURE, CRASH, OUT_OF_MEMORY, FILE_UNAVAILABLE, STORAGE }
 enum class DiagnosticTransport { UNKNOWN, OFFLINE, WIFI, CELLULAR, ETHERNET, VPN, OTHER }
 enum class DiagnosticAccess { UNKNOWN, LOCAL_NETWORK, DIRECT_REMOTE, REVERSE_PROXY, VPN, TUNNEL }
 enum class DiagnosticProtocol { UNKNOWN, HTTP, HTTPS }
@@ -56,6 +58,9 @@ data class DiagnosticEvent(
     val customHeaders: Boolean = false,
     /** The address has a client certificate configured: the fact only. */
     val customCertificate: Boolean = false,
+    val selectedLibrary: DiagnosticLibrary? = null,
+    val userMessage: UserMessage? = null,
+    val itemCount: Int? = null,
 )
 
 class DiagnosticFailure private constructor(private val kind: DiagnosticOutcome, private val frames: List<String>) {
@@ -80,6 +85,9 @@ enum class DiagnosticOperation {
     SERVER_CONFIG, SMART_SEARCH, SERVER_FEATURES, KEY_PERMISSIONS, EDITS, PEOPLE, MAP, MEMORIES,
     /** The movement of a Live Photo or Motion Photo, played from the detail. */
     LIVE_PHOTO,
+    OPEN_PHOTO, READ_RECIPE, SAVE_RECIPE, RECIPE_LIBRARY, PHOTO_EXPORT, EDIT_REEL,
+    GEOMETRY_MIRROR, RENDER_PHOTO, SUPPORT_REPORT, SUPPORT_EMAIL, OPEN_LINK, COMMUNITY_IMAGES,
+    ACCOUNT_REQUEST, ACCOUNT_LINK, MAP_TILES,
 }
 
 fun diagnosticOutcome(error: Throwable): DiagnosticOutcome {
@@ -94,6 +102,9 @@ fun diagnosticOutcome(error: Throwable): DiagnosticOutcome {
             is SSLException -> return DiagnosticOutcome.TLS
             is ConnectException -> return DiagnosticOutcome.CONNECTION
             is SecurityException -> return DiagnosticOutcome.PERMISSION
+            is OutOfMemoryError -> return DiagnosticOutcome.OUT_OF_MEMORY
+            is java.io.FileNotFoundException, is java.nio.file.NoSuchFileException -> return DiagnosticOutcome.FILE_UNAVAILABLE
+            is java.nio.file.FileSystemException -> return DiagnosticOutcome.STORAGE
         }
         current = current.cause
     }
@@ -151,6 +162,9 @@ class DiagnosticStore(
             event.protection?.let { append(" protection=").append(it) }
             if (event.customHeaders) append(" headers=custom")
             if (event.customCertificate) append(" certificate=custom")
+            event.selectedLibrary?.let { append(" selectedLibrary=").append(it) }
+            event.userMessage?.let { append(" message=").append(it) }
+            event.itemCount?.let { append(" items=").append(it.coerceAtLeast(0)) }
             event.failure?.let { append(" failure=").append(it) }
             append('\n')
         }
@@ -172,13 +186,13 @@ class DiagnosticStore(
         trim(reports, maxBytes * 2, 4)
     }
 
-    /** Metadata must come from the OS/build, never from account, server or user preferences. */
-    @Synchronized fun report(metadata: Map<String, String>, description: String, access: DiagnosticAccess, secrets: Collection<String>): File {
+    /** Free-form metadata comes only from OS/build; preferences must use the typed settings allowlist. */
+    @Synchronized fun report(metadata: Map<String, String>, description: String, access: DiagnosticAccess, secrets: Collection<String>, settings: DiagnosticSettings? = null): File {
         cleanup()
         check(reports.isDirectory || reports.mkdirs())
         val file = reports.resolve("IMAGO-support-${now()}.txt")
         val text = buildString {
-            appendLine("IMAGO local diagnostics (format 1)")
+            appendLine("IMAGO local diagnostics (format 2)")
             appendLine("Created: ${Instant.ofEpochMilli(now())}")
             appendLine("Retention: up to 24 hours; oldest events may be removed at the storage limit.")
             metadata.toSortedMap().forEach { (key, value) ->
@@ -186,6 +200,7 @@ class DiagnosticStore(
             }
             appendLine("Connection method (reported by user): $access")
             appendLine("Immich versions below are observed versions; absent means unknown. Proxy/tunnel cannot be inferred.")
+            appendLine(settings?.lines() ?: "\nApp settings: unavailable")
             appendLine("\nProblem description:\n${redactSupportDescription(description, secrets)}")
             appendLine("\nEvents (no URLs, credentials, headers, bodies, photo names or identifiers):")
             events.listFiles().orEmpty().sortedBy { it.nameWithoutExtension.toLongOrNull() }.forEach {
@@ -233,6 +248,7 @@ object LocalDiagnostics {
     @Volatile var store: DiagnosticStore? = null
         private set
     @Volatile var transport: () -> DiagnosticTransport = { DiagnosticTransport.UNKNOWN }
+    @Volatile var selectedLibrary: () -> DiagnosticLibrary? = { null }
     @Volatile var metadata: Map<String, String> = emptyMap()
         private set
     @Volatile var storageFailed: Boolean = false
@@ -261,10 +277,11 @@ object LocalDiagnostics {
         previousHandler = null
         store = null
         metadata = emptyMap()
+        selectedLibrary = { null }
     }
 
     fun record(event: DiagnosticEvent) {
-        try { store?.append(event.copy(transport = transport())) }
+        try { store?.append(event.copy(transport = transport(), selectedLibrary = event.selectedLibrary ?: selectedLibrary())) }
         catch (_: Exception) { storageFailed = true }
     }
 
@@ -275,9 +292,22 @@ object LocalDiagnostics {
     }
 
     fun failure(area: DiagnosticArea, error: Throwable, operation: DiagnosticOperation = DiagnosticOperation.OTHER) {
-        val outcome = diagnosticOutcome(error)
-        if (outcome != DiagnosticOutcome.CANCELLED) record {
-            DiagnosticEvent(area, outcome, operation, failure = DiagnosticFailure.from(error), protection = diagnosticProtection(error))
+        try {
+            val outcome = diagnosticOutcome(error)
+            if (outcome == DiagnosticOutcome.CANCELLED) return
+            val seen = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Throwable, Boolean>())
+            var current: Throwable? = error
+            var message: UserMessage? = null
+            while (current != null && seen.add(current)) {
+                if (current is UserMessageException) { message = current.userMessage; break }
+                current = current.cause
+            }
+            if (message == UserMessage.OPERATION_CANCELLED) return
+            record {
+                DiagnosticEvent(area, outcome, operation, failure = DiagnosticFailure.from(error), protection = diagnosticProtection(error), userMessage = message)
+            }
+        } catch (_: Exception) {
+            storageFailed = true
         }
     }
 }

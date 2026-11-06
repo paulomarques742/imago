@@ -93,9 +93,13 @@ class LocalizedException(val text: UiText, cause: Throwable? = null) : Exception
  * The exception's technical text never goes to the screen: it is in a single language, and says
  * nothing to someone editing a photo. It stays in the logs.
  */
-fun Throwable.toUiText(fallback: StringResource = Res.string.error_generic): UiText {
+fun Throwable.toUiText(
+    fallback: StringResource = Res.string.error_generic,
+    area: eu.studio742.imago.core.model.diagnostics.DiagnosticArea = eu.studio742.imago.core.model.diagnostics.DiagnosticArea.INTERFACE,
+    operation: eu.studio742.imago.core.model.diagnostics.DiagnosticOperation = eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.OTHER,
+): UiText {
     eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
-        eu.studio742.imago.core.model.diagnostics.DiagnosticArea.INTERFACE, this)
+        area, this, operation)
     for (failure in generateSequence(this) { it.cause }) {
         when (failure) {
             is LocalizedException -> return failure.text

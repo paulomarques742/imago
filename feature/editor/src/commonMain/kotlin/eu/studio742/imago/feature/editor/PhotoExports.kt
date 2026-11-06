@@ -63,7 +63,9 @@ object PhotoExports {
             }
             mutableState.value = PhotoExportState(
                 message = result.getOrNull(),
-                error = result.exceptionOrNull()?.toUiText(Res.string.editor_export_failed),
+                error = result.exceptionOrNull()?.toUiText(Res.string.editor_export_failed,
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticArea.EXPORT,
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.PHOTO_EXPORT),
             )
             onResult(result)
         }

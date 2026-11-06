@@ -2,6 +2,7 @@ package eu.studio742.imago.feature.detail
 
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.designsystem.i18n.toUiText
+import eu.studio742.imago.core.model.diagnostics.*
 import eu.studio742.imago.core.designsystem.i18n.uiText
 import eu.studio742.imago.feature.detail.resources.*
 import androidx.lifecycle.ViewModel
@@ -158,7 +159,7 @@ open class DetailViewModel(
                     onRenamed(RenamedAsset(asset.id, id, fileName, library.thumbnailUrl(id), library.previewUrl(id)))
                     onResult(null)
                 }
-                .onFailure { error -> onResult(error.toUiText(Res.string.detail_rename_failed)) }
+                .onFailure { error -> onResult(error.toUiText(Res.string.detail_rename_failed, DiagnosticArea.IMAGE, DiagnosticOperation.ASSET)) }
         }
     }
 
@@ -174,7 +175,7 @@ open class DetailViewModel(
                     mutableState.update { if (it.assetId == assetId) it.copy(isArchived = archived) else it }
                     onDone()
                 }
-                .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(Res.string.detail_archive_failed)) } }
+                .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(Res.string.detail_archive_failed, DiagnosticArea.IMAGE, DiagnosticOperation.ASSET)) } }
         }
     }
     private val mutableState = MutableStateFlow(DetailUiState())
@@ -206,6 +207,7 @@ open class DetailViewModel(
         }
         loadJob = viewModelScope.launch {
             val recipe = runCatching { recipes.get(asset.id) }
+                .onFailure { LocalDiagnostics.failure(DiagnosticArea.EDITOR, it, DiagnosticOperation.READ_RECIPE) }
                 .getOrNull()
                 ?.takeIf(EditRecipe::changesTheImage)
             mutableState.update { current ->
@@ -234,7 +236,7 @@ open class DetailViewModel(
                         if (current.assetId != asset.id) return@update current
                         // Without EXIF the screen stays useful: the photo, the date and the actions do
                         // not depend on it. The notice is discreet for that very reason.
-                        current.copy(isLoading = false, error = error.toUiText(Res.string.detail_load_failed))
+                        current.copy(isLoading = false, error = error.toUiText(Res.string.detail_load_failed, DiagnosticArea.IMAGE, DiagnosticOperation.ASSET))
                     }
                 }
         }
@@ -305,7 +307,7 @@ open class DetailViewModel(
             mutableState.update { it.copy(isBusy = false, busyLabel = null, stack = emptyList()) }
             result
                 .onSuccess { show(uiText(done), failed = false) }
-                .onFailure { show(it.toUiText(Res.string.detail_stack_failed), failed = true) }
+                .onFailure { show(it.toUiText(Res.string.detail_stack_failed, DiagnosticArea.IMAGE, DiagnosticOperation.STACK), failed = true) }
             loadStack(asset.id)
         }
     }
@@ -331,7 +333,7 @@ open class DetailViewModel(
                 mutableState.update {
                     it.copy(
                         isFavorite = !target,
-                        error = error.toUiText(Res.string.detail_favorite_failed),
+                        error = error.toUiText(Res.string.detail_favorite_failed, DiagnosticArea.IMAGE, DiagnosticOperation.FAVORITE),
                     )
                 }
             }
@@ -352,7 +354,7 @@ open class DetailViewModel(
                 counterpart
             }
                 .onSuccess { confirm(it) }
-                .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(Res.string.detail_delete_failed)) } }
+                .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(Res.string.detail_delete_failed, DiagnosticArea.IMAGE, DiagnosticOperation.DELETE)) } }
         }
     }
 
@@ -377,7 +379,7 @@ open class DetailViewModel(
                         it.copy(
                             isBusy = false,
                             busyLabel = null,
-                            error = error.toUiText(Res.string.detail_delete_failed),
+                            error = error.toUiText(Res.string.detail_delete_failed, DiagnosticArea.IMAGE, DiagnosticOperation.DELETE),
                         )
                     }
                 }
@@ -428,7 +430,7 @@ open class DetailViewModel(
                 .onSuccess { message -> mutableState.update { it.copy(isBusy = false, busyLabel = null, message = message) } }
                 .onFailure { error ->
                     mutableState.update {
-                        it.copy(isBusy = false, busyLabel = null, error = error.toUiText(Res.string.detail_save_failed))
+                        it.copy(isBusy = false, busyLabel = null, error = error.toUiText(Res.string.detail_save_failed, DiagnosticArea.IMAGE, DiagnosticOperation.DOWNLOAD))
                     }
                 }
         }
@@ -445,7 +447,7 @@ open class DetailViewModel(
                         if (current.assetId != asset.id) current else current.copy(recipe = rotated.takeIf(EditRecipe::changesTheImage))
                     }
                 }
-                .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(Res.string.detail_rotate_failed)) } }
+                .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(Res.string.detail_rotate_failed, DiagnosticArea.IMAGE, DiagnosticOperation.EDITS)) } }
         }
     }
 
@@ -482,7 +484,7 @@ open class DetailViewModel(
                     onReady(file, type)
                 }
                 .onFailure { error ->
-                    mutableState.update { it.copy(isBusy = false, busyLabel = null, error = error.toUiText(Res.string.detail_share_failed)) }
+                    mutableState.update { it.copy(isBusy = false, busyLabel = null, error = error.toUiText(Res.string.detail_share_failed, DiagnosticArea.IMAGE, DiagnosticOperation.DOWNLOAD)) }
                 }
         }
     }

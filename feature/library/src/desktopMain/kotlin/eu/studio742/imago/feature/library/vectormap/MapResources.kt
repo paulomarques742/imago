@@ -50,6 +50,10 @@ class MapResources(cacheDir: Path) {
             runCatching {
                 val suffix = if (density >= 1.5f) "@2x" else ""
                 Sprite.parse(text("$base$suffix.json"), bytes("$base$suffix.png"), if (suffix.isEmpty()) 1f else 2f)
+            }.onFailure {
+                eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticArea.INTERFACE, it,
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.MAP_TILES)
             }.getOrNull()
         }
         return MapSetup(style, template, maxZoom, sprite)
@@ -95,7 +99,12 @@ class TileStore(
             }
             synchronized(this@TileStore) {
                 pending -= key
-                tile.onSuccess { tiles[key] = TileEntry(it) }.onFailure { failed[key] = System.currentTimeMillis() }
+                tile.onSuccess { tiles[key] = TileEntry(it) }.onFailure {
+                    eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                        eu.studio742.imago.core.model.diagnostics.DiagnosticArea.INTERFACE, it,
+                        eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.MAP_TILES)
+                    failed[key] = System.currentTimeMillis()
+                }
             }
             if (tile.isSuccess) onLoaded()
         }

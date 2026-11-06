@@ -11,8 +11,24 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
+import eu.studio742.imago.core.model.diagnostics.*
 
 class AlbumActionsTest {
+    @get:Rule val temporary = TemporaryFolder()
+
+    @Test fun failedAlbumItemsAreRecordedWithoutTheAlbumName() {
+        val store = DiagnosticStore(temporary.newFolder())
+        LocalDiagnostics.start(store, emptyMap())
+        try {
+            assertTrue(albumAdditionOutcome(AlbumAddition(added = 1, alreadyThere = 0, failed = 2), "private-album-name").failed)
+            val report = store.report(emptyMap(), "Issue", DiagnosticAccess.UNKNOWN, emptyList()).readText()
+            assertTrue(report.contains("IMAGE ALBUMS FAILURE"))
+            assertTrue(report.contains("items=2"))
+            assertFalse(report.contains("private-album-name"))
+        } finally { LocalDiagnostics.stop() }
+    }
     private fun asset(libraryId: String) = AssetUiModel(
         id = AssetReference(libraryId, "1").encode(),
         checksum = "",

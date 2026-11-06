@@ -47,6 +47,9 @@ internal object GpuRecipePreviews {
                 gpu.render(source, recipe.toRenderParameters(), maxOf(source.width, source.height))
             } catch (failure: Throwable) {
                 if (failure is kotlinx.coroutines.CancellationException) throw failure
+                eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticArea.IMAGE, failure,
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.RENDER_PHOTO)
                 // A context that failed once is closed and not tried again in this process: a driver
                 // that cannot do it would fail on every preview, after making each one wait for it.
                 renderer?.close()

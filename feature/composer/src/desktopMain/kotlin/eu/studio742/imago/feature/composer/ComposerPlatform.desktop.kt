@@ -99,7 +99,12 @@ private fun ExternalPlayerBox(modifier: Modifier, file: suspend () -> File) {
                 busy = true; failed = false
                 scope.launch {
                     runCatching { withContext(Dispatchers.IO) { java.awt.Desktop.getDesktop().open(file()) } }
-                        .onFailure { failed = true }
+                        .onFailure {
+                            eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                                eu.studio742.imago.core.model.diagnostics.DiagnosticArea.VIDEO, it,
+                                eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.VIDEO)
+                            failed = true
+                        }
                     busy = false
                 }
             }) {

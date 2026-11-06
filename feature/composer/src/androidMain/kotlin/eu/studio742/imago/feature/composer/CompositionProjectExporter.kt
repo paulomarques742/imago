@@ -48,7 +48,13 @@ class CompositionProjectExporter @Inject constructor(
                 var failures = 0
                 files.zip(published.fileNames).forEach { (page, name) ->
                     runCatching { media.uploadComposition(checkNotNull(targetLibraryId), page.file, name, page.mimeType, project.createdAt) }
-                        .onFailure { failures++ }
+                        .onFailure {
+                            if (it is kotlinx.coroutines.CancellationException) throw it
+                            eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                                eu.studio742.imago.core.model.diagnostics.DiagnosticArea.EXPORT, it,
+                                eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.UPLOAD)
+                            failures++
+                        }
                 }
                 published.copy(immichUploadFailures = failures)
             }

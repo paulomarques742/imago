@@ -15,6 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import eu.studio742.imago.core.model.diagnostics.*
+import eu.studio742.imago.core.data.diagnosticSettings
+import eu.studio742.imago.core.designsystem.i18n.AppLocale
+import eu.studio742.imago.core.designsystem.i18n.LocalLanguageSettings
 import eu.studio742.imago.core.designsystem.i18n.appString
 import eu.studio742.imago.core.designsystem.ImagoColors
 import eu.studio742.imago.feature.library.resources.*
@@ -48,7 +51,9 @@ internal fun SupportContactCard(viewModel: LibrarySettingsViewModel, community: 
         stringResource(if (unread) Res.string.community_support_unread else Res.string.library_support_title),
         Icons.Outlined.HelpOutline, expanded, { expanded = it }, summary = {
             OutlinedButton(onClick = {
-                linkFailed = runCatching { uri.openUri(COMMUNITY_FORUM_URL) }.isFailure
+                linkFailed = runCatching { uri.openUri(COMMUNITY_FORUM_URL) }.onFailure {
+                    LocalDiagnostics.failure(DiagnosticArea.COMMUNITY, it, DiagnosticOperation.OPEN_LINK)
+                }.isFailure
             }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.community_open_forum)) }
             Text(COMMUNITY_FORUM_URL, style = MaterialTheme.typography.bodySmall)
             if (linkFailed) Text(stringResource(Res.string.community_link_failed), color = MaterialTheme.colorScheme.error)
@@ -83,6 +88,7 @@ internal fun SupportContactCard(viewModel: LibrarySettingsViewModel, community: 
 private fun SupportDialog(viewModel: LibrarySettingsViewModel, community: eu.studio742.imago.core.sync.CommunityRepository?, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     val email = rememberSupportEmail()
+    val languageSettings = LocalLanguageSettings.current
     var description by remember { mutableStateOf("") }
     var access by remember { mutableStateOf(DiagnosticAccess.UNKNOWN) }
     var expanded by remember { mutableStateOf(false) }
@@ -146,20 +152,39 @@ private fun SupportDialog(viewModel: LibrarySettingsViewModel, community: eu.stu
                             val sources = viewModel.configuration.libraries.value
                             val secrets = community?.localSecrets.orEmpty() + sources.flatMap { source ->
                                 listOfNotNull(source.apiKey) + source.profiles.values.flatMap { profile ->
-                                    profile.headers.flatMap { listOf(it.name, it.value) }.plus(listOfNotNull(profile.certificate?.password)).filter { it.length >= 3 }
+                                    profile.headers.flatMap { listOf(it.name, it.value) }.plus(listOfNotNull(profile.certificate?.password, profile.certificate?.pkcs12)).filter { it.length >= 3 }
                                 } + source.serverUrls.flatMap { url ->
                                     listOfNotNull(url, runCatching { URI(url).host }.getOrNull())
                                 }
                             }
-                            val body = redactSupportDescription(description.trim(), secrets)
+                            val privateNames = sources.flatMap { source ->
+                                if (source.isDevice || source.isUnified) emptyList()
+                                else listOfNotNull(source.name, source.id, source.userId).filter { it.length >= 3 }
+                            }
+                            val body = redactSupportDescription(description.trim(), secrets + privateNames)
+                            val language = DiagnosticLanguage.entries.firstOrNull { it.name == languageSettings?.preference?.value?.name } ?: DiagnosticLanguage.UNKNOWN
+                            val effective = DiagnosticLanguage.entries.firstOrNull { it.name == AppLocale.language.name } ?: DiagnosticLanguage.UNKNOWN
                             val report = withContext(Dispatchers.IO) {
-                                checkNotNull(LocalDiagnostics.store).report(LocalDiagnostics.metadata, body, access, secrets)
+                                val settings = try {
+                                    viewModel.configuration.diagnosticSettings(viewModel.device).copy(
+                                        languagePreference = language, effectiveLanguage = effective,
+                                    )
+                                } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                                catch (failure: Exception) {
+                                    LocalDiagnostics.failure(DiagnosticArea.APP, failure, DiagnosticOperation.SUPPORT_REPORT)
+                                    null
+                                }
+                                checkNotNull(LocalDiagnostics.store).report(LocalDiagnostics.metadata, body, access, secrets, settings)
                             }
                             preview = withContext(Dispatchers.IO) { report.readText(Charsets.UTF_8) }
                             draft = SupportDraft(report, appString(Res.string.library_support_subject), body)
                         }
                     } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-                    catch (_: Exception) { error = true }
+                    catch (failure: Exception) {
+                        LocalDiagnostics.failure(DiagnosticArea.APP, failure,
+                            if (draft == null) DiagnosticOperation.SUPPORT_REPORT else DiagnosticOperation.SUPPORT_EMAIL)
+                        error = true
+                    }
                     finally { busy = false }
                 }
             }) { Text(stringResource(if (draft == null) Res.string.library_support_review else Res.string.library_support_email)) }

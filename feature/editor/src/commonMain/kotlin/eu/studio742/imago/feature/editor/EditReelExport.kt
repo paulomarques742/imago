@@ -130,7 +130,9 @@ object ReelExports {
                 mutableState.value = ReelExportState()
                 throw cancelled
             } catch (failure: Exception) {
-                mutableState.value = ReelExportState(error = failure.toUiText(Res.string.reel_failed))
+                mutableState.value = ReelExportState(error = failure.toUiText(Res.string.reel_failed,
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticArea.EXPORT,
+                    eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.EDIT_REEL))
             } finally {
                 video?.delete()
             }

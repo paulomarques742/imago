@@ -19,6 +19,38 @@ class DiagnosticStoreTest {
     private val event = DiagnosticEvent(DiagnosticArea.IMMICH, DiagnosticOutcome.HTTP_ERROR,
         DiagnosticOperation.ALBUMS, status = 403, connection = DiagnosticConnection.from("https://192.168.1.42/private"), version = ServerVersion(3, 3, 5))
 
+    @Test fun failureRecordsCurrentAnonymousLibraryAndMessageKeyWithoutArguments() {
+        LocalDiagnostics.start(DiagnosticStore(temporary.newFolder()), emptyMap())
+        try {
+            LocalDiagnostics.selectedLibrary = { DiagnosticLibrary(DiagnosticLibraryKind.IMMICH, 2) }
+            LocalDiagnostics.failure(DiagnosticArea.EDITOR, eu.studio742.imago.core.model.UserMessageException(
+                eu.studio742.imago.core.model.UserMessage.LIBRARY_DISCONNECTED, listOf("private-library-name")), DiagnosticOperation.SAVE_RECIPE)
+            LocalDiagnostics.selectedLibrary = { DiagnosticLibrary(DiagnosticLibraryKind.DEVICE) }
+            LocalDiagnostics.failure(DiagnosticArea.IMAGE, IOException("private-path/photo.jpg"), DiagnosticOperation.OPEN_PHOTO)
+            val report = LocalDiagnostics.store!!.report(emptyMap(), "Issue", DiagnosticAccess.UNKNOWN, emptyList()).readText()
+            assertTrue(report.contains("EDITOR SAVE_RECIPE FAILURE"))
+            assertTrue(report.contains("selectedLibrary=IMMICH#2 message=LIBRARY_DISCONNECTED"))
+            assertTrue(report.contains("selectedLibrary=DEVICE"))
+            assertFalse(report.contains("private-library-name"))
+            assertFalse(report.contains("private-path"))
+        } finally { LocalDiagnostics.stop() }
+    }
+
+    @Test fun cancelledOperationsDoNotBecomeSupportErrorsAndContextFailureDoesNotEscape() {
+        LocalDiagnostics.start(DiagnosticStore(temporary.newFolder()), emptyMap())
+        try {
+            LocalDiagnostics.failure(DiagnosticArea.EDITOR, RuntimeException(java.util.concurrent.CancellationException("private")))
+            LocalDiagnostics.failure(DiagnosticArea.EDITOR, eu.studio742.imago.core.model.UserMessageException(eu.studio742.imago.core.model.UserMessage.OPERATION_CANCELLED))
+            var report = LocalDiagnostics.store!!.report(emptyMap(), "Issue", DiagnosticAccess.UNKNOWN, emptyList()).readText()
+            assertFalse(report.contains("EDITOR"))
+            LocalDiagnostics.selectedLibrary = { error("private context failure") }
+            LocalDiagnostics.failure(DiagnosticArea.EDITOR, IOException("original error"))
+            assertTrue(LocalDiagnostics.storageFailed)
+            report = LocalDiagnostics.store!!.report(emptyMap(), "Issue", DiagnosticAccess.UNKNOWN, emptyList()).readText()
+            assertFalse(report.contains("private context failure"))
+        } finally { LocalDiagnostics.stop() }
+    }
+
     @Test fun expiresEventsAndReportsWithoutNewTrafficAndAfterRestart() {
         val directory = temporary.newFolder()
         val store = DiagnosticStore(directory, { clock })
@@ -95,6 +127,13 @@ class DiagnosticStoreTest {
         assertEquals(DiagnosticOutcome.TLS, diagnosticOutcome(SSLHandshakeException("private")))
         assertEquals(DiagnosticOutcome.CANCELLED, diagnosticOutcome(java.util.concurrent.CancellationException("private")))
         assertEquals(DiagnosticTransport.UNKNOWN, DiagnosticEvent(DiagnosticArea.APP, DiagnosticOutcome.START).transport)
+    }
+
+    @Test fun distinguishesMemoryAndLocalFileFailuresFromNetworkFailures() {
+        assertEquals(DiagnosticOutcome.OUT_OF_MEMORY, diagnosticOutcome(RuntimeException(OutOfMemoryError("private-photo"))))
+        assertEquals(DiagnosticOutcome.FILE_UNAVAILABLE, diagnosticOutcome(java.io.FileNotFoundException("private-path")))
+        assertEquals(DiagnosticOutcome.FILE_UNAVAILABLE, diagnosticOutcome(java.nio.file.NoSuchFileException("private-path")))
+        assertEquals(DiagnosticOutcome.STORAGE, diagnosticOutcome(java.nio.file.FileSystemException("private-path")))
     }
 
     @Test fun classifiesAddressesWithoutRetainingTheirValues() {

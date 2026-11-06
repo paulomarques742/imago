@@ -25,16 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
 /** Authenticated image caches are account-specific; revoked local grants cannot use cached pixels. */
 class LibraryImageInterceptor : Interceptor {
     override suspend fun intercept(chain: Interceptor.Chain): ImageResult {
-        val result = try { interceptLibrary(chain) } catch (error: Exception) {
-            eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
-                eu.studio742.imago.core.model.diagnostics.DiagnosticArea.IMAGE, error,
-                eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.THUMBNAIL)
-            throw error
-        }
-        if (result is ErrorResult) eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
-            eu.studio742.imago.core.model.diagnostics.DiagnosticArea.IMAGE, result.throwable,
-            eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.THUMBNAIL)
-        return result
+        return interceptLibrary(chain)
     }
 
     private suspend fun interceptLibrary(chain: Interceptor.Chain): ImageResult {

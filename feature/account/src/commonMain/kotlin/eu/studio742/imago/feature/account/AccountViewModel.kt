@@ -1,6 +1,7 @@
 package eu.studio742.imago.feature.account
 
 import eu.studio742.imago.core.sync.AccountException
+import eu.studio742.imago.core.model.diagnostics.*
 import eu.studio742.imago.core.designsystem.i18n.toUiText
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.designsystem.i18n.appString
@@ -186,10 +187,13 @@ private fun invalidUnless(condition: Boolean, resource: StringResource, vararg a
  * The sentence for an account failure. Validations bring their own; refusals from the account
  * server are told by their reason ([AccountException.Reason]); the rest keeps the caller's sentence.
  */
-private fun Throwable.accountText(fallback: StringResource): UiText = when (this) {
+internal fun Throwable.accountText(fallback: StringResource): UiText = when (this) {
     is InvalidInput -> text
-    is AccountException -> UiText.Resource(reason.resource())
-    else -> toUiText(fallback)
+    is AccountException -> {
+        LocalDiagnostics.failure(DiagnosticArea.ACCOUNT, this, DiagnosticOperation.ACCOUNT_REQUEST)
+        UiText.Resource(reason.resource())
+    }
+    else -> toUiText(fallback, DiagnosticArea.ACCOUNT, DiagnosticOperation.ACCOUNT_REQUEST)
 }
 
 private fun AccountException.Reason.resource(): StringResource = when (this) {
@@ -206,6 +210,8 @@ private fun AccountException.Reason.resource(): StringResource = when (this) {
 }
 
 /** Why the device, or some libraries, were left unlinked from the account. */
-private fun AccountLinkState.Failed.text(): UiText =
-    if (libraries.isNotEmpty()) UiText.Resource(Res.string.account_link_libraries_failed, listOf(libraries.joinToString()))
+private fun AccountLinkState.Failed.text(): UiText {
+    LocalDiagnostics.record(DiagnosticEvent(DiagnosticArea.ACCOUNT, DiagnosticOutcome.FAILURE, DiagnosticOperation.ACCOUNT_LINK))
+    return if (libraries.isNotEmpty()) UiText.Resource(Res.string.account_link_libraries_failed, listOf(libraries.joinToString()))
     else UiText.Resource(reason?.resource() ?: Res.string.account_link_device_failed)
+}

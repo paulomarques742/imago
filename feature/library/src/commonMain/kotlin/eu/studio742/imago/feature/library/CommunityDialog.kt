@@ -172,7 +172,12 @@ internal fun CommunityPostsDialog(repository: CommunityRepository, onDismiss: ()
                         TextButton(enabled = !busy && reply?.available != false, onClick = {
                             runCatching { uri.openUri(communityTopicUrl(website, post.id, portuguese)) }
                                 .onSuccess { scope.launch { repository.markRead(post.id, reply?.activity) } }
-                                .onFailure { error = ForumException.Reason.FAILED }
+                                .onFailure {
+                                    eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                                        eu.studio742.imago.core.model.diagnostics.DiagnosticArea.COMMUNITY, it,
+                                        eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.OPEN_LINK)
+                                    error = ForumException.Reason.FAILED
+                                }
                         }) { Text(stringResource(Res.string.community_view)) }
                     }
                     if (reply?.available != false && (reply?.replyCount ?: 0) == 0)

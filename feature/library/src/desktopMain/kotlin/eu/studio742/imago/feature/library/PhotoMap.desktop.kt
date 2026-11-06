@@ -86,7 +86,12 @@ actual fun PhotoMap(
     var redraw by remember { mutableIntStateOf(0) }
     LaunchedEffect(attempt) {
         failed = false
-        runCatching { resources.load(MAP_STYLE_URL, density) }.onSuccess { setup = it }.onFailure { failed = true }
+        runCatching { resources.load(MAP_STYLE_URL, density) }.onSuccess { setup = it }.onFailure {
+            eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                eu.studio742.imago.core.model.diagnostics.DiagnosticArea.INTERFACE, it,
+                eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.MAP_TILES)
+            failed = true
+        }
     }
     val store = remember(setup) { setup?.let { TileStore(resources, it.tileTemplate) { redraw++ } } }
     DisposableEffect(store) { onDispose { store?.close() } }

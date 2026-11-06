@@ -56,6 +56,9 @@ internal class ImmichGeometryMirror(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            eu.studio742.imago.core.model.diagnostics.LocalDiagnostics.failure(
+                eu.studio742.imago.core.model.diagnostics.DiagnosticArea.EDITOR, error,
+                eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.GEOMETRY_MIRROR)
             log("could not mirror ${reference.localId}: ${error::class.simpleName} ${error.message.orEmpty().take(200)}")
         }
     }

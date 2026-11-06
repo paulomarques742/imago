@@ -5,7 +5,7 @@
     <string name="library_settings_preferences">Preferências</string>
     <string name="library_support_title">Suporte e diagnóstico</string>
     <string name="library_support_contact">Contactar suporte</string>
-    <string name="library_support_privacy">Os registos técnicos ficam apenas neste aparelho durante, no máximo, 24 horas, com limite de espaço. Excluem endereços do servidor, chaves API e conteúdo das fotografias. Nada é enviado automaticamente. Reveja o relatório e decida se o quer enviar por e-mail para hello@742studio.eu.</string>
+    <string name="library_support_privacy">Os registos técnicos ficam apenas neste aparelho durante, no máximo, 24 horas, com limite de espaço. O relatório inclui as definições da app e o tipo e posição local da biblioteca seleccionada, sem nomes nem identificadores das bibliotecas. Exclui endereços do servidor, chaves API e conteúdo das fotografias. Nada é enviado automaticamente. Reveja o relatório e decida se o quer enviar por e-mail para hello@742studio.eu.</string>
     <string name="library_support_description">Descreva brevemente o problema</string>
     <string name="library_support_connection">Como acede ao Immich?</string>
     <string name="library_support_access_unknown">Não sei / não uso Immich</string>
