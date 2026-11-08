@@ -7,7 +7,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.model.AssetReference
 import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.feature.library.resources.*
@@ -46,7 +46,7 @@ fun DeleteWhereDialog(count: Int, onChoose: (DeleteWhere) -> Unit, onDismiss: ()
                 TextButton(onClick = { onChoose(DeleteWhere.DEVICE) }) { Text(stringResource(Res.string.library_delete_where_device)) }
                 TextButton(onClick = { onChoose(DeleteWhere.SERVER) }) { Text(stringResource(Res.string.library_delete_where_server)) }
                 TextButton(onClick = { onChoose(DeleteWhere.BOTH) }) {
-                    Text(stringResource(Res.string.library_delete_where_both), color = ImagoColors.Danger)
+                    Text(stringResource(Res.string.library_delete_where_both), color = ImagoUi.colors.danger)
                 }
             }
         },

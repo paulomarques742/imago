@@ -28,7 +28,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSlider
 import eu.studio742.imago.core.designsystem.ImagoSpacing
@@ -105,7 +105,7 @@ internal fun VideoControls(playback: VideoPlayback, modifier: Modifier = Modifie
 
     Column(modifier.fillMaxWidth().padding(horizontal = ImagoSpacing.Lg)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(elapsed, style = timeStyle, color = ImagoColors.TextSecondary)
+            Text(elapsed, style = timeStyle, color = ImagoUi.colors.secondaryText)
             ImagoSlider(
                 value = shownMs.coerceAtMost(durationMs).toFloat(),
                 onValueChange = { value ->
@@ -132,7 +132,7 @@ internal fun VideoControls(playback: VideoPlayback, modifier: Modifier = Modifie
                         stateDescription = positionState
                     },
             )
-            Text(total, style = timeStyle, color = ImagoColors.TextSecondary)
+            Text(total, style = timeStyle, color = ImagoUi.colors.secondaryText)
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -140,7 +140,7 @@ internal fun VideoControls(playback: VideoPlayback, modifier: Modifier = Modifie
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = { playback.seekTo(skipTarget(playback.positionMs, -VIDEO_SKIP_MS, durationMs)) }) {
-                Icon(Icons.Filled.Replay10, stringResource(Res.string.detail_video_back), tint = ImagoColors.TextPrimary)
+                Icon(Icons.Filled.Replay10, stringResource(Res.string.detail_video_back), tint = ImagoUi.colors.text)
             }
             IconButton(onClick = { if (playback.isPlaying) playback.pause() else playback.play() }) {
                 Icon(
@@ -154,12 +154,12 @@ internal fun VideoControls(playback: VideoPlayback, modifier: Modifier = Modifie
                         playback.hasEnded -> stringResource(Res.string.detail_video_replay)
                         else -> stringResource(Res.string.detail_video_play)
                     },
-                    tint = ImagoColors.TextPrimary,
+                    tint = ImagoUi.colors.text,
                     modifier = Modifier.size(ImagoSizes.IconHero),
                 )
             }
             IconButton(onClick = { playback.seekTo(skipTarget(playback.positionMs, VIDEO_SKIP_MS, durationMs)) }) {
-                Icon(Icons.Filled.Forward10, stringResource(Res.string.detail_video_forward), tint = ImagoColors.TextPrimary)
+                Icon(Icons.Filled.Forward10, stringResource(Res.string.detail_video_forward), tint = ImagoUi.colors.text)
             }
         }
     }

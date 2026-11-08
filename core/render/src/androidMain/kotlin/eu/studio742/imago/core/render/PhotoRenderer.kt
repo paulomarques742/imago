@@ -37,6 +37,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     @Volatile private var clipping = ClippingWarning.NONE
     @Volatile private var spots: Float? = null
     @Volatile private var luminanceMap = false
+    @Volatile private var background = floatArrayOf(0f, 0f, 0f)
     @Volatile private var minZoom = MIN_PHOTO_ZOOM
     @Volatile private var zoom = MIN_PHOTO_ZOOM
     @Volatile private var panX = 0f
@@ -196,6 +197,9 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
 
     /** Show Luminance Mask on or off; an aid of the editor, like [setMaskOverlay]. */
     fun setLuminanceMap(value: Boolean) { luminanceMap = value }
+
+    /** What the frame clears to, around the photo. */
+    fun setBackground(red: Float, green: Float, blue: Float) { background = floatArrayOf(red, green, blue) }
     /**
      * @param minZoom the minimum this mode accepts. Crop passes [MIN_CROP_ZOOM] so it can zoom the
      *   photo out; viewing leaves the default and nothing changes for it.
@@ -242,6 +246,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     }
 
     override fun onDrawFrame(gl: GL10?) {
+        val around = background
+        GLES30.glClearColor(around[0], around[1], around[2], 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
         val source = bitmap ?: return
         val edited = if (showOriginal) parameters.original else parameters

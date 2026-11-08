@@ -1,5 +1,6 @@
 package eu.studio742.imago.feature.editor
 
+import eu.studio742.imago.core.designsystem.ImagoUi
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -62,6 +63,7 @@ internal fun WhiteBalancePickerOverlay(
         currentPick(sampleAt(photo, currentProjection.toImage(at)))
     }
 
+    val uiColors = ImagoUi.colors
     Canvas(
         modifier
             .semantics { contentDescription = description }
@@ -125,7 +127,7 @@ internal fun WhiteBalancePickerOverlay(
         val screen = Homography.translate(bounds.left.toDouble(), bounds.top.toDouble()) *
             Homography.scale(bounds.width.toDouble(), bounds.height.toDouble()) *
             geometry.framedFromImagePixels(around.x.takeUnless { it.isNaN() } ?: 0.5f, around.y.takeUnless { it.isNaN() } ?: 0.5f)
-        drawCircle(Color.Black, radius, at)
+        drawCircle(uiColors.imageShade, radius, at)
         clipPath(Path().apply { addOval(androidx.compose.ui.geometry.Rect(at, radius)) }) {
             drawIntoCanvas { canvas ->
                 canvas.save()
@@ -137,13 +139,13 @@ internal fun WhiteBalancePickerOverlay(
         // The square read, at the loupe's scale, so that what is averaged is what is seen.
         val half = SAMPLE_SIZE / 2f * (bounds.width / photo.width) * LOUPE_ZOOM.toFloat()
         drawRect(
-            Color.White,
+            uiColors.onImage,
             topLeft = at - Offset(half, half),
             size = androidx.compose.ui.geometry.Size(half * 2f, half * 2f),
             style = Stroke(1.dp.toPx()),
         )
-        drawCircle(Color.Black.copy(alpha = 0.45f), radius + 1.5.dp.toPx(), at, style = Stroke(3.dp.toPx()))
-        drawCircle(Color.White, radius, at, style = Stroke(2.dp.toPx()))
+        drawCircle(uiColors.imageShade.copy(alpha = 0.45f), radius + 1.5.dp.toPx(), at, style = Stroke(3.dp.toPx()))
+        drawCircle(uiColors.onImage, radius, at, style = Stroke(2.dp.toPx()))
     }
 }
 

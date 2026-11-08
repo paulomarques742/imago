@@ -59,7 +59,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoParameterSlider
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
@@ -222,7 +222,7 @@ internal fun ColorGradingPanel(
                     Text(
                         text = stringResource(Res.string.editor_tonal_zones),
                         style = MaterialTheme.typography.labelLarge,
-                        color = ImagoColors.Gold,
+                        color = ImagoUi.colors.accent,
                         modifier = Modifier
                             .alpha(chromeAlpha)
                             .padding(top = ImagoSpacing.Sm, bottom = ImagoSpacing.Xs),
@@ -267,7 +267,7 @@ private fun ColorGradeReadout(wheel: ColorGradeWheel, values: ColorWheel, modifi
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(ImagoRadii.Pill))
-            .background(Color.Black.copy(alpha = 0.55f))
+            .background(ImagoUi.colors.imageShade.copy(alpha = 0.55f))
             .padding(horizontal = ImagoSpacing.Md, vertical = ImagoSpacing.Sm),
         horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
         verticalAlignment = Alignment.CenterVertically,
@@ -275,17 +275,17 @@ private fun ColorGradeReadout(wheel: ColorGradeWheel, values: ColorWheel, modifi
         Text(
             text = wheel.historyLabel(),
             style = MaterialTheme.typography.labelLarge,
-            color = ImagoColors.TextPrimary,
+            color = ImagoUi.colors.onImage,
         )
         Text(
             text = stringResource(Res.string.editor_hue_value, ColorGradeComponent.HUE.format(values.hue)),
             style = MaterialTheme.typography.labelLarge,
-            color = ImagoColors.Gold,
+            color = ImagoUi.colors.imageAccent,
         )
         Text(
             text = stringResource(Res.string.editor_sat_value, ColorGradeComponent.SATURATION.format(values.saturation)),
             style = MaterialTheme.typography.labelLarge,
-            color = ImagoColors.Gold,
+            color = ImagoUi.colors.imageAccent,
         )
     }
 }
@@ -315,7 +315,7 @@ private fun ColorGradeWheelSelector(
                         .width(1.dp)
                         .height(ImagoSizes.IconDefault)
                         .clip(CircleShape)
-                        .border(1.dp, ImagoColors.BorderVisible, CircleShape),
+                        .border(1.dp, ImagoUi.colors.border, CircleShape),
                 )
             }
             val isSelected = wheel == selected
@@ -329,10 +329,12 @@ private fun ColorGradeWheelSelector(
                     .semantics { contentDescription = wheelLabel },
                 contentAlignment = Alignment.Center,
             ) {
+                val ring = if (isSelected) ImagoUi.colors.emphasis else ImagoUi.colors.border
+                val highlights = ImagoUi.colors.onImage
                 Canvas(Modifier.size(if (isSelected) 26.dp else 22.dp)) {
-                    drawWheelBadge(wheel)
+                    drawWheelBadge(wheel, highlights)
                     drawCircle(
-                        color = if (isSelected) ImagoColors.Ivory else ImagoColors.BorderVisible,
+                        color = ring,
                         radius = size.minDimension / 2 - (if (isSelected) 1f else 0.5f).dp.toPx(),
                         style = Stroke(width = (if (isSelected) 2f else 1f).dp.toPx()),
                     )
@@ -343,12 +345,12 @@ private fun ColorGradeWheelSelector(
 }
 
 /** Each icon's disc: black, grey, white, and half of each for the global one. */
-private fun DrawScope.drawWheelBadge(wheel: ColorGradeWheel) {
+private fun DrawScope.drawWheelBadge(wheel: ColorGradeWheel, highlights: Color) {
     val radius = size.minDimension / 2
     when (wheel) {
         ColorGradeWheel.SHADOWS -> drawCircle(color = Color(0xFF0B0D0F), radius = radius)
         ColorGradeWheel.MIDTONES -> drawCircle(color = Color(0xFF75797E), radius = radius)
-        ColorGradeWheel.HIGHLIGHTS -> drawCircle(color = ImagoColors.Ivory, radius = radius)
+        ColorGradeWheel.HIGHLIGHTS -> drawCircle(color = highlights, radius = radius)
         ColorGradeWheel.GLOBAL -> {
             drawArc(
                 color = Color(0xFF0B0D0F),
@@ -359,7 +361,7 @@ private fun DrawScope.drawWheelBadge(wheel: ColorGradeWheel) {
                 size = Size(size.minDimension, size.minDimension),
             )
             drawArc(
-                color = ImagoColors.Ivory,
+                color = highlights,
                 startAngle = 270f,
                 sweepAngle = 180f,
                 useCenter = true,
@@ -412,7 +414,7 @@ private fun ColorWheelPage(
             Text(
                 text = wheel.historyLabel(),
                 style = MaterialTheme.typography.bodyMedium,
-                color = ImagoColors.TextSecondary,
+                color = ImagoUi.colors.secondaryText,
                 textAlign = TextAlign.Center,
             )
             Text(
@@ -422,7 +424,7 @@ private fun ColorWheelPage(
                     ColorGradeComponent.SATURATION.format(values.saturation),
                 ),
                 style = MaterialTheme.typography.bodySmall,
-                color = if (values.saturation == 0f) ImagoColors.TextTertiary else ImagoColors.Gold,
+                color = if (values.saturation == 0f) ImagoUi.colors.tertiaryText else ImagoUi.colors.accent,
                 textAlign = TextAlign.Center,
             )
         }
@@ -484,6 +486,7 @@ private fun ColorWheelControl(
         ColorGradeComponent.HUE.format(values.hue),
         ColorGradeComponent.SATURATION.format(values.saturation),
     )
+    val uiColors = ImagoUi.colors
     Canvas(
         modifier = Modifier
             .size(side)
@@ -556,7 +559,7 @@ private fun ColorWheelControl(
         // Without the disc underneath, the centre stops showing — and it is this wheel's zero.
         if (discAlpha < 0.99f) {
             drawCircle(
-                color = ImagoColors.TextTertiary,
+                color = uiColors.tertiaryText,
                 radius = 3.dp.toPx(),
                 center = centre,
                 alpha = 1f - discAlpha,
@@ -568,7 +571,7 @@ private fun ColorWheelControl(
             center = handle,
         )
         drawCircle(
-            color = ImagoColors.BrandWhite,
+            color = uiColors.onImage,
             radius = 11.dp.toPx(),
             center = handle,
             style = Stroke(width = 2.dp.toPx()),
@@ -582,7 +585,7 @@ private fun ColorWheelControl(
         )
         drawCircle(color = Color.hsv(values.hue, 1f, 1f), radius = 7.dp.toPx(), center = hueHandle)
         drawCircle(
-            color = if (editing) ImagoColors.BrandWhite else ImagoColors.BorderStrong,
+            color = if (editing) uiColors.onImage else uiColors.strongBorder,
             radius = 7.dp.toPx(),
             center = hueHandle,
             style = Stroke(width = 1.5.dp.toPx()),

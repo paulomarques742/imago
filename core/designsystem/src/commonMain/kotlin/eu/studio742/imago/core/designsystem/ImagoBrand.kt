@@ -1,5 +1,10 @@
 package eu.studio742.imago.core.designsystem
 
+import androidx.compose.foundation.Image
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
@@ -48,4 +53,18 @@ object ImagoBrand {
             addPath(addPathNodes("M36,36h12v12H36z"), fill = SolidColor(ImagoColors.Ivory))
         }.build()
     }
+}
+
+/**
+ * The wordmark or the symbol in the interface, in the ink of the theme. The vectors stay as the brand
+ * draws them: they are kept in `by lazy`, and a colour baked into one would outlive a change of theme.
+ */
+@Composable
+fun ImagoBrandMark(vector: ImageVector, contentDescription: String?, modifier: Modifier = Modifier) {
+    Image(
+        painter = rememberVectorPainter(vector),
+        contentDescription = contentDescription,
+        colorFilter = ColorFilter.tint(ImagoUi.colors.emphasis),
+        modifier = modifier,
+    )
 }

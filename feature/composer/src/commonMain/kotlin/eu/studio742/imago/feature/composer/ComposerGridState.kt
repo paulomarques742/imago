@@ -19,6 +19,10 @@ data class ComposerGridEditor(
     }
 }
 
+/** A grid edited on the stage: its cells replace the members' own gestures until the mode ends. */
+internal fun ComposerEditorUiState.editedLayout(): CompositionLayout? =
+    editingGroupId?.let { group -> project?.layouts?.firstOrNull { it.groupId == group } }
+
 internal fun ComposerEditorUiState.selectedLayout(): CompositionLayout? {
     val members = selectionElements()
     val group = members.firstOrNull()?.groupId ?: return null
@@ -28,6 +32,8 @@ internal fun ComposerEditorUiState.selectedLayout(): CompositionLayout? {
 internal fun ComposerEditorUiState.manipulatedLayout(): CompositionLayout? = selectedLayout()?.takeIf {
     editingGroupId == null && editableSelection().map { member -> member.id }.toSet() == it.root.memberIds().toSet()
 }
+
+internal fun CompositionLayout.pageIndex(): Int = kotlin.math.floor(frame.bounds.x + frame.bounds.width / 2f).toInt()
 
 internal fun CompositionLayout.proxy() = CompositionElement.MediaPlaceholder(root.memberIds().first(), frame, 0, groupId = groupId)
 

@@ -19,7 +19,7 @@ import eu.studio742.imago.core.data.diagnosticSettings
 import eu.studio742.imago.core.designsystem.i18n.AppLocale
 import eu.studio742.imago.core.designsystem.i18n.LocalLanguageSettings
 import eu.studio742.imago.core.designsystem.i18n.appString
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.feature.library.resources.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -58,12 +58,12 @@ internal fun SupportContactCard(viewModel: LibrarySettingsViewModel, community: 
             Text(COMMUNITY_FORUM_URL, style = MaterialTheme.typography.bodySmall)
             if (linkFailed) Text(stringResource(Res.string.community_link_failed), color = MaterialTheme.colorScheme.error)
         }) {
-        Text(stringResource(Res.string.library_support_privacy), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+        Text(stringResource(Res.string.library_support_privacy), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
         OutlinedButton(onClick = { open = true }) { Text(stringResource(Res.string.library_support_contact)) }
         if (community != null) {
             HorizontalDivider()
             Text(stringResource(Res.string.community_invitation), style = MaterialTheme.typography.titleSmall)
-            Text(stringResource(Res.string.community_description), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+            Text(stringResource(Res.string.community_description), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
             OutlinedButton(onClick = { communityOpen = true }) { Text(stringResource(Res.string.community_new)) }
             if (posts.isNotEmpty()) {
                 if (unread) Text(stringResource(Res.string.community_unread), color = MaterialTheme.colorScheme.primary)

@@ -141,6 +141,15 @@ class EncryptedConfigurationRepository(
     private val onThisDay = MutableStateFlow(preferences.getString(ON_THIS_DAY_KEY) != "false")
     override val showOnThisDay: StateFlow<Boolean> = onThisDay.asStateFlow()
 
+    private val stageBackground = MutableStateFlow(preferences.getString(EDITOR_BACKGROUND_KEY))
+    override val editorBackground: StateFlow<String?> = stageBackground.asStateFlow()
+
+    /** Like the reel's style: losing it only means the editor goes back to following the theme. */
+    override fun setEditorBackground(background: String) {
+        preferences.write(mapOf(EDITOR_BACKGROUND_KEY to background))
+        stageBackground.value = background
+    }
+
     override val reelStyle: String? get() = preferences.getString(REEL_STYLE_KEY)
 
     /** Forgetting a style is not worth an error: the next video just starts from the default one. */
@@ -380,6 +389,7 @@ class EncryptedConfigurationRepository(
         const val FAILURE_REFRESH_INTERVAL_MS = 30_000L
         const val WELCOME_KEY = "welcome_completed"
         const val ON_THIS_DAY_KEY = "show_on_this_day"
+        const val EDITOR_BACKGROUND_KEY = "editor_background"
         const val REEL_STYLE_KEY = "reel_style"
         const val BRUSH_TOOL_KEY = "brush_tool"
         const val RETOUCH_TOOL_KEY = "retouch_tool"

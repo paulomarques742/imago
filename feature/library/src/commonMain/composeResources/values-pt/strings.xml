@@ -353,6 +353,13 @@
         <item quantity="one">Há %1$d ano</item>
         <item quantity="other">Há %1$d anos</item>
     </plurals>
+    <string name="library_editor_background">Fundo do editor</string>
+    <string name="library_editor_background_automatic">Automático</string>
+    <string name="library_editor_background_black">Preto</string>
+    <string name="library_editor_background_dark_grey">Cinzento escuro</string>
+    <string name="library_editor_background_mid_grey">Cinzento médio</string>
+    <string name="library_editor_background_light_grey">Cinzento claro</string>
+    <string name="library_editor_background_white">Branco</string>
     <string name="library_on_this_day_setting">Mostrar «Neste dia»</string>
     <string name="library_on_this_day_setting_body">Fotografias tiradas neste dia em anos anteriores, por cima da cronologia.</string>
     <string name="library_map_close">Fechar o mapa</string>

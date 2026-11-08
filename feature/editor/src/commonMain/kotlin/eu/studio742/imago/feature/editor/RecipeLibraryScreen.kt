@@ -57,7 +57,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.studio742.imago.core.designsystem.ImagoChipRow
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
@@ -164,7 +164,7 @@ fun RecipeLibraryScreen(
     val groups = listOf(ALL_GROUPS) + visible.map(RecipeCard::group).distinct().sorted()
     val filtered = if (group == ALL_GROUPS) visible else visible.filter { it.group == group }
 
-    Scaffold(containerColor = ImagoColors.Background, bottomBar = bottomBar) { padding ->
+    Scaffold(containerColor = ImagoUi.colors.background, bottomBar = bottomBar) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Row(
                 modifier = Modifier
@@ -177,13 +177,13 @@ fun RecipeLibraryScreen(
                     Icon(
                         Icons.AutoMirrored.Outlined.ArrowBack,
                         contentDescription = stringResource(Res.string.editor_back),
-                        tint = ImagoColors.TextPrimary,
+                        tint = ImagoUi.colors.text,
                     )
                 }
                 Text(
                     text = stringResource(Res.string.editor_recipes_title),
                     style = MaterialTheme.typography.titleMedium,
-                    color = ImagoColors.TextPrimary,
+                    color = ImagoUi.colors.text,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -208,7 +208,7 @@ fun RecipeLibraryScreen(
                 isLoading && filtered.isEmpty() -> Box(
                     Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
-                ) { CircularProgressIndicator(color = ImagoColors.Ivory) }
+                ) { CircularProgressIndicator(color = ImagoUi.colors.emphasis) }
 
                 filtered.isEmpty() -> Box(
                     Modifier.fillMaxSize().padding(ImagoSpacing.Xxxl),
@@ -217,7 +217,7 @@ fun RecipeLibraryScreen(
                     Text(
                         text = tab.emptyMessage(),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = ImagoColors.TextSecondary,
+                        color = ImagoUi.colors.secondaryText,
                     )
                 }
 
@@ -261,14 +261,14 @@ private fun RecipeTile(
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(ImagoRadii.Medium))
-            .background(ImagoColors.Surface)
+            .background(ImagoUi.colors.surface)
             .clickable(role = Role.Button, onClick = onSelect),
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(0.78f)
-                .background(ImagoColors.SurfaceElevated),
+                .background(ImagoUi.colors.elevated),
         ) {
             preview?.let {
                 Image(
@@ -293,7 +293,7 @@ private fun RecipeTile(
                     } else {
                         stringResource(Res.string.editor_recipe_favorite, card.name)
                     },
-                    tint = ImagoColors.BrandWhite,
+                    tint = ImagoUi.colors.onImage,
                     modifier = Modifier.size(ImagoSizes.IconDefault),
                 )
             }
@@ -304,7 +304,7 @@ private fun RecipeTile(
                     .fillMaxWidth()
                     .height(56.dp)
                     .background(
-                        Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))),
+                        Brush.verticalGradient(listOf(Color.Transparent, ImagoUi.colors.imageShade.copy(alpha = 0.78f))),
                     ),
             )
         }
@@ -318,14 +318,14 @@ private fun RecipeTile(
                 Text(
                     text = card.name,
                     style = MaterialTheme.typography.titleSmall,
-                    color = ImagoColors.TextPrimary,
+                    color = ImagoUi.colors.text,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = card.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = ImagoColors.TextTertiary,
+                    color = ImagoUi.colors.tertiaryText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -336,7 +336,7 @@ private fun RecipeTile(
                         Icon(
                             Icons.Outlined.MoreHoriz,
                             contentDescription = stringResource(Res.string.editor_recipe_options, card.name),
-                            tint = ImagoColors.TextTertiary,
+                            tint = ImagoUi.colors.tertiaryText,
                             modifier = Modifier.size(ImagoSizes.IconDefault),
                         )
                     }
@@ -360,9 +360,9 @@ private fun RecipeTile(
                             )
                         }
                         DropdownMenuItem(
-                            text = { Text(stringResource(Res.string.editor_delete), color = ImagoColors.Danger) },
+                            text = { Text(stringResource(Res.string.editor_delete), color = ImagoUi.colors.danger) },
                             leadingIcon = {
-                                Icon(Icons.Outlined.Delete, contentDescription = null, tint = ImagoColors.Danger)
+                                Icon(Icons.Outlined.Delete, contentDescription = null, tint = ImagoUi.colors.danger)
                             },
                             onClick = {
                                 menuExpanded = false
@@ -383,7 +383,7 @@ private fun CreateRecipeRow(label: String, hint: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .padding(ImagoSpacing.Md)
             .clip(RoundedCornerShape(ImagoRadii.Medium))
-            .background(ImagoColors.Surface)
+            .background(ImagoUi.colors.surface)
             .clickable(role = Role.Button, onClick = onClick)
             .sizeIn(minHeight = ImagoSizes.TouchTarget)
             .padding(ImagoSpacing.Lg),
@@ -392,25 +392,25 @@ private fun CreateRecipeRow(label: String, hint: String, onClick: () -> Unit) {
         Icon(
             Icons.Outlined.Layers,
             contentDescription = null,
-            tint = ImagoColors.TextSecondary,
+            tint = ImagoUi.colors.secondaryText,
             modifier = Modifier.size(ImagoSizes.IconLarge),
         )
         Column(Modifier.weight(1f).padding(horizontal = ImagoSpacing.Md)) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.titleSmall,
-                color = ImagoColors.TextPrimary,
+                color = ImagoUi.colors.text,
             )
             Text(
                 text = hint,
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.TextTertiary,
+                color = ImagoUi.colors.tertiaryText,
             )
         }
         Icon(
             Icons.AutoMirrored.Outlined.KeyboardArrowRight,
             contentDescription = null,
-            tint = ImagoColors.TextTertiary,
+            tint = ImagoUi.colors.tertiaryText,
         )
     }
 }

@@ -42,7 +42,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoParameterSlider
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
@@ -106,7 +106,7 @@ internal fun RemoveToolPanel(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(ImagoRadii.Small))
-                    .background(ImagoColors.SurfaceElevated),
+                    .background(ImagoUi.colors.elevated),
             ) {
                 RetouchMode.entries.forEach { mode ->
                     BrushModeButton(
@@ -122,7 +122,7 @@ internal fun RemoveToolPanel(
                 CircularProgressIndicator(
                     modifier = Modifier.size(18.dp),
                     strokeWidth = 2.dp,
-                    color = ImagoColors.Gold,
+                    color = ImagoUi.colors.accent,
                 )
             }
             if (!state.recipe?.retouches.isNullOrEmpty()) {
@@ -130,7 +130,7 @@ internal fun RemoveToolPanel(
                 MaskIconButton(
                     icon = if (shown) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
                     description = stringResource(if (shown) Res.string.editor_remove_hide_overlay else Res.string.editor_remove_show_overlay),
-                    tint = if (shown) ImagoColors.Gold else ImagoColors.TextSecondary,
+                    tint = if (shown) ImagoUi.colors.accent else ImagoUi.colors.secondaryText,
                     onClick = { actions.onShowRetouches(!shown) },
                 )
             }
@@ -191,7 +191,7 @@ internal fun RemoveToolPanel(
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.TextSecondary,
+                color = ImagoUi.colors.secondaryText,
                 modifier = Modifier.alpha(chromeAlpha).padding(vertical = ImagoSpacing.Sm),
             )
         }
@@ -233,13 +233,13 @@ private fun VisualizeSpotsRow(on: Boolean, onChange: (Boolean) -> Unit, modifier
         Text(
             text = stringResource(Res.string.editor_remove_visualize_spots),
             style = MaterialTheme.typography.bodyMedium,
-            color = ImagoColors.TextPrimary,
+            color = ImagoUi.colors.text,
             modifier = Modifier.weight(1f),
         )
         Switch(
             checked = on,
             onCheckedChange = null,
-            colors = SwitchDefaults.colors(checkedTrackColor = ImagoColors.Gold),
+            colors = SwitchDefaults.colors(checkedTrackColor = ImagoUi.colors.accent),
         )
     }
 }
@@ -265,28 +265,30 @@ internal fun RetouchOverlay(
     modifier: Modifier = Modifier,
     brushCursor: BrushCursor? = null,
 ) {
+    val uiColors = ImagoUi.colors
+    val ink = OverlayInk(uiColors.onImage, uiColors.imageShade)
     Canvas(modifier = modifier) {
         val projection = MaskProjection(bounds, geometry)
         retouches.forEach { retouch ->
             if (retouch.id == selectedId) return@forEach
-            retouch.pin()?.let { (x, y) -> drawPin(projection.toScreen(x, y)) }
+            retouch.pin()?.let { (x, y) -> drawPin(ink, projection.toScreen(x, y)) }
         }
         retouches.firstOrNull { it.id == selectedId }?.let { selected ->
-            drawArea(selected.strokes, 0f, 0f, projection)
+            drawArea(ink, selected.strokes, 0f, 0f, projection)
             val pin = selected.pin()?.let { (x, y) -> projection.toScreen(x, y) }
             val source = selected.sourcePin()?.takeIf { selected.sourceX != 0f || selected.sourceY != 0f }
                 ?.let { (x, y) -> projection.toScreen(x, y) }
             if (source != null) {
-                drawArea(selected.strokes, selected.sourceX, selected.sourceY, projection, dimmer = true)
+                drawArea(ink, selected.strokes, selected.sourceX, selected.sourceY, projection, dimmer = true)
                 if (pin != null) {
-                    drawLine(Color.Black.copy(alpha = 0.5f), pin, source, strokeWidth = OUTLINE_WIDTH.toPx() * 3)
-                    drawLine(OUTLINE_COLOR, pin, source, strokeWidth = OUTLINE_WIDTH.toPx())
+                    drawLine(ink.halo.copy(alpha = 0.5f), pin, source, strokeWidth = OUTLINE_WIDTH.toPx() * 3)
+                    drawLine(ink.line, pin, source, strokeWidth = OUTLINE_WIDTH.toPx())
                 }
-                drawHandle(source, filled = false)
+                drawHandle(ink, source, filled = false)
             }
-            pin?.let { if (extendable) drawSmallPin(it) else drawHandle(it, filled = true) }
+            pin?.let { if (extendable) drawSmallPin(ink, it) else drawHandle(ink, it, filled = true) }
         }
-        brushCursor?.let { drawBrushCursor(it) }
+        brushCursor?.let { drawBrushCursor(ink, it) }
     }
 }
 
@@ -294,7 +296,7 @@ internal fun RetouchOverlay(
  * A correction's area, moved by an offset in image units: each stroke drawn as wide as its brush,
  * lightly, so the photo under it still shows. The source's copy is drawn dimmer, so the two do not mix.
  */
-private fun DrawScope.drawArea(strokes: List<BrushStroke>, dx: Float, dy: Float, projection: MaskProjection, dimmer: Boolean = false) {
+private fun DrawScope.drawArea(ink: OverlayInk, strokes: List<BrushStroke>, dx: Float, dy: Float, projection: MaskProjection, dimmer: Boolean = false) {
     strokes.forEach { stroke ->
         if (stroke.points.size < 2) return@forEach
         val first = projection.toScreen(stroke.points[0] + dx, stroke.points[1] + dy)
@@ -310,15 +312,15 @@ private fun DrawScope.drawArea(strokes: List<BrushStroke>, dx: Float, dy: Float,
             if (stroke.points.size == 2) lineTo(first.x + 0.01f, first.y)
         }
         val alpha = if (dimmer) 0.16f else 0.28f
-        drawPath(path, OUTLINE_COLOR.copy(alpha = alpha), style = Stroke(width = width, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        drawPath(path, ink.line.copy(alpha = alpha), style = Stroke(width = width, cap = StrokeCap.Round, join = StrokeJoin.Round))
     }
 }
 
 /** The selected pin while a stroke still widens its correction: there, and not in the way of the brush. */
-private fun DrawScope.drawSmallPin(position: Offset) {
+private fun DrawScope.drawSmallPin(ink: OverlayInk, position: Offset) {
     val radius = SMALL_PIN_RADIUS.toPx()
-    drawCircle(Color.Black.copy(alpha = 0.5f), radius = radius + OUTLINE_WIDTH.toPx() * 1.5f, center = position)
-    drawCircle(OUTLINE_COLOR, radius = radius, center = position)
+    drawCircle(ink.halo.copy(alpha = 0.5f), radius = radius + OUTLINE_WIDTH.toPx() * 1.5f, center = position)
+    drawCircle(ink.line, radius = radius, center = position)
 }
 
 private val SMALL_PIN_RADIUS = 4.dp

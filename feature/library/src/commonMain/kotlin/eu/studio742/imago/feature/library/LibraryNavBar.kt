@@ -42,7 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoNavBarSurface
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
@@ -150,7 +150,7 @@ private fun LibraryDestination(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val tint = if (selected) ImagoColors.Ivory else ImagoColors.TextTertiary
+    val tint = if (selected) ImagoUi.colors.emphasis else ImagoUi.colors.tertiaryText
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(ImagoRadii.Small))

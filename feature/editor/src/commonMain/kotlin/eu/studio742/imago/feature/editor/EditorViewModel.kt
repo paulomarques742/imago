@@ -797,6 +797,9 @@ open class EditorViewModel(
     private var developedSource: DevelopedSource? = null
     private var conflictsJob: Job? = null
     private var saveJob: Job? = null
+    /** What the photo sits on, by name, as chosen in Settings; it can change while the editor is open on the desktop. */
+    val editorBackground get() = configuration.editorBackground
+
     private val geometryMirror = ImmichGeometryMirror(immichApi, configuration)
     private var uprightJob: Job? = null
 

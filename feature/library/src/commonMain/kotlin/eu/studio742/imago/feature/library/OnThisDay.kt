@@ -35,7 +35,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.request.crossfade
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.render.libraryAuth
@@ -67,7 +67,7 @@ internal fun OnThisDayStrip(memories: List<MemoryUiModel>, onOpen: (MemoryUiMode
                 Modifier
                     .size(width = 112.dp, height = 150.dp)
                     .clip(RoundedCornerShape(ImagoRadii.Medium))
-                    .background(ImagoColors.SurfaceElevated)
+                    .background(ImagoUi.colors.elevated)
                     .clickable(role = Role.Button, onClickLabel = label) { onOpen(memory) },
             ) {
                 AsyncImage(
@@ -79,7 +79,7 @@ internal fun OnThisDayStrip(memories: List<MemoryUiModel>, onOpen: (MemoryUiMode
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.7f))),
+                        .background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to ImagoUi.colors.imageShade.copy(alpha = 0.7f))),
                 )
                 Column(Modifier.align(Alignment.BottomStart).padding(ImagoSpacing.Sm)) {
                     Text(label, style = MaterialTheme.typography.labelLarge, color = Color.White)
@@ -99,10 +99,10 @@ internal fun OnThisDaySetting(viewModel: LibrarySettingsViewModel) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
     ) {
-        Icon(Icons.Outlined.History, null, tint = ImagoColors.Ivory)
+        Icon(Icons.Outlined.History, null, tint = ImagoUi.colors.emphasis)
         Column(Modifier.weight(1f)) {
             Text(stringResource(Res.string.library_on_this_day_setting), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(Res.string.library_on_this_day_setting_body), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+            Text(stringResource(Res.string.library_on_this_day_setting_body), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
         }
         Switch(checked = shown, onCheckedChange = null)
     }

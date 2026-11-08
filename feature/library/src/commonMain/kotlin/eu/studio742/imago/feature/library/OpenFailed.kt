@@ -11,7 +11,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.render.changesTheImage
 import eu.studio742.imago.feature.library.resources.*
@@ -20,13 +20,13 @@ import org.jetbrains.compose.resources.stringResource
 /** What another app asked to open could not be read: said, and back to that app. */
 @Composable
 fun OpenFailedScreen(onClose: () -> Unit) {
-    Surface(color = ImagoColors.Background, modifier = Modifier.fillMaxSize()) {
+    Surface(color = ImagoUi.colors.background, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize().padding(ImagoSpacing.Xxl),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(stringResource(Res.string.library_open_failed), style = MaterialTheme.typography.titleMedium, color = ImagoColors.TextPrimary)
+            Text(stringResource(Res.string.library_open_failed), style = MaterialTheme.typography.titleMedium, color = ImagoUi.colors.text)
             TextButton(onClick = onClose, modifier = Modifier.padding(top = ImagoSpacing.Lg)) {
                 Text(stringResource(Res.string.library_open_close))
             }

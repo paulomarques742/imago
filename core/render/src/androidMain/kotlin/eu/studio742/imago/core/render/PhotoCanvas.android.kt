@@ -16,7 +16,8 @@ actual fun PhotoCanvas(
     clipping: ClippingWarning,
     spots: Float?,
     luminanceMap: Boolean,
+    background: androidx.compose.ui.graphics.Color,
     onFirstFrame: () -> Unit,
-) = GlPhotoCanvas(bitmap, parameters, showOriginal, transform, minZoom, maskOverlay, modifier, highPrecisionSource, clipping, spots, luminanceMap, onFirstFrame)
+) = GlPhotoCanvas(bitmap, parameters, showOriginal, transform, minZoom, maskOverlay, modifier, highPrecisionSource, clipping, spots, luminanceMap, background, onFirstFrame)
 
 actual val photoCanvasShowsClipping: Boolean = true

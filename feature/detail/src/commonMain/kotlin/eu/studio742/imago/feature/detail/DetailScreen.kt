@@ -102,6 +102,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -142,7 +143,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import eu.studio742.imago.core.designsystem.GlassIconButton
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
+import eu.studio742.imago.core.designsystem.LocalImagoUiPalette
+import eu.studio742.imago.core.designsystem.ImagoDarkPalette
 import eu.studio742.imago.core.designsystem.ImagoMotion
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
@@ -350,7 +353,7 @@ private fun DetailScreen(
 
     Scaffold(
         modifier = modifier,
-        containerColor = Color.Black,
+        containerColor = ImagoUi.colors.workspace,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         // The photo goes to the edges; only the controls step back to the safe areas.
         contentWindowInsets = WindowInsets(0),
@@ -543,7 +546,7 @@ private fun DetailScreen(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .fillMaxHeight(1f - photoFraction)
-                        .background(Color.Black)
+                        .background(ImagoUi.colors.workspace)
                         .navigationBarsPadding(),
                 )
             }
@@ -554,25 +557,30 @@ private fun DetailScreen(
                 exit = fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // The gradient is what keeps the text readable whatever the photo; without it, a
-                        // light sky swallowed the date and the EXIF line.
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color.Transparent, Color.Black.copy(alpha = 0.82f), Color.Black),
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // The title sits on the photo, which does not change with the theme: light text on a
+                    // dark gradient in both. Without the gradient a light sky swallowed the date and the
+                    // EXIF line; the rest of the bar goes on the workspace, below.
+                    val shade = ImagoUi.colors.imageShade
+                    CompositionLocalProvider(LocalImagoUiPalette provides ImagoDarkPalette) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    0f to Color.Transparent,
+                                    0.45f to shade.copy(alpha = 0.62f),
+                                    1f to shade.copy(alpha = 0.82f),
+                                ),
                             ),
-                        )
-                        .navigationBarsPadding(),
-                ) {
+                    ) {
                     // Immich's caption, when there is one, is the best title the photo has; otherwise the
                     // file name stays. It is not editable here: Immich does not expose renaming, and
                     // editing the caption would be promising one thing by doing another.
                     Text(
                         text = state.description?.takeIf(String::isNotBlank) ?: asset.fileName,
                         style = MaterialTheme.typography.headlineSmall,
-                        color = ImagoColors.TextPrimary,
+                        color = ImagoUi.colors.text,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(
@@ -584,7 +592,7 @@ private fun DetailScreen(
                     Text(
                         text = formatTakenAt(asset.date.ifBlank { asset.fileCreatedAt }),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = ImagoColors.TextTertiary,
+                        color = ImagoUi.colors.tertiaryText,
                         modifier = Modifier.padding(horizontal = ImagoSpacing.Lg, vertical = ImagoSpacing.Xs),
                     )
                     ExifStrip(
@@ -592,6 +600,9 @@ private fun DetailScreen(
                         isLoading = state.isLoading,
                         modifier = Modifier.padding(top = ImagoSpacing.Sm, bottom = ImagoSpacing.Md),
                     )
+                    }
+                    }
+                    Column(Modifier.fillMaxWidth().background(ImagoUi.colors.workspace).navigationBarsPadding()) {
                     // In the middle of a swipe, the player is still the page's we left.
                     if (playback != null && settledAsset?.id == asset.id) {
                         VideoControls(playback, Modifier.padding(bottom = ImagoSpacing.Sm))
@@ -624,6 +635,7 @@ private fun DetailScreen(
                             }
                         },
                     )
+                    }
                 }
             }
 
@@ -642,15 +654,15 @@ private fun DetailScreen(
 
             if (state.isBusy) {
                 Box(
-                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)),
+                    Modifier.fillMaxSize().background(ImagoUi.colors.imageShade.copy(alpha = 0.55f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = ImagoColors.Ivory)
+                        CircularProgressIndicator(color = ImagoUi.colors.emphasis)
                         state.busyLabel?.let {
                             Text(
                                 it.resolve(),
-                                color = ImagoColors.TextSecondary,
+                                color = ImagoUi.colors.secondaryText,
                                 modifier = Modifier.padding(top = ImagoSpacing.Md),
                             )
                         }
@@ -740,7 +752,7 @@ private fun DetailScreen(
                         showDeleteConfirmation = false
                         onDelete(null, DeleteWhere.BOTH)
                     },
-                ) { Text(stringResource(Res.string.detail_delete), color = ImagoColors.Danger) }
+                ) { Text(stringResource(Res.string.detail_delete), color = ImagoUi.colors.danger) }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmation = false }) { Text(stringResource(Res.string.detail_cancel)) }
@@ -770,7 +782,7 @@ private fun DetailPage(
     modifier: Modifier = Modifier,
 ) {
     if (asset.isVideo && isCurrent && asset.videoUrl != null) {
-        Box(modifier.background(Color.Black)) {
+        Box(modifier.background(ImagoUi.colors.workspace)) {
             DetailVideoPlayer(
                 playback = playback,
                 url = asset.videoUrl,
@@ -794,7 +806,7 @@ private fun DetailPage(
     // The player is made at the first press, and stays for the page: the next hold replays at once.
     var motionRequested by remember(asset.id) { mutableStateOf(false) }
     val holdsMotion = motionUrl != null && PlaysMotionInApp
-    Box(modifier.background(Color.Black), contentAlignment = Alignment.Center) {
+    Box(modifier.background(ImagoUi.colors.workspace), contentAlignment = Alignment.Center) {
         ZoomablePhoto(
             asset = asset,
             recipe = recipe,
@@ -822,12 +834,12 @@ private fun DetailPage(
                 Text(
                     stringResource(Res.string.detail_motion_original),
                     style = MaterialTheme.typography.labelMedium,
-                    color = ImagoColors.BrandWhite,
+                    color = ImagoUi.colors.onImage,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(ImagoSpacing.Lg)
                         .clip(RoundedCornerShape(ImagoRadii.Small))
-                        .background(Color.Black.copy(alpha = 0.55f))
+                        .background(ImagoUi.colors.imageShade.copy(alpha = 0.55f))
                         .padding(horizontal = ImagoSpacing.Sm, vertical = ImagoSpacing.Xs),
                 )
             }
@@ -836,7 +848,7 @@ private fun DetailPage(
             Icon(
                 Icons.Filled.PlayArrow,
                 contentDescription = null,
-                tint = ImagoColors.BrandWhite,
+                tint = ImagoUi.colors.onImage,
                 modifier = Modifier.size(ImagoSizes.TouchTarget),
             )
         }
@@ -1128,7 +1140,7 @@ private fun ZoomablePhoto(
         val previewState by preview.state.collectAsState()
         if (previewState is coil3.compose.AsyncImagePainter.State.Error) {
             Text(stringResource(Res.string.detail_unavailable),
-                color = ImagoColors.TextSecondary, modifier = Modifier.align(Alignment.Center).padding(24.dp))
+                color = ImagoUi.colors.secondaryText, modifier = Modifier.align(Alignment.Center).padding(24.dp))
         }
         if (raw == RawSource.SERVER_EDIT && recipe != null) {
             val finalState = finalPainter?.state?.collectAsState()?.value
@@ -1166,7 +1178,7 @@ private fun ApproximateEditNote(
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(ImagoRadii.Medium))
-            .background(ImagoColors.Glass)
+            .background(ImagoUi.colors.glass)
             .padding(start = ImagoSpacing.Lg, end = ImagoSpacing.Sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
@@ -1174,7 +1186,7 @@ private fun ApproximateEditNote(
         Text(
             stringResource(if (failed) Res.string.detail_raw_final_failed else Res.string.detail_raw_approximate),
             style = MaterialTheme.typography.bodySmall,
-            color = if (failed) ImagoColors.Error else ImagoColors.TextSecondary,
+            color = if (failed) ImagoUi.colors.error else ImagoUi.colors.secondaryText,
         )
         if (developing) {
             Row(
@@ -1184,13 +1196,13 @@ private fun ApproximateEditNote(
             ) {
                 // With its track drawn: the moving arc alone could be a dot at any given moment.
                 CircularProgressIndicator(
-                    color = ImagoColors.Ivory,
-                    trackColor = ImagoColors.BorderStrong,
+                    color = ImagoUi.colors.emphasis,
+                    trackColor = ImagoUi.colors.strongBorder,
                     strokeWidth = 2.5.dp,
                     strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
                     modifier = Modifier.size(18.dp),
                 )
-                Text(stringResource(Res.string.detail_raw_developing), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextPrimary)
+                Text(stringResource(Res.string.detail_raw_developing), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.text)
             }
         } else {
             TextButton(onClick = onDevelop) {
@@ -1227,7 +1239,7 @@ private fun HeartBurst(trigger: Int) {
     Icon(
         Icons.Filled.Favorite,
         contentDescription = null,
-        tint = ImagoColors.BrandWhite,
+        tint = ImagoUi.colors.onImage,
         modifier = Modifier
             .size(BURST_HEART)
             .graphicsLayer {
@@ -1279,13 +1291,13 @@ private fun ExifStrip(exif: AssetExif, isLoading: Boolean, modifier: Modifier = 
                 Box(
                     Modifier
                         .size(width = 1.dp, height = 14.dp)
-                        .background(ImagoColors.BorderVisible),
+                        .background(ImagoUi.colors.border),
                 )
             }
             Text(
                 text = entry,
                 style = MaterialTheme.typography.labelLarge,
-                color = ImagoColors.TextSecondary,
+                color = ImagoUi.colors.secondaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1341,7 +1353,7 @@ private fun StackStrip(
         Icon(
             Icons.Outlined.Layers,
             contentDescription = stringResource(Res.string.detail_stack, members.size),
-            tint = ImagoColors.TextSecondary,
+            tint = ImagoUi.colors.secondaryText,
             modifier = Modifier.padding(start = ImagoSpacing.Lg).size(ImagoSizes.IconSmall),
         )
         LazyRow(
@@ -1411,7 +1423,7 @@ private fun StripThumbnail(
             // a row of thumbnails with no position.
             .border(
                 width = if (isSelected) 2.dp else 0.dp,
-                color = if (isSelected) ImagoColors.BrandWhite else Color.Transparent,
+                color = if (isSelected) ImagoUi.colors.selectedChoiceSurface else Color.Transparent,
                 shape = RoundedCornerShape(ImagoRadii.Small),
             )
             .clickable(role = Role.Tab, onClick = onClick),
@@ -1435,7 +1447,7 @@ private fun StripThumbnail(
             Icon(
                 Icons.Filled.PlayArrow,
                 contentDescription = null,
-                tint = ImagoColors.BrandWhite,
+                tint = ImagoUi.colors.onImage,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .size(ImagoSizes.IconDefault),
@@ -1467,17 +1479,23 @@ private fun DetailActionBar(
         // For videos too: a composition accepts them, unlike the editor.
         if (ownsFile) DetailAction(Icons.Outlined.ViewCarousel, stringResource(Res.string.detail_compose), onCompose)
         DetailAction(Icons.Outlined.Info, stringResource(Res.string.detail_info), onInfo)
-        if (ownsFile) DetailAction(Icons.Outlined.Delete, stringResource(Res.string.detail_delete), onDelete, tint = ImagoColors.Danger)
+        if (ownsFile) DetailAction(Icons.Outlined.Delete, stringResource(Res.string.detail_delete), onDelete, destructive = true)
     }
 }
 
+/**
+ * An action of the bar. A [destructive] one is a red square with the icon inside: this bar sits on the
+ * workspace, where a red icon and label over the light theme's grey did not read. Every icon gets the
+ * square's room, so that the labels stay on one line.
+ */
 @Composable
-private fun DetailAction(
+internal fun DetailAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     onClick: () -> Unit,
-    tint: Color = ImagoColors.TextPrimary,
+    destructive: Boolean = false,
 ) {
+    val uiColors = ImagoUi.colors
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(ImagoRadii.Small))
@@ -1487,15 +1505,35 @@ private fun DetailAction(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(ImagoSizes.IconLarge))
+        Box(
+            modifier = Modifier
+                .size(DETAIL_ACTION_ICON_SLOT)
+                .then(
+                    if (destructive) {
+                        Modifier.background(uiColors.dangerFill, RoundedCornerShape(ImagoRadii.Small))
+                    } else {
+                        Modifier
+                    },
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (destructive) uiColors.onDanger else uiColors.text,
+                modifier = Modifier.size(if (destructive) ImagoSizes.IconDefault else ImagoSizes.IconLarge),
+            )
+        }
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = tint.copy(alpha = 0.86f),
+            color = uiColors.text.copy(alpha = 0.86f),
             modifier = Modifier.padding(top = ImagoSpacing.Xs),
         )
     }
 }
+
+private val DETAIL_ACTION_ICON_SLOT = 32.dp
 
 /**
  * "16 de mai. de 2024 · 18:42" in Portuguese, "May 16, 2024 · 6:42 PM" in English: the day pattern
@@ -1541,14 +1579,14 @@ private fun ListPaneTab(shown: Boolean, onClick: () -> Unit) {
             modifier = Modifier
                 .size(width = LIST_PANE_TAB_WIDTH, height = LIST_PANE_TAB_HEIGHT)
                 .clip(shape)
-                .background(Color.Black.copy(alpha = 0.42f))
-                .border(1.dp, ImagoColors.BorderSubtle, shape),
+                .background(ImagoUi.colors.imageShade.copy(alpha = 0.42f))
+                .border(1.dp, ImagoUi.colors.subtleBorder, shape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = if (shown) Icons.AutoMirrored.Filled.KeyboardArrowLeft else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = ImagoColors.TextSecondary,
+                tint = ImagoUi.colors.secondaryText,
                 modifier = Modifier.size(ImagoSizes.IconDefault),
             )
         }

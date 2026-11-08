@@ -48,7 +48,7 @@ import eu.studio742.imago.core.data.SharedUploadItem
 import eu.studio742.imago.core.data.SharedUploadQueue
 import eu.studio742.imago.core.data.SharedUploadStaging
 import eu.studio742.imago.core.data.SharedUploadSummary
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.SheetHandle
 import eu.studio742.imago.core.designsystem.i18n.UiText
@@ -316,7 +316,7 @@ fun ShareUploadSheet(onClose: () -> Unit, viewModel: ShareUploadViewModel = hilt
     }
     ModalBottomSheet(
         onDismissRequest = onClose,
-        containerColor = ImagoColors.Surface,
+        containerColor = ImagoUi.colors.surface,
         dragHandle = { SheetHandle() },
     ) {
         Column(
@@ -336,7 +336,7 @@ fun ShareUploadSheet(onClose: () -> Unit, viewModel: ShareUploadViewModel = hilt
                         Text(
                             stringResource(Res.string.library_share_preparing, stage.copied, stage.total),
                             style = MaterialTheme.typography.bodySmall,
-                            color = ImagoColors.TextSecondary,
+                            color = ImagoUi.colors.secondaryText,
                         )
                         LinearProgressIndicator(
                             progress = { stage.copied / stage.total.toFloat() },
@@ -347,7 +347,7 @@ fun ShareUploadSheet(onClose: () -> Unit, viewModel: ShareUploadViewModel = hilt
                 ShareUploadStage.Unreadable -> Text(
                     stringResource(Res.string.library_share_unreadable),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                 )
                 is ShareUploadStage.Sending -> {
                     Text(
@@ -360,7 +360,7 @@ fun ShareUploadSheet(onClose: () -> Unit, viewModel: ShareUploadViewModel = hilt
                     Text(
                         stringResource(Res.string.library_share_background),
                         style = MaterialTheme.typography.bodySmall,
-                        color = ImagoColors.TextTertiary,
+                        color = ImagoUi.colors.tertiaryText,
                     )
                 }
                 is ShareUploadStage.Finished -> stage.summary.describe(stage.libraryName).forEach {
@@ -369,7 +369,7 @@ fun ShareUploadSheet(onClose: () -> Unit, viewModel: ShareUploadViewModel = hilt
                 is ShareUploadStage.Failed -> Text(
                     stage.message.resolve(),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = ImagoColors.Danger,
+                    color = ImagoUi.colors.danger,
                 )
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm, Alignment.End)) {
@@ -398,5 +398,5 @@ private fun ShareCount(photos: Int, videos: Int) {
         photos > 0 -> pluralStringResource(Res.plurals.library_share_photos, photos, photos)
         else -> return
     }
-    Text(text, style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextTertiary)
+    Text(text, style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.tertiaryText)
 }

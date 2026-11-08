@@ -145,4 +145,64 @@ class CompositionLayoutTest {
         assertEquals(drawing.strokeWidth * factor, stroke.strokeWidth, .0001f)
         assertEquals(text.text, label.text); assertEquals(drawing.points, stroke.points)
     }
+
+    private fun gridOf(vararg members: String, columns: Int = 2) = CompositionLayout("layout", ElementTransform(box),
+        layoutTree(members.toList(), CompositionLayoutKind.GRID, columns), columns = columns, margin = 0f, gap = 0f)
+    private fun CompositionProject.deleting(vararg ids: String) = copy(elements = elements.filterNot { it.id in ids }).reconcileLayouts(this)
+
+    @Test fun `deleting a member lets its row neighbour grow and leaves the other rows where they were`() {
+        val before = project(gridOf("a", "b", "c", "d"))
+        val after = before.deleting("a")
+        val layout = after.layouts.single()
+        assertEquals(listOf("b", "c", "d"), layout.root.memberIds())
+        fun bounds(project: CompositionProject, id: String) = project.elements.first { it.id == id }.transform.bounds
+        assertEquals(bounds(before, "c"), bounds(after, "c"))
+        assertEquals(bounds(before, "d"), bounds(after, "d"))
+        assertEquals(box.x, bounds(after, "b").x, .0001f)
+        assertEquals(box.width, bounds(after, "b").width, .0001f)
+        assertEquals("layout", after.elements.first { it.id == "b" }.groupId)
+    }
+
+    @Test fun `deleting a member keeps the proportions tuned by hand between the survivors`() {
+        val tuned = layout(CompositionLayoutKind.ROW, listOf("a", "b", "c")).let { it.copy(root = it.root.adjustDivider("row", 0, .2f)) }
+        val weights = (tuned.root as LayoutNode.Split).weights
+        val reduced = project(tuned).deleting("c").layouts.single().root as LayoutNode.Split
+        assertEquals(weights.take(2), reduced.weights)
+    }
+
+    @Test fun `deleting a whole row removes the row and the grid reports what it now shows`() {
+        val tree = layoutTree(listOf("a", "b", "c", "d", "e"), CompositionLayoutKind.GRID, columns = 3, rows = 2)
+        val grid = CompositionLayout("layout", ElementTransform(box), tree, columns = 3, rows = 2, margin = 0f, gap = 0f,
+            content = mapOf("d" to LayoutContent(1f), "a" to LayoutContent(1f)))
+        val reduced = project(grid).deleting("d", "e").layouts.single()
+        assertEquals(listOf("a", "b", "c"), reduced.root.memberIds())
+        assertEquals(3, reduced.columns)
+        assertEquals(1, reduced.rows)
+        assertEquals(setOf("a"), reduced.content.keys)
+    }
+
+    @Test fun `losing the feature cell leaves the kind that matches what remains`() {
+        val members = listOf("a", "b", "c")
+        assertEquals(CompositionLayoutKind.COLUMN, project(layout(CompositionLayoutKind.FEATURE_LEFT, members)).deleting("a").layouts.single().kind)
+        assertEquals(CompositionLayoutKind.ROW, project(layout(CompositionLayoutKind.FEATURE_TOP, members)).deleting("a").layouts.single().kind)
+        assertEquals(CompositionLayoutKind.FEATURE_LEFT, project(layout(CompositionLayoutKind.FEATURE_LEFT, members)).deleting("c").layouts.single().kind)
+    }
+
+    @Test fun `the last member is released as an ordinary element filling the grid area`() {
+        val after = project(gridOf("a", "b")).deleting("a")
+        val survivor = after.elements.first { it.id == "b" }
+        assertTrue(after.layouts.isEmpty())
+        assertNull(survivor.groupId)
+        assertEquals(box.width, survivor.transform.bounds.width, .0001f)
+        assertEquals(box.height, survivor.transform.bounds.height, .0001f)
+    }
+
+    @Test fun `deleting every member drops the grid and ungrouping is not mistaken for a deletion`() {
+        val project = project(gridOf("a", "b", "c"))
+        assertTrue(project.deleting("a", "b", "c").layouts.isEmpty())
+        val ungrouped = project.copy(elements = project.elements.filterNot { it.id == "a" }.map { it.withGroupId(null) })
+        val after = ungrouped.reconcileLayouts(project)
+        assertTrue(after.layouts.isEmpty())
+        assertEquals(ungrouped.elements, after.elements)
+    }
 }

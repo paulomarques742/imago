@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoMotion
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
@@ -475,14 +475,14 @@ private fun FastScrollRail(
                             .padding(end = RAIL_WIDTH)
                             .wrapContentWidth(Alignment.End, unbounded = true)
                             .clip(RoundedCornerShape(ImagoRadii.Pill))
-                            .background(Color.Black.copy(alpha = if (current) 0.70f else 0.45f))
+                            .background(ImagoUi.colors.imageShade.copy(alpha = if (current) 0.70f else 0.45f))
                             .padding(horizontal = ImagoSpacing.Sm, vertical = 2.dp),
                     ) {
                         Text(
                             text = yearSlot.year.toString(),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (current) ImagoColors.BrandWhite else ImagoColors.TextTertiary,
+                            color = if (current) ImagoUi.colors.onImage else ImagoUi.colors.tertiaryText,
                         )
                     }
                 }
@@ -515,11 +515,11 @@ private fun FastScrollRail(
                             .shadow(if (chosen) 8.dp else 3.dp, CircleShape)
                             .clip(CircleShape)
                             .background(
-                                if (chosen) ImagoColors.BrandWhite else Color.Black.copy(alpha = 0.72f),
+                                if (chosen) ImagoUi.colors.selectedChoiceSurface else ImagoUi.colors.imageShade.copy(alpha = 0.72f),
                             )
                             .border(
                                 width = 1.dp,
-                                color = if (chosen) Color.Transparent else ImagoColors.BorderVisible,
+                                color = if (chosen) Color.Transparent else ImagoUi.colors.border,
                                 shape = CircleShape,
                             ),
                         contentAlignment = Alignment.Center,
@@ -528,7 +528,7 @@ private fun FastScrollRail(
                             text = month.label,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (chosen) ImagoColors.BrandBlack else ImagoColors.TextSecondary,
+                            color = if (chosen) ImagoUi.colors.onSelectedChoiceSurface else ImagoUi.colors.secondaryText,
                         )
                     }
                 }
@@ -547,14 +547,14 @@ private fun FastScrollRail(
                         .wrapContentWidth(Alignment.End, unbounded = true)
                         .shadow(8.dp, RoundedCornerShape(ImagoRadii.Pill))
                         .clip(RoundedCornerShape(ImagoRadii.Pill))
-                        .background(ImagoColors.Charcoal)
-                        .border(1.dp, ImagoColors.BorderVisible, RoundedCornerShape(ImagoRadii.Pill))
+                        .background(ImagoUi.colors.choiceSurface)
+                        .border(1.dp, ImagoUi.colors.border, RoundedCornerShape(ImagoRadii.Pill))
                         .padding(horizontal = ImagoSpacing.Lg, vertical = ImagoSpacing.Md),
                 ) {
                     Text(
                         text = label,
                         style = MaterialTheme.typography.titleMedium,
-                        color = ImagoColors.TextPrimary,
+                        color = ImagoUi.colors.text,
                     )
                 }
             }
@@ -571,8 +571,8 @@ private fun FastScrollRail(
                 // without an outline disappeared.
                 .shadow(6.dp, RoundedCornerShape(ImagoRadii.Pill))
                 .clip(RoundedCornerShape(ImagoRadii.Pill))
-                .background(if (grabbed) ImagoColors.BrandWhite else ImagoColors.Ivory)
-                .border(1.dp, Color.Black.copy(alpha = 0.28f), RoundedCornerShape(ImagoRadii.Pill))
+                .background(if (grabbed) ImagoUi.colors.onImage else ImagoUi.colors.emphasis)
+                .border(1.dp, ImagoUi.colors.imageShade.copy(alpha = 0.28f), RoundedCornerShape(ImagoRadii.Pill))
                 .semantics { contentDescription = railDescription },
         )
     }

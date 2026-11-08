@@ -58,7 +58,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.studio742.imago.core.designsystem.ImagoBrand
+import eu.studio742.imago.core.designsystem.ImagoBrandMark
 import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.i18n.resolve
@@ -97,7 +99,7 @@ fun WelcomeRoute(
     }
     BackHandler(enabled = connectingImmich && !state.isChecking) { connectingImmich = false }
     BackHandler(enabled = offeringManagement, onBack = onFinished)
-    Surface(color = ImagoColors.Background, modifier = Modifier.fillMaxSize()) {
+    Surface(color = ImagoUi.colors.background, modifier = Modifier.fillMaxSize()) {
         // Without scroll or imePadding, the keyboard covered the connect button on a small screen and
         // there was no way to reach it. The Box centres the block when the screen is wider than 480 dp.
         Box(
@@ -151,27 +153,23 @@ private fun WelcomeChoice(
     onChooseImmich: () -> Unit,
     accountPrompt: @Composable () -> Unit,
 ) {
-    Image(
-        painter = rememberVectorPainter(ImagoBrand.Symbol),
-        contentDescription = null,
-        modifier = Modifier.size(52.dp),
-    )
+    ImagoBrandMark(ImagoBrand.Symbol, contentDescription = null, modifier = Modifier.size(52.dp))
     Text(
         text = "IMAGO",
         style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Normal, letterSpacing = 5.sp),
-        color = ImagoColors.Ivory,
+        color = ImagoUi.colors.emphasis,
         modifier = Modifier.padding(top = ImagoSpacing.Lg),
     )
     Text(
         text = stringResource(Res.string.library_tagline),
         style = MaterialTheme.typography.titleMedium,
-        color = ImagoColors.TextSecondary,
+        color = ImagoUi.colors.secondaryText,
         modifier = Modifier.padding(top = ImagoSpacing.Xs),
     )
     Text(
         text = stringResource(Res.string.library_welcome_question),
         style = MaterialTheme.typography.titleLarge,
-        color = ImagoColors.TextPrimary,
+        color = ImagoUi.colors.text,
         modifier = Modifier.padding(top = ImagoSpacing.Xxxl, bottom = ImagoSpacing.Lg),
     )
     Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
@@ -191,7 +189,7 @@ private fun WelcomeChoice(
     Text(
         text = stringResource(Res.string.library_welcome_later),
         style = MaterialTheme.typography.bodySmall,
-        color = ImagoColors.TextTertiary,
+        color = ImagoUi.colors.tertiaryText,
         modifier = Modifier.padding(top = ImagoSpacing.Md),
     )
     Box(Modifier.padding(top = ImagoSpacing.Xxxl)) { accountPrompt() }
@@ -203,12 +201,12 @@ private fun MediaManagementOffer(onAllow: () -> Unit, onSkip: () -> Unit) {
     Text(
         text = stringResource(Res.string.library_media_management_offer_title),
         style = MaterialTheme.typography.titleLarge,
-        color = ImagoColors.TextPrimary,
+        color = ImagoUi.colors.text,
     )
     Text(
         text = stringResource(Res.string.library_media_management_offer_body),
         style = MaterialTheme.typography.bodyMedium,
-        color = ImagoColors.TextSecondary,
+        color = ImagoUi.colors.secondaryText,
         modifier = Modifier.padding(top = ImagoSpacing.Md),
     )
     Button(onClick = onAllow, modifier = Modifier.fillMaxWidth().padding(top = ImagoSpacing.Xxl)) {
@@ -220,7 +218,7 @@ private fun MediaManagementOffer(onAllow: () -> Unit, onSkip: () -> Unit) {
     Text(
         text = stringResource(Res.string.library_media_management_later),
         style = MaterialTheme.typography.bodySmall,
-        color = ImagoColors.TextTertiary,
+        color = ImagoUi.colors.tertiaryText,
         modifier = Modifier.padding(top = ImagoSpacing.Md),
     )
 }
@@ -229,9 +227,9 @@ private fun MediaManagementOffer(onAllow: () -> Unit, onSkip: () -> Unit) {
 private fun WelcomeOption(icon: ImageVector, title: String, body: String, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        color = ImagoColors.SurfaceElevated,
+        color = ImagoUi.colors.elevated,
         shape = RoundedCornerShape(ImagoRadii.Medium),
-        border = BorderStroke(1.dp, ImagoColors.BorderSubtle),
+        border = BorderStroke(1.dp, ImagoUi.colors.subtleBorder),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -239,12 +237,12 @@ private fun WelcomeOption(icon: ImageVector, title: String, body: String, onClic
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
         ) {
-            Icon(icon, null, tint = ImagoColors.Ivory)
+            Icon(icon, null, tint = ImagoUi.colors.emphasis)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, color = ImagoColors.TextPrimary)
-                Text(body, style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
+                Text(title, style = MaterialTheme.typography.titleMedium, color = ImagoUi.colors.text)
+                Text(body, style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText)
             }
-            Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, tint = ImagoColors.TextTertiary)
+            Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, tint = ImagoUi.colors.tertiaryText)
         }
     }
 }
@@ -263,17 +261,17 @@ private fun ImmichConnectForm(
     var showKey by remember { mutableStateOf(false) }
     // Inset by the button's own margin, so the arrow lines up with the title below.
     IconButton(onClick = onBack, enabled = !state.isChecking, modifier = Modifier.offset(x = -ImagoSpacing.Md).padding(bottom = ImagoSpacing.Sm)) {
-        Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(Res.string.library_back), tint = ImagoColors.TextPrimary)
+        Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(Res.string.library_back), tint = ImagoUi.colors.text)
     }
     Text(
         text = stringResource(Res.string.library_welcome_immich_title),
         style = MaterialTheme.typography.headlineSmall,
-        color = ImagoColors.TextPrimary,
+        color = ImagoUi.colors.text,
     )
     Text(
         text = stringResource(Res.string.library_connect_intro),
         style = MaterialTheme.typography.bodyLarge,
-        color = ImagoColors.TextSecondary,
+        color = ImagoUi.colors.secondaryText,
         modifier = Modifier.padding(top = ImagoSpacing.Md, bottom = ImagoSpacing.Xxl),
     )
     OutlinedTextField(
@@ -323,14 +321,14 @@ private fun ImmichConnectForm(
         enabled = !state.isChecking,
         shape = RoundedCornerShape(ImagoRadii.Medium),
         colors = ButtonDefaults.buttonColors(
-            containerColor = ImagoColors.Ivory,
-            contentColor = ImagoColors.BrandBlack,
+            containerColor = ImagoUi.colors.emphasis,
+            contentColor = ImagoUi.colors.onEmphasis,
         ),
         modifier = Modifier.fillMaxWidth().padding(top = ImagoSpacing.Xl).height(52.dp),
     ) {
         if (state.isChecking) {
             CircularProgressIndicator(
-                color = ImagoColors.BrandBlack,
+                color = ImagoUi.colors.onEmphasis,
                 strokeWidth = 2.dp,
                 modifier = Modifier.height(24.dp),
             )
@@ -341,7 +339,7 @@ private fun ImmichConnectForm(
     Text(
         text = stringResource(Res.string.library_key_encrypted),
         style = MaterialTheme.typography.bodySmall,
-        color = ImagoColors.TextTertiary,
+        color = ImagoUi.colors.tertiaryText,
         modifier = Modifier.padding(top = ImagoSpacing.Md),
     )
 }

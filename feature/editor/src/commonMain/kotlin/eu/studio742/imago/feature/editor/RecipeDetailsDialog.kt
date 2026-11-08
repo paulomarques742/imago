@@ -35,7 +35,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
@@ -107,7 +107,7 @@ internal fun RecipeDetailsDialog(
                 Text(
                     text = stringResource(Res.string.editor_collection),
                     style = MaterialTheme.typography.labelLarge,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                 )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
@@ -158,11 +158,11 @@ internal fun RecipeDetailsDialog(
 /** The library's chip: the chosen one is the inverse of the others, as in [eu.studio742.imago.core.designsystem.ImagoChipRow]. */
 @Composable
 private fun CollectionChip(label: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector? = null) {
-    val color = if (selected) ImagoColors.BrandBlack else ImagoColors.TextSecondary
+    val color = if (selected) ImagoUi.colors.onSelectedChoiceSurface else ImagoUi.colors.secondaryText
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(ImagoRadii.Pill))
-            .background(if (selected) ImagoColors.BrandWhite else ImagoColors.Charcoal)
+            .background(if (selected) ImagoUi.colors.selectedChoiceSurface else ImagoUi.colors.choiceSurface)
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
             .sizeIn(minHeight = ImagoSizes.TouchTarget)
             .padding(horizontal = ImagoSpacing.Lg),

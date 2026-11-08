@@ -31,7 +31,7 @@ import eu.studio742.imago.core.composition.CompositionFont
 import eu.studio742.imago.core.composition.CompositionFonts
 import eu.studio742.imago.core.composition.FontCategory
 import eu.studio742.imago.core.composition.weightName
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 
@@ -86,7 +86,7 @@ private fun FontSectionHeader(label: String) {
     Text(
         label,
         style = MaterialTheme.typography.labelMedium,
-        color = ImagoColors.Gold,
+        color = ImagoUi.colors.accent,
         modifier = Modifier.padding(
             top = ImagoSpacing.Md,
             bottom = ImagoSpacing.Xs,
@@ -101,24 +101,24 @@ private fun FontRow(font: CompositionFont, chosen: Boolean, sample: String, deta
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(ImagoRadii.Small))
-            .background(if (chosen) ImagoColors.Gold.copy(alpha = .12f) else Color.Transparent)
+            .background(if (chosen) ImagoUi.colors.accent.copy(alpha = .12f) else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = ImagoSpacing.Sm, vertical = ImagoSpacing.Sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(font.displayName, fontFamily = family, fontSize = 20.sp, color = ImagoColors.TextPrimary, modifier = Modifier.weight(1f, fill = false))
+                Text(font.displayName, fontFamily = family, fontSize = 20.sp, color = ImagoUi.colors.text, modifier = Modifier.weight(1f, fill = false))
                 Text(
                     detail,
                     style = MaterialTheme.typography.labelSmall,
-                    color = ImagoColors.TextTertiary,
+                    color = ImagoUi.colors.tertiaryText,
                     modifier = Modifier.padding(start = ImagoSpacing.Sm),
                 )
             }
-            Text(sample, fontFamily = family, fontSize = 14.sp, color = ImagoColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(sample, fontFamily = family, fontSize = 14.sp, color = ImagoUi.colors.secondaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (chosen) Icon(Icons.Outlined.Check, stringResource(Res.string.composer_chosen), tint = ImagoColors.Gold)
+        if (chosen) Icon(Icons.Outlined.Check, stringResource(Res.string.composer_chosen), tint = ImagoUi.colors.accent)
     }
 }
 

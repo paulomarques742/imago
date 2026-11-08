@@ -34,7 +34,7 @@ fun CollapsibleSettingsCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val stateLabel = stringResource(if (expanded) Res.string.settings_category_expanded else Res.string.settings_category_collapsed)
-    Surface(color = ImagoColors.SurfaceElevated, shape = RoundedCornerShape(ImagoRadii.Medium), modifier = modifier.fillMaxWidth()) {
+    Surface(color = ImagoUi.colors.elevated, shape = RoundedCornerShape(ImagoRadii.Medium), modifier = modifier.fillMaxWidth()) {
         Column {
             Row(
                 Modifier.fillMaxWidth().clickable(role = Role.Button) { onExpandedChange(!expanded) }
@@ -43,15 +43,16 @@ fun CollapsibleSettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
             ) {
-                Icon(icon, null, tint = ImagoColors.Ivory)
-                Text(title, style = MaterialTheme.typography.titleMedium, color = ImagoColors.TextPrimary, modifier = Modifier.weight(1f))
+                Icon(icon, null, tint = ImagoUi.colors.emphasis)
+                Text(title, style = MaterialTheme.typography.titleMedium, color = ImagoUi.colors.text, modifier = Modifier.weight(1f))
+                val chevronColor = ImagoUi.colors.secondaryText
                 Canvas(Modifier.size(24.dp).rotate(if (expanded) 180f else 0f)) {
                     val chevron = Path().apply {
                         moveTo(size.width / 3, size.height * 5 / 12)
                         lineTo(size.width / 2, size.height * 7 / 12)
                         lineTo(size.width * 2 / 3, size.height * 5 / 12)
                     }
-                    drawPath(chevron, ImagoColors.TextSecondary, style = Stroke(width = 2.dp.toPx()))
+                    drawPath(chevron, chevronColor, style = Stroke(width = 2.dp.toPx()))
                 }
             }
             if (summary != null) Column(

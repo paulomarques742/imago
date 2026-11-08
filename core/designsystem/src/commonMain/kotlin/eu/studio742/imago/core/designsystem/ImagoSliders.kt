@@ -139,6 +139,8 @@ fun FocusedAdjustmentScale(
 ) {
     val span = (range.endInclusive - range.start).takeIf { it > 0f } ?: 1f
     val fraction = ((value - range.start) / span).coerceIn(0f, 1f)
+    // All of this sits on the photo, whatever the theme.
+    val uiColors = ImagoUi.colors
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -146,13 +148,13 @@ fun FocusedAdjustmentScale(
         Text(
             text = label,
             style = MaterialTheme.typography.titleMedium,
-            color = ImagoColors.TextPrimary,
+            color = uiColors.onImage,
             textAlign = TextAlign.Center,
         )
         Text(
             text = valueText,
             style = MaterialTheme.typography.headlineSmall,
-            color = ImagoColors.BrandWhite,
+            color = uiColors.onImage,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = ImagoSpacing.Xs),
         )
@@ -165,7 +167,7 @@ fun FocusedAdjustmentScale(
             Text(
                 text = formatBound(range.start),
                 style = MaterialTheme.typography.labelLarge,
-                color = ImagoColors.TextTertiary,
+                color = uiColors.onImage.copy(alpha = 0.46f),
             )
             Canvas(
                 Modifier
@@ -181,7 +183,7 @@ fun FocusedAdjustmentScale(
                     val position = index / ticks.toFloat()
                     val x = size.width * position
                     drawLine(
-                        color = tickColor(tint, position),
+                        color = tickColor(tint, position, uiColors.onImage),
                         start = Offset(x, y - tickHeight / 2),
                         end = Offset(x, y + tickHeight / 2),
                         strokeWidth = stroke,
@@ -192,12 +194,12 @@ fun FocusedAdjustmentScale(
                 // the current position, and not one more graduation.
                 val thumbX = size.width * fraction
                 drawCircle(
-                    color = Color.Black.copy(alpha = 0.55f),
+                    color = uiColors.imageShade.copy(alpha = 0.55f),
                     radius = 13.dp.toPx(),
                     center = Offset(thumbX, y),
                 )
                 drawCircle(
-                    color = ImagoColors.BrandWhite,
+                    color = uiColors.onImage,
                     radius = 10.dp.toPx(),
                     center = Offset(thumbX, y),
                 )
@@ -205,7 +207,7 @@ fun FocusedAdjustmentScale(
             Text(
                 text = formatBound(range.endInclusive),
                 style = MaterialTheme.typography.labelLarge,
-                color = ImagoColors.TextTertiary,
+                color = uiColors.onImage.copy(alpha = 0.46f),
             )
         }
     }
@@ -217,12 +219,12 @@ fun FocusedAdjustmentScale(
  * The cold-warm gradient is interpolated by hand instead of with a `Brush` because each mark is an
  * independent line: a gradient over the whole `Canvas` would also paint the gaps between them.
  */
-private fun tickColor(tint: ImagoScaleTint, position: Float): Color = when (tint) {
-    ImagoScaleTint.NEUTRAL -> ImagoColors.TextSecondary
+private fun tickColor(tint: ImagoScaleTint, position: Float, onImage: Color): Color = when (tint) {
+    ImagoScaleTint.NEUTRAL -> onImage.copy(alpha = 0.68f)
     ImagoScaleTint.TEMPERATURE -> {
         val cold = Color(0xFF3E8BD8)
         val warm = Color(0xFFE8A33D)
-        val neutral = ImagoColors.Ivory
+        val neutral = onImage
         if (position < 0.5f) {
             lerpColor(cold, neutral, position * 2f)
         } else {
@@ -233,7 +235,7 @@ private fun tickColor(tint: ImagoScaleTint, position: Float): Color = when (tint
     ImagoScaleTint.TINT -> {
         val green = Color(0xFF5DB85D)
         val magenta = Color(0xFFD45AB8)
-        val neutral = ImagoColors.Ivory
+        val neutral = onImage
         if (position < 0.5f) {
             lerpColor(green, neutral, position * 2f)
         } else {
@@ -259,11 +261,14 @@ private fun lerpColor(from: Color, to: Color, amount: Float): Color {
  * by frame. It is the same drawing the live sliders use, so the video cannot drift from the app.
  */
 fun DrawScope.drawImagoSlider(valueFraction: Float, neutralFraction: Float, enabled: Boolean = true) {
-    drawImagoTrack(valueFraction, neutralFraction, enabled)
+    drawImagoTrack(valueFraction, neutralFraction, enabled, VideoSliderPalette)
     val start = ThumbRadius.toPx()
     val usable = (size.width - 2 * start).coerceAtLeast(0f)
-    drawImagoThumb(Offset(start + usable * valueFraction, size.height / 2), enabled)
+    drawImagoThumb(Offset(start + usable * valueFraction, size.height / 2), enabled, VideoSliderPalette)
 }
+
+/** A video is content: its sliders are these whatever the app's appearance when it is exported. */
+private val VideoSliderPalette = ImagoDarkPalette.copy(text = ImagoColors.BrandWhite, workspace = Color.Black)
 
 /**
  * The track and the ring, drawn the same in both sliders.
@@ -271,14 +276,14 @@ fun DrawScope.drawImagoSlider(valueFraction: Float, neutralFraction: Float, enab
  * The ring moves between two limits inset by its radius, not between 0 and the full width; without
  * the inset the fill would run away from it at the ends.
  */
-private fun DrawScope.drawImagoTrack(valueFraction: Float, neutralFraction: Float, enabled: Boolean, palette: ImagoUiPalette? = null) {
+private fun DrawScope.drawImagoTrack(valueFraction: Float, neutralFraction: Float, enabled: Boolean, palette: ImagoUiPalette) {
     val start = ThumbRadius.toPx()
     val end = size.width - ThumbRadius.toPx()
     val usable = (end - start).coerceAtLeast(0f)
     val y = size.height / 2
     val thickness = TrackHeight.toPx()
     drawLine(
-        color = (palette?.border ?: ImagoColors.BorderVisible),
+        color = palette.border,
         start = Offset(start, y),
         end = Offset(end, y),
         strokeWidth = thickness,
@@ -288,7 +293,7 @@ private fun DrawScope.drawImagoTrack(valueFraction: Float, neutralFraction: Floa
     val to = start + usable * valueFraction
     if (abs(to - from) > 0.5f) {
         drawLine(
-            color = if (enabled) (palette?.text ?: ImagoColors.BrandWhite) else (palette?.disabledText ?: ImagoColors.TextDisabled),
+            color = if (enabled) palette.text else palette.disabledText,
             start = Offset(minOf(from, to), y),
             end = Offset(maxOf(from, to), y),
             strokeWidth = thickness,
@@ -297,14 +302,14 @@ private fun DrawScope.drawImagoTrack(valueFraction: Float, neutralFraction: Floa
     }
 }
 
-private fun DrawScope.drawImagoThumb(center: Offset, enabled: Boolean, palette: ImagoUiPalette? = null) {
+private fun DrawScope.drawImagoThumb(center: Offset, enabled: Boolean, palette: ImagoUiPalette) {
     val stroke = 2.dp.toPx()
     val radius = ThumbRadius.toPx() - stroke / 2
     // The inside darkens just enough for the white ring not to get lost over a light area of the
     // photo; it still lets what is underneath show through.
-    drawCircle(color = (palette?.workspace ?: Color.Black).copy(alpha = 0.28f), radius = radius, center = center)
+    drawCircle(color = palette.workspace.copy(alpha = 0.28f), radius = radius, center = center)
     drawCircle(
-        color = if (enabled) (palette?.text ?: ImagoColors.BrandWhite) else (palette?.disabledText ?: ImagoColors.TextDisabled),
+        color = if (enabled) palette.text else palette.disabledText,
         radius = radius,
         center = center,
         style = Stroke(width = stroke),

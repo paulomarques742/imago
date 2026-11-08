@@ -21,6 +21,10 @@ val LocalReducedMotion: ProvidableCompositionLocal<Boolean> = compositionLocalOf
 @Composable
 internal expect fun rememberSystemReducedMotion(): Boolean
 
+/** The bars the system draws over the app take dark or light icons from the palette; Android only has them. */
+@Composable
+internal expect fun SystemBarsFollow(palette: ImagoUiPalette)
+
 /**
  * A `tween` that collapses to [snap] with Reduce Motion on. The final state is always the same —
  * only the path disappears.

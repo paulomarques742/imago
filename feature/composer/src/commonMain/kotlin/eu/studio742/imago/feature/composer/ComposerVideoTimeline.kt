@@ -59,7 +59,7 @@ import eu.studio742.imago.core.composition.MAX_PAGE_DURATION_MS
 import eu.studio742.imago.core.composition.PageVideoPlan
 import eu.studio742.imago.core.composition.VideoTimelineEdits
 import eu.studio742.imago.core.composition.clipDurationMs
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.feature.composer.resources.*
 import org.jetbrains.compose.resources.stringResource
@@ -114,12 +114,12 @@ internal fun PageVideoTimeline(
 
     Column(modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(Res.string.composer_timeline), style = MaterialTheme.typography.labelMedium, color = ImagoColors.TextPrimary)
+            Text(stringResource(Res.string.composer_timeline), style = MaterialTheme.typography.labelMedium, color = ImagoUi.colors.text)
             Spacer(Modifier.weight(1f))
             Text(
                 stringResource(Res.string.composer_timeline_length, seconds(pageMs)),
                 style = MaterialTheme.typography.labelMedium,
-                color = ImagoColors.Gold,
+                color = ImagoUi.colors.accent,
             )
         }
         BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -158,7 +158,7 @@ internal fun PageVideoTimeline(
         Text(
             stringResource(Res.string.composer_timeline_hint),
             style = MaterialTheme.typography.labelSmall,
-            color = ImagoColors.TextTertiary,
+            color = ImagoUi.colors.tertiaryText,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
         )
     }
@@ -185,6 +185,7 @@ private fun TimelineRuler(
     pageIndex: Int,
     modifier: Modifier,
 ) {
+    val uiColors = ImagoUi.colors
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val currentPage by rememberUpdatedState(pageMs)
@@ -194,7 +195,7 @@ private fun TimelineRuler(
     val lengthText = stringResource(Res.string.composer_timeline_length, seconds(pageMs))
     val shorter = stringResource(Res.string.composer_video_end_earlier)
     val longer = stringResource(Res.string.composer_video_end_later)
-    val labelStyle = TextStyle(color = ImagoColors.TextTertiary, fontSize = 10.sp)
+    val labelStyle = TextStyle(color = ImagoUi.colors.tertiaryText, fontSize = 10.sp)
     Canvas(
         modifier
             .height(RulerHeight)
@@ -238,7 +239,7 @@ private fun TimelineRuler(
             val x = second * 1000 * pxPerMs
             val major = second % labelEvery == 0
             drawLine(
-                color = if (major) ImagoColors.BorderStrong else ImagoColors.BorderSubtle,
+                color = if (major) uiColors.strongBorder else uiColors.subtleBorder,
                 start = Offset(x, size.height * if (major) .45f else .7f),
                 end = Offset(x, size.height),
                 strokeWidth = 1.dp.toPx(),
@@ -252,7 +253,7 @@ private fun TimelineRuler(
         }
         // Past the end of the page nothing is exported.
         val end = pageMs * pxPerMs
-        drawRect(Color.Black.copy(alpha = .35f), topLeft = Offset(end, 0f), size = Size((size.width - end).coerceAtLeast(0f), size.height))
+        drawRect(uiColors.imageShade.copy(alpha = .35f), topLeft = Offset(end, 0f), size = Size((size.width - end).coerceAtLeast(0f), size.height))
         val tab = 6.dp.toPx()
         drawPath(
             Path().apply {
@@ -263,7 +264,7 @@ private fun TimelineRuler(
                 lineTo(end - tab, size.height - tab)
                 close()
             },
-            ImagoColors.Gold,
+            uiColors.accent,
         )
     }
 }
@@ -278,6 +279,7 @@ private fun TimelineLane(
     onDragging: (Boolean) -> Unit,
     actions: ComposerEditorViewModel,
 ) {
+    val uiColors = ImagoUi.colors
     val video = clip.video
     val name = video.media.fileName
     Row(Modifier.fillMaxWidth().height(LaneHeight), verticalAlignment = Alignment.CenterVertically) {
@@ -288,7 +290,7 @@ private fun TimelineLane(
                     if (clip.audible) Res.string.composer_clip_sound_on else Res.string.composer_clip_sound_off,
                     name,
                 ),
-                tint = if (clip.audible) ImagoColors.TextPrimary else ImagoColors.TextTertiary,
+                tint = if (clip.audible) ImagoUi.colors.text else ImagoUi.colors.tertiaryText,
             )
         }
         Box(
@@ -298,7 +300,7 @@ private fun TimelineLane(
                 .padding(vertical = 4.dp)
                 .clipToBounds()
                 .drawBehind {
-                    drawRoundRect(ImagoColors.Graphite, cornerRadius = CornerRadius(4.dp.toPx()))
+                    drawRoundRect(uiColors.selectedSurface, cornerRadius = CornerRadius(4.dp.toPx()))
                     // The repeats of a loop, after the clip itself.
                     var cursor = 0L
                     var first = true
@@ -306,7 +308,7 @@ private fun TimelineLane(
                         if (segment is PageVideoPlan.Segment.Source) {
                             if (!first) {
                                 drawRoundRect(
-                                    ImagoColors.Gold.copy(alpha = .22f),
+                                    uiColors.accent.copy(alpha = .22f),
                                     topLeft = Offset(cursor * pxPerMs, 0f),
                                     size = Size(segment.durationMs * pxPerMs, size.height),
                                     cornerRadius = CornerRadius(4.dp.toPx()),
@@ -323,8 +325,8 @@ private fun TimelineLane(
             Box(
                 Modifier.fillMaxHeight().fillMaxWidth().drawBehind {
                     val end = pageMs * pxPerMs
-                    drawRect(Color.Black.copy(alpha = .45f), topLeft = Offset(end, 0f), size = Size((size.width - end).coerceAtLeast(0f), size.height))
-                    drawLine(ImagoColors.Gold, Offset(end, 0f), Offset(end, size.height), strokeWidth = 2.dp.toPx())
+                    drawRect(uiColors.imageShade.copy(alpha = .45f), topLeft = Offset(end, 0f), size = Size((size.width - end).coerceAtLeast(0f), size.height))
+                    drawLine(uiColors.accent, Offset(end, 0f), Offset(end, size.height), strokeWidth = 2.dp.toPx())
                 },
             )
         }
@@ -367,8 +369,8 @@ private fun ClipBlock(
             .width(widthDp)
             .fillMaxHeight()
             .clip(shape)
-            .background(if (selected) ImagoColors.Gold.copy(alpha = .55f) else ImagoColors.Ivory.copy(alpha = .28f))
-            .border(if (selected) 2.dp else 1.dp, if (selected) ImagoColors.Gold else ImagoColors.BorderStrong, shape)
+            .background(if (selected) ImagoUi.colors.accent.copy(alpha = .55f) else ImagoUi.colors.emphasis.copy(alpha = .28f))
+            .border(if (selected) 2.dp else 1.dp, if (selected) ImagoUi.colors.accent else ImagoUi.colors.strongBorder, shape)
             .semantics {
                 contentDescription = description
                 val end = timing.startOffsetMs + timing.clipDurationMs
@@ -438,14 +440,14 @@ private fun ClipBlock(
         Text(
             video.media.fileName,
             style = MaterialTheme.typography.labelSmall,
-            color = ImagoColors.TextPrimary,
+            color = ImagoUi.colors.text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = EdgeHandle),
         )
         // The grips say where trimming starts.
-        Box(Modifier.align(Alignment.CenterStart).padding(start = 5.dp).size(3.dp, 14.dp).background(ImagoColors.TextPrimary, RoundedCornerShape(2.dp)))
-        Box(Modifier.align(Alignment.CenterEnd).padding(end = 5.dp).size(3.dp, 14.dp).background(ImagoColors.TextPrimary, RoundedCornerShape(2.dp)))
+        Box(Modifier.align(Alignment.CenterStart).padding(start = 5.dp).size(3.dp, 14.dp).background(ImagoUi.colors.text, RoundedCornerShape(2.dp)))
+        Box(Modifier.align(Alignment.CenterEnd).padding(end = 5.dp).size(3.dp, 14.dp).background(ImagoUi.colors.text, RoundedCornerShape(2.dp)))
     }
 }
 

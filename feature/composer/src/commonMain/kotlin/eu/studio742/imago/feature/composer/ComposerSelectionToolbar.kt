@@ -25,6 +25,17 @@ internal fun ComposerSelectionToolbar(
     val members = state.selectionElements()
     val units = state.selectionUnitCount()
     val group = members.firstOrNull()?.groupId?.takeIf { id -> members.all { it.groupId == id } }
+    val edited = state.editedLayout()
+    if (edited != null) {
+        ComposerToolRow(Modifier.testTag("composer-grid-tools")) {
+            if (onAddGridMedia != null && state.project?.elements?.none { it.groupId == edited.groupId && it.repeatOnPages.isNotEmpty() } == true) {
+                ToolButton(stringResource(Res.string.composer_grid_add_elements), Icons.Outlined.AddPhotoAlternate) { onAddGridMedia(edited.groupId) }
+            }
+            if (onToggleProperties != null) ToolButton(stringResource(Res.string.composer_adjust), Icons.Outlined.Tune,
+                active = propertiesExpanded, onClick = onToggleProperties)
+        }
+        return
+    }
     ComposerToolRow(Modifier.testTag("composer-selection-tools")) {
         if (state.editingGroupId == null && units > 1) {
             ToolButton(stringResource(Res.string.composer_group), Icons.Outlined.Layers, onClick = actions::groupSelection)
@@ -32,7 +43,7 @@ internal fun ComposerSelectionToolbar(
         if (members.any { it.groupId != null }) {
             ToolButton(stringResource(Res.string.composer_ungroup), Icons.Outlined.LayersClear, onClick = actions::ungroupSelected)
         }
-        if (group != null && state.editingGroupId == null) {
+        if (group != null && state.editingGroupId == null && state.selectedLayout() == null) {
             ToolButton(stringResource(Res.string.composer_edit_group), Icons.Outlined.Edit) { actions.editGroup(group) }
         }
         if (state.editingGroupId == null && members.size > 1) {

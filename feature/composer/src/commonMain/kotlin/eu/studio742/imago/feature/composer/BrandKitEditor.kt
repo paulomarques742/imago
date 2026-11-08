@@ -75,7 +75,7 @@ import eu.studio742.imago.core.composition.CompositionFont
 import eu.studio742.imago.core.composition.CompositionFonts
 import eu.studio742.imago.core.composition.MediaReference
 import eu.studio742.imago.core.composition.toColorHex
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
@@ -186,7 +186,7 @@ internal fun BrandKitOverlay(onClose: () -> Unit) {
     // While the library is open it is what hears "back", to close albums and search.
     BackHandler(enabled = !pickingLogos) { onClose() }
     Surface(
-        color = ImagoColors.Background,
+        color = ImagoUi.colors.background,
         modifier = Modifier
             .fillMaxSize()
             // Without something consuming the touches, those landing on empty space hit the composer.
@@ -198,9 +198,9 @@ internal fun BrandKitOverlay(onClose: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(Res.string.composer_back_to_composer), tint = ImagoColors.TextPrimary)
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(Res.string.composer_back_to_composer), tint = ImagoUi.colors.text)
                 }
-                Text(stringResource(Res.string.composer_brand), style = MaterialTheme.typography.titleMedium, color = ImagoColors.TextPrimary)
+                Text(stringResource(Res.string.composer_brand), style = MaterialTheme.typography.titleMedium, color = ImagoUi.colors.text)
             }
             BrandKitEditor(viewModel, onPickLogos = { pickingLogos = true }, Modifier.weight(1f))
         }
@@ -217,7 +217,7 @@ internal fun BrandKitOverlay(onClose: () -> Unit) {
 @Composable
 internal fun BrandLogoPicker(onDismiss: () -> Unit, onPicked: (List<ComposerMedia>) -> Unit) {
     Surface(
-        color = ImagoColors.Background,
+        color = ImagoUi.colors.background,
         modifier = Modifier
             .fillMaxSize()
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
@@ -240,8 +240,8 @@ private fun BrandPreview(kit: BrandKit, viewModel: BrandKitViewModel) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(ImagoRadii.Large))
-            .background(ImagoColors.SurfaceElevated)
-            .border(1.dp, ImagoColors.BorderSubtle, RoundedCornerShape(ImagoRadii.Large))
+            .background(ImagoUi.colors.elevated)
+            .border(1.dp, ImagoUi.colors.subtleBorder, RoundedCornerShape(ImagoRadii.Large))
             .padding(ImagoSpacing.Lg),
         verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
     ) {
@@ -252,7 +252,7 @@ private fun BrandPreview(kit: BrandKit, viewModel: BrandKitViewModel) {
                     fontFamily = rememberCompositionFontFamily(kit.primaryFont, 700),
                     fontWeight = FontWeight(CompositionFonts.resolve(kit.primaryFont).weight(700)),
                     fontSize = 26.sp,
-                    color = ImagoColors.TextPrimary,
+                    color = ImagoUi.colors.text,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -260,7 +260,7 @@ private fun BrandPreview(kit: BrandKit, viewModel: BrandKitViewModel) {
                     stringResource(Res.string.composer_brand_paragraph_sample),
                     fontFamily = rememberCompositionFontFamily(kit.secondaryFont, 400),
                     fontSize = 15.sp,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                     modifier = Modifier.padding(top = ImagoSpacing.Xs),
                 )
             }
@@ -277,7 +277,7 @@ private fun BrandPreview(kit: BrandKit, viewModel: BrandKitViewModel) {
                         .weight(if (index == 0) 2f else 1f)
                         .clip(RoundedCornerShape(ImagoRadii.Pill))
                         .background(Color(argb))
-                        .border(1.dp, ImagoColors.BorderSubtle, RoundedCornerShape(ImagoRadii.Pill)),
+                        .border(1.dp, ImagoUi.colors.subtleBorder, RoundedCornerShape(ImagoRadii.Pill)),
                 )
             }
         }
@@ -287,8 +287,8 @@ private fun BrandPreview(kit: BrandKit, viewModel: BrandKitViewModel) {
 @Composable
 private fun SectionHeader(title: String, subtitle: String) {
     Column(Modifier.padding(bottom = ImagoSpacing.Sm)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = ImagoColors.TextPrimary)
-        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextTertiary)
+        Text(title, style = MaterialTheme.typography.titleMedium, color = ImagoUi.colors.text)
+        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.tertiaryText)
     }
 }
 
@@ -308,27 +308,27 @@ private fun PaletteSection(
                     .fillMaxWidth()
                     .height(PaletteRowHeight)
                     .clip(RoundedCornerShape(ImagoRadii.Medium))
-                    .background(if (dragging) ImagoColors.Graphite else ImagoColors.SurfaceElevated)
+                    .background(if (dragging) ImagoUi.colors.selectedSurface else ImagoUi.colors.elevated)
                     .clickable { onEdit(index) }
                     .padding(start = ImagoSpacing.Md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
                     Modifier.size(32.dp).clip(CircleShape).background(Color(argb))
-                        .border(1.dp, ImagoColors.BorderVisible, CircleShape),
+                        .border(1.dp, ImagoUi.colors.border, CircleShape),
                 )
                 Column(Modifier.weight(1f).padding(start = ImagoSpacing.Md)) {
                     Text(
                         if (index == 0) stringResource(Res.string.composer_main) else stringResource(Res.string.composer_color_n, index + 1),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = ImagoColors.TextPrimary,
+                        color = ImagoUi.colors.text,
                     )
-                    Text(argb.toColorHex(), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextTertiary)
+                    Text(argb.toColorHex(), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.tertiaryText)
                 }
                 // The last colour is not removed: a brand has at least the main one.
                 if (kit.paletteArgb.size > 1) {
                     IconButton(onClick = { onRemove(index) }, Modifier.size(ImagoSizes.TouchTarget)) {
-                        Icon(Icons.Outlined.Delete, stringResource(Res.string.composer_remove_color), Modifier.size(ImagoSizes.IconSmall), tint = ImagoColors.TextSecondary)
+                        Icon(Icons.Outlined.Delete, stringResource(Res.string.composer_remove_color), Modifier.size(ImagoSizes.IconSmall), tint = ImagoUi.colors.secondaryText)
                     }
                 }
                 DragHandleBox(handle, stringResource(Res.string.composer_reorder_color))
@@ -356,22 +356,22 @@ private fun FontSlotRow(slot: BrandFontSlot, font: CompositionFont, onClick: () 
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(ImagoRadii.Medium))
-            .background(ImagoColors.SurfaceElevated)
+            .background(ImagoUi.colors.elevated)
             .clickable(onClick = onClick)
             .padding(horizontal = ImagoSpacing.Md, vertical = ImagoSpacing.Md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(stringResource(slot.label), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextTertiary)
+            Text(stringResource(slot.label), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.tertiaryText)
             Text(
                 font.displayName,
                 fontFamily = rememberCompositionFontFamily(font.id, 400),
                 fontSize = 22.sp,
-                color = ImagoColors.TextPrimary,
+                color = ImagoUi.colors.text,
             )
         }
-        Text(font.category.displayName(), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextTertiary)
-        Icon(Icons.Outlined.ChevronRight, null, Modifier.padding(start = ImagoSpacing.Sm), tint = ImagoColors.TextTertiary)
+        Text(font.category.displayName(), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.tertiaryText)
+        Icon(Icons.Outlined.ChevronRight, null, Modifier.padding(start = ImagoSpacing.Sm), tint = ImagoUi.colors.tertiaryText)
     }
 }
 
@@ -383,7 +383,7 @@ private fun LogosSection(kit: BrandKit, viewModel: BrandKitViewModel, onAdd: () 
             Text(
                 stringResource(Res.string.composer_no_logos),
                 style = MaterialTheme.typography.bodyMedium,
-                color = ImagoColors.TextSecondary,
+                color = ImagoUi.colors.secondaryText,
                 modifier = Modifier.padding(vertical = ImagoSpacing.Sm),
             )
         } else {
@@ -393,7 +393,7 @@ private fun LogosSection(kit: BrandKit, viewModel: BrandKitViewModel, onAdd: () 
                         .fillMaxWidth()
                         .height(LogoRowHeight)
                         .clip(RoundedCornerShape(ImagoRadii.Medium))
-                        .background(if (dragging) ImagoColors.Graphite else ImagoColors.SurfaceElevated)
+                        .background(if (dragging) ImagoUi.colors.selectedSurface else ImagoUi.colors.elevated)
                         .padding(start = ImagoSpacing.Sm),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -402,16 +402,16 @@ private fun LogosSection(kit: BrandKit, viewModel: BrandKitViewModel, onAdd: () 
                         Text(
                             logo.fileName,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = ImagoColors.TextPrimary,
+                            color = ImagoUi.colors.text,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         if (logo.width != null && logo.height != null) {
-                            Text("${logo.width} × ${logo.height}", style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextTertiary)
+                            Text("${logo.width} × ${logo.height}", style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.tertiaryText)
                         }
                     }
                     IconButton(onClick = { viewModel.removeLogo(logo.assetId) }, Modifier.size(ImagoSizes.TouchTarget)) {
-                        Icon(Icons.Outlined.Delete, stringResource(Res.string.composer_remove_logo), Modifier.size(ImagoSizes.IconSmall), tint = ImagoColors.TextSecondary)
+                        Icon(Icons.Outlined.Delete, stringResource(Res.string.composer_remove_logo), Modifier.size(ImagoSizes.IconSmall), tint = ImagoUi.colors.secondaryText)
                     }
                     DragHandleBox(handle, stringResource(Res.string.composer_reorder_logo))
                 }
@@ -436,7 +436,7 @@ private fun LogoThumbnail(logo: MediaReference, viewModel: BrandKitViewModel, mo
         contentScale = ContentScale.Fit,
         modifier = modifier
             .clip(RoundedCornerShape(ImagoRadii.Small))
-            .background(ImagoColors.Charcoal),
+            .background(ImagoUi.colors.choiceSurface),
     )
 }
 
@@ -446,7 +446,7 @@ private fun DragHandleBox(handle: Modifier, label: String) {
         handle.size(ImagoSizes.TouchTarget).semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Outlined.DragHandle, null, Modifier.size(ImagoSizes.IconSmall), tint = ImagoColors.TextTertiary)
+        Icon(Icons.Outlined.DragHandle, null, Modifier.size(ImagoSizes.IconSmall), tint = ImagoUi.colors.tertiaryText)
     }
 }
 

@@ -45,7 +45,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoNavBarSurface
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
@@ -208,11 +208,11 @@ internal fun SelectionActionsBar(
         ) {
             if (work != null) {
                 // Halfway through, the buttons would start a second job over the first.
-                CircularProgressIndicator(color = ImagoColors.Ivory, modifier = Modifier.size(ImagoSizes.IconDefault))
+                CircularProgressIndicator(color = ImagoUi.colors.emphasis, modifier = Modifier.size(ImagoSizes.IconDefault))
                 Text(
                     work.resolve(),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).padding(start = ImagoSpacing.Md),
@@ -310,11 +310,11 @@ private fun SelectionAction(icon: ImageVector, label: String, modifier: Modifier
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = ImagoColors.Ivory, modifier = Modifier.size(ImagoSizes.IconDefault))
+        Icon(icon, contentDescription = null, tint = ImagoUi.colors.emphasis, modifier = Modifier.size(ImagoSizes.IconDefault))
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = ImagoColors.TextSecondary,
+            color = ImagoUi.colors.secondaryText,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
@@ -343,7 +343,7 @@ internal fun SelectionDeleteDialog(selection: List<AssetUiModel>, onConfirm: () 
             )
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text(stringResource(Res.string.library_selection_delete), color = ImagoColors.Danger) }
+            TextButton(onClick = onConfirm) { Text(stringResource(Res.string.library_selection_delete), color = ImagoUi.colors.danger) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.library_cancel)) } },
     )

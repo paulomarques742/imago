@@ -51,6 +51,9 @@ kotlin {
             implementation(project(":core:immich"))
             implementation(libs.okhttp)
         }
+        getByName("desktopTest").dependencies {
+            implementation(compose.desktop.currentOs)
+        }
         commonTest.dependencies {
             implementation(libs.junit4)
             implementation(libs.kotlinx.coroutines.test)

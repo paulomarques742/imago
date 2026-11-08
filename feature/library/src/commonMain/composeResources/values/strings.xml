@@ -353,6 +353,13 @@
         <item quantity="one">%1$d year ago</item>
         <item quantity="other">%1$d years ago</item>
     </plurals>
+    <string name="library_editor_background">Editor background</string>
+    <string name="library_editor_background_automatic">Automatic</string>
+    <string name="library_editor_background_black">Black</string>
+    <string name="library_editor_background_dark_grey">Dark grey</string>
+    <string name="library_editor_background_mid_grey">Mid grey</string>
+    <string name="library_editor_background_light_grey">Light grey</string>
+    <string name="library_editor_background_white">White</string>
     <string name="library_on_this_day_setting">Show “On this day”</string>
     <string name="library_on_this_day_setting_body">Photos taken on this day in earlier years, above the timeline.</string>
     <string name="library_map_close">Close the map</string>

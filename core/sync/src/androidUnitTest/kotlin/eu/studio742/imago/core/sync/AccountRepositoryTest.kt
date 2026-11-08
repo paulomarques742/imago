@@ -187,15 +187,16 @@ class AccountRepositoryTest {
         override var lastSeenAppVersion: String? = null
         override fun selectLibrary(id: String) = Unit
         override fun source(id: String) = libraries.value.first { it.id == id }
-        override suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String) = error("unused")
+        override suspend fun saveLibrary(id: String?, name: String, serverUrl: String, apiKey: String, profile: ConnectionProfile) = error("unused")
         override suspend fun testLibrary(id: String) = error("unused")
-        override suspend fun addServerUrl(id: String, serverUrl: String) = error("unused")
+        override suspend fun addServerUrl(id: String, serverUrl: String, profile: ConnectionProfile) = error("unused")
+        override suspend fun setConnectionProfile(id: String, serverUrl: String, profile: ConnectionProfile) = error("unused")
         override fun removeServerUrl(id: String, serverUrl: String) = Unit
         override fun moveServerUrl(id: String, serverUrl: String, offset: Int) = Unit
         override suspend fun refreshEndpoints() = Unit
         override fun removeLibrary(id: String) = Unit
         override fun currentConnection(): ImmichConnection? = null
-        override suspend fun validateAndSave(serverUrl: String, apiKey: String) = error("unused")
+        override suspend fun validateAndSave(serverUrl: String, apiKey: String, profile: ConnectionProfile) = error("unused")
         override suspend fun clear() = Unit
     }
 }

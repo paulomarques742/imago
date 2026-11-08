@@ -413,7 +413,7 @@ class ReelFramePainter(
         val geometry = recipe.toRenderParameters().frameGeometry(sourceWidth, sourceHeight)
         val projection = MaskProjection(PhotoBounds(rect.left, rect.top, rect.width, rect.height), geometry)
         clipPath(roundedPath(rect, 14.dp.toPx())) {
-            drawMaskOutline(mask, projection, alpha)
+            drawMaskOutline(OverlayInkOfVideo, mask, projection, alpha)
         }
     }
 
@@ -432,9 +432,10 @@ class ReelFramePainter(
             channels.forEachIndexed { index, channel ->
                 val points = frame.recipe.editableCurvePoints(channel)
                 drawCurveGraph(
+                    OverlayInkOfVideo,
                     plot = plot,
                     lut = frame.recipe.curveLut(points),
-                    color = channel.curveColor(),
+                    color = channel.curveColor(ImagoColors.BrandWhite),
                     points = points,
                     alpha = alpha,
                     grid = index == 0,

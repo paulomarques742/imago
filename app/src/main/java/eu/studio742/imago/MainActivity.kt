@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalConfiguration
 import dagger.hilt.android.AndroidEntryPoint
 import eu.studio742.imago.core.designsystem.ImagoTheme
+import eu.studio742.imago.core.designsystem.LocalAppearanceSettings
 import eu.studio742.imago.core.designsystem.i18n.LocalLanguageSettings
 import eu.studio742.imago.core.designsystem.i18n.ProvideAppLanguage
 import kotlinx.coroutines.flow.map
@@ -27,6 +28,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var account: AccountRepository
     @Inject lateinit var syncEngine: SyncEngine
     @Inject lateinit var languageSettings: AndroidLanguageSettings
+    @Inject lateinit var appearanceSettings: AndroidAppearanceSettings
     private val shell: HiltShellViewModel by viewModels()
 
     override fun onNewIntent(intent: Intent) {
@@ -52,7 +54,7 @@ class MainActivity : ComponentActivity() {
             val preference by languageSettings.preference.collectAsState()
             // The system language comes from the configuration, which on Android 13+ already carries the per-app language.
             val systemLocale = LocalConfiguration.current.locales[0]
-            CompositionLocalProvider(LocalLanguageSettings provides languageSettings) {
+            CompositionLocalProvider(LocalLanguageSettings provides languageSettings, LocalAppearanceSettings provides appearanceSettings) {
                 ProvideAppLanguage(preference, systemLocale) {
                     ImagoTheme { ImagoApp(shell, syncIndicator = indicator) }
                 }

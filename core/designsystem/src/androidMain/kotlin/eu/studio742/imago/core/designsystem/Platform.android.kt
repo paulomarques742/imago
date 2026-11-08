@@ -1,7 +1,12 @@
 package eu.studio742.imago.core.designsystem
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.provider.Settings
+import android.view.WindowInsetsController
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -19,6 +24,22 @@ internal actual fun rememberSystemReducedMotion(): Boolean {
             Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
         }.getOrDefault(false)
     }
+}
+
+/** Set here and not by `enableEdgeToEdge()`, which reads the system and not what the person chose. */
+@Composable
+internal actual fun SystemBarsFollow(palette: ImagoUiPalette) {
+    val context = LocalContext.current
+    SideEffect {
+        val bars = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+        context.activity()?.window?.insetsController?.setSystemBarsAppearance(if (palette.isLight) bars else 0, bars)
+    }
+}
+
+private tailrec fun Context.activity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.activity()
+    else -> null
 }
 
 /**

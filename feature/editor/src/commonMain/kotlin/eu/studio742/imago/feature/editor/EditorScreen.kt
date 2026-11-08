@@ -75,6 +75,7 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -130,6 +131,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -199,7 +201,11 @@ import eu.studio742.imago.core.designsystem.FocusedAdjustmentScale
 import eu.studio742.imago.core.designsystem.ImagoScaleTint
 import eu.studio742.imago.core.designsystem.ImagoSlider
 import eu.studio742.imago.core.designsystem.SheetHandle
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
+import eu.studio742.imago.core.designsystem.onStage
+import eu.studio742.imago.core.designsystem.LocalImagoUiPalette
+import eu.studio742.imago.core.designsystem.ImagoDarkPalette
+import eu.studio742.imago.core.designsystem.EditorBackground
 import eu.studio742.imago.core.designsystem.ImagoParameterSlider
 import eu.studio742.imago.core.designsystem.ImagoMotion
 import eu.studio742.imago.core.designsystem.ImagoRadii
@@ -328,8 +334,10 @@ fun EditorRoute(
         }
     }
     BackHandler { requestLeave() }
+    val background by viewModel.editorBackground.collectAsStateWithLifecycle()
     EditorScreen(
         state = state,
+        background = EditorBackground.of(background),
         compositionMode = compositionMode,
         onBack = requestLeave,
         onConfirm = {
@@ -513,7 +521,7 @@ fun EditorRoute(
                             askingToLeave = false
                             leave()
                         },
-                    ) { Text(stringResource(Res.string.editor_discard), color = ImagoColors.Danger) }
+                    ) { Text(stringResource(Res.string.editor_discard), color = ImagoUi.colors.danger) }
                     TextButton(onClick = { askingToLeave = false }) { Text(stringResource(Res.string.editor_cancel)) }
                 }
             },
@@ -562,7 +570,7 @@ fun EditorRoute(
                         // Gone, so there is nothing left to ask about saving: straight out.
                         viewModel.deleteRecipeEdit(onDeleted = onBack)
                     },
-                ) { Text(stringResource(Res.string.editor_delete), color = ImagoColors.Danger) }
+                ) { Text(stringResource(Res.string.editor_delete), color = ImagoUi.colors.danger) }
             },
             dismissButton = {
                 TextButton(onClick = { confirmingDelete = false }) { Text(stringResource(Res.string.editor_cancel)) }
@@ -575,6 +583,7 @@ fun EditorRoute(
 @Composable
 private fun EditorScreen(
     state: EditorUiState,
+    background: EditorBackground,
     compositionMode: Boolean,
     onBack: () -> Unit,
     onConfirm: () -> Unit,
@@ -960,6 +969,8 @@ private fun EditorScreen(
     // key by convention, and does here the same as a long press on the photo.
     val keyboardFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { keyboardFocus.requestFocus() } }
+    // The panels follow the theme; what sits on the stage follows the stage, which may be neither.
+    val stage = ImagoUi.colors.onStage(background)
     Scaffold(
         modifier = Modifier
             .focusRequester(keyboardFocus)
@@ -1020,13 +1031,14 @@ private fun EditorScreen(
                     else -> false
                 }
             },
-        containerColor = ImagoColors.Background,
+        containerColor = ImagoUi.colors.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         // The photo is the whole screen, under the system bars; it is the controls, and only they,
         // that step back to the safe areas.
         contentWindowInsets = WindowInsets(0),
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
+            CompositionLocalProvider(LocalImagoUiPalette provides stage) {
             HorizontalPager(
                 state = pagerState,
                 key = { page -> assets.getOrNull(page)?.id ?: "gone-$page" },
@@ -1040,11 +1052,11 @@ private fun EditorScreen(
                     // column starts, and so does the swipe between photos.
                     .padding(end = stageInsets.end)
                     .clipToBounds()
-                    .background(Color.Black),
+                    .background(ImagoUi.colors.workspace),
             ) { page ->
                 val pageAsset = assets.getOrNull(page) ?: return@HorizontalPager
                 val isActiveAsset = pageAsset.id == assetId
-                Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxSize().background(ImagoUi.colors.workspace), contentAlignment = Alignment.Center) {
                     // What holds the photo's place stays until the stage has drawn it: the stage is opaque, and for
                     // the seconds between the photo being ready and its first frame it was a black screen.
                     var stageShown by remember(pageAsset.id, state.bitmap) { mutableStateOf(false) }
@@ -1068,7 +1080,7 @@ private fun EditorScreen(
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(Color.Black),
+                                .background(ImagoUi.colors.workspace),
                         )
                         // The edit as the library already shows it, from its kept render: over the camera's own look
                         // as soon as the saved recipe is read, so that the wait is for the edited photo and not for
@@ -1129,6 +1141,7 @@ private fun EditorScreen(
                                 clipping = if (cropMode || visualizingSpots || showingLuminanceMap) ClippingWarning.NONE else state.clipping,
                                 spots = if (visualizingSpots) state.retouchTool.spots else null,
                                 luminanceMap = showingLuminanceMap && !cropMode,
+                                background = ImagoUi.colors.workspace,
                                 modifier = Modifier.fillMaxSize(),
                                 onFirstFrame = { stageShown = true },
                             )
@@ -1930,12 +1943,12 @@ private fun EditorScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
                         ) {
-                            CircularProgressIndicator(color = ImagoColors.Ivory)
+                            CircularProgressIndicator(color = ImagoUi.colors.emphasis)
                             if (raw) {
                                 Text(
                                     text = stringResource(Res.string.editor_developing_raw),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = ImagoColors.TextSecondary,
+                                    color = ImagoUi.colors.secondaryText,
                                 )
                             }
                         }
@@ -1944,7 +1957,7 @@ private fun EditorScreen(
                         // An error must never be left without a way out. The recipe is still saved
                         // locally, so all that is left is fetching the preview again.
                         Surface(
-                            color = ImagoColors.SurfaceElevated,
+                            color = ImagoUi.colors.elevated,
                             shape = RoundedCornerShape(ImagoRadii.Medium),
                             modifier = Modifier.padding(ImagoSpacing.Xxl),
                         ) {
@@ -1953,12 +1966,25 @@ private fun EditorScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
                             ) {
-                                Text(text = state.error.resolve(), color = ImagoColors.TextSecondary)
+                                Text(text = state.error.resolve(), color = ImagoUi.colors.secondaryText)
                                 TextButton(onClick = onRetry) { Text(stringResource(Res.string.editor_try_again)) }
                             }
                         }
                     }
                 }
+            }
+
+            }
+            // The system draws its bar's icons for the theme, across the stage and the rail alike, so
+            // they cannot follow a stage of the opposite kind: they get the theme's ground to sit on.
+            if (stage.isLight != ImagoUi.colors.isLight) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .fillMaxWidth()
+                        .windowInsetsTopHeight(WindowInsets.statusBars)
+                        .background(ImagoUi.colors.navigation),
+                )
             }
 
             // The panel and the toolbar are a single piece stacked at the bottom. Aligning them
@@ -2147,7 +2173,7 @@ private fun EditorScreen(
                         CurveChannel.GREEN -> state.renderParameters.toneCurveGreen
                         CurveChannel.BLUE -> state.renderParameters.toneCurveBlue
                     },
-                    color = state.curveChannel.curveColor(),
+                    color = state.curveChannel.curveColor(ImagoUi.colors.onImage),
                     points = curvePoints,
                     onEditing = { editingKey = it },
                     onAddPoint = onAddCurvePoint,
@@ -2340,9 +2366,9 @@ private fun EditorScreen(
                                 // A filter is not the user's to delete, and a new recipe has nothing yet.
                                 if (state.recipeEdit?.saved != null) {
                                     DropdownMenuItem(
-                                        text = { Text(stringResource(Res.string.editor_delete), color = ImagoColors.Danger) },
+                                        text = { Text(stringResource(Res.string.editor_delete), color = ImagoUi.colors.danger) },
                                         leadingIcon = {
-                                            Icon(Icons.Outlined.Delete, contentDescription = null, tint = ImagoColors.Danger)
+                                            Icon(Icons.Outlined.Delete, contentDescription = null, tint = ImagoUi.colors.danger)
                                         },
                                         onClick = {
                                             showContextMenu = false
@@ -2356,9 +2382,9 @@ private fun EditorScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
-                    titleContentColor = ImagoColors.TextPrimary,
-                    navigationIconContentColor = ImagoColors.TextPrimary,
-                    actionIconContentColor = ImagoColors.TextPrimary,
+                    titleContentColor = stage.text,
+                    navigationIconContentColor = stage.text,
+                    actionIconContentColor = stage.text,
                 ),
             )
             }
@@ -2378,10 +2404,10 @@ private fun EditorScreen(
                 Text(
                     text = stringResource(Res.string.editor_original),
                     style = MaterialTheme.typography.labelLarge,
-                    color = ImagoColors.Ivory,
+                    color = ImagoUi.colors.onImage,
                     modifier = Modifier
                         .clip(RoundedCornerShape(ImagoRadii.Pill))
-                        .background(Color.Black.copy(alpha = 0.56f))
+                        .background(ImagoUi.colors.imageShade.copy(alpha = 0.56f))
                         .padding(horizontal = ImagoSpacing.Md, vertical = ImagoSpacing.Xs),
                 )
             }
@@ -2390,7 +2416,7 @@ private fun EditorScreen(
                 Text(
                     text = "%.1f×".format(transform.zoom),
                     style = MaterialTheme.typography.labelSmall,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.onImage.copy(alpha = 0.68f),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         // It sits on the measured chrome, and not on the panel's height: that one does
@@ -2405,7 +2431,7 @@ private fun EditorScreen(
                             end = stageInsets.end,
                         )
                         .clip(RoundedCornerShape(ImagoRadii.Pill))
-                        .background(Color.Black.copy(alpha = 0.56f))
+                        .background(ImagoUi.colors.imageShade.copy(alpha = 0.56f))
                         .padding(horizontal = ImagoSpacing.Sm, vertical = ImagoSpacing.Xs),
                 )
             }
@@ -2551,10 +2577,10 @@ private fun EditorScreen(
                         },
                         enabled = state.recipe != null,
                         colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = ImagoColors.Gold.copy(alpha = 0.10f),
-                            contentColor = ImagoColors.Gold,
+                            containerColor = ImagoUi.colors.accent.copy(alpha = 0.10f),
+                            contentColor = ImagoUi.colors.accent,
                         ),
-                        border = BorderStroke(1.dp, ImagoColors.Gold.copy(alpha = if (state.recipe != null) 0.35f else 0.12f)),
+                        border = BorderStroke(1.dp, ImagoUi.colors.accent.copy(alpha = if (state.recipe != null) 0.35f else 0.12f)),
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text(stringResource(Res.string.reel_open)) }
                 }
@@ -2574,7 +2600,7 @@ private fun EditorScreen(
     }
     if (state.isExporting) {
         Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)),
+            modifier = Modifier.fillMaxSize().background(ImagoUi.colors.imageShade.copy(alpha = 0.55f)),
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -2604,7 +2630,7 @@ private fun RecipeEditTitle(state: EditorUiState) {
             Text(
                 text = stringResource(Res.string.editor_unsaved_marker),
                 style = MaterialTheme.typography.labelSmall,
-                color = ImagoColors.TextSecondary,
+                color = ImagoUi.colors.secondaryText,
             )
         }
     }
@@ -2664,13 +2690,13 @@ private fun AdjustmentPanel(
     val panelColor by animateColorAsState(
         targetValue = when {
             isEditing -> Color.Transparent
-            else -> ImagoColors.Glass
+            else -> ImagoUi.colors.glass
         },
         animationSpec = imagoTween(ImagoMotion.Instant),
         label = "panelColor",
     )
     val borderColor by animateColorAsState(
-        targetValue = if (isEditing) Color.Transparent else ImagoColors.BorderSubtle,
+        targetValue = if (isEditing) Color.Transparent else ImagoUi.colors.subtleBorder,
         animationSpec = imagoTween(ImagoMotion.Instant),
         label = "panelBorder",
     )
@@ -3074,8 +3100,8 @@ private fun WhiteBalancePresetMenu(
             onClick = { open = true },
             modifier = Modifier.semantics { contentDescription = description },
         ) {
-            Text(stringResource(current.labelRes), style = MaterialTheme.typography.labelLarge, color = ImagoColors.TextSecondary)
-            Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = ImagoColors.TextSecondary)
+            Text(stringResource(current.labelRes), style = MaterialTheme.typography.labelLarge, color = ImagoUi.colors.secondaryText)
+            Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = ImagoUi.colors.secondaryText)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             offered.forEach { preset ->
@@ -3083,7 +3109,7 @@ private fun WhiteBalancePresetMenu(
                     text = {
                         Text(
                             stringResource(preset.labelRes),
-                            color = if (preset == current) ImagoColors.Gold else ImagoColors.TextPrimary,
+                            color = if (preset == current) ImagoUi.colors.accent else ImagoUi.colors.text,
                         )
                     },
                     onClick = {
@@ -3101,19 +3127,19 @@ private fun WhiteBalancePresetMenu(
 private fun WhiteBalancePickBar(unreadable: Boolean, onCancel: () -> Unit, onAccept: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onCancel) {
-            Icon(Icons.Outlined.Close, contentDescription = stringResource(Res.string.editor_cancel), tint = ImagoColors.TextPrimary)
+            Icon(Icons.Outlined.Close, contentDescription = stringResource(Res.string.editor_cancel), tint = ImagoUi.colors.text)
         }
         Text(
             text = stringResource(
                 if (unreadable) Res.string.editor_white_balance_unreadable else Res.string.editor_white_balance_pick_hint,
             ),
             style = MaterialTheme.typography.bodySmall,
-            color = if (unreadable) ImagoColors.Gold else ImagoColors.TextSecondary,
+            color = if (unreadable) ImagoUi.colors.accent else ImagoUi.colors.secondaryText,
             textAlign = TextAlign.Center,
             modifier = Modifier.weight(1f),
         )
         IconButton(onClick = onAccept) {
-            Icon(Icons.Outlined.Check, contentDescription = stringResource(Res.string.editor_apply), tint = ImagoColors.Gold)
+            Icon(Icons.Outlined.Check, contentDescription = stringResource(Res.string.editor_apply), tint = ImagoUi.colors.accent)
         }
     }
 }
@@ -3160,7 +3186,7 @@ private fun SliderPanel(
                         Text(
                             text = title,
                             style = MaterialTheme.typography.labelLarge,
-                            color = ImagoColors.Gold,
+                            color = ImagoUi.colors.accent,
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(top = ImagoSpacing.Sm, bottom = ImagoSpacing.Xs),
@@ -3177,7 +3203,7 @@ private fun SliderPanel(
                                 Icon(
                                     Icons.Outlined.Colorize,
                                     contentDescription = stringResource(Res.string.editor_white_balance_pick),
-                                    tint = ImagoColors.TextSecondary,
+                                    tint = ImagoUi.colors.secondaryText,
                                 )
                             }
                         }
@@ -3291,8 +3317,8 @@ private fun SubToolChip(
     Row(
         modifier = modifier
             .clip(shape)
-            .background(ImagoColors.Gold.copy(alpha = 0.10f))
-            .border(1.dp, ImagoColors.Gold.copy(alpha = 0.35f), shape)
+            .background(ImagoUi.colors.accent.copy(alpha = 0.10f))
+            .border(1.dp, ImagoUi.colors.accent.copy(alpha = 0.35f), shape)
             .clickable(role = Role.Button, onClick = onClick)
             .sizeIn(minHeight = ImagoSizes.TouchTarget)
             .padding(start = ImagoSpacing.Md, end = ImagoSpacing.Sm),
@@ -3301,20 +3327,20 @@ private fun SubToolChip(
         Icon(
             icon,
             contentDescription = null,
-            tint = ImagoColors.Gold,
+            tint = ImagoUi.colors.accent,
             modifier = Modifier.size(ImagoSizes.IconSmall),
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelLarge,
-            color = ImagoColors.Gold,
+            color = ImagoUi.colors.accent,
             maxLines = 1,
             modifier = Modifier.padding(start = ImagoSpacing.Xs),
         )
         Icon(
             Icons.AutoMirrored.Outlined.KeyboardArrowRight,
             contentDescription = null,
-            tint = ImagoColors.Gold,
+            tint = ImagoUi.colors.accent,
             modifier = Modifier.size(ImagoSizes.IconSmall),
         )
     }
@@ -3352,7 +3378,7 @@ private fun ToolCategoryBar(
                 Icon(
                     imageVector = panel.vector(),
                     contentDescription = panel.label(),
-                    tint = if (isSelected) ImagoColors.TextPrimary else ImagoColors.TextTertiary,
+                    tint = if (isSelected) ImagoUi.colors.text else ImagoUi.colors.tertiaryText,
                     modifier = Modifier.size(ImagoSizes.IconLarge),
                 )
                 // A dot, and not an underline: it is what the mockup shows, and it weighs less over
@@ -3362,7 +3388,7 @@ private fun ToolCategoryBar(
                         .padding(top = ImagoSpacing.Sm)
                         .size(4.dp)
                         .clip(CircleShape)
-                        .background(if (isSelected) ImagoColors.BrandWhite else Color.Transparent),
+                        .background(if (isSelected) ImagoUi.colors.selectedChoiceSurface else Color.Transparent),
                 )
             }
         }
@@ -3419,7 +3445,7 @@ private fun CurvePanel(
         Text(
             stringResource(Res.string.editor_curve_hint),
             style = MaterialTheme.typography.bodySmall,
-            color = ImagoColors.TextTertiary,
+            color = ImagoUi.colors.tertiaryText,
         )
     }
 }
@@ -3444,10 +3470,10 @@ private fun CurveChannelRow(selected: CurveChannel, onSelect: (CurveChannel) -> 
                     Modifier
                         .size(if (isSelected) 27.dp else 23.dp)
                         .clip(CircleShape)
-                        .background(channel.curveColor())
+                        .background(channel.curveColor(ImagoUi.colors.text))
                         .then(
-                            if (isSelected) Modifier.border(2.dp, ImagoColors.Ivory, CircleShape)
-                            else Modifier.border(1.dp, ImagoColors.BorderVisible, CircleShape),
+                            if (isSelected) Modifier.border(2.dp, ImagoUi.colors.emphasis, CircleShape)
+                            else Modifier.border(1.dp, ImagoUi.colors.border, CircleShape),
                         ),
                 )
             }
@@ -3456,8 +3482,8 @@ private fun CurveChannelRow(selected: CurveChannel, onSelect: (CurveChannel) -> 
 }
 
 /** The channel's colour, for its disc and for its line over the photo. */
-internal fun CurveChannel.curveColor() = when (this) {
-    CurveChannel.RGB -> ImagoColors.BrandWhite
+internal fun CurveChannel.curveColor(neutral: Color) = when (this) {
+    CurveChannel.RGB -> neutral
     CurveChannel.RED -> Color(0xFFE14B4B)
     CurveChannel.GREEN -> Color(0xFF52A86A)
     CurveChannel.BLUE -> Color(0xFF4F79D8)
@@ -3488,6 +3514,8 @@ private fun CurveOverlay(
     val currentPoints by rememberUpdatedState(points)
     var activePoint by remember { mutableStateOf<Int?>(null) }
     val description = stringResource(Res.string.editor_tone_curve)
+    val uiColors = ImagoUi.colors
+    val ink = OverlayInk(uiColors.onImage, uiColors.imageShade)
     BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
         val side = minOf(maxWidth, maxHeight)
         Canvas(
@@ -3536,7 +3564,7 @@ private fun CurveOverlay(
                     }
                 },
         ) {
-            drawCurveGraph(curvePlot(size.width, size.height), lut, color, points, activePoint)
+            drawCurveGraph(ink, curvePlot(size.width, size.height), lut, color, points, activePoint)
         }
     }
 }
@@ -3547,6 +3575,7 @@ private fun CurveOverlay(
  * over the photo, which is why the grid can be left out for a second channel and everything fades.
  */
 internal fun DrawScope.drawCurveGraph(
+    ink: OverlayInk,
     plot: CurvePlot,
     lut: List<Float>,
     color: Color,
@@ -3556,7 +3585,7 @@ internal fun DrawScope.drawCurveGraph(
     grid: Boolean = true,
 ) {
     if (grid) {
-        val gridLine = Color.White.copy(alpha = 0.32f * alpha)
+        val gridLine = ink.line.copy(alpha = 0.32f * alpha)
         repeat(5) { index ->
             val x = plot.left + index * plot.width / 4f
             val y = plot.top + index * plot.height / 4f
@@ -3571,13 +3600,13 @@ internal fun DrawScope.drawCurveGraph(
             if (sample == 0) moveTo(x, y) else lineTo(x, y)
         }
     }
-    drawPath(curve, Color.Black.copy(alpha = 0.45f * alpha), style = Stroke(width = 4.dp.toPx()))
+    drawPath(curve, ink.halo.copy(alpha = 0.45f * alpha), style = Stroke(width = 4.dp.toPx()))
     drawPath(curve, color.copy(alpha = color.alpha * alpha), style = Stroke(width = 2.dp.toPx()))
     points.forEachIndexed { index, point ->
         val center = plot.toScreen(point)
         val active = activePoint == index
         val radius = if (active) 10.dp.toPx() else 8.dp.toPx()
-        drawCircle(Color.Black.copy(alpha = 0.45f * alpha), radius = radius + 1.5.dp.toPx(), center = center)
+        drawCircle(ink.halo.copy(alpha = 0.45f * alpha), radius = radius + 1.5.dp.toPx(), center = center)
         drawCircle(color.copy(alpha = color.alpha * alpha), radius = radius, center = center)
     }
 }
@@ -3639,6 +3668,8 @@ private fun CropOverlay(
     onGestureFinished: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val cropLine = ImagoUi.colors.onImage
+    val cropShade = ImagoUi.colors.imageShade.copy(alpha = 0.62f)
     val currentCrop by rememberUpdatedState(cropRect)
     val lockedRatio by rememberUpdatedState(
         lockedCropRatio(aspectLock, imageWidth, imageHeight, rotation),
@@ -3706,14 +3737,14 @@ private fun CropOverlay(
 
         // The dimming covers the whole stage and not just the photo: with the zoom-out, what is
         // around it is also outside the crop and should not compete with what is inside.
-        val scrim = Color.Black.copy(alpha = 0.62f)
+        val scrim = cropShade
         drawRect(scrim, Offset.Zero, Size(size.width, crop.top.coerceAtLeast(0f)))
         drawRect(scrim, Offset(0f, crop.bottom), Size(size.width, (size.height - crop.bottom).coerceAtLeast(0f)))
         drawRect(scrim, Offset(0f, crop.top), Size(crop.left.coerceAtLeast(0f), crop.height))
         drawRect(scrim, Offset(crop.right, crop.top), Size((size.width - crop.right).coerceAtLeast(0f), crop.height))
 
         drawRect(
-            color = Color.White.copy(alpha = 0.94f),
+            color = cropLine.copy(alpha = 0.94f),
             topLeft = Offset(crop.left, crop.top),
             size = Size(crop.width, crop.height),
             style = Stroke(width = borderWidth),
@@ -3722,12 +3753,12 @@ private fun CropOverlay(
         for (division in 1 until gridDivisions) {
             val x = crop.left + crop.width * division / gridDivisions
             val y = crop.top + crop.height * division / gridDivisions
-            drawLine(Color.White.copy(alpha = 0.48f), Offset(x, crop.top), Offset(x, crop.bottom), gridWidth)
-            drawLine(Color.White.copy(alpha = 0.48f), Offset(crop.left, y), Offset(crop.right, y), gridWidth)
+            drawLine(cropLine.copy(alpha = 0.48f), Offset(x, crop.top), Offset(x, crop.bottom), gridWidth)
+            drawLine(cropLine.copy(alpha = 0.48f), Offset(crop.left, y), Offset(crop.right, y), gridWidth)
         }
 
         fun handleLine(start: Offset, end: Offset) = drawLine(
-            color = Color.White,
+            color = cropLine,
             start = start,
             end = end,
             strokeWidth = handleWidth,
@@ -3947,11 +3978,11 @@ private fun UprightRow(
             Text(
                 text = stringResource(Res.string.editor_upright),
                 style = MaterialTheme.typography.bodyMedium,
-                color = ImagoColors.TextPrimary,
+                color = ImagoUi.colors.text,
                 modifier = Modifier.weight(1f),
             )
             if (detecting) {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = ImagoColors.Gold)
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = ImagoUi.colors.accent)
             }
         }
         // Six modes do not fit a phone's width: the row scrolls, as the crop's aspect ratios do.
@@ -3971,20 +4002,20 @@ private fun UprightRow(
             Text(
                 text = it.resolve(),
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.TextTertiary,
+                color = ImagoUi.colors.tertiaryText,
             )
         }
         if (guided) {
             Text(
                 text = stringResource(Res.string.editor_upright_guided_hint, MIN_UPRIGHT_GUIDES, MAX_UPRIGHT_GUIDES),
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.TextTertiary,
+                color = ImagoUi.colors.tertiaryText,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = stringResource(Res.string.editor_upright_guides_count, perspective.guides.size, MAX_UPRIGHT_GUIDES),
                     style = MaterialTheme.typography.labelLarge,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(onClick = actions.onRemoveLastGuide, enabled = perspective.guides.isNotEmpty()) {
@@ -4050,22 +4081,22 @@ private fun SwitchRow(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium,
-                color = ImagoColors.TextPrimary,
+                color = ImagoUi.colors.text,
             )
             Text(
                 text = hint,
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.TextTertiary,
+                color = ImagoUi.colors.tertiaryText,
             )
         }
         if (working) {
-            CircularProgressIndicator(color = ImagoColors.Gold, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            CircularProgressIndicator(color = ImagoUi.colors.accent, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
         }
         // The row is the control: the switch only shows its state, so the touch is not counted twice.
         Switch(
             checked = checked,
             onCheckedChange = null,
-            colors = SwitchDefaults.colors(checkedTrackColor = ImagoColors.Gold),
+            colors = SwitchDefaults.colors(checkedTrackColor = ImagoUi.colors.accent),
         )
     }
 }
@@ -4115,7 +4146,7 @@ private fun CropActionRow(
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(ImagoRadii.Pill))
-            .background(Color.Black.copy(alpha = 0.56f))
+            .background(ImagoUi.colors.imageShade.copy(alpha = 0.56f))
             .padding(horizontal = ImagoSpacing.Xs),
         horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs),
         verticalAlignment = Alignment.CenterVertically,
@@ -4161,9 +4192,9 @@ private fun CropActionButton(
             imageVector = icon,
             contentDescription = label,
             tint = when {
-                !enabled -> ImagoColors.TextDisabled
-                active -> ImagoColors.Gold
-                else -> ImagoColors.TextPrimary
+                !enabled -> ImagoDarkPalette.disabledText
+                active -> ImagoUi.colors.imageAccent
+                else -> ImagoUi.colors.onImage
             },
             modifier = Modifier.size(ImagoSizes.IconLarge),
         )
@@ -4178,17 +4209,17 @@ private fun CropAspectButton(
 ) {
     Surface(
         onClick = onClick,
-        color = if (selected) ImagoColors.Gold.copy(alpha = 0.22f) else ImagoColors.SurfaceElevated,
+        color = if (selected) ImagoUi.colors.accent.copy(alpha = 0.22f) else ImagoUi.colors.elevated,
         shape = RoundedCornerShape(ImagoRadii.Medium),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (selected) ImagoColors.Gold else ImagoColors.BorderVisible,
+            if (selected) ImagoUi.colors.accent else ImagoUi.colors.border,
         ),
     ) {
         Text(
             text = if (selected) "✓ $label" else label,
             style = MaterialTheme.typography.labelMedium,
-            color = if (selected) ImagoColors.Ivory else ImagoColors.TextSecondary,
+            color = if (selected) ImagoUi.colors.emphasis else ImagoUi.colors.secondaryText,
             modifier = Modifier.padding(horizontal = ImagoSpacing.Md, vertical = ImagoSpacing.Md),
         )
     }
@@ -4247,8 +4278,8 @@ private fun HslPanel(
                             .clip(CircleShape)
                             .background(band.selectorColor())
                             .then(
-                                if (selected) Modifier.border(2.dp, ImagoColors.Ivory, CircleShape)
-                                else Modifier.border(1.dp, ImagoColors.BorderVisible, CircleShape),
+                                if (selected) Modifier.border(2.dp, ImagoUi.colors.emphasis, CircleShape)
+                                else Modifier.border(1.dp, ImagoUi.colors.border, CircleShape),
                             ),
                     )
                 }

@@ -58,7 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.studio742.imago.core.composition.CompositionProject
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
@@ -117,7 +117,7 @@ private fun ComposerHubScreen(
     var deleting by remember { mutableStateOf<CompositionProject?>(null) }
     Box(Modifier.fillMaxSize()) {
         Scaffold(
-            containerColor = ImagoColors.Background,
+            containerColor = ImagoUi.colors.background,
             snackbarHost = { SnackbarHost(snackbar) },
             bottomBar = {
                 LibraryNavBar(
@@ -139,13 +139,13 @@ private fun ComposerHubScreen(
                         Icon(
                             Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = stringResource(Res.string.composer_back),
-                            tint = ImagoColors.TextPrimary,
+                            tint = ImagoUi.colors.text,
                         )
                     }
                     Text(
                         text = stringResource(Res.string.composer_compose),
                         style = MaterialTheme.typography.titleMedium,
-                        color = ImagoColors.TextPrimary,
+                        color = ImagoUi.colors.text,
                     )
                     eu.studio742.imago.core.designsystem.SyncIndicator(Modifier.padding(start = ImagoSpacing.Sm))
                     androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
@@ -170,7 +170,7 @@ private fun ComposerHubScreen(
                     state.isLoading -> Box(
                         Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
-                    ) { CircularProgressIndicator(color = ImagoColors.Ivory) }
+                    ) { CircularProgressIndicator(color = ImagoUi.colors.emphasis) }
 
                     tab == ComposerTab.TEMPLATES && state.templates.isNotEmpty() -> CompositionGrid {
                         items(state.templates, key = { "template-${it.id}" }) { template ->
@@ -191,7 +191,7 @@ private fun ComposerHubScreen(
                         Text(
                             text = stringResource(Res.string.composer_empty),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = ImagoColors.TextSecondary,
+                            color = ImagoUi.colors.secondaryText,
                         )
                     }
 
@@ -215,8 +215,8 @@ private fun ComposerHubScreen(
                                         onClick = { dismiss(); actions.duplicate(project.id) },
                                     )
                                     DropdownMenuItem(
-                                        text = { Text(stringResource(Res.string.composer_delete), color = ImagoColors.Danger) },
-                                        leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = ImagoColors.Danger) },
+                                        text = { Text(stringResource(Res.string.composer_delete), color = ImagoUi.colors.danger) },
+                                        leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = ImagoUi.colors.danger) },
                                         onClick = { dismiss(); deleting = project },
                                     )
                                 },
@@ -255,7 +255,7 @@ private fun ComposerHubScreen(
         AlertDialog(
             onDismissRequest = { deleting = null }, title = { Text(stringResource(Res.string.composer_delete_composition_question)) },
             text = { Text(stringResource(Res.string.composer_delete_composition_body, project.name)) },
-            confirmButton = { TextButton(onClick = { actions.delete(project.id); deleting = null }) { Text(stringResource(Res.string.composer_delete), color = ImagoColors.Danger) } },
+            confirmButton = { TextButton(onClick = { actions.delete(project.id); deleting = null }) { Text(stringResource(Res.string.composer_delete), color = ImagoUi.colors.danger) } },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(Res.string.composer_cancel)) } },
         )
     }
@@ -293,14 +293,14 @@ private fun CompositionTile(
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(ImagoRadii.Medium))
-            .background(ImagoColors.Surface)
+            .background(ImagoUi.colors.surface)
             .clickable(role = Role.Button, onClick = onClick),
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(0.78f)
-                .background(ImagoColors.SurfaceElevated),
+                .background(ImagoUi.colors.elevated),
         ) {
             project.pages.firstOrNull()?.let { page ->
                 CompositionPagePreview(
@@ -318,7 +318,7 @@ private fun CompositionTile(
                     .fillMaxWidth()
                     .height(56.dp)
                     .background(
-                        Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))),
+                        Brush.verticalGradient(listOf(Color.Transparent, ImagoUi.colors.imageShade.copy(alpha = 0.78f))),
                     ),
             )
         }
@@ -332,14 +332,14 @@ private fun CompositionTile(
                 Text(
                     text = name,
                     style = MaterialTheme.typography.titleSmall,
-                    color = ImagoColors.TextPrimary,
+                    color = ImagoUi.colors.text,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = ImagoColors.TextTertiary,
+                    color = ImagoUi.colors.tertiaryText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -350,7 +350,7 @@ private fun CompositionTile(
                         Icon(
                             Icons.Outlined.MoreHoriz,
                             contentDescription = stringResource(Res.string.composer_options_for, name),
-                            tint = ImagoColors.TextTertiary,
+                            tint = ImagoUi.colors.tertiaryText,
                             modifier = Modifier.size(ImagoSizes.IconDefault),
                         )
                     }

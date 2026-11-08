@@ -27,7 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.backhandler.BackHandler
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.i18n.resolve
@@ -53,7 +53,7 @@ internal fun PhotoMapScreen(
     BackHandler(onBack = onBack)
     val contents = state.map
     val allowLocations = rememberLocationAccess(onGranted = onRetry)
-    Box(modifier.fillMaxSize().background(ImagoColors.Background)) {
+    Box(modifier.fillMaxSize().background(ImagoUi.colors.background)) {
         PhotoMap(
             markers = contents?.markers.orEmpty(),
             camera = state.mapCamera,
@@ -64,16 +64,16 @@ internal fun PhotoMapScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.45f))
+                .background(ImagoUi.colors.imageShade.copy(alpha = 0.45f))
                 .statusBarsPadding()
                 .height(56.dp)
                 .padding(horizontal = ImagoSpacing.Sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(Res.string.library_map_close), tint = ImagoColors.TextPrimary)
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(Res.string.library_map_close), tint = ImagoUi.colors.text)
             }
-            Text(stringResource(Res.string.library_map), style = MaterialTheme.typography.titleMedium, color = ImagoColors.TextPrimary)
+            Text(stringResource(Res.string.library_map), style = MaterialTheme.typography.titleMedium, color = ImagoUi.colors.text)
         }
         val reading = contents?.reading
         val note: (@Composable () -> Unit)? = when {
@@ -95,7 +95,7 @@ internal fun PhotoMapScreen(
                     LinearProgressIndicator(
                         progress = { reading.done.toFloat() / reading.total.coerceAtLeast(1) },
                         modifier = Modifier.fillMaxWidth().padding(top = ImagoSpacing.Sm),
-                        color = ImagoColors.Ivory,
+                        color = ImagoUi.colors.emphasis,
                     )
                 }
             }
@@ -111,7 +111,7 @@ internal fun PhotoMapScreen(
                     .navigationBarsPadding()
                     .padding(ImagoSpacing.Lg)
                     .clip(RoundedCornerShape(ImagoRadii.Medium))
-                    .background(ImagoColors.SurfaceElevated.copy(alpha = 0.94f))
+                    .background(ImagoUi.colors.elevated.copy(alpha = 0.94f))
                     .padding(ImagoSpacing.Lg),
             ) { it() }
         }
@@ -121,7 +121,7 @@ internal fun PhotoMapScreen(
 @Composable
 private fun MapNote(text: String, action: @Composable () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary, modifier = Modifier.weight(1f))
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.text, modifier = Modifier.weight(1f))
         action()
     }
 }

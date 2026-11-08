@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import eu.studio742.imago.core.data.LocalDesktopDataGraph
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.NativeDialogs
 import eu.studio742.imago.core.immich.IMMICH_API_KEY_HEADER
@@ -84,7 +84,7 @@ actual fun DetailVideoPlayer(playback: VideoPlayback?, url: String, apiKey: Stri
     var error by remember(url) { mutableStateOf<UiText?>(null) }
     Box(modifier, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-            if (busy) CircularProgressIndicator(color = ImagoColors.Ivory)
+            if (busy) CircularProgressIndicator(color = ImagoUi.colors.emphasis)
             else Button(onClick = {
                 busy = true; error = null
                 scope.launch {
@@ -96,7 +96,7 @@ actual fun DetailVideoPlayer(playback: VideoPlayback?, url: String, apiKey: Stri
                 Icon(Icons.Outlined.PlayCircle, null)
                 Text(stringResource(Res.string.detail_play_in_windows))
             }
-            error?.let { Text(it.resolve(), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary) }
+            error?.let { Text(it.resolve(), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText) }
         }
     }
 }
@@ -131,7 +131,7 @@ actual fun MotionPlayer(
         ended()
     }
     if (playing) {
-        Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ImagoColors.Ivory) }
+        Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ImagoUi.colors.emphasis) }
     }
 }
 

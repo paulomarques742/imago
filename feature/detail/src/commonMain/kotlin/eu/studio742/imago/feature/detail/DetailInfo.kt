@@ -49,7 +49,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.request.crossfade
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.i18n.LocalAppLocale
@@ -93,25 +93,25 @@ internal fun DetailInfoPanel(
                 formatTakenAt(asset.date.ifBlank { asset.fileCreatedAt }),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = ImagoColors.TextPrimary,
+                color = ImagoUi.colors.text,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     state.fileName ?: asset.fileName,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 onRename?.let {
                     IconButton(onClick = it, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Outlined.Edit, stringResource(Res.string.detail_rename), tint = ImagoColors.TextSecondary, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Outlined.Edit, stringResource(Res.string.detail_rename), tint = ImagoUi.colors.secondaryText, modifier = Modifier.size(18.dp))
                     }
                 }
             }
             state.folder?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextTertiary)
+                Text(it, style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.tertiaryText)
             }
         }
 
@@ -120,8 +120,8 @@ internal fun DetailInfoPanel(
         val camera = cameraName(exif)
         if (camera != null || file.isNotEmpty() || shot.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs)) {
-                camera?.let { Text(it, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = ImagoColors.TextPrimary) }
-                exif.lensModel?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextTertiary) }
+                camera?.let { Text(it, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = ImagoUi.colors.text) }
+                exif.lensModel?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.tertiaryText) }
                 if (file.isNotEmpty()) Facts(file)
                 if (shot.isNotEmpty()) Facts(shot)
             }
@@ -134,7 +134,7 @@ internal fun DetailInfoPanel(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(ImagoRadii.Medium))
-                    .background(ImagoColors.SurfaceElevated)
+                    .background(ImagoUi.colors.elevated)
                     .then(
                         onShowOnMap?.let { show ->
                             Modifier.clickable(role = Role.Button, onClickLabel = stringResource(Res.string.detail_show_on_map)) { show(latitude, longitude) }
@@ -158,7 +158,7 @@ internal fun DetailInfoPanel(
                 Text(
                     address,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = ImagoColors.TextPrimary,
+                    color = ImagoUi.colors.text,
                     modifier = Modifier.padding(ImagoSpacing.Md),
                 )
             }
@@ -180,7 +180,7 @@ private fun Facts(facts: List<String>) {
     Text(
         facts.joinToString("   |   "),
         style = MaterialTheme.typography.bodyMedium,
-        color = ImagoColors.TextSecondary,
+        color = ImagoUi.colors.secondaryText,
     )
 }
 
@@ -198,13 +198,13 @@ private fun Face(person: DetailPerson, onClick: (() -> Unit)?) {
             model = ImageRequest.Builder(context).data(person.thumbnailUrl).libraryAuth(person.apiKey).crossfade(true).build(),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.size(64.dp).clip(CircleShape).background(ImagoColors.SurfaceElevated),
+            modifier = Modifier.size(64.dp).clip(CircleShape).background(ImagoUi.colors.elevated),
         )
         // As the system gallery does, a face nobody named shows a question mark.
         Text(
             person.name.ifBlank { "?" },
             style = MaterialTheme.typography.bodySmall,
-            color = ImagoColors.TextSecondary,
+            color = ImagoUi.colors.secondaryText,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
@@ -286,14 +286,14 @@ internal fun RenameDialog(fileName: String, error: UiText?, busy: Boolean, onCon
                     onValueChange = { value = it },
                     singleLine = true,
                     enabled = !busy,
-                    suffix = { Text(extension, color = ImagoColors.TextTertiary) },
+                    suffix = { Text(extension, color = ImagoUi.colors.tertiaryText) },
                     label = { Text(stringResource(Res.string.detail_rename_label)) },
                     isError = error != null,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { name?.let(onConfirm) }),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
-                error?.let { Text(it.resolve(), style = MaterialTheme.typography.bodySmall, color = ImagoColors.Danger) }
+                error?.let { Text(it.resolve(), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.danger) }
             }
         },
         confirmButton = {

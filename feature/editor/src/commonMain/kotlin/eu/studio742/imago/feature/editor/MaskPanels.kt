@@ -61,7 +61,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoParameterSlider
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
@@ -204,7 +204,7 @@ internal fun MaskListPanel(
             Text(
                 text = text.resolve(),
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.TextSecondary,
+                color = ImagoUi.colors.secondaryText,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = actions.onDismissNotice)
@@ -216,7 +216,7 @@ internal fun MaskListPanel(
             Text(
                 text = stringResource(Res.string.editor_masks_intro),
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.TextTertiary,
+                color = ImagoUi.colors.tertiaryText,
                 modifier = Modifier.padding(vertical = ImagoSpacing.Md),
             )
         } else {
@@ -244,11 +244,11 @@ private fun MaskCreateButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tint = if (enabled) ImagoColors.TextPrimary else ImagoColors.TextDisabled
+    val tint = if (enabled) ImagoUi.colors.text else ImagoUi.colors.disabledText
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(ImagoRadii.Small))
-            .background(ImagoColors.SurfaceElevated)
+            .background(ImagoUi.colors.elevated)
             .clickable(enabled = enabled, onClick = onClick)
             .sizeIn(minHeight = ImagoSizes.TouchTarget)
             .padding(horizontal = ImagoSpacing.Md),
@@ -277,21 +277,21 @@ private fun MaskRow(mask: LocalMask, canDuplicate: Boolean, actions: MaskActions
         Switch(
             checked = mask.enabled,
             onCheckedChange = { actions.onSetEnabled(mask.id, it) },
-            colors = SwitchDefaults.colors(checkedTrackColor = ImagoColors.Gold),
+            colors = SwitchDefaults.colors(checkedTrackColor = ImagoUi.colors.accent),
             modifier = Modifier.semantics { contentDescription = enableDescription },
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = mask.name,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (mask.enabled) ImagoColors.TextPrimary else ImagoColors.TextDisabled,
+                color = if (mask.enabled) ImagoUi.colors.text else ImagoUi.colors.disabledText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = maskSummary(mask),
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.TextTertiary,
+                color = ImagoUi.colors.tertiaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -299,7 +299,7 @@ private fun MaskRow(mask: LocalMask, canDuplicate: Boolean, actions: MaskActions
         MaskIconButton(
             icon = Icons.Outlined.InvertColors,
             description = stringResource(Res.string.editor_mask_invert_named, mask.name),
-            tint = if (mask.inverted) ImagoColors.Gold else ImagoColors.TextSecondary,
+            tint = if (mask.inverted) ImagoUi.colors.accent else ImagoUi.colors.secondaryText,
             onClick = { actions.onSetInverted(mask.id, !mask.inverted) },
         )
         MaskMoreMenu(mask = mask, canDuplicate = canDuplicate, actions = actions)
@@ -314,7 +314,7 @@ private fun MaskMoreMenu(mask: LocalMask, canDuplicate: Boolean, actions: MaskAc
         MaskIconButton(
             icon = Icons.Outlined.MoreVert,
             description = stringResource(Res.string.editor_mask_more_named, mask.name),
-            tint = ImagoColors.TextSecondary,
+            tint = ImagoUi.colors.secondaryText,
             onClick = { open = true },
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -371,13 +371,13 @@ private fun MaskComponentRow(mask: LocalMask, index: Int, component: MaskCompone
         Icon(
             imageVector = op.icon(),
             contentDescription = null,
-            tint = ImagoColors.TextSecondary,
+            tint = ImagoUi.colors.secondaryText,
             modifier = Modifier.size(ImagoSizes.IconDefault),
         )
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
-            color = if (mask.enabled) ImagoColors.TextSecondary else ImagoColors.TextDisabled,
+            color = if (mask.enabled) ImagoUi.colors.secondaryText else ImagoUi.colors.disabledText,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
@@ -385,13 +385,13 @@ private fun MaskComponentRow(mask: LocalMask, index: Int, component: MaskCompone
         MaskIconButton(
             icon = Icons.Outlined.InvertColors,
             description = stringResource(Res.string.editor_mask_shape_invert_named, shape),
-            tint = if (component.inverted) ImagoColors.Gold else ImagoColors.TextTertiary,
+            tint = if (component.inverted) ImagoUi.colors.accent else ImagoUi.colors.tertiaryText,
             onClick = { actions.onSetComponentInverted(mask.id, index, !component.inverted) },
         )
         MaskIconButton(
             icon = Icons.Outlined.Close,
             description = stringResource(Res.string.editor_mask_shape_delete_named, shape),
-            tint = ImagoColors.TextTertiary,
+            tint = ImagoUi.colors.tertiaryText,
             onClick = { actions.onDeleteComponent(mask.id, index) },
         )
     }
@@ -435,7 +435,7 @@ private fun MaskCombineButton(
     modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
-    val tint = if (enabled) ImagoColors.TextSecondary else ImagoColors.TextDisabled
+    val tint = if (enabled) ImagoUi.colors.secondaryText else ImagoUi.colors.disabledText
     Box(modifier = modifier) {
         Row(
             modifier = Modifier
@@ -491,13 +491,13 @@ internal fun MaskAdjustmentsHeader(
         MaskIconButton(
             icon = Icons.AutoMirrored.Outlined.ArrowBack,
             description = stringResource(Res.string.editor_mask_back_to_list),
-            tint = ImagoColors.TextPrimary,
+            tint = ImagoUi.colors.text,
             onClick = actions.onShowList,
         )
         Text(
             text = mask.name,
             style = MaterialTheme.typography.titleSmall,
-            color = ImagoColors.TextPrimary,
+            color = ImagoUi.colors.text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
@@ -505,13 +505,13 @@ internal fun MaskAdjustmentsHeader(
         MaskIconButton(
             icon = Icons.Outlined.InvertColors,
             description = stringResource(Res.string.editor_mask_invert),
-            tint = if (mask.inverted) ImagoColors.Gold else ImagoColors.TextSecondary,
+            tint = if (mask.inverted) ImagoUi.colors.accent else ImagoUi.colors.secondaryText,
             onClick = { actions.onSetInverted(mask.id, !mask.inverted) },
         )
         MaskIconButton(
             icon = if (overlayPinned) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
             description = if (overlayPinned) stringResource(Res.string.editor_mask_hide_overlay) else stringResource(Res.string.editor_mask_show_overlay),
-            tint = if (overlayPinned) ImagoColors.Gold else ImagoColors.TextSecondary,
+            tint = if (overlayPinned) ImagoUi.colors.accent else ImagoUi.colors.secondaryText,
             onClick = { actions.onSetOverlayPinned(!overlayPinned) },
         )
     }
@@ -529,7 +529,7 @@ internal fun MaskIconButton(
             .clip(RoundedCornerShape(ImagoRadii.Small))
             .clickable(onClick = onClick)
             .size(ImagoSizes.TouchTarget)
-            .border(0.dp, ImagoColors.BorderSubtle, RoundedCornerShape(ImagoRadii.Small)),
+            .border(0.dp, ImagoUi.colors.subtleBorder, RoundedCornerShape(ImagoRadii.Small)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(ImagoSizes.IconDefault))
@@ -577,7 +577,7 @@ internal fun BrushToolPanel(
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(ImagoRadii.Small))
-                .background(ImagoColors.SurfaceElevated),
+                .background(ImagoUi.colors.elevated),
         ) {
             BrushModeButton(
                 label = stringResource(Res.string.editor_brush_paint),
@@ -597,14 +597,14 @@ internal fun BrushToolPanel(
         Text(
             text = autoMaskLabel,
             style = MaterialTheme.typography.labelMedium,
-            color = ImagoColors.TextSecondary,
+            color = ImagoUi.colors.secondaryText,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Switch(
             checked = tool.active.autoMask,
             onCheckedChange = actions.onBrushAutoMask,
-            colors = SwitchDefaults.colors(checkedTrackColor = ImagoColors.Gold),
+            colors = SwitchDefaults.colors(checkedTrackColor = ImagoUi.colors.accent),
             modifier = Modifier.semantics { contentDescription = autoMaskLabel },
         )
     }
@@ -653,7 +653,7 @@ internal fun RangeToolPanel(
             if (component.shape == MaskShape.COLOR) Res.string.editor_range_color_hint else Res.string.editor_range_luminance_hint,
         ),
         style = MaterialTheme.typography.bodySmall,
-        color = ImagoColors.TextTertiary,
+        color = ImagoUi.colors.tertiaryText,
         modifier = Modifier.fillMaxWidth().alpha(headerAlpha).padding(top = ImagoSpacing.Xs),
     )
     when (component.shape) {
@@ -680,7 +680,7 @@ internal fun RangeToolPanel(
                                 .size(28.dp)
                                 .clip(RoundedCornerShape(ImagoRadii.Small))
                                 .background(Color(RangeMasks.sampleArgb(sample)))
-                                .border(1.dp, ImagoColors.BorderSubtle, RoundedCornerShape(ImagoRadii.Small)),
+                                .border(1.dp, ImagoUi.colors.subtleBorder, RoundedCornerShape(ImagoRadii.Small)),
                         )
                     }
                 }
@@ -688,7 +688,7 @@ internal fun RangeToolPanel(
                 Text(
                     text = stringResource(Res.string.editor_range_samples_count, range.samples.size.toString(), MAX_COLOR_SAMPLES.toString()),
                     style = MaterialTheme.typography.labelMedium,
-                    color = ImagoColors.TextTertiary,
+                    color = ImagoUi.colors.tertiaryText,
                 )
             }
             Row(
@@ -700,13 +700,13 @@ internal fun RangeToolPanel(
                 Text(
                     text = addLabel,
                     style = MaterialTheme.typography.labelMedium,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                     modifier = Modifier.weight(1f),
                 )
                 Switch(
                     checked = addSamples,
                     onCheckedChange = actions.onRangeAddSamples,
-                    colors = SwitchDefaults.colors(checkedTrackColor = ImagoColors.Gold),
+                    colors = SwitchDefaults.colors(checkedTrackColor = ImagoUi.colors.accent),
                     modifier = Modifier.semantics { contentDescription = addLabel },
                 )
             }
@@ -727,13 +727,13 @@ internal fun RangeToolPanel(
                     Text(
                         text = stringResource(Res.string.editor_range_luminance),
                         style = MaterialTheme.typography.labelMedium,
-                        color = ImagoColors.TextSecondary,
+                        color = ImagoUi.colors.secondaryText,
                         modifier = Modifier.weight(1f),
                     )
                     Text(
                         text = "%.0f – %.0f".format(range.low, range.high),
                         style = MaterialTheme.typography.labelMedium,
-                        color = ImagoColors.TextSecondary,
+                        color = ImagoUi.colors.secondaryText,
                     )
                 }
                 RangeSlider(
@@ -742,9 +742,9 @@ internal fun RangeToolPanel(
                     onValueChangeFinished = actions.onRangeSettingFinished,
                     valueRange = 0f..100f,
                     colors = SliderDefaults.colors(
-                        thumbColor = ImagoColors.Gold,
-                        activeTrackColor = ImagoColors.Gold,
-                        inactiveTrackColor = ImagoColors.BorderSubtle,
+                        thumbColor = ImagoUi.colors.accent,
+                        activeTrackColor = ImagoUi.colors.accent,
+                        inactiveTrackColor = ImagoUi.colors.subtleBorder,
                     ),
                 )
                 // Black to white under the slider, so the two ends read as brightnesses.
@@ -775,13 +775,13 @@ internal fun RangeToolPanel(
                 Text(
                     text = mapLabel,
                     style = MaterialTheme.typography.labelMedium,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                     modifier = Modifier.weight(1f),
                 )
                 Switch(
                     checked = luminanceMap,
                     onCheckedChange = actions.onLuminanceMap,
-                    colors = SwitchDefaults.colors(checkedTrackColor = ImagoColors.Gold),
+                    colors = SwitchDefaults.colors(checkedTrackColor = ImagoUi.colors.accent),
                     modifier = Modifier.semantics { contentDescription = mapLabel },
                 )
             }
@@ -820,11 +820,11 @@ private fun RangeSettingSlider(
 
 @Composable
 internal fun BrushModeButton(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
-    val tint = if (selected) ImagoColors.Gold else ImagoColors.TextSecondary
+    val tint = if (selected) ImagoUi.colors.accent else ImagoUi.colors.secondaryText
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(ImagoRadii.Small))
-            .background(if (selected) ImagoColors.Gold.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent)
+            .background(if (selected) ImagoUi.colors.accent.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent)
             .clickable(onClick = onClick)
             .sizeIn(minHeight = ImagoSizes.TouchTarget)
             .padding(horizontal = ImagoSpacing.Md),

@@ -32,6 +32,8 @@ fun GlPhotoCanvas(
     spots: Float? = null,
     /** Show Luminance Mask; another aid of the editor, like [maskOverlay]. */
     luminanceMap: Boolean = false,
+    /** What shows around the photo: the surface is opaque, and clears to it. */
+    background: androidx.compose.ui.graphics.Color,
     /** The photo is on screen: whatever held its place can go. */
     onFirstFrame: () -> Unit = {},
 ) {
@@ -62,6 +64,7 @@ fun GlPhotoCanvas(
             renderer.setClipping(clipping)
             renderer.setSpots(spots)
             renderer.setLuminanceMap(luminanceMap)
+            renderer.setBackground(background.red, background.green, background.blue)
             renderer.setTransform(transform, minZoom)
             stage.requestRender()
         },

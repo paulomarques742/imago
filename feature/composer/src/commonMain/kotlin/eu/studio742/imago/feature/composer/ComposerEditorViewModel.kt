@@ -896,6 +896,7 @@ open class ComposerEditorViewModel(
     }
 
     fun moveSelected(dx: Float, dy: Float) {
+        if (state.value.editedLayout() != null) return
         if (resizableBlock() == null) return moveSingle(dx, dy)
         val project = requireProject()
         val ids = project.selectionMembers().filterNot(CompositionElement::locked).mapTo(mutableSetOf()) { it.id }
@@ -1450,40 +1451,62 @@ open class ComposerEditorViewModel(
         val project = requireProject()
         val members = state.value.selectionElements()
         if (members.size < 2 || state.value.editingGroupId != null) return
+        state.value.selectedLayout()?.let { return openGrid(it.groupId) }
         if (state.value.editableSelection().size != members.size) return notice(uiText(Res.string.composer_group_has_locked_members))
         if (members.any { it.repeatOnPages.isNotEmpty() }) return notice(uiText(Res.string.composer_grid_repeated_notice))
-        val existing = state.value.selectedLayout()
-        val reference = if (existing == null) state.value.arrangementReference else CompositionArrangementReference.SELECTION
-        val box = existing?.frame?.bounds ?: if (reference == CompositionArrangementReference.PAGE)
+        val reference = state.value.arrangementReference
+        val box = if (reference == CompositionArrangementReference.PAGE)
             NormalizedRect(state.value.currentPage.toFloat(), 0f, 1f, 1f) else members.map { it.visualBounds(aspect = project.format.aspectRatio) }.boundingBox()!!
         if (members.filterIsInstance<CompositionElement.Video>().any { it.pageIndex != state.value.currentPage })
             return notice(uiText(Res.string.composer_grid_video_page_notice))
         val columns = kotlin.math.ceil(kotlin.math.sqrt(members.size.toDouble())).toInt()
-        val layout = existing ?: CompositionLayout(UUID.randomUUID().toString(), ElementTransform(box),
+        val layout = CompositionLayout(UUID.randomUUID().toString(), ElementTransform(box),
             layoutTree(members.sortedBy { it.zIndex }.map { it.id }, CompositionLayoutKind.GRID, columns), columns = columns,
             content = members.associate { it.id to LayoutContent(it.transform.bounds.width * project.format.aspectRatio / it.transform.bounds.height,
                 it.transform.rotationDegrees) })
         val groups = members.mapNotNull { it.groupId }.distinct()
         mutableState.update { it.copy(gridEditor = ComposerGridEditor(project, layout, reference, it.currentPage,
-            combinesGroups = existing == null && groups.isNotEmpty()), multiSelect = existing == null && it.multiSelect, editingGroupId = null,
-            groupMergeRequest = null) }
+            combinesGroups = groups.isNotEmpty()), editingGroupId = null, groupMergeRequest = null) }
     }
 
     fun cancelGrid() = mutableState.update { it.copy(gridEditor = null) }
 
     fun openGrid(groupId: String) {
         val project = requireProject()
-        if (project.layouts.none { it.groupId == groupId } || project.elements.any { it.groupId == groupId && it.locked }) return
-        selectGroup(groupId)
-        beginGrid()
+        if (project.layouts.none { it.groupId == groupId }) return
+        if (project.elements.any { it.groupId == groupId && it.locked }) return notice(uiText(Res.string.composer_grid_locked_notice))
+        confirmTextEditing()
+        clearMovementGuides()
+        mutableState.update { it.copy(editingGroupId = groupId, selectedElementId = null, selectedElementIds = emptySet(),
+            multiSelect = false, backgroundSelected = false, groupMergeRequest = null) }
     }
 
-    fun swapGridDraftMembers(first: String, second: String) {
-        val editor = state.value.gridEditor ?: return
-        if ((editor.base.elements + editor.addedElements).any { it.id in setOf(first, second) && it.locked }) return
-        val next = editor.layout.copy(root = editor.layout.root.swapMembers(first, second))
-        if (!gridVideoBoundsFit(next, editor.copy(layout = next).preview().elements)) return
-        updateGridDraft(next)
+    /** Back to the grid's own tools, still inside the mode. */
+    fun clearGridMemberSelection() = mutableState.update {
+        it.copy(selectedElementId = null, selectedElementIds = emptySet(), multiSelect = false)
+    }
+
+    private fun currentGrid(): CompositionLayout? = state.value.gridEditor?.layout ?: state.value.editedLayout()
+
+    fun swapGridMembers(first: String, second: String) {
+        val editor = state.value.gridEditor
+        val current = currentGrid() ?: return
+        val project = requireProject()
+        val elements = editor?.let { it.base.elements + it.addedElements } ?: project.elements
+        if (elements.any { it.id in setOf(first, second) && it.locked }) return
+        val next = current.copy(root = current.root.swapMembers(first, second))
+        val placed = editor?.copy(layout = next)?.preview()?.elements ?: next.applyTo(elements, project.format.aspectRatio)
+        if (!gridVideoBoundsFit(next, placed)) return
+        updateGridLayout(next)
+    }
+
+    fun removeGridMember(id: String) {
+        val layout = state.value.editedLayout() ?: return
+        deleteGroupMember(id)
+        if (state.value.editedLayout() != null) return
+        // The grid dissolved around its last element: leave that one in hand.
+        val elements = requireProject().elements
+        layout.root.memberIds().firstOrNull { member -> member != id && elements.any { it.id == member } }?.let(::focusElement)
     }
 
     fun createGridFromMedia(media: List<ComposerMedia>, pageIndex: Int = state.value.currentPage) =
@@ -1537,29 +1560,44 @@ open class ComposerEditorViewModel(
         } else {
             commitDiscrete { source.copy(elements = elements, pages = insertion.project.pages,
                 layouts = source.layouts.filterNot { it.groupId == next.groupId } + next) }
-            selectGroup(next.groupId)
+            if (state.value.editingGroupId != next.groupId) selectGroup(next.groupId)
         }
     }
 
-    fun updateGridDraft(layout: CompositionLayout) {
-        val editor = state.value.gridEditor ?: return
-        if (layout.groupId != editor.layout.groupId || layout.root.memberIds().toSet() != editor.layout.root.memberIds().toSet()) return
-        mutableState.update { it.copy(gridEditor = editor.copy(layout = layout)) }
+    /** A grid being created is still a draft; one edited on the stage changes the project at once. */
+    fun updateGridLayout(layout: CompositionLayout) {
+        val current = currentGrid() ?: return
+        if (layout == current || layout.groupId != current.groupId || layout.root.memberIds().toSet() != current.root.memberIds().toSet()) return
+        val editor = state.value.gridEditor
+        if (editor != null) {
+            mutableState.update { it.copy(gridEditor = editor.copy(layout = layout)) }
+            return
+        }
+        val project = requireProject()
+        if (project.elements.any { it.groupId == layout.groupId && it.locked }) return
+        val elements = layout.applyTo(project.elements, project.format.aspectRatio)
+        if (!gridVideoBoundsFit(layout, elements)) return
+        commit { project.copy(elements = elements, layouts = project.layouts.map { if (it.groupId == layout.groupId) layout else it }) }
     }
 
     fun setGridKind(kind: CompositionLayoutKind, columns: Int? = null, rows: Int? = null) {
-        val editor = state.value.gridEditor ?: return
-        val count = (columns ?: editor.layout.columns).coerceIn(1, editor.layout.root.memberIds().size)
-        val rowCount = (rows ?: if (columns == null) editor.layout.rows else 0).coerceIn(0, editor.layout.root.memberIds().size)
-        updateGridDraft(editor.layout.copy(kind = kind, columns = count, rows = rowCount, root = layoutTree(editor.layout.root.memberIds(), kind, count, rowCount)))
+        val layout = currentGrid() ?: return
+        val count = (columns ?: layout.columns).coerceIn(1, layout.root.memberIds().size)
+        val rowCount = (rows ?: if (columns == null) layout.rows else 0).coerceIn(0, layout.root.memberIds().size)
+        updateGridLayout(layout.copy(kind = kind, columns = count, rows = rowCount, root = layoutTree(layout.root.memberIds(), kind, count, rowCount)))
     }
 
     fun setGridReference(reference: CompositionArrangementReference) {
-        val editor = state.value.gridEditor ?: return
-        val ids = editor.layout.root.memberIds().toSet()
-        val box = if (reference == CompositionArrangementReference.PAGE) NormalizedRect(editor.pageIndex.toFloat(), 0f, 1f, 1f)
-            else (editor.base.elements + editor.addedElements).filter { it.id in ids }.map { it.visualBounds(aspect = editor.base.format.aspectRatio) }.boundingBox()!!
-        mutableState.update { it.copy(gridEditor = editor.copy(reference = reference, layout = editor.layout.copy(frame = editor.layout.frame.copy(bounds = box, rotationDegrees = 0f)))) }
+        val layout = currentGrid() ?: return
+        val editor = state.value.gridEditor
+        val project = requireProject()
+        val ids = layout.root.memberIds().toSet()
+        val elements = editor?.let { it.base.elements + it.addedElements } ?: project.elements
+        val box = if (reference == CompositionArrangementReference.PAGE) NormalizedRect((editor?.pageIndex ?: layout.pageIndex()).toFloat(), 0f, 1f, 1f)
+            else elements.filter { it.id in ids }.map { it.visualBounds(aspect = project.format.aspectRatio) }.boundingBox()!!
+        val next = layout.copy(frame = layout.frame.copy(bounds = box, rotationDegrees = 0f))
+        if (editor != null) mutableState.update { it.copy(gridEditor = editor.copy(reference = reference, layout = next)) }
+        else updateGridLayout(next)
     }
 
     fun confirmGrid() {
@@ -1602,6 +1640,19 @@ open class ComposerEditorViewModel(
             layouts = project.layouts.map { if (it.groupId == layout.groupId) next else it }) }
     }
 
+    /** Closing a gap moves the grid's remaining cells, which a locked member or an oversized video cell cannot allow. */
+    private fun canCloseGridGaps(project: CompositionProject, ids: Set<String>): Boolean {
+        val affected = project.layouts.filter { layout -> layout.root.memberIds().any { it in ids } }
+        return affected.all { layout ->
+            val next = layout.withoutMembers(ids) ?: return@all true
+            val survivors = next.root.memberIds().toSet()
+            if (project.elements.any { it.id in survivors && it.locked }) {
+                notice(uiText(Res.string.composer_grid_locked_notice)); return@all false
+            }
+            gridVideoBoundsFit(next, next.applyTo(project.elements, project.format.aspectRatio))
+        }
+    }
+
     private fun gridVideoBoundsFit(layout: CompositionLayout, elements: List<CompositionElement>): Boolean {
         val ids = layout.root.memberIds().toSet()
         if (elements.any { it.id in ids && it is CompositionElement.Video && (it.transform.bounds.width > 1f || it.transform.bounds.height > 1f) }) {
@@ -1619,6 +1670,7 @@ open class ComposerEditorViewModel(
     }
 
     fun editGroup(groupId: String) {
+        if (requireProject().layouts.any { it.groupId == groupId }) return openGrid(groupId)
         val member = requireProject().elements.firstOrNull { it.groupId == groupId && !it.locked } ?: return
         focusGroupMember(member.id)
     }
@@ -1637,6 +1689,8 @@ open class ComposerEditorViewModel(
     }
 
     fun beginGroupMemberMultiSelection(id: String) {
+        // In a grid the long press belongs to swapping and removing cells.
+        if (requireProject().layouts.any { id in it.root.memberIds() }) return focusGroupMember(id)
         if (state.value.editingGroupId != requireProject().elements.firstOrNull { it.id == id }?.groupId) focusGroupMember(id)
         beginMultiSelection(id)
     }
@@ -1644,6 +1698,7 @@ open class ComposerEditorViewModel(
     fun deleteGroupMember(id: String) {
         val project = requireProject()
         if (project.elements.firstOrNull { it.id == id }?.locked != false) return
+        if (!canCloseGridGaps(project, setOf(id))) return
         commitDiscrete { project.copy(elements = project.elements.filterNot { it.id == id }) }
     }
 
@@ -1744,9 +1799,9 @@ open class ComposerEditorViewModel(
     fun deleteSelected() {
         val project = requireProject()
         val ids = project.selectionMembers().mapTo(mutableSetOf()) { it.id }
-        if (ids.isEmpty()) return
+        if (ids.isEmpty() || !canCloseGridGaps(project, ids)) return
         commitDiscrete { project.copy(elements = project.elements.filterNot { it.id in ids }) }
-        clearSelection()
+        if (state.value.editedLayout() == null) clearSelection()
     }
 
     fun undo() {

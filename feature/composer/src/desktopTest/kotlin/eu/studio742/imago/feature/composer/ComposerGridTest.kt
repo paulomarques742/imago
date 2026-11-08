@@ -46,7 +46,7 @@ class ComposerGridTest {
     @Test fun `preview and cancellation leave content and undo history untouched`() {
         val vm = model(); val original = vm.project()
         vm.beginGrid(); vm.setGridKind(CompositionLayoutKind.FEATURE_LEFT)
-        vm.updateGridDraft(vm.state.value.gridEditor!!.layout.copy(margin = .1f, gap = .05f))
+        vm.updateGridLayout(vm.state.value.gridEditor!!.layout.copy(margin = .1f, gap = .05f))
         val preview = vm.state.value.gridEditor!!.preview()
         assertEquals(4, preview.elements.size); assertEquals(1, preview.layouts.size)
         assertEquals(original, vm.project()); assertFalse(vm.state.value.canUndo)
@@ -105,7 +105,7 @@ class ComposerGridTest {
         vm.beginGesture(); repeat(4) { vm.adjustGridDivider(layout.groupId, "rows", 0, .02f) }; vm.endGesture()
         assertNotEquals(before.elements, vm.project().elements)
         vm.undo(); assertEquals(before.layouts, vm.project().layouts); assertEquals(before.elements, vm.project().elements)
-        vm.beginGrid(); vm.updateGridDraft(vm.state.value.gridEditor!!.layout.copy(outline = LayoutStroke(0xFF77AA99, .4f, .02f))); vm.confirmGrid()
+        vm.openGrid(layout.groupId); vm.updateGridLayout(vm.project().layouts.single().copy(outline = LayoutStroke(0xFF77AA99, .4f, .02f)))
         assertEquals(.4f, vm.project().layouts.single().outline.opacity, .00001f)
         vm.undo(); assertEquals(before.layouts, vm.project().layouts)
     }
@@ -153,9 +153,9 @@ class ComposerGridTest {
 
     @Test fun `semi transparent separators do not double their opacity at a shared junction`() {
         val slots = elements.map { it.copy(visible = false) }.toMutableList().also { it[0] = it[0].copy(visible = true) }
-        val vm = model(source(slots)); vm.create(); vm.beginGrid()
-        val draft = vm.state.value.gridEditor!!.layout.copy(margin = 0f, gap = 0f, separators = LayoutStroke(0xFFFFFFFF, .5f, .04f))
-        vm.updateGridDraft(draft); vm.confirmGrid()
+        val vm = model(source(slots)); vm.create(); vm.openGrid(vm.project().layouts.single().groupId)
+        val draft = vm.project().layouts.single().copy(margin = 0f, gap = 0f, separators = LayoutStroke(0xFFFFFFFF, .5f, .04f))
+        vm.updateGridLayout(draft)
         val project = vm.project().copy(background = CompositionBackground.Solid(0xFF000000))
         val image = ImageIO.read(ByteArrayInputStream(CompositionRenderer().render(project, 0, emptyMap(), 240)))
         val crossing = image.getRGB(120, 120) and 255

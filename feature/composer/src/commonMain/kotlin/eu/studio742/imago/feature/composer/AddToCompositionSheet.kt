@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.studio742.imago.core.composition.CompositionProject
 import eu.studio742.imago.core.composition.PageFormat
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
@@ -79,7 +79,7 @@ fun AddToCompositionSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = ImagoColors.Surface,
+        containerColor = ImagoUi.colors.surface,
         dragHandle = { SheetHandle() },
     ) {
         Column(
@@ -94,15 +94,15 @@ fun AddToCompositionSheet(
             Text(
                 text = media.countLabel(),
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.TextTertiary,
+                color = ImagoUi.colors.tertiaryText,
             )
             state.error?.let {
-                Text(it.resolve(), style = MaterialTheme.typography.bodySmall, color = ImagoColors.Danger)
+                Text(it.resolve(), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.danger)
             }
             // What came in was saved, but what did not fit has to be said before the screen changes —
             // once the composer opens nobody notices what is missing.
             state.warning?.let { warning ->
-                Text(warning.message.resolve(), style = MaterialTheme.typography.bodySmall, color = ImagoColors.Gold)
+                Text(warning.message.resolve(), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.accent)
                 TextButton(onClick = viewModel::openWarned) { Text(stringResource(Res.string.composer_open_composition)) }
             }
             when {
@@ -119,7 +119,7 @@ fun AddToCompositionSheet(
                         Text(
                             stringResource(Res.string.composer_recent_projects),
                             style = MaterialTheme.typography.titleSmall,
-                            color = ImagoColors.TextSecondary,
+                            color = ImagoUi.colors.secondaryText,
                         )
                         LazyColumn(
                             modifier = Modifier.heightIn(max = PROJECT_LIST_MAX_HEIGHT),
@@ -166,7 +166,7 @@ private fun ProjectRow(
     onClick: () -> Unit,
 ) {
     Surface(
-        color = ImagoColors.SurfaceElevated,
+        color = ImagoUi.colors.elevated,
         shape = RoundedCornerShape(ImagoRadii.Medium),
         modifier = Modifier
             .fillMaxWidth()
@@ -174,14 +174,14 @@ private fun ProjectRow(
             .clickable(role = Role.Button, onClick = onClick),
     ) {
         Row(Modifier.padding(ImagoSpacing.Lg), verticalAlignment = Alignment.CenterVertically) {
-            Surface(color = ImagoColors.Graphite, shape = RoundedCornerShape(ImagoRadii.Small)) {
+            Surface(color = ImagoUi.colors.selectedSurface, shape = RoundedCornerShape(ImagoRadii.Small)) {
                 Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.GridView, null) }
             }
             Column(Modifier.weight(1f).padding(horizontal = ImagoSpacing.Md)) {
                 Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
                 Text(
                     pluralStringResource(Res.plurals.composer_format_pages, pages, format.displayLabel(), pages),
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -192,7 +192,7 @@ private fun ProjectRow(
 @Composable
 private fun NewProjectRow(onClick: () -> Unit) {
     Surface(
-        color = ImagoColors.SurfaceElevated,
+        color = ImagoUi.colors.elevated,
         shape = RoundedCornerShape(ImagoRadii.Medium),
         modifier = Modifier
             .fillMaxWidth()
@@ -200,7 +200,7 @@ private fun NewProjectRow(onClick: () -> Unit) {
             .clickable(role = Role.Button, onClick = onClick),
     ) {
         Row(Modifier.padding(ImagoSpacing.Lg), verticalAlignment = Alignment.CenterVertically) {
-            Surface(color = ImagoColors.Graphite, shape = RoundedCornerShape(ImagoRadii.Small)) {
+            Surface(color = ImagoUi.colors.selectedSurface, shape = RoundedCornerShape(ImagoRadii.Small)) {
                 Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.Add, null, Modifier.size(ImagoSizes.IconLarge))
                 }
@@ -210,7 +210,7 @@ private fun NewProjectRow(onClick: () -> Unit) {
                 Text(
                     stringResource(Res.string.composer_choose_format_layout),
                     style = MaterialTheme.typography.bodySmall,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                 )
             }
         }

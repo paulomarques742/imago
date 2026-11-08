@@ -34,7 +34,7 @@ import eu.studio742.imago.core.data.DeviceLibraryRepository
 import eu.studio742.imago.core.data.LibraryRepository
 import eu.studio742.imago.core.data.PendingMediaAction
 import eu.studio742.imago.core.data.RecipeRepository
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.model.FolderTransfer
 import javax.inject.Inject
 
@@ -191,14 +191,14 @@ actual val WelcomeDeviceBody: StringResource get() = Res.string.library_welcome_
 @Composable
 actual fun ColumnScope.DeviceLibraryAccess(viewModel: LibrarySettingsViewModel, revision: Int, requestAccess: () -> Unit) {
     Text(remember(revision) { viewModel.device.accessSummary() }.toUiText().resolve(),
-        style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
+        style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText)
     OutlinedButton(onClick = requestAccess) { Text(stringResource(Res.string.library_manage_access)) }
     rememberMediaManagement()?.let { management ->
-        Text(stringResource(Res.string.library_media_management_title), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
+        Text(stringResource(Res.string.library_media_management_title), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.text)
         Text(
             stringResource(if (management.granted) Res.string.library_media_management_on else Res.string.library_media_management_off),
             style = MaterialTheme.typography.bodySmall,
-            color = ImagoColors.TextSecondary,
+            color = ImagoUi.colors.secondaryText,
         )
         OutlinedButton(onClick = { management.request() }) {
             Text(stringResource(if (management.granted) Res.string.library_media_management_change else Res.string.library_media_management_allow))

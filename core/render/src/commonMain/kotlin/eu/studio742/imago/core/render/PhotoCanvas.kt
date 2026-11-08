@@ -2,6 +2,7 @@ package eu.studio742.imago.core.render
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 
 /**
  * The editor's photo, with the recipe applied and the zoom and pan transformation.
@@ -29,6 +30,8 @@ expect fun PhotoCanvas(
     spots: Float? = null,
     /** Show Luminance Mask: the photo's [LuminanceView] map, framed as the photo is, under the [maskOverlay]. */
     luminanceMap: Boolean = false,
+    /** What shows around the photo. The GL stage is opaque, so it has to clear to this itself. */
+    background: Color,
     /** Called once the photo is on screen, so that what held its place while it developed can be taken away. */
     onFirstFrame: () -> Unit = {},
 )

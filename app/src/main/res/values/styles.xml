@@ -6,10 +6,10 @@
     -->
     <style name="Theme.ImmichRoom" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans-serif</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:colorAccent">#E6E6E3</item>
-        <item name="android:windowBackground">#0B0D0F</item>
+        <item name="android:windowLightStatusBar">@bool/light_system_bars</item>
+        <item name="android:windowLightNavigationBar">@bool/light_system_bars</item>
+        <item name="android:colorAccent">@color/window_accent</item>
+        <item name="android:windowBackground">@color/window_background</item>
     </style>
 
     <!-- Sharing opens on top of the app it came from: only the upload sheet, the rest shows behind it. -->

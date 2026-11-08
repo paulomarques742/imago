@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.core.content.IntentCompat
 import dagger.hilt.android.AndroidEntryPoint
 import eu.studio742.imago.core.designsystem.ImagoTheme
+import eu.studio742.imago.core.designsystem.LocalAppearanceSettings
 import eu.studio742.imago.core.designsystem.i18n.LocalLanguageSettings
 import eu.studio742.imago.core.designsystem.i18n.ProvideAppLanguage
 import eu.studio742.imago.feature.library.SharedMediaLocation
@@ -37,6 +38,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class ShareActivity : ComponentActivity() {
     @Inject lateinit var languageSettings: AndroidLanguageSettings
+    @Inject lateinit var appearanceSettings: AndroidAppearanceSettings
     private val upload: ShareUploadViewModel by viewModels()
 
     /** The permission dialog is open; across a recreation its answer comes to the new activity. */
@@ -68,7 +70,7 @@ class ShareActivity : ComponentActivity() {
         setContent {
             val preference by languageSettings.preference.collectAsState()
             val systemLocale = LocalConfiguration.current.locales[0]
-            CompositionLocalProvider(LocalLanguageSettings provides languageSettings) {
+            CompositionLocalProvider(LocalLanguageSettings provides languageSettings, LocalAppearanceSettings provides appearanceSettings) {
                 ProvideAppLanguage(preference, systemLocale) {
                     ImagoTheme { ShareUploadSheet(onClose = ::finish, viewModel = upload) }
                 }

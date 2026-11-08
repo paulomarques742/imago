@@ -30,7 +30,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoDarkPalette
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.model.EditRecipe
@@ -76,7 +77,8 @@ internal fun HistogramRow(
             .padding(top = ImagoSpacing.Sm)
             .height(HISTOGRAM_HEIGHT)
             .clip(RoundedCornerShape(ImagoRadii.Medium))
-            .background(ImagoColors.Surface)
+            // The channels are added up, which only shows on a dark ground: the same one in every theme.
+            .background(ImagoDarkPalette.surface)
             .semantics { contentDescription = description },
     ) {
         Canvas(Modifier.fillMaxWidth().height(HISTOGRAM_HEIGHT)) {
@@ -122,6 +124,7 @@ private fun WarningTriangle(
             },
         contentAlignment = Alignment.Center,
     ) {
+        val outline = ImagoDarkPalette.secondaryText
         Canvas(Modifier.size(14.dp)) {
             val path = Path().apply {
                 if (pointsLeft) {
@@ -131,7 +134,7 @@ private fun WarningTriangle(
                 }
                 close()
             }
-            if (on) drawPath(path, warning) else drawPath(path, ImagoColors.TextSecondary, style = Stroke(width = 1.5.dp.toPx()))
+            if (on) drawPath(path, warning) else drawPath(path, outline, style = Stroke(width = 1.5.dp.toPx()))
         }
     }
 }

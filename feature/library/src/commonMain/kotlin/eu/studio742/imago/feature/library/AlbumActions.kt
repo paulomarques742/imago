@@ -54,7 +54,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import eu.studio742.imago.core.data.LibraryRepository
 import eu.studio742.imago.core.model.AlbumPlace
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
@@ -238,13 +238,13 @@ fun AddToAlbumSheet(
     ModalBottomSheet(
         onDismissRequest = { if (!state.isWorking) onDismiss() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = ImagoColors.SurfaceElevated,
+        containerColor = ImagoUi.colors.elevated,
     ) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = ImagoSpacing.Lg)) {
             Text(
                 pluralStringResource(Res.plurals.library_album_sheet_title, assetIds.size, assetIds.size),
                 style = MaterialTheme.typography.titleMedium,
-                color = ImagoColors.TextPrimary,
+                color = ImagoUi.colors.text,
                 modifier = Modifier.padding(horizontal = ImagoSpacing.Lg, vertical = ImagoSpacing.Md),
             )
             AlbumRow(
@@ -252,19 +252,19 @@ fun AddToAlbumSheet(
                 subtitle = null,
                 enabled = !state.isWorking,
                 onClick = { naming = true },
-            ) { Icon(Icons.Outlined.Add, contentDescription = null, tint = ImagoColors.Ivory) }
+            ) { Icon(Icons.Outlined.Add, contentDescription = null, tint = ImagoUi.colors.emphasis) }
             when {
                 state.isWorking || state.isLoading -> Box(Modifier.fillMaxWidth().padding(ImagoSpacing.Xl), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = ImagoColors.Ivory)
+                    CircularProgressIndicator(color = ImagoUi.colors.emphasis)
                 }
                 state.error != null -> Text(
                     state.error!!.resolve(),
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                     modifier = Modifier.padding(ImagoSpacing.Lg),
                 )
                 state.albums.isEmpty() -> Text(
                     stringResource(Res.string.library_album_none_editable),
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                     modifier = Modifier.padding(ImagoSpacing.Lg),
                 )
                 else -> LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
@@ -318,12 +318,12 @@ private fun AlbumRow(
         horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
     ) {
         Box(
-            Modifier.size(48.dp).clip(RoundedCornerShape(ImagoRadii.Small)).background(ImagoColors.Background),
+            Modifier.size(48.dp).clip(RoundedCornerShape(ImagoRadii.Small)).background(ImagoUi.colors.background),
             contentAlignment = Alignment.Center,
         ) { leading() }
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = ImagoColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextTertiary) }
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = ImagoUi.colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.tertiaryText) }
         }
     }
 }
@@ -331,7 +331,7 @@ private fun AlbumRow(
 @Composable
 private fun AlbumThumbnail(source: Pair<String, String>?) {
     if (source == null) {
-        Icon(Icons.Outlined.Collections, contentDescription = null, tint = ImagoColors.TextTertiary)
+        Icon(Icons.Outlined.Collections, contentDescription = null, tint = ImagoUi.colors.tertiaryText)
         return
     }
     val context = LocalPlatformContext.current
@@ -377,7 +377,7 @@ internal fun AlbumNameDialog(
                     Text(
                         stringResource(Res.string.library_album_place_label),
                         style = MaterialTheme.typography.labelLarge,
-                        color = ImagoColors.TextSecondary,
+                        color = ImagoUi.colors.secondaryText,
                         modifier = Modifier.padding(top = ImagoSpacing.Md, bottom = ImagoSpacing.Xs),
                     )
                     places.forEach { place ->
@@ -390,11 +390,11 @@ internal fun AlbumNameDialog(
                         ) {
                             RadioButton(selected = chosen == place.id, onClick = null, modifier = Modifier.padding(ImagoSpacing.Sm))
                             Column(Modifier.weight(1f)) {
-                                Text(place.name, style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
+                                Text(place.name, style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.text)
                                 Text(
                                     place.path,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = ImagoColors.TextTertiary,
+                                    color = ImagoUi.colors.tertiaryText,
                                     maxLines = 1,
                                     overflow = TextOverflow.MiddleEllipsis,
                                 )
@@ -424,7 +424,7 @@ internal fun AlbumDeleteDialog(album: AlbumUiModel, onConfirm: () -> Unit, onDis
             Text(if (album.isFolder) folderAlbumDeleteBody(album.assetCount) else stringResource(Res.string.library_album_delete_body))
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text(stringResource(Res.string.library_album_delete), color = ImagoColors.Danger) }
+            TextButton(onClick = onConfirm) { Text(stringResource(Res.string.library_album_delete), color = ImagoUi.colors.danger) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.library_cancel)) } },
     )
@@ -493,7 +493,7 @@ private fun FolderTransferDialog(onChoose: (FolderTransfer, always: Boolean) -> 
 @Composable
 internal fun FolderTransferSetting(device: DeviceLibrary) {
     val transfer by device.rememberedTransfer.collectAsStateWithLifecycle()
-    Text(stringResource(Res.string.library_folder_transfer_setting), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
+    Text(stringResource(Res.string.library_folder_transfer_setting), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.text)
     Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
         listOf(
             null to Res.string.library_folder_transfer_ask,

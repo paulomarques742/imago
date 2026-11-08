@@ -1,5 +1,6 @@
 package eu.studio742.imago
 
+import eu.studio742.imago.core.designsystem.ImagoUi
 import android.app.KeyguardManager
 import android.content.Intent
 import android.net.Uri
@@ -26,6 +27,7 @@ import eu.studio742.imago.core.data.LibraryRepository
 import eu.studio742.imago.core.data.RecipeRepository
 import eu.studio742.imago.core.designsystem.ActionGate
 import eu.studio742.imago.core.designsystem.ImagoTheme
+import eu.studio742.imago.core.designsystem.LocalAppearanceSettings
 import eu.studio742.imago.core.designsystem.LocalActionGate
 import eu.studio742.imago.core.designsystem.i18n.LocalLanguageSettings
 import eu.studio742.imago.core.designsystem.i18n.ProvideAppLanguage
@@ -44,6 +46,7 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class ViewerActivity : ComponentActivity() {
     @Inject lateinit var languageSettings: AndroidLanguageSettings
+    @Inject lateinit var appearanceSettings: AndroidAppearanceSettings
     @Inject lateinit var device: DeviceLibrary
     @Inject lateinit var library: LibraryRepository
     @Inject lateinit var recipes: RecipeRepository
@@ -66,11 +69,11 @@ class ViewerActivity : ComponentActivity() {
         setContent {
             val preference by languageSettings.preference.collectAsState()
             val systemLocale = LocalConfiguration.current.locales[0]
-            CompositionLocalProvider(LocalLanguageSettings provides languageSettings, LocalActionGate provides gate) {
+            CompositionLocalProvider(LocalLanguageSettings provides languageSettings, LocalAppearanceSettings provides appearanceSettings, LocalActionGate provides gate) {
                 ProvideAppLanguage(preference, systemLocale) {
                     ImagoTheme {
                         when (stage.value) {
-                            Stage.LOADING -> Box(Modifier.fillMaxSize().background(Color.Black))
+                            Stage.LOADING -> Box(Modifier.fillMaxSize().background(ImagoUi.colors.workspace))
                             Stage.FAILED -> OpenFailedScreen(onClose = ::finish)
                             Stage.READY -> ImagoApp(shell, onLeaveViewer = ::finish)
                         }

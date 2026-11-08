@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.i18n.resolve
 import coil3.Bitmap
 import eu.studio742.imago.feature.editor.resources.Res
@@ -120,7 +121,7 @@ internal fun EditReelSheet(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false),
     ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = ImagoColors.Background) {
+        Surface(modifier = Modifier.fillMaxSize(), color = ImagoUi.colors.background) {
             BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
                 val wide = maxWidth > maxHeight && maxWidth >= 600.dp
                 val previewHeight = maxHeight * 0.55f
@@ -258,7 +259,7 @@ private fun ReelTopBar(onClose: () -> Unit) {
         Text(
             stringResource(Res.string.reel_sheet_title),
             style = MaterialTheme.typography.titleLarge,
-            color = ImagoColors.TextPrimary,
+            color = ImagoUi.colors.text,
         )
     }
 }
@@ -269,11 +270,11 @@ private fun ReelPreview(frame: ImageBitmap?, modifier: Modifier) {
         val shape = RoundedCornerShape(16.dp)
         Box(
             modifier = Modifier.fillMaxHeight().aspectRatio(9f / 16f, matchHeightConstraintsFirst = true)
-                .clip(shape).background(ImagoColors.BrandBlack),
+                .clip(shape).background(ImagoUi.colors.workspace),
             contentAlignment = Alignment.Center,
         ) {
             if (frame == null) {
-                CircularProgressIndicator(color = ImagoColors.TextSecondary)
+                CircularProgressIndicator(color = ImagoUi.colors.secondaryText)
             } else {
                 Image(
                     bitmap = frame,
@@ -341,7 +342,7 @@ private fun ReelChoices(
 
 @Composable
 private fun ChoiceLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = ImagoColors.TextSecondary)
+    Text(text, style = MaterialTheme.typography.labelLarge, color = ImagoUi.colors.secondaryText)
 }
 
 @Composable
@@ -362,18 +363,18 @@ private fun ReelExportArea(
                 Text(
                     stringResource(Res.string.reel_progress, "%d%%".format((progress * 100).toInt())),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = ImagoColors.TextPrimary,
+                    color = ImagoUi.colors.text,
                 )
                 LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                 Text(
                     stringResource(Res.string.reel_background_hint),
                     style = MaterialTheme.typography.bodySmall,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                 )
                 TextButton(onClick = onCancel) { Text(stringResource(Res.string.editor_cancel)) }
             }
             saved != null -> {
-                Text(saved.message.resolve(), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
+                Text(saved.message.resolve(), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.text)
                 if (canShare) {
                     Button(onClick = onShare, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.reel_share)) }
                 }
@@ -381,7 +382,7 @@ private fun ReelExportArea(
             }
             else -> {
                 export.error?.let { error ->
-                    Text(error.resolve(), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.Error)
+                    Text(error.resolve(), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.error)
                 }
                 Button(onClick = onExport, enabled = canExport, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(Res.string.reel_export))

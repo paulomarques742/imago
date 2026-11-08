@@ -245,6 +245,7 @@ import eu.studio742.imago.core.composition.CompositionPage
 import eu.studio742.imago.core.composition.CompositionProject
 import eu.studio742.imago.core.composition.FrameStyle
 import eu.studio742.imago.core.composition.MAX_BACKGROUND_BLUR
+import eu.studio742.imago.core.composition.CompositionLayout
 import eu.studio742.imago.core.composition.NormalizedRect
 import eu.studio742.imago.core.composition.backgroundBlurDivisor
 import eu.studio742.imago.core.composition.PlacementCrop
@@ -569,11 +570,6 @@ private fun ComposerEditorScreenBody(
             onCompositionCommit = actions::updateSelectedPhotoRecipe,
             onBack = { onEditPhotoId(null) },
         )
-        return
-    }
-    val gridEditor = state.gridEditor
-    if (gridEditor != null && gridEditor.base.layouts.any { it.groupId == gridEditor.layout.groupId }) {
-        ComposerGridEditScreen(state, actions, snackbar)
         return
     }
     // The physical keyboard stops being decoration on a tablet with a cover. Focus is requested once so
@@ -934,7 +930,7 @@ private fun ComposerEditorScreenBody(
             if ((state.multiSelect || state.editingGroupId != null) && !drawing && shapeKind == null && !outlining && !eyedropperActive) {
                 ComposerMultiSelectionHint(Modifier.align(Alignment.TopCenter)
                     .padding(top = measuredChrome.top + 8.dp, start = 16.dp, end = 16.dp)
-                    .widthIn(max = 420.dp).alpha(chromeAlpha), state.editingGroupId != null, actions::finishEditingGroup)
+                    .widthIn(max = 420.dp).alpha(chromeAlpha), state.editingGroupId != null, actions::finishEditingGroup, editingGrid = state.editedLayout() != null)
             }
             if (outlining && state.outlineSelection().isNotEmpty()) {
                 val outlineDensity = LocalDensity.current
@@ -1192,6 +1188,8 @@ private fun ComposerInspector(
             positioning = positioningBackground,
             onTogglePositioning = onTogglePositioning,
         )
+
+        state.editedLayout() != null && selected == null -> GridInspector(state, actions, rail)
 
         selected != null -> SelectedInspector(
             state,
@@ -1675,15 +1673,17 @@ internal fun ComposerCanvas(
     /** A colour picker asked for a colour from the page: a touch samples it instead of acting. */
     eyedropper: Boolean = false,
     onSample: (Long?) -> Unit = {},
-    /** Grid editing owns cell gestures while the artwork uses the normal stage renderer. */
-    gridEditor: ComposerGridEditor? = null,
 ) {
     val uiColors = ImagoUi.colors
     val gridFeedback = LocalHapticFeedback.current
-    var gridSwapDrag by remember(gridEditor?.layout?.groupId) { mutableStateOf<GridSwapDrag?>(null) }
+    var gridSwapDrag by remember(state.editingGroupId) { mutableStateOf<GridSwapDrag?>(null) }
     // Drawing and placing a shape both own the stage's finger: scrolling, selecting and the elements'
     // own gestures stand aside for either.
     val armed = drawing || shapeKind != null || eyedropper
+    // While a grid is edited its cells answer to the stage, not to the elements in them. Framing a
+    // photo or typing in a cell hands that one element its own gestures back.
+    val gridCells = state.editedLayout()?.takeIf { state.textSession == null && !armed && !positioningBackground && !positioningMedia && !multiSelect }
+    val gridCellIds = remember(gridCells?.root) { gridCells?.root?.memberIds()?.toSet().orEmpty() }
     // Before any element asks for anything: photos with a recipe are processed in the background, so
     // the stage finds them ready instead of having them made one by one in front of whoever is looking.
     WarmComposerPhotos(project, previewUrl, thumbnailUrl, apiKey)
@@ -1729,9 +1729,7 @@ internal fun ComposerCanvas(
         val fit = minOf((viewportSize.width - marginPx * 2).coerceAtLeast(1f) / modelSize.width,
             (viewportSize.height - topPx - bottomPx - marginPx * 2).coerceAtLeast(1f) / modelSize.height)
         LaunchedEffect(viewportSize, project.format) {
-            if (gridEditor != null && viewport.scale == 0f) {
-                viewport.fitBounds(viewportSize, modelSize, gridEditor.layout.proxy().visualBounds(aspect = project.format.aspectRatio), marginPx)
-            } else viewport.resize(viewportSize, fit, state.currentPage, modelSize, topPx, bottomPx)
+            viewport.resize(viewportSize, fit, state.currentPage, modelSize, topPx, bottomPx)
         }
         val scale = viewport.scale.takeIf { it > 0f } ?: fit
         val pageWidthPx = modelSize.width * scale
@@ -1747,6 +1745,17 @@ internal fun ComposerCanvas(
         val livePageSize by rememberUpdatedState(Offset(pageWidthPx, pageHeightPx))
         val liveMultiSelect by rememberUpdatedState(multiSelect)
         val liveMediaTap by rememberUpdatedState(onMediaTap)
+        val tapGridCell: (String) -> Unit = { id ->
+            val repeated = id == lastTapId && System.currentTimeMillis() - lastTapAt <= DoubleTapWindowMs
+            when {
+                project.elements.firstOrNull { it.id == id } is CompositionElement.MediaPlaceholder -> onPickMediaFor(id)
+                state.selectedElementId == id && !repeated -> actions.clearGridMemberSelection()
+                else -> actions.focusGroupMember(id)
+            }
+            onMediaTap(id)
+        }
+        val liveGridCells by rememberUpdatedState(gridCells)
+        val liveGridTap by rememberUpdatedState(tapGridCell)
         val liveFit by rememberUpdatedState(fit)
         val touchSlopPx = androidx.compose.ui.platform.LocalViewConfiguration.current.touchSlop
         val strokes = remember(drawing, project.id) { mutableStateListOf<StrokePoint>() }
@@ -2001,17 +2010,16 @@ internal fun ComposerCanvas(
                 // (`drawing`, `positioningBackground`) can no longer both be true at the same time —
                 // whoever turns one on turns the other off — but keeping them separate avoids turning
                 // one on restarting the other's gesture halfway.
-                .composerHandleGestures(state, pageWidthPx, pageHeightPx, state.textSession == null && gridEditor == null && !armed && !positioningBackground && !positioningMedia, actions, stageOrigin)
-                .composerGridDividerGestures(gridEditor?.layout ?: state.manipulatedLayout()?.takeIf { state.textSession == null && !armed && !positioningBackground && !positioningMedia && !state.multiSelect },
+                .composerHandleGestures(state, pageWidthPx, pageHeightPx, state.textSession == null && gridCells == null && !armed && !positioningBackground && !positioningMedia, actions, stageOrigin)
+                .composerGridDividerGestures(gridCells ?: state.manipulatedLayout()?.takeIf { state.textSession == null && !armed && !positioningBackground && !positioningMedia && !state.multiSelect },
                     project.format.aspectRatio, stageOrigin, pageWidthPx, pageHeightPx,
-                    { if (gridEditor == null) actions.beginGesture() }, { if (gridEditor == null) actions.endGesture() },
+                    { actions.beginGesture() }, { actions.endGesture() },
                     { split, index, delta ->
-                        if (gridEditor != null) actions.updateGridDraft(gridEditor.layout.copy(root = gridEditor.layout.root.adjustDivider(split, index, delta)))
-                        else state.manipulatedLayout()?.let { actions.adjustGridDivider(it.groupId, split, index, delta) }
+                        (gridCells ?: state.manipulatedLayout())?.let { actions.adjustGridDivider(it.groupId, split, index, delta) }
                     })
-                .then(if (gridEditor == null) Modifier else Modifier.composerGridSwapGestures(project, gridEditor.layout,
-                    stageOrigin, pageWidthPx, pageHeightPx, { gridSwapDrag = it }, actions::swapGridDraftMembers,
-                    { gridFeedback.performHapticFeedback(HapticFeedbackType.LongPress) }))
+                .then(if (gridCells == null) Modifier else Modifier.composerGridSwapGestures(project, gridCells,
+                    stageOrigin, pageWidthPx, pageHeightPx, { gridSwapDrag = it }, actions::swapGridMembers,
+                    { gridFeedback.performHapticFeedback(HapticFeedbackType.LongPress) }, actions::removeGridMember, stageInsets.bottom))
                 .pointerInput(positioningBackground, eyedropper, project.pages.size) {
                     if (positioningBackground && !eyedropper) detectDragGestures(
                         onDragStart = { actions.beginGesture() },
@@ -2038,8 +2046,7 @@ internal fun ComposerCanvas(
                 // `awaitFirstDown(requireUnconsumed = true)` — the same guard that already protects
                 // `composerElementGestures` and the overlay — guarantees, and not just makes likely,
                 // that tapping inside an element or on a handle never gets here.
-                .pointerInput(armed, positioningBackground, gridEditor != null) {
-                    if (gridEditor != null) return@pointerInput
+                .pointerInput(armed, positioningBackground) {
                     // The mode check sits outside `awaitEachGesture`. Inside, the block returned without
                     // suspending, and once the finger was up `awaitEachGesture` looped straight back
                     // into it with nothing to wait for: a busy loop on the main thread, and the app
@@ -2052,7 +2059,8 @@ internal fun ComposerCanvas(
                         try {
                             do {
                                 val event = awaitPointerEvent()
-                                if (event.changes.any { it.isConsumed }) break
+                                // This node hears the finger before the cell gesture does, and must not pan under it.
+                                if (event.changes.any { it.isConsumed } || gridSwapDrag != null) break
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
                                 travelled += change.positionChange()
                                 if (!moved && travelled.getDistance() > viewConfiguration.touchSlop) {
@@ -2063,9 +2071,14 @@ internal fun ComposerCanvas(
                                 if (moved) event.changes.forEach { it.consume() }
                                 if (!change.pressed) {
                                     if (!moved) {
-                                        val layout = liveProject.layouts.lastOrNull { it.copy(margin = 0f, gap = 0f)
-                                            .cellAt(change.position, liveProject.format.aspectRatio, liveStageOrigin, livePageSize.x, livePageSize.y) != null }
-                                        if (layout != null && !liveMultiSelect) {
+                                        val aspect = liveProject.format.aspectRatio
+                                        fun CompositionLayout.at(): String? = cellAt(change.position, aspect, liveStageOrigin, livePageSize.x, livePageSize.y)
+                                        val layout = liveProject.layouts.lastOrNull { it.copy(margin = 0f, gap = 0f).at() != null }
+                                        val grid = liveGridCells
+                                        if (grid != null && grid.groupId == layout?.groupId) {
+                                            // A tap on a gutter lets go of the photo without leaving the grid.
+                                            grid.at()?.let { liveGridTap(it) } ?: actions.clearGridMemberSelection()
+                                        } else if (layout != null && !liveMultiSelect) {
                                             actions.selectGroup(layout.groupId)
                                             liveMediaTap(layout.root.memberIds().first())
                                         } else actions.clearSelection()
@@ -2158,7 +2171,7 @@ internal fun ComposerCanvas(
                         onTap = { onMediaTap(element.id) },
                         previewUrl = previewUrl, thumbnailUrl = thumbnailUrl, videoPlaybackUrl = videoPlaybackUrl, apiKey = apiKey,
                         actions = actions,
-                        interactive = gridEditor == null && state.textSession?.draft?.id != element.id,
+                        interactive = element.id !in gridCellIds && state.textSession?.draft?.id != element.id,
                     )
                 }
             }
@@ -2168,11 +2181,10 @@ internal fun ComposerCanvas(
                 }
             }
             ComposerMovementGuides(state.movementGuides, stageOrigin, pageWidthPx, pageHeightPx)
-            gridEditor?.let { editor ->
-                ComposerGridDividers(editor.layout, project.format.aspectRatio, stageOrigin, pageWidthPx, pageHeightPx, {}, {},
-                    { split, index, delta -> actions.updateGridDraft(editor.layout.copy(root = editor.layout.root.adjustDivider(split, index, delta))) })
-                ComposerGridSwapOverlay(project, editor.layout, stageOrigin, pageWidthPx, pageHeightPx, gridSwapDrag,
-                    thumbnailUrl, apiKey, actions::swapGridDraftMembers)
+            gridCells?.let { layout ->
+                ComposerGridSwapOverlay(project, layout, stageOrigin, pageWidthPx, pageHeightPx, gridSwapDrag,
+                    thumbnailUrl, apiKey, actions::swapGridMembers, actions::removeGridMember, stageInsets.bottom,
+                    state.selectedElementId, actions::focusGroupMember)
             }
             // In a multiple selection the secondaries only get an outline: the handles belong to the
             // primary, which is what the gestures move and resize.
@@ -2194,7 +2206,7 @@ internal fun ComposerCanvas(
                 ?: state.selectionElements().firstOrNull { it.visible }
             val block = state.selectionElements()
                 .takeIf { it.size > 1 }
-            if (selected != null && selected.visible && !armed && state.textSession?.contentEditing != true) {
+            if (selected != null && selected.visible && !armed && state.textSession?.contentEditing != true && gridCells == null) {
                 // With several chosen the frame wraps the set, and not the last one tapped: it is the
                 // set the handles resize, and a frame around a single one promised something else.
                 // Without rotation, because the block has no angle of its own.
@@ -2231,8 +2243,9 @@ internal fun ComposerCanvas(
                     onTap = { onMediaTap(selected.id) },
                 )
             }
-            if (state.textSession == null && !armed && !positioningMedia && state.editingGroupId == null && !state.multiSelect) {
-                state.selectedLayout()?.takeIf { layout -> project.elements.none { it.groupId == layout.groupId && it.locked } }?.let { layout ->
+            if (state.textSession == null && !armed && !positioningMedia && !state.multiSelect) {
+                (gridCells ?: state.selectedLayout()?.takeIf { state.editingGroupId == null })
+                    ?.takeIf { layout -> project.elements.none { it.groupId == layout.groupId && it.locked } }?.let { layout ->
                     ComposerGridDividers(layout, project.format.aspectRatio, stageOrigin, pageWidthPx, pageHeightPx,
                         onBegin = { actions.beginGesture() }, onEnd = { actions.endGesture() },
                         onAdjust = { split, index, delta -> actions.adjustGridDivider(layout.groupId, split, index, delta) })
@@ -2641,45 +2654,7 @@ private fun CompositionElementView(
         // Fill **and** outline, like the exporter. The stage painted lines and arrows with `fillArgb`
         // and ignored `strokeArgb`, so the shape changed colour on export.
         is CompositionElement.Shape -> Canvas(common) { drawCompositionShape(element, pageWidthPx / REFERENCE_PAGE_WIDTH) }
-        is CompositionElement.Drawing -> Canvas(common) {
-            if (element.id.startsWith("layout-decoration:")) {
-                drawCompositionLayoutStroke(element, pageWidthPx / REFERENCE_PAGE_WIDTH)
-            } else if (element.points.size > 1) {
-                val strokeColor =
-                    if (element.kind == StrokeKind.ERASER) Color.Transparent else Color(element.colorArgb)
-                val strokeAlpha = if (element.kind == StrokeKind.MARKER) .45f else 1f
-                if (element.points.hasVariablePressure()) {
-                    // Without a single width for the whole stroke, no `Path` will do: it is drawn
-                    // segment by segment, each with the width of the average pressure of its ends.
-                    // Only stylus strokes go through here — the others stay in a single `Path`, which
-                    // is cheaper and gives exactly the same result.
-                    element.points.zipWithNext { from, to ->
-                        if (!to.startsStroke) drawLine(
-                            color = strokeColor,
-                            start = Offset(from.x * size.width, from.y * size.height),
-                            end = Offset(to.x * size.width, to.y * size.height),
-                            strokeWidth = strokeWidthAt(element.strokeWidth * pageWidthPx / REFERENCE_PAGE_WIDTH, (from.pressure + to.pressure) / 2f),
-                            cap = StrokeCap.Round,
-                            alpha = strokeAlpha,
-                        )
-                    }
-                } else {
-                    val path = Path().apply {
-                        moveTo(element.points.first().x * size.width, element.points.first().y * size.height)
-                        element.points.drop(1).forEach { if (it.startsStroke) moveTo(it.x * size.width, it.y * size.height) else lineTo(it.x * size.width, it.y * size.height) }
-                    }
-                    drawPath(
-                        path,
-                        strokeColor,
-                        alpha = strokeAlpha,
-                        // Round caps and joins, as the exporter always drew them. Here they were square
-                        // by default, and a curved stroke came out faceted on screen and smooth in the
-                        // file — the same composition with two looks.
-                        style = Stroke(element.strokeWidth * pageWidthPx / REFERENCE_PAGE_WIDTH, cap = StrokeCap.Round, join = StrokeJoin.Round),
-                    )
-                }
-            }
-        }
+        is CompositionElement.Drawing -> Canvas(common) { drawCompositionDrawing(element, pageWidthPx / REFERENCE_PAGE_WIDTH) }
     }
 }
 

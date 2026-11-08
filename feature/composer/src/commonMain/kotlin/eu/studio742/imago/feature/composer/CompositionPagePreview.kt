@@ -13,7 +13,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.LocalPlatformContext
 import androidx.compose.ui.unit.Dp
@@ -35,8 +34,9 @@ import androidx.compose.ui.platform.LocalDensity
  *
  * It is the same drawing the composer's page strip shows and the project list uses to show the first
  * page — not an export, but the elements in their boxes, which at this scale is what can be told apart.
- * Shapes and frames retain their geometry and transparency. Texts and strokes become rectangles of
- * their own colour: at 60 px wide reading the word is not possible, and the patch says where it is.
+ * Shapes, frames, strokes and texts are drawn by the stage's own painters, with their geometry and
+ * transparency. A text painted as a patch of its colour filled its whole box, and a line of words
+ * showed up as a square.
  *
  * The miniature takes the space it is given respecting the page's format — the rest stays background,
  * because stretching a 9:16 into a square would lie about the composition.
@@ -130,11 +130,12 @@ internal fun CompositionPageCanvas(
                         alignment = placementAlignment(element.crop),
                         modifier = cell.compositionFrameDecoration(element.frame, unit, element.transform.opacity).placementZoom(element.crop),
                     )
-                    is CompositionElement.Text -> Box(cell.background(Color(element.colorArgb).copy(alpha = .75f)))
+                    is CompositionElement.Text -> {
+                        val fontBytes = rememberCompositionFontBytes(element.fontFamily)
+                        Canvas(cell) { drawCompositionText(element, unit, fontBytes) }
+                    }
                     is CompositionElement.Shape -> Canvas(cell) { drawCompositionShape(element, unit) }
-                    is CompositionElement.Drawing -> if (element.id.startsWith("layout-decoration:")) Canvas(cell) {
-                        drawCompositionLayoutStroke(element, unit)
-                    } else Box(cell.background(Color(element.colorArgb).copy(alpha = .75f)))
+                    is CompositionElement.Drawing -> Canvas(cell) { drawCompositionDrawing(element, unit) }
                     is CompositionElement.MediaPlaceholder -> Box(cell.compositionFrameDecoration(element.frame, unit, element.transform.opacity).background(uiColors.text.copy(alpha = .18f)))
                 }
             }

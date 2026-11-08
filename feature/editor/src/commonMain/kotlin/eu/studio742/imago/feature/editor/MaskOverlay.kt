@@ -1,5 +1,6 @@
 package eu.studio742.imago.feature.editor
 
+import eu.studio742.imago.core.designsystem.ImagoUi
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -226,43 +227,45 @@ fun MaskOverlay(
     /** The two corners, in screen pixels, of the area a range is being sampled from, while it is dragged. */
     samplingArea: Pair<Offset, Offset>? = null,
 ) {
+    val uiColors = ImagoUi.colors
+    val ink = OverlayInk(uiColors.onImage, uiColors.imageShade)
     Canvas(modifier = modifier) {
         val projection = MaskProjection(bounds, geometry)
         mask.components.forEachIndexed { index, component ->
             if (index == selectedComponent) return@forEachIndexed
-            drawComponentOutline(component, projection, OTHER_COMPONENT_ALPHA)
-            componentPin(component, projection)?.let { drawPin(it) }
+            drawComponentOutline(ink, component, projection, OTHER_COMPONENT_ALPHA)
+            componentPin(component, projection)?.let { drawPin(ink, it) }
         }
         mask.components.getOrNull(selectedComponent)?.let { selected ->
-            drawComponentOutline(selected, projection)
+            drawComponentOutline(ink, selected, projection)
             val handles = maskHandlesOf(selected, projection, MASK_ROTATE_HANDLE_GAP.toPx())
             if (handles != null) {
-                listOfNotNull(handles.radiusX, handles.radiusY, handles.width).forEach { drawHandle(it, filled = false) }
-                drawHandle(handles.rotate, filled = false)
-                drawHandle(handles.centre, filled = true)
+                listOfNotNull(handles.radiusX, handles.radiusY, handles.width).forEach { drawHandle(ink, it, filled = false) }
+                drawHandle(ink, handles.rotate, filled = false)
+                drawHandle(ink, handles.centre, filled = true)
             } else {
-                componentPin(selected, projection)?.let { drawHandle(it, filled = true) }
+                componentPin(selected, projection)?.let { drawHandle(ink, it, filled = true) }
             }
         }
-        brushCursor?.let { drawBrushCursor(it) }
-        samplingArea?.let { (from, to) -> drawSamplingArea(from, to) }
+        brushCursor?.let { drawBrushCursor(ink, it) }
+        samplingArea?.let { (from, to) -> drawSamplingArea(ink, from, to) }
     }
 }
 
 /** The rectangle being dragged on the photo, the way Lightroom draws its sampling area. */
-private fun DrawScope.drawSamplingArea(from: Offset, to: Offset) {
+private fun DrawScope.drawSamplingArea(ink: OverlayInk, from: Offset, to: Offset) {
     val stroke = OUTLINE_WIDTH.toPx()
     val topLeft = Offset(min(from.x, to.x), min(from.y, to.y))
     val size = androidx.compose.ui.geometry.Size(kotlin.math.abs(to.x - from.x), kotlin.math.abs(to.y - from.y))
-    drawRect(Color.Black.copy(alpha = 0.5f), topLeft = topLeft - Offset(stroke, stroke), size = size.copy(width = size.width + stroke * 2, height = size.height + stroke * 2), style = Stroke(width = stroke))
-    drawRect(OUTLINE_COLOR, topLeft = topLeft, size = size, style = Stroke(width = stroke))
+    drawRect(ink.halo.copy(alpha = 0.5f), topLeft = topLeft - Offset(stroke, stroke), size = size.copy(width = size.width + stroke * 2, height = size.height + stroke * 2), style = Stroke(width = stroke))
+    drawRect(ink.line, topLeft = topLeft, size = size, style = Stroke(width = stroke))
 }
 
 /**
  * Where each sample of a Color Range was taken: a point's marker, or an area's rectangle, projected so
  * that it stays on the colour it read under any crop or rotation.
  */
-private fun DrawScope.drawColorSamples(component: MaskComponent, projection: MaskProjection, alpha: Float) {
+private fun DrawScope.drawColorSamples(ink: OverlayInk, component: MaskComponent, projection: MaskProjection, alpha: Float) {
     val samples = component.color?.samples ?: return
     val stroke = HANDLE_STROKE.toPx()
     samples.forEach { sample ->
@@ -280,23 +283,23 @@ private fun DrawScope.drawColorSamples(component: MaskComponent, projection: Mas
                 corners.drop(1).forEach { lineTo(it.x, it.y) }
                 close()
             }
-            drawPath(path, color = OUTLINE_COLOR.copy(alpha = 0.9f * alpha), style = Stroke(width = OUTLINE_WIDTH.toPx()))
+            drawPath(path, color = ink.line.copy(alpha = 0.9f * alpha), style = Stroke(width = OUTLINE_WIDTH.toPx()))
         }
         val centre = projection.toScreen(sample.x, sample.y)
         val radius = SAMPLE_RADIUS.toPx()
-        drawCircle(color = Color.Black.copy(alpha = 0.5f * alpha), radius = radius + stroke, center = centre)
-        drawCircle(color = OUTLINE_COLOR.copy(alpha = alpha), radius = radius, center = centre, style = Stroke(width = stroke))
+        drawCircle(color = ink.halo.copy(alpha = 0.5f * alpha), radius = radius + stroke, center = centre)
+        drawCircle(color = ink.line.copy(alpha = alpha), radius = radius, center = centre, style = Stroke(width = stroke))
     }
 }
 
 /** Two circles: the brush's reach, and dimmer, where its feather begins. */
-internal fun DrawScope.drawBrushCursor(cursor: BrushCursor) {
+internal fun DrawScope.drawBrushCursor(ink: OverlayInk, cursor: BrushCursor) {
     val stroke = OUTLINE_WIDTH.toPx()
-    drawCircle(Color.Black.copy(alpha = 0.5f), radius = cursor.radius + stroke, center = cursor.centre, style = Stroke(width = stroke))
-    drawCircle(OUTLINE_COLOR, radius = cursor.radius, center = cursor.centre, style = Stroke(width = stroke))
+    drawCircle(ink.halo.copy(alpha = 0.5f), radius = cursor.radius + stroke, center = cursor.centre, style = Stroke(width = stroke))
+    drawCircle(ink.line, radius = cursor.radius, center = cursor.centre, style = Stroke(width = stroke))
     val inner = cursor.radius * (1f - (cursor.feather / 100f).coerceIn(0f, 1f))
     if (inner > stroke * 2 && inner < cursor.radius - stroke) {
-        drawCircle(OUTLINE_COLOR.copy(alpha = 0.45f), radius = inner, center = cursor.centre, style = Stroke(width = stroke))
+        drawCircle(ink.line.copy(alpha = 0.45f), radius = inner, center = cursor.centre, style = Stroke(width = stroke))
     }
 }
 
@@ -325,32 +328,33 @@ fun hitMaskComponentPin(
  * The mask's shapes without their handles: the editor draws the handles on top, the "Show your edit"
  * video draws the shapes alone while the mask's sliders rise.
  */
-internal fun DrawScope.drawMaskOutline(mask: LocalMask, projection: MaskProjection, alpha: Float = 1f) {
-    mask.components.forEach { drawComponentOutline(it, projection, alpha) }
+internal fun DrawScope.drawMaskOutline(ink: OverlayInk, mask: LocalMask, projection: MaskProjection, alpha: Float = 1f) {
+    mask.components.forEach { drawComponentOutline(ink, it, projection, alpha) }
 }
 
-private fun DrawScope.drawComponentOutline(component: MaskComponent, projection: MaskProjection, alpha: Float = 1f) {
+private fun DrawScope.drawComponentOutline(ink: OverlayInk, component: MaskComponent, projection: MaskProjection, alpha: Float = 1f) {
     when (component.shape) {
         MaskShape.RADIAL -> component.radial?.let { radial ->
             // The ellipse is drawn point by point and projected, and not with `drawOval`: under a
             // crop with fine rotation the frame is no longer aligned with the screen, and an oval
             // drawn in screen coordinates was crooked compared to what the pipeline applies.
-            drawProjectedEllipse(projection, radial.x, radial.y, radial.radiusX, radial.radiusY, radial.angle, alpha)
+            drawProjectedEllipse(ink, projection, radial.x, radial.y, radial.radiusX, radial.radiusY, radial.angle, alpha)
         }
         MaskShape.LINEAR -> component.linear?.let { linear ->
             val half = linear.width * 0.5f
             listOf(-half to 0.35f, 0f to 0.9f, half to 0.35f).forEach { (offset, lineAlpha) ->
-                drawProjectedLine(projection, linear.x, linear.y, linear.angle, offset, lineAlpha * alpha)
+                drawProjectedLine(ink, projection, linear.x, linear.y, linear.angle, offset, lineAlpha * alpha)
             }
         }
         // What a brush or a Luminance Range covers is shown by the red, which comes from the pipeline
         // itself; a Color Range also shows where its samples were taken.
         MaskShape.BRUSH, MaskShape.LUMINANCE -> Unit
-        MaskShape.COLOR -> drawColorSamples(component, projection, alpha)
+        MaskShape.COLOR -> drawColorSamples(ink, component, projection, alpha)
     }
 }
 
 private fun DrawScope.drawProjectedEllipse(
+    ink: OverlayInk,
     projection: MaskProjection,
     centreX: Float,
     centreY: Float,
@@ -372,10 +376,11 @@ private fun DrawScope.drawProjectedEllipse(
         if (step == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
     }
     path.close()
-    drawPath(path, color = OUTLINE_COLOR.copy(alpha = 0.9f * alpha), style = Stroke(width = OUTLINE_WIDTH.toPx()))
+    drawPath(path, color = ink.line.copy(alpha = 0.9f * alpha), style = Stroke(width = OUTLINE_WIDTH.toPx()))
 }
 
 private fun DrawScope.drawProjectedLine(
+    ink: OverlayInk,
     projection: MaskProjection,
     centreX: Float,
     centreY: Float,
@@ -387,7 +392,7 @@ private fun DrawScope.drawProjectedLine(
     val start = projection.handleAt(centreX, centreY, angleDegrees, -LINE_REACH, across)
     val end = projection.handleAt(centreX, centreY, angleDegrees, LINE_REACH, across)
     drawLine(
-        color = OUTLINE_COLOR.copy(alpha = alpha),
+        color = ink.line.copy(alpha = alpha),
         start = start,
         end = end,
         strokeWidth = OUTLINE_WIDTH.toPx(),
@@ -395,22 +400,22 @@ private fun DrawScope.drawProjectedLine(
 }
 
 /** Another shape's pin: smaller and dimmer than a handle, so it does not read as one. */
-internal fun DrawScope.drawPin(position: Offset) {
+internal fun DrawScope.drawPin(ink: OverlayInk, position: Offset) {
     val radius = PIN_RADIUS.toPx()
-    drawCircle(color = Color.Black.copy(alpha = 0.5f), radius = radius + HANDLE_STROKE.toPx(), center = position)
-    drawCircle(color = OUTLINE_COLOR.copy(alpha = OTHER_COMPONENT_ALPHA), radius = radius, center = position)
+    drawCircle(color = ink.halo.copy(alpha = 0.5f), radius = radius + HANDLE_STROKE.toPx(), center = position)
+    drawCircle(color = ink.line.copy(alpha = OTHER_COMPONENT_ALPHA), radius = radius, center = position)
 }
 
-internal fun DrawScope.drawHandle(position: Offset, filled: Boolean) {
+internal fun DrawScope.drawHandle(ink: OverlayInk, position: Offset, filled: Boolean) {
     val radius = (if (filled) HANDLE_RADIUS else HANDLE_RADIUS_SECONDARY).toPx()
     val stroke = HANDLE_STROKE.toPx()
     // The dark ring underneath is not decoration: over a light sky, a white circle without an outline
     // disappears, and the handle stops showing precisely where a gradient is usually placed.
-    drawCircle(color = Color.Black.copy(alpha = 0.5f), radius = radius + stroke, center = position)
+    drawCircle(color = ink.halo.copy(alpha = 0.5f), radius = radius + stroke, center = position)
     if (filled) {
-        drawCircle(color = OUTLINE_COLOR, radius = radius, center = position)
+        drawCircle(color = ink.line, radius = radius, center = position)
     } else {
-        drawCircle(color = OUTLINE_COLOR, radius = radius, center = position, style = Stroke(width = stroke))
+        drawCircle(color = ink.line, radius = radius, center = position, style = Stroke(width = stroke))
     }
 }
 
@@ -485,7 +490,13 @@ internal val OUTLINE_WIDTH = 1.5.dp
 /** The shapes of the mask that are not being edited: present, but behind the one that is. */
 private const val OTHER_COMPONENT_ALPHA = 0.45f
 
-internal val OUTLINE_COLOR = Color(0xFFF2F2F0)
+/**
+ * What the overlays on a photo draw with: a line, and the halo that keeps it readable on any pixel.
+ * Handed in, because the "Show your edit" video draws these too and must not follow the theme.
+ */
+internal class OverlayInk(val line: Color, val halo: Color)
+
+internal val OverlayInkOfVideo = OverlayInk(line = Color(0xFFF2F2F0), halo = Color.Black)
 
 /** A component's centre in normalised image coordinates, or null if it has no shape. */
 fun LocalMask.centreInImage(component: Int = 0): Offset? = components.getOrNull(component)?.let { shape ->

@@ -6,6 +6,9 @@
     <string name="composer_grid_choose_multiple">Select at least two items to create a grid.</string>
     <string name="composer_grid_swap_hint">Touch and hold an element, then drag it over another to swap them.</string>
     <string name="composer_grid_swap_with">Swap with %1$s</string>
+    <string name="composer_grid_stage_hint">Tap an element to edit it. Touch and hold, then drag it over another to swap them, or onto the bin to remove it.</string>
+    <string name="composer_grid_remove_element">Remove from grid</string>
+    <string name="composer_grid_locked_notice">Unlock the grid’s elements to edit it.</string>
     <string name="composer_share_title">Share composition</string>
     <string name="composer_export_failed">The export failed.</string>
     <string name="composer_project_missing">This project no longer exists.</string>

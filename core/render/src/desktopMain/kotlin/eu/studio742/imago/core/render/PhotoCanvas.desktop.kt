@@ -41,6 +41,8 @@ actual fun PhotoCanvas(
     clipping: ClippingWarning,
     spots: Float?,
     luminanceMap: Boolean,
+    // Unused here: this canvas is transparent around the photo, and what is behind it shows.
+    background: androidx.compose.ui.graphics.Color,
     onFirstFrame: () -> Unit,
 ) {
     val source = remember(bitmap) { bitmap.toPixelBuffer() }

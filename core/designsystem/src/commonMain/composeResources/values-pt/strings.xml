@@ -62,6 +62,10 @@
     <string name="sync_done">Sincronizado</string>
 
     <!-- Língua da app -->
+    <string name="appearance_title">Aparência</string>
+    <string name="appearance_system">Sistema</string>
+    <string name="appearance_light">Claro</string>
+    <string name="appearance_dark">Escuro</string>
     <string name="language_title">Idioma</string>
     <string name="language_system">Sistema</string>
     <string name="language_english">English</string>

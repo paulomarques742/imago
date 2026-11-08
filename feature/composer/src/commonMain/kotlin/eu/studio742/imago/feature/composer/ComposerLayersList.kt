@@ -141,7 +141,8 @@ private fun GroupLayerHeader(
                 Icon(Icons.Outlined.MoreVert, stringResource(Res.string.composer_group_options, label), tint = colors.secondaryText)
             }
             DropdownMenu(menu, onDismissRequest = { menu = false }) {
-                if (members.any { !it.locked }) ToolMenuItem(stringResource(Res.string.composer_edit_group), Icons.Outlined.Edit, { menu = false }) { actions.editGroup(group) }
+                if (members.any { !it.locked }) ToolMenuItem(stringResource(if (state.project?.layouts?.any { it.groupId == group } == true) Res.string.composer_edit_grid else Res.string.composer_edit_group),
+                    Icons.Outlined.Edit, { menu = false }) { actions.editGroup(group) }
                 ToolMenuItem(stringResource(if (locked) Res.string.composer_unlock else Res.string.composer_lock), Icons.Outlined.Lock, { menu = false }) { actions.toggleGroupLocked(group) }
                 ToolMenuItem(stringResource(if (visible) Res.string.composer_hide else Res.string.composer_show), Icons.Outlined.Visibility, { menu = false }) { actions.toggleGroupVisible(group) }
                 DropdownMenuItem(text = { Text(stringResource(Res.string.composer_delete_element)) }, enabled = !locked,

@@ -7,15 +7,31 @@ import eu.studio742.imago.core.designsystem.i18n.toUiText
 import eu.studio742.imago.core.designsystem.i18n.uiText
 import eu.studio742.imago.core.designsystem.i18n.resolve
 import eu.studio742.imago.feature.library.resources.*
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import eu.studio742.imago.core.designsystem.ImagoSizes
+import eu.studio742.imago.core.designsystem.AppearancePreference
+import eu.studio742.imago.core.designsystem.EditorBackground
+import eu.studio742.imago.core.designsystem.LocalAppearanceSettings
+import eu.studio742.imago.core.designsystem.LocalThemeReveal
 import eu.studio742.imago.core.designsystem.i18n.LanguagePreference
 import eu.studio742.imago.core.designsystem.i18n.LocalLanguageSettings
 import eu.studio742.imago.core.designsystem.resources.Res as CommonRes
+import eu.studio742.imago.core.designsystem.resources.appearance_dark
+import eu.studio742.imago.core.designsystem.resources.appearance_light
+import eu.studio742.imago.core.designsystem.resources.appearance_system
+import eu.studio742.imago.core.designsystem.resources.appearance_title
 import eu.studio742.imago.core.designsystem.resources.language_english
 import eu.studio742.imago.core.designsystem.resources.language_portuguese
 import eu.studio742.imago.core.designsystem.resources.language_system
 import eu.studio742.imago.core.designsystem.resources.language_title
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.material.icons.outlined.Contrast
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.runtime.collectAsState
@@ -38,10 +54,11 @@ import eu.studio742.imago.core.model.UNIFIED_LIBRARY_ID
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.ImagoBrand
+import eu.studio742.imago.core.designsystem.ImagoBrandMark
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -164,7 +181,7 @@ fun LibrarySourceButton(viewModel: LibrarySettingsViewModel = librarySettingsVie
         IconButton(onClick = { expanded = true }) {
             Icon(Icons.Outlined.PhotoLibrary,
                 contentDescription = stringResource(Res.string.library_libraries_selected, selectedName),
-                tint = ImagoColors.TextPrimary)
+                tint = ImagoUi.colors.text)
         }
         DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
             sources.filter { it.isConnected }.forEach { source ->
@@ -186,7 +203,7 @@ fun LibrarySourceButton(viewModel: LibrarySettingsViewModel = librarySettingsVie
             if (selected == DEVICE_LIBRARY_ID) {
                 HorizontalDivider()
                 Text(remember(revision) { viewModel.device.accessSummary() }.toUiText().resolve(),
-                    style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary,
+                    style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText,
                     modifier = Modifier.widthIn(max = 280.dp).padding(horizontal = 16.dp, vertical = 8.dp))
                 DropdownMenuItem(text = { Text(stringResource(Res.string.library_manage_access)) },
                     onClick = { expanded = false; requestAccess() })
@@ -234,18 +251,18 @@ fun LibrarySettingsRoute(
     }
     BackHandler(onBack = back)
     Scaffold(
-        containerColor = ImagoColors.Background,
+        containerColor = ImagoUi.colors.background,
         topBar = {
             Row(
-                Modifier.fillMaxWidth().background(ImagoColors.Background).statusBarsPadding()
+                Modifier.fillMaxWidth().background(ImagoUi.colors.background).statusBarsPadding()
                     .height(64.dp).padding(horizontal = ImagoSpacing.Sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = back, enabled = !busy) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(Res.string.library_back), tint = ImagoColors.TextPrimary)
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(Res.string.library_back), tint = ImagoUi.colors.text)
                 }
                 Spacer(Modifier.weight(1f))
-                Image(rememberVectorPainter(ImagoBrand.Wordmark), contentDescription = "IMAGO", modifier = Modifier.height(17.dp))
+                ImagoBrandMark(ImagoBrand.Wordmark, contentDescription = "IMAGO", modifier = Modifier.height(17.dp))
                 Spacer(Modifier.weight(1f))
                 Spacer(Modifier.width(48.dp))
             }
@@ -257,11 +274,15 @@ fun LibrarySettingsRoute(
                     .padding(ImagoSpacing.Lg),
                 verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Lg),
             ) {
-                Text(stringResource(Res.string.library_settings), style = MaterialTheme.typography.headlineLarge, color = ImagoColors.TextPrimary)
+                Text(stringResource(Res.string.library_settings), style = MaterialTheme.typography.headlineLarge, color = ImagoUi.colors.text)
                 if (!editing) {
                     accountSection()
                     CollapsibleSettingsCard(stringResource(Res.string.library_settings_preferences), Icons.Outlined.Tune,
                         preferencesExpanded, { preferencesExpanded = it }) {
+                        AppearanceSetting()
+                        SettingsDivider()
+                        EditorBackgroundSetting(viewModel)
+                        SettingsDivider()
                         LanguageSetting()
                         SettingsDivider()
                         OnThisDaySetting(viewModel)
@@ -271,7 +292,7 @@ fun LibrarySettingsRoute(
                 }
                 if (editing) {
                     Text(if (editId == null) stringResource(Res.string.library_add_immich_server) else stringResource(Res.string.library_edit_library),
-                        style = MaterialTheme.typography.titleLarge, color = ImagoColors.TextPrimary)
+                        style = MaterialTheme.typography.titleLarge, color = ImagoUi.colors.text)
                     // A linked library manages its addresses in the list; the key is validated by the one in use.
                     val connected = sources.firstOrNull { it.id == editId && it.isConnected && it.serverUrls.isNotEmpty() }
                     var headers by remember(editId) { mutableStateOf(emptyList<ConnectionHeader>()) }
@@ -304,7 +325,7 @@ fun LibrarySettingsRoute(
                         librariesExpanded, { librariesExpanded = it }) {
                         Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-                                Icon(DeviceLibraryIcon, null, tint = ImagoColors.Ivory)
+                                Icon(DeviceLibraryIcon, null, tint = ImagoUi.colors.emphasis)
                                 Text(stringResource(DeviceLibraryName), style = MaterialTheme.typography.titleMedium)
                             }
                             DeviceLibraryAccess(viewModel, revision, requestAccess)
@@ -315,10 +336,10 @@ fun LibrarySettingsRoute(
                             SettingsDivider()
                             Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-                                    Icon(Icons.Outlined.Layers, null, tint = ImagoColors.Ivory)
+                                    Icon(Icons.Outlined.Layers, null, tint = ImagoUi.colors.emphasis)
                                     Text(stringResource(Res.string.library_unified_name, stringResource(DeviceLibraryName)), style = MaterialTheme.typography.titleMedium)
                                 }
-                                Text(stringResource(Res.string.library_unified_partner), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
+                                Text(stringResource(Res.string.library_unified_partner), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText)
                                 var partner by remember(servers) { mutableStateOf(viewModel.configuration.unifiedPartnerId) }
                                 Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
                                     servers.forEach { source ->
@@ -335,15 +356,15 @@ fun LibrarySettingsRoute(
                             SettingsDivider()
                             Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-                                    Icon(Icons.Outlined.CloudQueue, null, tint = ImagoColors.Ivory)
+                                    Icon(Icons.Outlined.CloudQueue, null, tint = ImagoUi.colors.emphasis)
                                     Text(source.displayName(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                                 }
-                                Text(source.serverUrl.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary,
+                                Text(source.serverUrl.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText,
                                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 if (source.serverUrls.size > 1) Text(stringResource(Res.string.library_addresses_count, source.serverUrls.size),
-                                    style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextTertiary)
+                                    style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.tertiaryText)
                                 if (!source.isConnected) Text(stringResource(Res.string.library_disconnected),
-                                    style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+                                    style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
                                 Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs)) {
                                     TextButton(enabled = !busy, onClick = {
                                         editId = source.id; name = source.name; url = source.serverUrl.orEmpty(); key = source.apiKey.orEmpty(); editing = true
@@ -353,7 +374,7 @@ fun LibrarySettingsRoute(
                                     }) { Text(if (source.isConnected) stringResource(Res.string.library_edit) else stringResource(Res.string.library_connect)) }
                                     if (source.isConnected) {
                                         TextButton(enabled = !busy, onClick = { viewModel.test(source.id) }) { Text(stringResource(Res.string.library_test)) }
-                                        TextButton(enabled = !busy, onClick = { remove = source }) { Text(stringResource(Res.string.library_remove), color = ImagoColors.Danger) }
+                                        TextButton(enabled = !busy, onClick = { remove = source }) { Text(stringResource(Res.string.library_remove), color = ImagoUi.colors.danger) }
                                     }
                                 }
                                 connectionTests[source.id]?.let { test -> ConnectionTestResult(test) }
@@ -371,17 +392,17 @@ fun LibrarySettingsRoute(
                     aboutSection()
                 }
                 if (busy && connectionTests.values.none { it.running }) LinearProgressIndicator(Modifier.fillMaxWidth())
-                message?.let { Text(it.resolve(), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary) }
+                message?.let { Text(it.resolve(), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText) }
             }
         }
     }
     remove?.let { source -> AlertDialog(onDismissRequest = { remove = null }, title = { Text(stringResource(Res.string.library_remove_question, source.displayName())) },
         text = { Text(stringResource(Res.string.library_remove_body)) },
-        confirmButton = { TextButton(onClick = { viewModel.configuration.removeLibrary(source.id); remove = null }) { Text(stringResource(Res.string.library_remove), color = ImagoColors.Danger) } },
+        confirmButton = { TextButton(onClick = { viewModel.configuration.removeLibrary(source.id); remove = null }) { Text(stringResource(Res.string.library_remove), color = ImagoUi.colors.danger) } },
         dismissButton = { TextButton(onClick = { remove = null }) { Text(stringResource(Res.string.library_cancel)) } }) }
     discard?.let { action -> AlertDialog(onDismissRequest = { discard = null }, title = { Text(stringResource(Res.string.connection_discard_title)) },
         text = { Text(stringResource(Res.string.connection_discard_body)) },
-        confirmButton = { TextButton(onClick = { discard = null; action() }) { Text(stringResource(Res.string.connection_discard), color = ImagoColors.Danger) } },
+        confirmButton = { TextButton(onClick = { discard = null; action() }) { Text(stringResource(Res.string.connection_discard), color = ImagoUi.colors.danger) } },
         dismissButton = { TextButton(onClick = { discard = null }) { Text(stringResource(Res.string.connection_keep_editing)) } }) }
 }
 
@@ -430,19 +451,19 @@ private fun ColumnScope.ServerAddressList(
         optionsOf?.let { optionsDraft.toProfile(optionsCertificate) }, optionsOf?.let(source::profileOf))
     LaunchedEffect(unsaved) { onUnsavedChange(unsaved) }
     DisposableEffect(Unit) { onDispose { onUnsavedChange(false) } }
-    Text(stringResource(Res.string.library_addresses), style = MaterialTheme.typography.titleMedium, color = ImagoColors.TextPrimary)
+    Text(stringResource(Res.string.library_addresses), style = MaterialTheme.typography.titleMedium, color = ImagoUi.colors.text)
     Text(stringResource(Res.string.library_addresses_hint),
-        style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+        style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
     source.serverUrls.forEachIndexed { index, address ->
         val active = address == source.serverUrl
         val probe = probes[address]
         val certificateInfo = source.profileOf(address)?.certificate?.let(viewModel.certificates.describe)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).background(
-                if (active) ImagoColors.Gold else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(50),
+                if (active) ImagoUi.colors.accent else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(50),
             ))
             Column(Modifier.weight(1f).padding(start = ImagoSpacing.Sm)) {
-                Text(address, style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary,
+                Text(address, style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.text,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     when {
@@ -453,7 +474,7 @@ private fun ColumnScope.ServerAddressList(
                         else -> stringResource(Res.string.library_address_untested)
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (probe == false) ImagoColors.Error else ImagoColors.TextSecondary,
+                    color = if (probe == false) ImagoUi.colors.error else ImagoUi.colors.secondaryText,
                 )
                 // The server refuses a device whose certificate ran out without saying why.
                 if (certificateInfo != null && (certificateInfo.expired || certificateInfo.expiresSoon())) {
@@ -461,13 +482,13 @@ private fun ColumnScope.ServerAddressList(
                         .format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM))
                     Text(if (certificateInfo.expired) stringResource(Res.string.connection_certificate_expired_on, until)
                         else stringResource(Res.string.connection_certificate_days_left, certificateInfo.daysLeft()),
-                        style = MaterialTheme.typography.bodySmall, color = ImagoColors.Error)
+                        style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.error)
                 }
             }
             val options = source.profileOf(address)
             IconButton(enabled = !busy, onClick = { if (optionsOf == address) optionsOf = null else openOptions(address) }) {
                 Icon(Icons.Outlined.Tune, stringResource(Res.string.connection_address_settings, address),
-                    tint = if (options != null) ImagoColors.Gold else androidx.compose.material3.LocalContentColor.current)
+                    tint = if (options != null) ImagoUi.colors.accent else androidx.compose.material3.LocalContentColor.current)
             }
             IconButton(enabled = !busy && index > 0, onClick = { viewModel.moveUrl(source.id, address, -1) }) {
                 Icon(Icons.Outlined.ArrowUpward, stringResource(Res.string.library_move_up, address))
@@ -482,7 +503,7 @@ private fun ColumnScope.ServerAddressList(
     }
     optionsOf?.takeIf { it in source.serverUrls }?.let { address ->
         Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
-            Text(stringResource(Res.string.connection_address_settings, address), style = MaterialTheme.typography.titleSmall, color = ImagoColors.TextPrimary)
+            Text(stringResource(Res.string.connection_address_settings, address), style = MaterialTheme.typography.titleSmall, color = ImagoUi.colors.text)
             ConnectionAdvanced(optionsDraft, { optionsDraft = it }, enabled = !busy, initiallyOpen = true, highlight = needsOptions == address,
                 certificate = optionsCertificate, onCertificateChange = { optionsCertificate = it }, certificates = viewModel.certificates)
             Button(enabled = !busy, onClick = { viewModel.setProfile(source.id, address, optionsDraft.toProfile(optionsCertificate)) { optionsOf = null; optionsDraft = emptyList(); optionsCertificate = null } }) {
@@ -512,6 +533,89 @@ private fun ColumnScope.ServerAddressList(
  * itself, so whoever got lost in one they cannot read can find their way back.
  */
 @Composable
+private fun AppearanceSetting() {
+    val settings = LocalAppearanceSettings.current ?: return
+    val current by settings.preference.collectAsState()
+    var expanded by remember { mutableStateOf(false) }
+    val labels = mapOf(
+        AppearancePreference.SYSTEM to CommonRes.string.appearance_system,
+        AppearancePreference.LIGHT to CommonRes.string.appearance_light,
+        AppearancePreference.DARK to CommonRes.string.appearance_dark,
+    )
+    val reveal = LocalThemeReveal.current
+    // Where the circle opens from: the button the choice was made on.
+    var button by remember { mutableStateOf(Offset.Zero) }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
+        Icon(Icons.Outlined.Contrast, null, tint = ImagoUi.colors.emphasis)
+        Text(stringResource(CommonRes.string.appearance_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Box(Modifier.onGloballyPositioned { button = it.boundsInRoot().center }) {
+            TextButton(onClick = { expanded = true }) {
+                Text(stringResource(labels.getValue(current)))
+                Icon(Icons.Outlined.ExpandMore, null, Modifier.padding(start = ImagoSpacing.Xs).size(18.dp))
+            }
+            DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+                labels.forEach { (option, label) ->
+                    DropdownMenuItem(text = { Text(stringResource(label)) },
+                        trailingIcon = { if (option == current) Icon(Icons.Outlined.Check, null) },
+                        onClick = {
+                            expanded = false
+                            when {
+                                option == current -> Unit
+                                reveal == null -> settings.choose(option)
+                                else -> reveal.reveal(button) { settings.choose(option) }
+                            }
+                        })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditorBackgroundSetting(viewModel: LibrarySettingsViewModel) {
+    val stored by viewModel.configuration.editorBackground.collectAsState()
+    val current = EditorBackground.of(stored)
+    var expanded by remember { mutableStateOf(false) }
+    val labels = mapOf(
+        EditorBackground.AUTOMATIC to Res.string.library_editor_background_automatic,
+        EditorBackground.BLACK to Res.string.library_editor_background_black,
+        EditorBackground.DARK_GREY to Res.string.library_editor_background_dark_grey,
+        EditorBackground.MID_GREY to Res.string.library_editor_background_mid_grey,
+        EditorBackground.LIGHT_GREY to Res.string.library_editor_background_light_grey,
+        EditorBackground.WHITE to Res.string.library_editor_background_white,
+    )
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
+        Icon(Icons.Outlined.Wallpaper, null, tint = ImagoUi.colors.emphasis)
+        Text(stringResource(Res.string.library_editor_background), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Box {
+            TextButton(onClick = { expanded = true }) {
+                Text(stringResource(labels.getValue(current)))
+                Icon(Icons.Outlined.ExpandMore, null, Modifier.padding(start = ImagoSpacing.Xs).size(18.dp))
+            }
+            DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+                labels.forEach { (option, label) ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(label)) },
+                        leadingIcon = {
+                            // The swatch of the automatic one is the theme's own, which is what it means.
+                            Box(
+                                Modifier.size(ImagoSizes.IconDefault)
+                                    .background(option.grey ?: ImagoUi.colors.workspace, CircleShape)
+                                    .border(1.dp, ImagoUi.colors.border, CircleShape),
+                            )
+                        },
+                        trailingIcon = { if (option == current) Icon(Icons.Outlined.Check, null) },
+                        onClick = { expanded = false; viewModel.configuration.setEditorBackground(option.name) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun LanguageSetting() {
     val settings = LocalLanguageSettings.current ?: return
     val current by settings.preference.collectAsState()
@@ -523,7 +627,7 @@ private fun LanguageSetting() {
     )
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-        Icon(Icons.Outlined.Language, null, tint = ImagoColors.Ivory)
+        Icon(Icons.Outlined.Language, null, tint = ImagoUi.colors.emphasis)
         Text(stringResource(CommonRes.string.language_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
         Box {
             TextButton(onClick = { expanded = true }) {
@@ -543,14 +647,14 @@ private fun LanguageSetting() {
 
 @Composable
 internal fun LibrarySettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Surface(color = ImagoColors.SurfaceElevated, shape = RoundedCornerShape(ImagoRadii.Medium), modifier = Modifier.fillMaxWidth()) {
+    Surface(color = ImagoUi.colors.elevated, shape = RoundedCornerShape(ImagoRadii.Medium), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(ImagoSpacing.Lg), verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md), content = content)
     }
 }
 
 @Composable
 private fun SettingsDivider() {
-    HorizontalDivider(color = ImagoColors.BorderSubtle, modifier = Modifier.padding(vertical = ImagoSpacing.Xs))
+    HorizontalDivider(color = ImagoUi.colors.subtleBorder, modifier = Modifier.padding(vertical = ImagoSpacing.Xs))
 }
 
 @Composable
@@ -559,10 +663,10 @@ internal fun ConnectionTestResult(test: ConnectionTestState) {
         verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
         if (test.running) {
             LinearProgressIndicator(Modifier.fillMaxWidth())
-            Text(stringResource(Res.string.library_connection_testing), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+            Text(stringResource(Res.string.library_connection_testing), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
         } else test.result?.let { result ->
             Text(result.resolve(), style = MaterialTheme.typography.bodyMedium,
-                color = if (test.failed) ImagoColors.Error else ImagoColors.TextSecondary)
+                color = if (test.failed) ImagoUi.colors.error else ImagoUi.colors.secondaryText)
         }
     }
 }

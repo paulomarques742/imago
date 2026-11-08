@@ -24,7 +24,7 @@ import eu.studio742.imago.feature.composer.resources.*
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun ComposerMultiSelectionHint(modifier: Modifier = Modifier, editingGroup: Boolean = false, onFinishGroup: () -> Unit = {}) {
+internal fun ComposerMultiSelectionHint(modifier: Modifier = Modifier, editingGroup: Boolean = false, onFinishGroup: () -> Unit = {}, editingGrid: Boolean = false) {
     val colors = ImagoUi.colors
     val shape = RoundedCornerShape(ImagoRadii.Small)
     Box(modifier.testTag("composer-multiselection-hint").semantics { liveRegion = LiveRegionMode.Polite }
@@ -32,7 +32,7 @@ internal fun ComposerMultiSelectionHint(modifier: Modifier = Modifier, editingGr
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Outlined.SelectAll, null, Modifier.size(20.dp), tint = colors.accent)
-            Text(stringResource(if (editingGroup) Res.string.composer_edit_group_hint else Res.string.composer_multi_select_hint),
+            Text(stringResource(if (editingGrid) Res.string.composer_grid_stage_hint else if (editingGroup) Res.string.composer_edit_group_hint else Res.string.composer_multi_select_hint),
                 color = colors.text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             if (editingGroup) TextButton(onClick = onFinishGroup, modifier = Modifier.testTag("composer-finish-group")) {
                 Text(stringResource(Res.string.composer_finish_group))

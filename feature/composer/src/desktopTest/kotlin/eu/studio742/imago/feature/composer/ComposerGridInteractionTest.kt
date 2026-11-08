@@ -45,50 +45,52 @@ class ComposerGridInteractionTest {
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
     @After fun tearDown() = Dispatchers.resetMain()
 
-    @Test fun `swapping draft cells keeps split weights recipes and crops and cancel restores everything`() {
+    @Test fun `swapping cells on the stage keeps split weights recipes and crops and undo restores everything`() {
         val vm = model(); val group = vm.grid()
         vm.adjustGridDivider(group, "row-0", 0, .1f)
         val before = vm.project(); vm.openGrid(group)
-        val root = vm.state.value.gridEditor!!.layout.root
-        vm.swapGridDraftMembers("a", "b")
-        val editor = vm.state.value.gridEditor!!; val preview = editor.preview()
-        assertEquals(root.swapMembers("a", "b"), editor.layout.root)
-        assertEquals(before.layouts.single().geometry(1f).cells["a"], editor.layout.geometry(1f).cells["b"])
+        vm.swapGridMembers("a", "b")
+        val after = vm.project()
+        assertEquals(before.layouts.single().root.swapMembers("a", "b"), after.layouts.single().root)
+        assertEquals(before.layouts.single().geometry(1f).cells["a"], after.layouts.single().geometry(1f).cells["b"])
         before.elements.filterIsInstance<CompositionElement.Photo>().forEach { photo ->
-            val after = preview.elements.first { it.id == photo.id } as CompositionElement.Photo
-            assertEquals(photo.media, after.media); assertEquals(photo.recipe, after.recipe); assertEquals(photo.crop, after.crop)
+            val moved = after.elements.first { it.id == photo.id } as CompositionElement.Photo
+            assertEquals(photo.media, moved.media); assertEquals(photo.recipe, moved.recipe); assertEquals(photo.crop, moved.crop)
         }
-        assertEquals(before, vm.project()); vm.cancelGrid(); assertEquals(before, vm.project())
-    }
-
-    @Test fun `confirming a swap is one undo step and invalid drops do not change the draft`() {
-        val vm = model(); val group = vm.grid(); val before = vm.project()
-        vm.openGrid(group); val original = vm.state.value.gridEditor
-        vm.swapGridDraftMembers("a", "missing"); assertEquals(original, vm.state.value.gridEditor)
-        vm.swapGridDraftMembers("a", "a"); assertEquals(original, vm.state.value.gridEditor)
-        vm.swapGridDraftMembers("a", "b"); vm.confirmGrid(); val after = vm.project()
-        assertNotEquals(before.layouts, after.layouts)
         vm.undo(); assertEquals(before.elements, vm.project().elements); assertEquals(before.layouts, vm.project().layouts)
         vm.redo(); assertEquals(after.elements, vm.project().elements); assertEquals(after.layouts, vm.project().layouts)
     }
 
-    @Test fun `adding media to a draft stays provisional and never fills unrelated placeholders`() {
-        val vm = model(); val group = vm.grid(); val before = vm.project(); vm.openGrid(group)
+    @Test fun `invalid swaps change nothing`() {
+        val vm = model(); val group = vm.grid(); vm.openGrid(group); val before = vm.project()
+        vm.swapGridMembers("a", "missing"); assertEquals(before, vm.project())
+        vm.swapGridMembers("a", "a"); assertEquals(before, vm.project())
+    }
+
+    @Test fun `adding media while creating a grid stays provisional`() {
+        val vm = model(); vm.beginMultiSelection("a"); vm.toggleElementInSelection("b")
+        vm.setArrangementReference(CompositionArrangementReference.PAGE); vm.beginGrid()
+        val before = vm.project(); val group = vm.state.value.gridEditor!!.layout.groupId
         vm.addMediaToGrid(listOf(incoming("new")), group, draft = true)
         assertEquals(before, vm.project())
-        val preview = vm.state.value.gridEditor!!.preview()
-        assertEquals(3, preview.layouts.single().root.memberIds().size)
-        assertEquals(before.elements.last(), preview.elements.first { it.id == "unrelated" })
-        vm.cancelGrid(); assertEquals(before, vm.project())
-        vm.openGrid(group); vm.addMediaToGrid(listOf(incoming("new")), group, draft = true); vm.confirmGrid()
+        assertEquals(3, vm.state.value.gridEditor!!.preview().layouts.single().root.memberIds().size)
+        vm.confirmGrid()
         assertEquals(4, vm.project().elements.size); assertEquals(3, vm.project().layouts.single().root.memberIds().size)
+    }
+
+    @Test fun `adding media on the stage stays in the mode and never fills unrelated placeholders`() {
+        val vm = model(); val group = vm.grid(); val before = vm.project(); vm.openGrid(group)
+        vm.addMediaToGrid(listOf(incoming("new")), group)
+        assertEquals(group, vm.state.value.editingGroupId)
+        assertEquals(3, vm.project().layouts.single().root.memberIds().size)
+        assertEquals(before.elements.last(), vm.project().elements.first { it.id == "unrelated" })
         vm.undo(); assertEquals(before.elements, vm.project().elements); assertEquals(before.layouts, vm.project().layouts)
     }
 
     @Test fun `adding from the selected grid preserves its frame and styles as one undo step`() {
         val vm = model(); val group = vm.grid(); vm.openGrid(group)
-        vm.updateGridDraft(vm.state.value.gridEditor!!.layout.copy(margin = .1f, gap = .05f, outline = LayoutStroke(width = .02f)))
-        vm.confirmGrid(); vm.setSelectedOpacity(.4f); val before = vm.project()
+        vm.updateGridLayout(vm.project().layouts.single().copy(margin = .1f, gap = .05f, outline = LayoutStroke(width = .02f)))
+        vm.finishEditingGroup(); vm.setSelectedOpacity(.4f); val before = vm.project()
         vm.addMediaToGrid(listOf(incoming("new"), incoming("next")), group)
         val layout = vm.project().layouts.single()
         assertEquals(before.layouts.single().frame, layout.frame); assertEquals(before.layouts.single().outline, layout.outline)
@@ -131,19 +133,97 @@ class ComposerGridInteractionTest {
     @Test fun `locked grid members prevent picker insertion and grid editing`() {
         val vm = model(); val group = vm.grid(); vm.toggleElementLocked("b", wholeGroup = false)
         val before = vm.project(); vm.addMediaToGrid(listOf(incoming("new")), group); vm.openGrid(group)
-        assertEquals(before, vm.project()); assertNull(vm.state.value.gridEditor)
+        assertEquals(before, vm.project()); assertNull(vm.state.value.editingGroupId); assertNotNull(vm.state.value.notice)
     }
 
-    @Test fun `opening an existing grid leaves multi selection and member editing before a provisional swap`() {
-        val vm = model(); val group = vm.grid(); val before = vm.project()
-        vm.editGroup(group); vm.beginMultiSelection("a")
-        assertTrue(vm.state.value.multiSelect); assertEquals(group, vm.state.value.editingGroupId)
+    private fun ComposerEditorViewModel.gridOfThree(): String = grid().also { addMediaToGrid(listOf(incoming("c")), it) }
+    private fun ComposerEditorViewModel.members() = project().layouts.single().root.memberIds()
+
+    @Test fun `opening a grid leaves any selection and its long press never starts multi selection`() {
+        val vm = model(); val group = vm.grid(); vm.beginMultiSelection("a")
         vm.openGrid(group)
-        assertNotNull(vm.state.value.gridEditor)
-        assertFalse(vm.state.value.multiSelect); assertNull(vm.state.value.editingGroupId)
-        vm.swapGridDraftMembers("a", "b")
-        assertFalse(vm.state.value.multiSelect); assertNull(vm.state.value.editingGroupId)
+        assertEquals(group, vm.state.value.editingGroupId)
+        assertNull(vm.state.value.selectedElementId); assertFalse(vm.state.value.multiSelect)
+        assertNull(vm.state.value.gridEditor)
+        vm.beginGroupMemberMultiSelection("a")
+        assertFalse(vm.state.value.multiSelect); assertEquals("a", vm.state.value.selectedElementId)
+    }
+
+    @Test fun `editing a grid and editing a plain group take their own paths`() {
+        val vm = model(); val group = vm.grid()
+        vm.editGroup(group)
+        assertEquals(group, vm.state.value.editingGroupId); assertNull(vm.state.value.selectedElementId)
+        vm.finishEditingGroup()
+        assertNull(vm.state.value.editingGroupId); assertEquals(setOf("a", "b"), vm.state.value.selectedElementIds)
+    }
+
+    @Test fun `removing a cell closes the gap at once as one undo step and keeps the mode open`() {
+        val vm = model(); val group = vm.gridOfThree(); val before = vm.project()
+        val survivors = vm.members() - "a"
+        vm.openGrid(group); vm.removeGridMember("a")
+        assertEquals(survivors, vm.members())
+        assertTrue(vm.project().elements.none { it.id == "a" })
+        assertEquals(group, vm.state.value.editingGroupId)
+        vm.undo()
+        assertEquals(before.elements, vm.project().elements); assertEquals(before.layouts, vm.project().layouts)
+    }
+
+    @Test fun `a grid left with one element releases it in hand and undo brings the grid back`() {
+        val vm = model(); val group = vm.grid(); val before = vm.project()
+        vm.openGrid(group); vm.removeGridMember("a")
+        assertTrue(vm.project().layouts.isEmpty())
+        assertNull(vm.project().elements.first { it.id == "b" }.groupId)
+        assertNull(vm.state.value.editingGroupId)
+        assertEquals("b", vm.state.value.selectedElementId)
+        vm.undo()
+        assertEquals(before.elements, vm.project().elements); assertEquals(before.layouts, vm.project().layouts)
+    }
+
+    @Test fun `deleting the selected cell stays in the mode and the layers path reflows the same way`() {
+        val vm = model(); val group = vm.gridOfThree(); val before = vm.project()
+        val members = vm.members(); val added = (members - setOf("a", "b")).single()
+        vm.openGrid(group); vm.focusGroupMember("a"); vm.deleteSelected()
+        assertEquals(members - "a", vm.members())
+        assertEquals(group, vm.state.value.editingGroupId); assertNull(vm.state.value.selectedElementId)
+        vm.undo()
+        assertEquals(before.layouts, vm.project().layouts)
+
+        vm.deleteGroupMember(added)
+        assertEquals(listOf("a", "b"), vm.members())
+        vm.deleteGroupMember("b")
+        assertTrue(vm.project().layouts.isEmpty())
+        assertNull(vm.project().elements.first { it.id == "a" }.groupId)
+    }
+
+    @Test fun `a locked member stops a deletion that would move it`() {
+        val vm = model(); vm.gridOfThree()
+        vm.toggleElementLocked("b", wholeGroup = false); val before = vm.project()
+        vm.deleteGroupMember("a")
         assertEquals(before, vm.project())
-        vm.cancelGrid(); assertEquals(before, vm.project())
+        assertNotNull(vm.state.value.notice)
+    }
+
+    @Test fun `settings on the stage apply at once and a whole slider drag is one undo step`() {
+        val vm = model(); val group = vm.grid(); val before = vm.project(); vm.openGrid(group)
+        vm.beginGesture(stage = false)
+        vm.updateGridLayout(vm.project().layouts.single().copy(margin = .05f))
+        vm.updateGridLayout(vm.project().layouts.single().copy(margin = .1f))
+        vm.endGesture(stage = false)
+        assertEquals(.1f, vm.project().layouts.single().margin, .0001f)
+        assertNotEquals(before.elements, vm.project().elements)
+        vm.undo()
+        assertEquals(before.elements, vm.project().elements); assertEquals(before.layouts, vm.project().layouts)
+
+        vm.setGridKind(CompositionLayoutKind.COLUMN)
+        assertEquals(CompositionLayoutKind.COLUMN, vm.project().layouts.single().kind)
+        vm.setGridReference(CompositionArrangementReference.SELECTION)
+        vm.setGridReference(CompositionArrangementReference.PAGE)
+        assertEquals(NormalizedRect(0f, 0f, 1f, 1f), vm.project().layouts.single().frame.bounds)
+    }
+
+    @Test fun `a member cannot leave its cell while the grid is edited`() {
+        val vm = model(); val group = vm.grid(); vm.openGrid(group); vm.focusGroupMember("a"); val before = vm.project()
+        vm.moveSelected(.1f, .1f)
+        assertEquals(before, vm.project())
     }
 }

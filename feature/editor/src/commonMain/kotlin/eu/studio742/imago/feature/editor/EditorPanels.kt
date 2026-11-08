@@ -70,7 +70,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoNavBarSurface
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
@@ -107,17 +107,17 @@ fun HistoryPanel(
             Icon(
                 Icons.Outlined.History,
                 contentDescription = null,
-                tint = ImagoColors.TextSecondary,
+                tint = ImagoUi.colors.secondaryText,
                 modifier = Modifier.size(ImagoSizes.IconDefault),
             )
             Text(
                 text = stringResource(Res.string.editor_history),
                 style = MaterialTheme.typography.titleMedium,
-                color = ImagoColors.TextPrimary,
+                color = ImagoUi.colors.text,
                 modifier = Modifier.weight(1f).padding(start = ImagoSpacing.Sm),
             )
             TextButton(onClick = onClearAll, enabled = entries.size > 1) {
-                Text(stringResource(Res.string.editor_clear_all), color = ImagoColors.Danger)
+                Text(stringResource(Res.string.editor_clear_all), color = ImagoUi.colors.danger)
             }
         }
         // Other devices' versions stay at the top, apart from the undo path.
@@ -132,7 +132,7 @@ fun HistoryPanel(
                 Text(
                     stringResource(Res.string.editor_history_empty),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = ImagoColors.TextTertiary,
+                    color = ImagoUi.colors.tertiaryText,
                 )
             }
             return@Column
@@ -173,9 +173,9 @@ private fun HistoryRow(
     onClick: () -> Unit,
 ) {
     val contentColor = when {
-        isCurrent -> ImagoColors.TextPrimary
-        isUndone -> ImagoColors.TextDisabled
-        else -> ImagoColors.TextSecondary
+        isCurrent -> ImagoUi.colors.text
+        isUndone -> ImagoUi.colors.disabledText
+        else -> ImagoUi.colors.secondaryText
     }
     Row(
         modifier = Modifier
@@ -190,7 +190,7 @@ private fun HistoryRow(
                 .weight(1f)
                 .padding(vertical = 3.dp)
                 .clip(RoundedCornerShape(ImagoRadii.Medium))
-                .background(if (isCurrent) ImagoColors.Charcoal else Color.Transparent)
+                .background(if (isCurrent) ImagoUi.colors.choiceSurface else Color.Transparent)
                 .padding(horizontal = ImagoSpacing.Md, vertical = ImagoSpacing.Sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -211,7 +211,7 @@ private fun HistoryRow(
                 Text(
                     text = entry.detail.resolve(),
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (isUndone) ImagoColors.TextDisabled else ImagoColors.TextTertiary,
+                    color = if (isUndone) ImagoUi.colors.disabledText else ImagoUi.colors.tertiaryText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -227,7 +227,7 @@ private fun HistoryRow(
                 Text(
                     text = formatHistoryTime(entry.timestamp),
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (isUndone) ImagoColors.TextDisabled else ImagoColors.TextTertiary,
+                    color = if (isUndone) ImagoUi.colors.disabledText else ImagoUi.colors.tertiaryText,
                 )
             }
         }
@@ -242,25 +242,25 @@ private fun ConflictRow(version: eu.studio742.imago.core.model.RecipeConflictVer
             .fillMaxWidth()
             .padding(horizontal = ImagoSpacing.Lg, vertical = 3.dp)
             .clip(RoundedCornerShape(ImagoRadii.Medium))
-            .background(ImagoColors.Charcoal)
+            .background(ImagoUi.colors.choiceSurface)
             .clickable(role = Role.Button, onClick = onClick)
             .sizeIn(minHeight = ImagoSizes.TouchTarget)
             .padding(horizontal = ImagoSpacing.Md, vertical = ImagoSpacing.Sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Outlined.Devices, contentDescription = null, tint = ImagoColors.TextSecondary, modifier = Modifier.size(ImagoSizes.IconDefault))
+        Icon(Icons.Outlined.Devices, contentDescription = null, tint = ImagoUi.colors.secondaryText, modifier = Modifier.size(ImagoSizes.IconDefault))
         Column(Modifier.weight(1f).padding(start = ImagoSpacing.Md)) {
             Text(
                 stringResource(Res.string.editor_conflict_version, version.deviceName, formatHistoryTime(version.editedAt)),
                 style = MaterialTheme.typography.bodyLarge,
-                color = ImagoColors.TextPrimary,
+                color = ImagoUi.colors.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 stringResource(Res.string.editor_conflict_hint),
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.TextTertiary,
+                color = ImagoUi.colors.tertiaryText,
             )
         }
     }
@@ -270,10 +270,11 @@ private fun ConflictRow(version: eu.studio742.imago.core.model.RecipeConflictVer
 @Composable
 private fun TimelineMarker(isCurrent: Boolean, isUndone: Boolean, isFirst: Boolean, isLast: Boolean) {
     val color = when {
-        isCurrent -> ImagoColors.BrandWhite
-        isUndone -> ImagoColors.TextDisabled
-        else -> ImagoColors.TextTertiary
+        isCurrent -> ImagoUi.colors.text
+        isUndone -> ImagoUi.colors.disabledText
+        else -> ImagoUi.colors.tertiaryText
     }
+    val lineColor = ImagoUi.colors.border
     Canvas(
         Modifier
             .width(28.dp)
@@ -284,7 +285,7 @@ private fun TimelineMarker(isCurrent: Boolean, isUndone: Boolean, isFirst: Boole
         // The line does not go past the top of the first entry or the bottom of the last: it would stop in the void.
         if (!isLast) {
             drawLine(
-                color = ImagoColors.BorderVisible,
+                color = lineColor,
                 start = Offset(centerX, 0f),
                 end = Offset(centerX, centerY),
                 strokeWidth = 1.dp.toPx(),
@@ -292,7 +293,7 @@ private fun TimelineMarker(isCurrent: Boolean, isUndone: Boolean, isFirst: Boole
         }
         if (!isFirst) {
             drawLine(
-                color = ImagoColors.BorderVisible,
+                color = lineColor,
                 start = Offset(centerX, centerY),
                 end = Offset(centerX, size.height),
                 strokeWidth = 1.dp.toPx(),
@@ -375,13 +376,13 @@ fun SubToolHeader(
             Icon(
                 Icons.AutoMirrored.Outlined.ArrowBack,
                 contentDescription = stringResource(Res.string.editor_back_to_adjustments),
-                tint = ImagoColors.TextSecondary,
+                tint = ImagoUi.colors.secondaryText,
                 modifier = Modifier.size(ImagoSizes.IconDefault),
             )
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
-                color = ImagoColors.TextPrimary,
+                color = ImagoUi.colors.text,
                 modifier = Modifier.padding(start = ImagoSpacing.Sm),
             )
         }
@@ -437,16 +438,16 @@ private fun EditorToolButton(
     modifier: Modifier = Modifier,
 ) {
     val tint = when {
-        !enabled -> ImagoColors.TextDisabled
-        selected -> ImagoColors.TextPrimary
-        else -> ImagoColors.TextTertiary
+        !enabled -> ImagoUi.colors.disabledText
+        selected -> ImagoUi.colors.text
+        else -> ImagoUi.colors.tertiaryText
     }
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(ImagoRadii.Medium))
             // The filled capsule is what marks the active tool in the mockup — stronger than a
             // difference in opacity over an arbitrary photo.
-            .background(if (selected) ImagoColors.Graphite else Color.Transparent)
+            .background(if (selected) ImagoUi.colors.selectedSurface else Color.Transparent)
             .selectable(selected = selected, enabled = enabled, role = Role.Tab, onClick = onClick)
             // In a sliding row each button measures its own label: none is squeezed to fit beside the
             // others, and "History" no longer decides everyone's width.

@@ -32,10 +32,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.ImagoBrand
+import eu.studio742.imago.core.designsystem.ImagoBrandMark
 import eu.studio742.imago.core.sync.AccountLinkState
 import eu.studio742.imago.core.sync.RemoteDevice
 import java.time.OffsetDateTime
@@ -57,18 +58,18 @@ fun AccountSettingsCard(onOpenAccount: (signUp: Boolean) -> Unit, viewModel: Acc
         when {
             !viewModel.isAvailable -> Text(
                 stringResource(Res.string.account_unavailable_detail),
-                style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary,
+                style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText,
             )
             session == null -> {
                 // What syncs and what never leaves the device — said before the person creates an account.
-                Text(stringResource(Res.string.account_privacy_note), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
+                Text(stringResource(Res.string.account_privacy_note), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText)
                 Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
                     Button(onClick = { onOpenAccount(false) }) { Text(stringResource(Res.string.account_sign_in)) }
                     OutlinedButton(onClick = { onOpenAccount(true) }) { Text(stringResource(Res.string.account_create)) }
                 }
             }
             else -> {
-                Text(session?.email.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary,
+                Text(session?.email.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.text,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 TextButton(onClick = { onOpenAccount(false) }) { Text(stringResource(Res.string.account_manage)) }
             }
@@ -85,7 +86,7 @@ fun WelcomeAccountPrompt(onOpenAccount: (signUp: Boolean) -> Unit, viewModel: Ac
     val session by viewModel.session.collectAsStateWithLifecycle()
     if (!viewModel.isAvailable || session != null) return
     Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
-        Text(stringResource(Res.string.account_welcome_prompt), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
+        Text(stringResource(Res.string.account_welcome_prompt), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText)
         Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
             OutlinedButton(onClick = { onOpenAccount(true) }) { Text(stringResource(Res.string.account_create)) }
             TextButton(onClick = { onOpenAccount(false) }) { Text(stringResource(Res.string.account_sign_in)) }
@@ -102,18 +103,18 @@ fun AccountRoute(startWithSignUp: Boolean, onBack: () -> Unit, viewModel: Accoun
     val back = { if (!busy) onBack() }
     BackHandler(onBack = back)
     Scaffold(
-        containerColor = ImagoColors.Background,
+        containerColor = ImagoUi.colors.background,
         topBar = {
             Row(
-                Modifier.fillMaxWidth().background(ImagoColors.Background).statusBarsPadding()
+                Modifier.fillMaxWidth().background(ImagoUi.colors.background).statusBarsPadding()
                     .height(64.dp).padding(horizontal = ImagoSpacing.Sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = back, enabled = !busy) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(Res.string.account_back), tint = ImagoColors.TextPrimary)
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(Res.string.account_back), tint = ImagoUi.colors.text)
                 }
                 Spacer(Modifier.weight(1f))
-                Image(rememberVectorPainter(ImagoBrand.Wordmark), contentDescription = "IMAGO", modifier = Modifier.height(17.dp))
+                ImagoBrandMark(ImagoBrand.Wordmark, contentDescription = "IMAGO", modifier = Modifier.height(17.dp))
                 Spacer(Modifier.weight(1f))
                 Spacer(Modifier.width(48.dp))
             }
@@ -124,7 +125,7 @@ fun AccountRoute(startWithSignUp: Boolean, onBack: () -> Unit, viewModel: Accoun
                 Modifier.widthIn(max = 760.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(ImagoSpacing.Lg),
                 verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Lg),
             ) {
-                Text(stringResource(Res.string.account_title), style = MaterialTheme.typography.headlineLarge, color = ImagoColors.TextPrimary)
+                Text(stringResource(Res.string.account_title), style = MaterialTheme.typography.headlineLarge, color = ImagoUi.colors.text)
                 when {
                     !viewModel.isAvailable -> AccountCard {
                         Text(stringResource(Res.string.account_unavailable), style = MaterialTheme.typography.bodyMedium)
@@ -133,7 +134,7 @@ fun AccountRoute(startWithSignUp: Boolean, onBack: () -> Unit, viewModel: Accoun
                     else -> SignedIn(session?.email.orEmpty(), busy, viewModel)
                 }
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                message?.let { Text(it.resolve(), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary) }
+                message?.let { Text(it.resolve(), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText) }
             }
         }
     }
@@ -149,13 +150,13 @@ private fun SignedOut(startWithSignUp: Boolean, busy: Boolean, viewModel: Accoun
     var repeated by remember { mutableStateOf("") }
     val sentTo by viewModel.confirmationSentTo.collectAsStateWithLifecycle()
 
-    Text(stringResource(Res.string.account_privacy_note), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
+    Text(stringResource(Res.string.account_privacy_note), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText)
     sentTo?.let { address ->
         AccountCard {
             Text(stringResource(Res.string.account_confirm_email_title), style = MaterialTheme.typography.titleMedium)
             Text(
                 stringResource(Res.string.account_confirm_email_body, address),
-                style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary,
+                style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText,
             )
         }
     }
@@ -196,7 +197,7 @@ private fun SignedIn(email: String, busy: Boolean, viewModel: AccountViewModel) 
 
     AccountCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-            Icon(Icons.Outlined.AccountCircle, null, tint = ImagoColors.Ivory)
+            Icon(Icons.Outlined.AccountCircle, null, tint = ImagoUi.colors.emphasis)
             Text(email, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(
@@ -205,13 +206,13 @@ private fun SignedIn(email: String, busy: Boolean, viewModel: AccountViewModel) 
                 is AccountLinkState.Failed -> stringResource(Res.string.account_link_failed)
                 else -> stringResource(Res.string.account_link_pending)
             },
-            style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary,
+            style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText,
         )
         if (link is AccountLinkState.Linked) viewModel.syncStatus?.let { status -> SyncStatusRow(status, viewModel::syncNow) }
         (link as? AccountLinkState.Linked)?.withoutIdentity?.takeIf { it.isNotEmpty() }?.let { names ->
             Text(
                 stringResource(Res.string.account_libraries_without_identity, names.joinToString()),
-                style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary,
+                style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText,
             )
         }
     }
@@ -219,7 +220,7 @@ private fun SignedIn(email: String, busy: Boolean, viewModel: AccountViewModel) 
     AccountCard {
         Text(stringResource(Res.string.account_this_device), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(Res.string.account_device_name_hint),
-            style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+            style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
         OutlinedTextField(name, { name = it }, label = { Text(stringResource(Res.string.account_device_name_label)) }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())
         OutlinedButton(enabled = !busy && name.isNotBlank() && name.trim() != deviceName, onClick = { viewModel.renameDevice(name) }) {
             Text(stringResource(Res.string.account_save_name))
@@ -228,17 +229,17 @@ private fun SignedIn(email: String, busy: Boolean, viewModel: AccountViewModel) 
 
     AccountCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-            Icon(Icons.Outlined.Devices, null, tint = ImagoColors.Ivory)
+            Icon(Icons.Outlined.Devices, null, tint = ImagoUi.colors.emphasis)
             Text(stringResource(Res.string.account_devices), style = MaterialTheme.typography.titleMedium)
         }
         when (val state = devices) {
-            DevicesState.Loading -> Text(stringResource(Res.string.account_devices_loading), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+            DevicesState.Loading -> Text(stringResource(Res.string.account_devices_loading), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
             is DevicesState.Failed -> {
-                Text(state.message.resolve(), style = MaterialTheme.typography.bodySmall, color = ImagoColors.Error)
+                Text(state.message.resolve(), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.error)
                 TextButton(enabled = !busy, onClick = viewModel::retry) { Text(stringResource(Res.string.account_try_again)) }
             }
             is DevicesState.Loaded -> if (state.devices.isEmpty()) {
-                Text(stringResource(Res.string.account_devices_empty), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+                Text(stringResource(Res.string.account_devices_empty), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
                 TextButton(enabled = !busy, onClick = viewModel::retry) { Text(stringResource(Res.string.account_refresh)) }
             }
         }
@@ -248,10 +249,10 @@ private fun SignedIn(email: String, busy: Boolean, viewModel: AccountViewModel) 
                 Column(Modifier.weight(1f)) {
                     Text(device.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(if (current) stringResource(Res.string.account_this_device) else stringResource(Res.string.account_last_seen, formatSeen(device.lastSeenAt)),
-                        style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+                        style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
                 }
                 if (!current) TextButton(enabled = !busy, onClick = { removing = device }) {
-                    Text(stringResource(Res.string.account_remove), color = ImagoColors.Danger)
+                    Text(stringResource(Res.string.account_remove), color = ImagoUi.colors.danger)
                 }
             }
         }
@@ -263,11 +264,11 @@ private fun SignedIn(email: String, busy: Boolean, viewModel: AccountViewModel) 
         Text(stringResource(Res.string.account_your_data), style = MaterialTheme.typography.titleMedium)
         Text(
             stringResource(Res.string.account_your_data_body),
-            style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary,
+            style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(enabled = !busy, onClick = { viewModel.exportData(deliverExport) }) { Text(stringResource(Res.string.account_export_data)) }
-            TextButton(enabled = !busy, onClick = { deleting = true }) { Text(stringResource(Res.string.account_delete), color = ImagoColors.Danger) }
+            TextButton(enabled = !busy, onClick = { deleting = true }) { Text(stringResource(Res.string.account_delete), color = ImagoUi.colors.danger) }
         }
     }
 
@@ -291,7 +292,7 @@ private fun SignedIn(email: String, busy: Boolean, viewModel: AccountViewModel) 
             },
             confirmButton = {
                 TextButton(enabled = password.isNotEmpty(), onClick = { viewModel.deleteAccount(password); deleting = false }) {
-                    Text(stringResource(Res.string.account_delete_confirm), color = ImagoColors.Danger)
+                    Text(stringResource(Res.string.account_delete_confirm), color = ImagoUi.colors.danger)
                 }
             },
             dismissButton = { TextButton(onClick = { deleting = false }) { Text(stringResource(Res.string.account_cancel)) } },
@@ -303,7 +304,7 @@ private fun SignedIn(email: String, busy: Boolean, viewModel: AccountViewModel) 
             onDismissRequest = { removing = null },
             title = { Text(stringResource(Res.string.account_remove_device_question, device.name)) },
             text = { Text(stringResource(Res.string.account_remove_device_body)) },
-            confirmButton = { TextButton(onClick = { viewModel.removeDevice(device); removing = null }) { Text(stringResource(Res.string.account_remove), color = ImagoColors.Danger) } },
+            confirmButton = { TextButton(onClick = { viewModel.removeDevice(device); removing = null }) { Text(stringResource(Res.string.account_remove), color = ImagoUi.colors.danger) } },
             dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(Res.string.account_cancel)) } },
         )
     }
@@ -318,7 +319,7 @@ private fun SignedIn(email: String, busy: Boolean, viewModel: AccountViewModel) 
                 Column(horizontalAlignment = Alignment.End) {
                     TextButton(onClick = { viewModel.signOut(keepCopy = true); signingOut = false }) { Text(stringResource(Res.string.account_sign_out_keep)) }
                     TextButton(onClick = { viewModel.signOut(keepCopy = false); signingOut = false }) {
-                        Text(stringResource(Res.string.account_sign_out_remove), color = ImagoColors.Danger)
+                        Text(stringResource(Res.string.account_sign_out_remove), color = ImagoUi.colors.danger)
                     }
                     TextButton(onClick = { signingOut = false }) { Text(stringResource(Res.string.account_cancel)) }
                 }
@@ -351,7 +352,7 @@ private fun NewPasswordDialog(busy: Boolean, viewModel: AccountViewModel) {
 
 @Composable
 private fun AccountCard(content: @Composable ColumnScope.() -> Unit) {
-    Surface(color = ImagoColors.SurfaceElevated, shape = RoundedCornerShape(ImagoRadii.Medium), modifier = Modifier.fillMaxWidth()) {
+    Surface(color = ImagoUi.colors.elevated, shape = RoundedCornerShape(ImagoRadii.Medium), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(ImagoSpacing.Lg), verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Md), content = content)
     }
 }
@@ -376,7 +377,7 @@ private fun SyncStatusRow(statusFlow: kotlinx.coroutines.flow.StateFlow<eu.studi
         Text(
             syncStatusText(status),
             style = MaterialTheme.typography.bodySmall,
-            color = if (status.error != null) MaterialTheme.colorScheme.error else ImagoColors.TextSecondary,
+            color = if (status.error != null) MaterialTheme.colorScheme.error else ImagoUi.colors.secondaryText,
             modifier = Modifier.weight(1f),
         )
         TextButton(enabled = !status.running, onClick = onSyncNow) { Text(stringResource(Res.string.account_sync_now)) }

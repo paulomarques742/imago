@@ -34,7 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.state.ToggleableState
 import eu.studio742.imago.core.data.ConfigurationRepository
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
@@ -129,7 +129,7 @@ internal fun RecipePartsPicker(selected: Set<RecipePart>, onChange: (Set<RecipeP
             Text(
                 text = stringResource(Res.string.editor_parts_title),
                 style = MaterialTheme.typography.labelLarge,
-                color = ImagoColors.TextSecondary,
+                color = ImagoUi.colors.secondaryText,
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = { onChange(RecipePart.entries.toSet()) }) { Text(stringResource(Res.string.editor_parts_all)) }
@@ -175,7 +175,7 @@ private fun PartGroup(group: RecipePartGroup, selected: Set<RecipePart>, onChang
                 Text(
                     text = stringResource(Res.string.editor_parts_count, ticked, parts.size),
                     style = MaterialTheme.typography.bodySmall,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                 )
             }
         }

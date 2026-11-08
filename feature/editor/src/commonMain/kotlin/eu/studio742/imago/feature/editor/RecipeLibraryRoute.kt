@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import eu.studio742.imago.core.data.SavedRecipeRepository
 import eu.studio742.imago.core.model.RecipePart
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.i18n.appString
 import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.SavedRecipe
@@ -229,7 +229,7 @@ fun RecipeLibraryRoute(
                         viewModel.delete(recipe.id)
                         deleting = null
                     },
-                ) { Text(stringResource(Res.string.editor_delete), color = ImagoColors.Danger) }
+                ) { Text(stringResource(Res.string.editor_delete), color = ImagoUi.colors.danger) }
             },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(Res.string.editor_cancel)) } },
         )

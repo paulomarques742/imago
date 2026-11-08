@@ -36,7 +36,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.model.EditRecipe
@@ -64,7 +64,7 @@ internal fun ProfileRow(
             .fillMaxWidth()
             .padding(top = ImagoSpacing.Sm)
             .clip(RoundedCornerShape(ImagoRadii.Medium))
-            .background(ImagoColors.Surface)
+            .background(ImagoUi.colors.surface)
             .clickable(role = Role.Button) { browsing = true }
             .semantics { contentDescription = description }
             .padding(ImagoSpacing.Sm),
@@ -75,15 +75,15 @@ internal fun ProfileRow(
             Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(ImagoRadii.Small))
-                .background(ImagoColors.SurfaceElevated),
+                .background(ImagoUi.colors.elevated),
         ) {
             preview?.let { Image(bitmap = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
         }
         Column(Modifier.weight(1f)) {
-            Text(stringResource(Res.string.editor_profile), style = MaterialTheme.typography.labelMedium, color = ImagoColors.Gold)
-            Text(stringResource(current.labelRes), style = MaterialTheme.typography.titleSmall, color = ImagoColors.TextPrimary)
+            Text(stringResource(Res.string.editor_profile), style = MaterialTheme.typography.labelMedium, color = ImagoUi.colors.accent)
+            Text(stringResource(current.labelRes), style = MaterialTheme.typography.titleSmall, color = ImagoUi.colors.text)
         }
-        Icon(Icons.Outlined.GridView, contentDescription = null, tint = ImagoColors.TextSecondary)
+        Icon(Icons.Outlined.GridView, contentDescription = null, tint = ImagoUi.colors.secondaryText)
     }
     if (browsing) {
         ProfileBrowser(
@@ -156,15 +156,15 @@ private fun ProfileTile(
                 .fillMaxWidth()
                 .aspectRatio(0.78f)
                 .clip(RoundedCornerShape(ImagoRadii.Medium))
-                .background(ImagoColors.SurfaceElevated)
-                .then(if (selected) Modifier.border(2.dp, ImagoColors.Gold, RoundedCornerShape(ImagoRadii.Medium)) else Modifier),
+                .background(ImagoUi.colors.elevated)
+                .then(if (selected) Modifier.border(2.dp, ImagoUi.colors.accent, RoundedCornerShape(ImagoRadii.Medium)) else Modifier),
         ) {
             preview?.let { Image(bitmap = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
         }
         Text(
             text = stringResource(choice.labelRes),
             style = MaterialTheme.typography.labelLarge,
-            color = if (selected) ImagoColors.Gold else ImagoColors.TextPrimary,
+            color = if (selected) ImagoUi.colors.accent else ImagoUi.colors.text,
         )
     }
 }
@@ -189,16 +189,16 @@ internal fun DevelopmentUpgradeCard(
             .fillMaxWidth()
             .padding(top = ImagoSpacing.Sm)
             .clip(RoundedCornerShape(ImagoRadii.Medium))
-            .background(ImagoColors.Surface)
+            .background(ImagoUi.colors.surface)
             .padding(ImagoSpacing.Sm),
     ) {
-        Text(stringResource(Res.string.editor_development_card_title), style = MaterialTheme.typography.labelMedium, color = ImagoColors.Gold)
-        Text(stringResource(Res.string.editor_development_card_body), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+        Text(stringResource(Res.string.editor_development_card_title), style = MaterialTheme.typography.labelMedium, color = ImagoUi.colors.accent)
+        Text(stringResource(Res.string.editor_development_card_body), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             if (isWorking) {
-                CircularProgressIndicator(color = ImagoColors.Gold, modifier = Modifier.padding(ImagoSpacing.Sm).size(24.dp), strokeWidth = 2.dp)
+                CircularProgressIndicator(color = ImagoUi.colors.accent, modifier = Modifier.padding(ImagoSpacing.Sm).size(24.dp), strokeWidth = 2.dp)
             } else {
-                TextButton(onClick = onUpgrade) { Text(stringResource(Res.string.editor_development_card_action), color = ImagoColors.Gold) }
+                TextButton(onClick = onUpgrade) { Text(stringResource(Res.string.editor_development_card_action), color = ImagoUi.colors.accent) }
             }
         }
     }

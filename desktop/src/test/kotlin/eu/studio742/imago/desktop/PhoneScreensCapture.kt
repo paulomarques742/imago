@@ -54,7 +54,12 @@ import eu.studio742.imago.core.composition.NormalizedRect
 import eu.studio742.imago.core.data.DesktopDataGraph
 import eu.studio742.imago.core.data.LocalDesktopDataGraph
 import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoDarkPalette
+import eu.studio742.imago.core.designsystem.ImagoLightPalette
 import eu.studio742.imago.core.designsystem.ImagoTheme
+import eu.studio742.imago.core.designsystem.ImagoUi
+import eu.studio742.imago.core.designsystem.LocalAppearanceSettings
+import eu.studio742.imago.desktop.platform.DesktopAppearanceSettings
 import eu.studio742.imago.core.designsystem.i18n.AppSyncTexts
 import eu.studio742.imago.core.designsystem.i18n.LocalLanguageSettings
 import eu.studio742.imago.core.designsystem.i18n.LanguagePreference
@@ -167,12 +172,13 @@ class PhoneScreensCapture {
                     LocalAccountRepository provides account,
                     LocalSyncEngine provides sync,
                     LocalLanguageSettings provides languageSettings,
+                    LocalAppearanceSettings provides DesktopAppearanceSettings(profile!!.resolve("appearance")),
                 ) {
                     val captureLanguage by languageSettings.preference.collectAsState()
                     ProvideAppLanguage(captureLanguage, Locale.ENGLISH) {
-                        ImagoTheme {
+                        ImagoTheme(if (System.getProperty("imago.capture.theme") == "light") ImagoLightPalette else ImagoDarkPalette) {
                             val shell = shellViewModel()
-                            Surface(Modifier.fillMaxSize(), color = ImagoColors.Background) {
+                            Surface(Modifier.fillMaxSize(), color = ImagoUi.colors.background) {
                                 ImagoApp(shell, syncIndicator = null)
                             }
                         }
@@ -194,7 +200,7 @@ class PhoneScreensCapture {
                 onNodeWithText("Add Immich server").assertDoesNotExist()
                 shot("settings-00-collapsed")
                 onNodeWithText("Preferences").performClick()
-                onNodeWithText("System").performClick()
+                onAllNodesWithText("System")[1].performClick()
                 onNodeWithText("English").performClick()
                 settle(500)
                 org.junit.Assert.assertEquals(LanguagePreference.ENGLISH, languageSettings.preference.value)
@@ -818,6 +824,13 @@ class PhoneScreensCapture {
                     .performClick()
                 settle(4_000)
                 shot("12-composed")
+                // The bare stage, then the insertion card over the bar: both ends of the video's bar animation.
+                onAllNodes(isRoot())[0].performTouchInput { down(Offset(width * 0.3f, height * 0.086f)); up() }
+                settle(1_500)
+                shot("12a-clean")
+                onAllNodesWithText("Add")[0].performClick()
+                settle(1_500)
+                shot("12b-add")
                 tree("12-composed")
             }
         }

@@ -30,7 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
@@ -96,14 +96,14 @@ internal fun ImmichKeyPermissions(modifier: Modifier = Modifier) {
                 .padding(horizontal = ImagoSpacing.Xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Outlined.Key, null, tint = ImagoColors.TextSecondary, modifier = Modifier.size(18.dp))
+            Icon(Icons.Outlined.Key, null, tint = ImagoUi.colors.secondaryText, modifier = Modifier.size(18.dp))
             Text(
                 stringResource(Res.string.library_key_permissions_title),
                 style = MaterialTheme.typography.bodyMedium,
-                color = ImagoColors.TextPrimary,
+                color = ImagoUi.colors.text,
                 modifier = Modifier.weight(1f).padding(horizontal = ImagoSpacing.Sm),
             )
-            Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = ImagoColors.TextSecondary)
+            Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = ImagoUi.colors.secondaryText)
         }
         AnimatedVisibility(expanded) {
             Column(
@@ -113,7 +113,7 @@ internal fun ImmichKeyPermissions(modifier: Modifier = Modifier) {
                 Text(
                     stringResource(Res.string.library_key_permissions_where),
                     style = MaterialTheme.typography.bodySmall,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                 )
                 PermissionGroup(Res.string.library_key_permissions_required, ImmichKeyPermissionList.filterNot { it.optional })
                 PermissionGroup(
@@ -124,7 +124,7 @@ internal fun ImmichKeyPermissions(modifier: Modifier = Modifier) {
                 Text(
                     stringResource(Res.string.library_key_permissions_all),
                     style = MaterialTheme.typography.bodySmall,
-                    color = ImagoColors.TextTertiary,
+                    color = ImagoUi.colors.tertiaryText,
                 )
             }
         }
@@ -134,8 +134,8 @@ internal fun ImmichKeyPermissions(modifier: Modifier = Modifier) {
 @Composable
 private fun PermissionGroup(title: StringResource, permissions: List<ImmichKeyPermission>, note: StringResource? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs)) {
-        Text(stringResource(title), style = MaterialTheme.typography.labelLarge, color = ImagoColors.TextPrimary)
-        note?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextTertiary) }
+        Text(stringResource(title), style = MaterialTheme.typography.labelLarge, color = ImagoUi.colors.text)
+        note?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.tertiaryText) }
         permissions.forEach { permission ->
             Row {
                 // Fixed width so the explanations line up in a column; it fits the longest,
@@ -144,14 +144,14 @@ private fun PermissionGroup(title: StringResource, permissions: List<ImmichKeyPe
                     permission.id,
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
-                    color = ImagoColors.Gold,
+                    color = ImagoUi.colors.accent,
                     modifier = Modifier.width(112.dp),
                 )
                 Spacer(Modifier.width(ImagoSpacing.Sm))
                 Text(
                     stringResource(permission.purpose),
                     style = MaterialTheme.typography.bodySmall,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                     modifier = Modifier.weight(1f),
                 )
             }

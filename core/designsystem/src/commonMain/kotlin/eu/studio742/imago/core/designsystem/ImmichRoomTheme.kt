@@ -3,6 +3,7 @@ package eu.studio742.imago.core.designsystem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
@@ -155,15 +156,31 @@ private val ImagoColorScheme = darkColorScheme(
     scrim = ImagoColors.Scrim,
 )
 
+/** Roles Material only has in its own defaults, which in a light scheme would be its purple. */
+private val ImagoLightColorScheme = lightColorScheme(
+    secondaryContainer = ImagoLightPalette.selectedSurface,
+    onSecondaryContainer = ImagoLightPalette.text,
+    tertiary = ImagoLightPalette.accent,
+    onTertiary = ImagoLightPalette.onAccent,
+    tertiaryContainer = ImagoLightPalette.selectedSurface,
+    onTertiaryContainer = ImagoLightPalette.text,
+    // Its own value: Material picks a surface's content colour by matching it against these roles, and
+    // sharing one with `elevated` turned the text of every card red.
+    errorContainer = Color(0xFFF9DEDC),
+    onErrorContainer = Color(0xFF410E0B),
+    onError = ImagoLightPalette.onAccent,
+)
+
 @Composable
-fun ImagoTheme(palette: ImagoUiPalette = ImagoUiPalette(), content: @Composable () -> Unit) {
+fun ImagoTheme(palette: ImagoUiPalette = chosenPalette(), content: @Composable () -> Unit) {
+    SystemBarsFollow(palette)
     CompositionLocalProvider(
         LocalImagoUiPalette provides palette,
         LocalReducedMotion provides rememberSystemReducedMotion(),
         LocalImagoWindow provides currentImagoWindow(),
     ) {
         MaterialTheme(
-            colorScheme = ImagoColorScheme.copy(
+            colorScheme = (if (palette.isLight) ImagoLightColorScheme else ImagoColorScheme).copy(
                 background = palette.background, onBackground = palette.text,
                 surface = palette.surface, onSurface = palette.text,
                 surfaceVariant = palette.elevated, onSurfaceVariant = palette.secondaryText,
@@ -178,8 +195,9 @@ fun ImagoTheme(palette: ImagoUiPalette = ImagoUiPalette(), content: @Composable 
                 outlineVariant = palette.subtleBorder, error = palette.error, scrim = palette.scrim,
             ),
             typography = ImagoTypography,
-            content = content,
-        )
+        ) {
+            ThemeRevealHost(content)
+        }
     }
 }
 

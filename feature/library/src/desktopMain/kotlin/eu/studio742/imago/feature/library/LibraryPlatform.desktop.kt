@@ -35,7 +35,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import eu.studio742.imago.core.data.FolderLibraryRepository
 import eu.studio742.imago.core.data.LocalDesktopDataGraph
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.NativeDialogs
 
@@ -109,13 +109,13 @@ actual fun ColumnScope.DeviceLibraryAccess(viewModel: LibrarySettingsViewModel, 
     val paths by folders.folders.collectAsState()
     val scope = rememberCoroutineScope()
     Text(remember(revision, paths) { folders.accessSummary() }.toUiText().resolve(),
-        style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
+        style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText)
     for (path in paths) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
-            Text(path, style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextPrimary, maxLines = 1,
+            Text(path, style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.text, maxLines = 1,
                 overflow = TextOverflow.MiddleEllipsis, modifier = Modifier.weight(1f))
             IconButton(onClick = { scope.launch { folders.removeFolder(path) } }) {
-                Icon(Icons.Outlined.Close, stringResource(Res.string.library_remove_folder), tint = ImagoColors.TextSecondary)
+                Icon(Icons.Outlined.Close, stringResource(Res.string.library_remove_folder), tint = ImagoUi.colors.secondaryText)
             }
         }
     }

@@ -54,7 +54,7 @@ import eu.studio742.imago.core.composition.toArgb
 import eu.studio742.imago.core.composition.toColorHex
 import eu.studio742.imago.core.composition.toHsva
 import eu.studio742.imago.core.composition.withColorAlpha
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 
@@ -174,7 +174,7 @@ internal fun ColorPickerDialog(
                     Text(
                         stringResource(Res.string.composer_composition_colors),
                         style = MaterialTheme.typography.labelSmall,
-                        color = ImagoColors.TextSecondary,
+                        color = ImagoUi.colors.secondaryText,
                     )
                     SwatchRow(compositionColors) { swatch -> update(swatch.withColorAlpha(hsva.alpha).toHsva()) }
                 }
@@ -222,12 +222,13 @@ private fun ChannelSlider(
     brush: Brush,
     onFraction: (Float) -> Unit,
 ) {
+    val uiColors = ImagoUi.colors
     val shape = RoundedCornerShape(ImagoRadii.Small)
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = ImagoColors.TextSecondary,
+            color = ImagoUi.colors.secondaryText,
             modifier = Modifier.width(72.dp),
         )
         Box(
@@ -237,7 +238,7 @@ private fun ChannelSlider(
                 .clip(shape)
                 .checkerboard()
                 .background(brush)
-                .border(1.dp, ImagoColors.BorderVisible, shape)
+                .border(1.dp, ImagoUi.colors.border, shape)
                 .semantics { contentDescription = label }
                 .pointerInput(Unit) {
                     awaitEachGesture {
@@ -261,13 +262,13 @@ private fun ChannelSlider(
                     // Two rings, light inside and dark outside: a single one disappeared against the end
                     // of the track with the same lightness.
                     drawCircle(Color.White, radius, centre, style = Stroke(2.5f))
-                    drawCircle(Color.Black.copy(alpha = .55f), radius + 2f, centre, style = Stroke(1.5f))
+                    drawCircle(uiColors.imageShade.copy(alpha = .55f), radius + 2f, centre, style = Stroke(1.5f))
                 },
         )
         Text(
             "${(fraction * 100).toInt()}%",
             style = MaterialTheme.typography.labelSmall,
-            color = ImagoColors.TextTertiary,
+            color = ImagoUi.colors.tertiaryText,
             modifier = Modifier.padding(start = 6.dp).width(36.dp),
         )
     }
@@ -282,7 +283,7 @@ private fun ColorSwatch(argb: Long, corner: Dp, modifier: Modifier = Modifier, l
             .clip(shape)
             .checkerboard()
             .background(Color(argb))
-            .border(1.dp, ImagoColors.BorderStrong, shape)
+            .border(1.dp, ImagoUi.colors.strongBorder, shape)
             .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier),
     )
 }

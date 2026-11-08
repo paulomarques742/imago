@@ -25,6 +25,7 @@ internal fun ComposerEditorUiState.editableSelection(source: CompositionProject?
 
 internal fun ComposerEditorUiState.hasSelectionTools(): Boolean {
     if (textSession != null) return false
+    if (editedLayout() != null && selectedElementId == null) return true
     val members = selectionElements()
     return members.size > 1 || editingGroupId == null && members.any { it.groupId != null }
 }

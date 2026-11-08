@@ -53,15 +53,15 @@ fun GlassIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    tint: Color = ImagoColors.BrandWhite,
+    tint: Color = ImagoUi.colors.onImage,
     size: Dp = ImagoSizes.TouchTarget,
 ) {
     Box(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.42f))
-            .border(1.dp, ImagoColors.BorderSubtle, CircleShape)
+            .background(ImagoUi.colors.imageShade.copy(alpha = 0.42f))
+            .border(1.dp, ImagoUi.colors.subtleBorder, CircleShape)
             .clickable(
                 enabled = enabled,
                 role = Role.Button,
@@ -74,7 +74,7 @@ fun GlassIconButton(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = if (enabled) tint else ImagoColors.TextDisabled,
+            tint = if (enabled) tint else ImagoUi.colors.disabledText,
             modifier = Modifier.size(ImagoSizes.IconLarge),
         )
     }
@@ -175,13 +175,13 @@ fun <T> ImagoTabRow(
                 Text(
                     text = label(option),
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (isSelected) ImagoColors.TextPrimary else ImagoColors.TextTertiary,
+                    color = if (isSelected) ImagoUi.colors.text else ImagoUi.colors.tertiaryText,
                 )
                 Box(
                     Modifier
                         .padding(top = ImagoSpacing.Sm)
                         .size(width = 28.dp, height = 2.dp)
-                        .background(if (isSelected) ImagoColors.BrandWhite else Color.Transparent),
+                        .background(if (isSelected) ImagoUi.colors.selectedChoiceSurface else Color.Transparent),
                 )
             }
         }
@@ -196,7 +196,7 @@ fun SheetHandle(modifier: Modifier = Modifier) {
             Modifier
                 .size(width = 36.dp, height = 4.dp)
                 .clip(RoundedCornerShape(ImagoRadii.Pill))
-                .background(ImagoColors.BorderStrong),
+                .background(ImagoUi.colors.strongBorder),
         )
     }
 }

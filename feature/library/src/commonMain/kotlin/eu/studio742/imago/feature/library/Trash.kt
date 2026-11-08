@@ -65,7 +65,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import eu.studio742.imago.core.data.LibraryRepository
 import eu.studio742.imago.core.data.daysLeft
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
@@ -212,7 +212,7 @@ private fun TrashScreen(
     androidx.compose.ui.backhandler.BackHandler(enabled = viewing != null) { viewing = null }
     androidx.compose.ui.backhandler.BackHandler(enabled = !selecting && viewing == null, onBack = onBack)
     Scaffold(
-        containerColor = ImagoColors.Background,
+        containerColor = ImagoUi.colors.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             Row(
@@ -223,21 +223,21 @@ private fun TrashScreen(
                     Icon(
                         if (selecting) Icons.Outlined.Close else Icons.AutoMirrored.Outlined.ArrowBack,
                         contentDescription = stringResource(if (selecting) Res.string.library_clear_selection else Res.string.library_back_to_library),
-                        tint = ImagoColors.TextPrimary,
+                        tint = ImagoUi.colors.text,
                     )
                 }
                 Text(
                     if (selecting) pluralStringResource(Res.plurals.library_selected, state.selection.size, state.selection.size)
                     else stringResource(Res.string.library_trash),
                     style = MaterialTheme.typography.titleMedium,
-                    color = ImagoColors.TextPrimary,
+                    color = ImagoUi.colors.text,
                     modifier = Modifier.weight(1f).padding(start = ImagoSpacing.Xs),
                 )
                 if (!selecting && state.items.isNotEmpty()) {
                     var menu by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { menu = true }) {
-                            Icon(Icons.Outlined.MoreVert, stringResource(Res.string.library_trash_more), tint = ImagoColors.TextPrimary)
+                            Icon(Icons.Outlined.MoreVert, stringResource(Res.string.library_trash_more), tint = ImagoUi.colors.text)
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(
@@ -272,16 +272,16 @@ private fun TrashScreen(
                 Text(
                     it,
                     style = MaterialTheme.typography.bodySmall,
-                    color = ImagoColors.TextSecondary,
+                    color = ImagoUi.colors.secondaryText,
                     modifier = Modifier.padding(horizontal = ImagoSpacing.Lg, vertical = ImagoSpacing.Sm),
                 )
             }
             when {
                 state.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = ImagoColors.Ivory)
+                    CircularProgressIndicator(color = ImagoUi.colors.emphasis)
                 }
                 state.items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(Res.string.library_trash_empty_view), color = ImagoColors.TextSecondary)
+                    Text(stringResource(Res.string.library_trash_empty_view), color = ImagoUi.colors.secondaryText)
                 }
                 else -> LazyVerticalGrid(
                     columns = GridCells.Adaptive(112.dp),
@@ -342,7 +342,7 @@ private fun TrashScreen(
                 }) {
                     Text(
                         stringResource(if (confirmation is TrashConfirmation.Empty) Res.string.library_trash_empty_action else Res.string.library_trash_delete_forever),
-                        color = ImagoColors.Danger,
+                        color = ImagoUi.colors.danger,
                     )
                 }
             },
@@ -354,7 +354,7 @@ private fun TrashScreen(
 @Composable
 private fun TrashTile(item: TrashItem, selected: Boolean, modifier: Modifier) {
     val context = LocalPlatformContext.current
-    Box(modifier.aspectRatio(1f).clip(RoundedCornerShape(ImagoRadii.Small)).background(ImagoColors.SurfaceElevated)) {
+    Box(modifier.aspectRatio(1f).clip(RoundedCornerShape(ImagoRadii.Small)).background(ImagoUi.colors.elevated)) {
         AsyncImage(
             model = ImageRequest.Builder(context).data(item.asset.thumbnailUrl).libraryAuth(item.asset.apiKey).crossfade(true).build(),
             contentDescription = item.asset.fileName,
@@ -362,27 +362,27 @@ private fun TrashTile(item: TrashItem, selected: Boolean, modifier: Modifier) {
             modifier = Modifier.fillMaxSize(),
         )
         if (item.asset.isVideo) {
-            Icon(Icons.Filled.PlayArrow, null, tint = ImagoColors.BrandWhite, modifier = Modifier.align(Alignment.Center).size(ImagoSizes.IconDefault))
+            Icon(Icons.Filled.PlayArrow, null, tint = ImagoUi.colors.onImage, modifier = Modifier.align(Alignment.Center).size(ImagoSizes.IconDefault))
         }
         item.daysLeft?.let { days ->
             Text(
                 pluralStringResource(Res.plurals.library_trash_days_left, days, days),
                 style = MaterialTheme.typography.labelSmall,
-                color = ImagoColors.BrandWhite,
+                color = ImagoUi.colors.onImage,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(ImagoSpacing.Xs)
                     .clip(RoundedCornerShape(ImagoRadii.Pill))
-                    .background(Color.Black.copy(alpha = 0.55f))
+                    .background(ImagoUi.colors.imageShade.copy(alpha = 0.55f))
                     .padding(horizontal = ImagoSpacing.Sm, vertical = 2.dp),
             )
         }
         if (selected) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
+            Box(Modifier.fillMaxSize().background(ImagoUi.colors.imageShade.copy(alpha = 0.35f)))
             Icon(
                 Icons.Outlined.CheckCircle,
                 contentDescription = stringResource(Res.string.library_asset_selected, item.asset.fileName),
-                tint = ImagoColors.Ivory,
+                tint = ImagoUi.colors.emphasis,
                 modifier = Modifier.align(Alignment.TopStart).padding(ImagoSpacing.Xs).size(ImagoSizes.IconDefault),
             )
         }
@@ -392,21 +392,21 @@ private fun TrashTile(item: TrashItem, selected: Boolean, modifier: Modifier) {
 @Composable
 private fun TrashActions(working: Boolean, onRestore: () -> Unit, onDelete: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(ImagoColors.SurfaceElevated).navigationBarsPadding().height(ImagoSizes.TouchTarget + ImagoSpacing.Xl),
+        Modifier.fillMaxWidth().background(ImagoUi.colors.elevated).navigationBarsPadding().height(ImagoSizes.TouchTarget + ImagoSpacing.Xl),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (working) {
-            CircularProgressIndicator(color = ImagoColors.Ivory, modifier = Modifier.size(ImagoSizes.IconDefault))
+            CircularProgressIndicator(color = ImagoUi.colors.emphasis, modifier = Modifier.size(ImagoSizes.IconDefault))
             return@Row
         }
         TextButton(onClick = onRestore) {
-            Icon(Icons.Outlined.RestoreFromTrash, null, tint = ImagoColors.Ivory)
-            Text(stringResource(Res.string.library_trash_restore), color = ImagoColors.Ivory, modifier = Modifier.padding(start = ImagoSpacing.Sm))
+            Icon(Icons.Outlined.RestoreFromTrash, null, tint = ImagoUi.colors.emphasis)
+            Text(stringResource(Res.string.library_trash_restore), color = ImagoUi.colors.emphasis, modifier = Modifier.padding(start = ImagoSpacing.Sm))
         }
         TextButton(onClick = onDelete) {
-            Icon(Icons.Outlined.DeleteForever, null, tint = ImagoColors.Danger)
-            Text(stringResource(Res.string.library_trash_delete_forever), color = ImagoColors.Danger, modifier = Modifier.padding(start = ImagoSpacing.Sm))
+            Icon(Icons.Outlined.DeleteForever, null, tint = ImagoUi.colors.danger)
+            Text(stringResource(Res.string.library_trash_delete_forever), color = ImagoUi.colors.danger, modifier = Modifier.padding(start = ImagoSpacing.Sm))
         }
     }
 }
@@ -424,7 +424,7 @@ private fun TrashViewer(
     if (items.isEmpty()) return
     val context = LocalPlatformContext.current
     val pager = rememberPagerState(initialPage = start) { items.size }
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(ImagoUi.colors.workspace)) {
         HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
             val asset = items[page].asset
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -434,16 +434,16 @@ private fun TrashViewer(
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize(),
                 )
-                if (asset.isVideo) Icon(Icons.Filled.PlayArrow, null, tint = ImagoColors.BrandWhite, modifier = Modifier.size(ImagoSizes.TouchTarget))
+                if (asset.isVideo) Icon(Icons.Filled.PlayArrow, null, tint = ImagoUi.colors.onImage, modifier = Modifier.size(ImagoSizes.TouchTarget))
             }
         }
         val current = items.getOrNull(pager.currentPage) ?: return@Box
         Row(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(ImagoSpacing.Sm), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(Res.string.library_trash), tint = ImagoColors.BrandWhite)
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(Res.string.library_trash), tint = ImagoUi.colors.onImage)
             }
             current.daysLeft?.let { days ->
-                Text(pluralStringResource(Res.plurals.library_trash_days_left, days, days), color = ImagoColors.TextSecondary, textAlign = TextAlign.Start)
+                Text(pluralStringResource(Res.plurals.library_trash_days_left, days, days), color = ImagoUi.colors.secondaryText, textAlign = TextAlign.Start)
             }
         }
         Box(Modifier.align(Alignment.BottomCenter)) {

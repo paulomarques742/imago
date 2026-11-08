@@ -149,7 +149,7 @@ import coil3.request.ImageRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import eu.studio742.imago.core.designsystem.ImagoChipRow
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoNavBarSurface
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
@@ -158,6 +158,7 @@ import eu.studio742.imago.core.designsystem.ImagoWidthClass
 import eu.studio742.imago.core.designsystem.LocalImagoWindow
 import eu.studio742.imago.core.designsystem.PhotoOverlayIcon
 import eu.studio742.imago.core.designsystem.ImagoBrand
+import eu.studio742.imago.core.designsystem.ImagoBrandMark
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import eu.studio742.imago.core.data.CatalogSyncState
 import eu.studio742.imago.core.model.LibraryFilter
@@ -658,10 +659,10 @@ private fun LibraryScreen(
     }
     Scaffold(
         modifier = modifier,
-        containerColor = ImagoColors.Background,
+        containerColor = ImagoUi.colors.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            Column(Modifier.background(Color.Black.copy(alpha = 0.22f)).statusBarsPadding()) {
+            Column(Modifier.background(ImagoUi.colors.background.copy(alpha = 0.22f)).statusBarsPadding()) {
                 if (picker != null) {
                     PickerTopBar(
                         picker = picker,
@@ -1000,18 +1001,14 @@ private fun LibraryTopBar(
                 searchesContent = searchesContent,
             )
         } else {
-            Image(
-                painter = rememberVectorPainter(ImagoBrand.Wordmark),
-                contentDescription = "IMAGO",
-                modifier = Modifier.height(17.dp),
-            )
+            ImagoBrandMark(ImagoBrand.Wordmark, contentDescription = "IMAGO", modifier = Modifier.height(17.dp))
             eu.studio742.imago.core.designsystem.SyncIndicator(Modifier.padding(start = ImagoSpacing.Sm))
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onOpenSearch) {
                 Icon(
                     Icons.Outlined.Search,
                     contentDescription = stringResource(Res.string.library_search),
-                    tint = ImagoColors.TextPrimary,
+                    tint = ImagoUi.colors.text,
                 )
             }
             // Next to the magnifier, and not inside the menu: searching by name and jumping to a date
@@ -1021,13 +1018,13 @@ private fun LibraryTopBar(
                 Icon(
                     Icons.Outlined.CalendarMonth,
                     contentDescription = stringResource(Res.string.library_jump_to_date),
-                    tint = ImagoColors.TextPrimary,
+                    tint = ImagoUi.colors.text,
                 )
             }
             // Beside the calendar: the other way of reaching a photo, by where instead of when.
             onOpenMap?.let {
                 IconButton(onClick = it) {
-                    Icon(Icons.Outlined.Map, contentDescription = stringResource(Res.string.library_map), tint = ImagoColors.TextPrimary)
+                    Icon(Icons.Outlined.Map, contentDescription = stringResource(Res.string.library_map), tint = ImagoUi.colors.text)
                 }
             }
             LibrarySourceButton()
@@ -1036,7 +1033,7 @@ private fun LibraryTopBar(
                     Icon(
                         Icons.Outlined.MoreHoriz,
                         contentDescription = stringResource(Res.string.library_more_options),
-                        tint = ImagoColors.TextPrimary,
+                        tint = ImagoUi.colors.text,
                     )
                 }
                 DropdownMenu(expanded = moreExpanded, onDismissRequest = { moreExpanded = false }) {
@@ -1092,13 +1089,13 @@ private fun SelectionTopBar(count: Int, onClear: () -> Unit) {
             Icon(
                 Icons.Outlined.Close,
                 contentDescription = stringResource(Res.string.library_end_selection),
-                tint = ImagoColors.TextPrimary,
+                tint = ImagoUi.colors.text,
             )
         }
         Text(
             text = pluralStringResource(Res.plurals.library_selected, count, count),
             style = MaterialTheme.typography.titleMedium,
-            color = ImagoColors.TextPrimary,
+            color = ImagoUi.colors.text,
             modifier = Modifier.padding(start = ImagoSpacing.Xs),
         )
     }
@@ -1138,7 +1135,7 @@ private fun RowScope.LibrarySearchField(
                         else -> Res.string.library_file_name
                     },
                 ),
-                color = ImagoColors.TextTertiary,
+                color = ImagoUi.colors.tertiaryText,
             )
         },
         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
@@ -1160,13 +1157,13 @@ private fun RowScope.LibrarySearchField(
             unfocusedContainerColor = Color.Transparent,
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent,
-            focusedTextColor = ImagoColors.TextPrimary,
-            unfocusedTextColor = ImagoColors.TextPrimary,
-            cursorColor = ImagoColors.Ivory,
-            focusedLeadingIconColor = ImagoColors.TextSecondary,
-            unfocusedLeadingIconColor = ImagoColors.TextSecondary,
-            focusedTrailingIconColor = ImagoColors.TextSecondary,
-            unfocusedTrailingIconColor = ImagoColors.TextSecondary,
+            focusedTextColor = ImagoUi.colors.text,
+            unfocusedTextColor = ImagoUi.colors.text,
+            cursorColor = ImagoUi.colors.emphasis,
+            focusedLeadingIconColor = ImagoUi.colors.secondaryText,
+            unfocusedLeadingIconColor = ImagoUi.colors.secondaryText,
+            focusedTrailingIconColor = ImagoUi.colors.secondaryText,
+            unfocusedTrailingIconColor = ImagoUi.colors.secondaryText,
         ),
         modifier = Modifier.weight(1f).focusRequester(focusRequester),
     )
@@ -1211,7 +1208,7 @@ private fun PickerTopBar(
             Icon(
                 Icons.AutoMirrored.Outlined.ArrowBack,
                 contentDescription = if (inAlbum) stringResource(Res.string.library_back_to_albums) else stringResource(Res.string.library_cancel),
-                tint = ImagoColors.TextPrimary,
+                tint = ImagoUi.colors.text,
             )
         }
         if (isSearching) {
@@ -1230,7 +1227,7 @@ private fun PickerTopBar(
             Text(
                 text = album?.name ?: picker.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = ImagoColors.TextPrimary,
+                color = ImagoUi.colors.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1242,7 +1239,7 @@ private fun PickerTopBar(
                 Text(
                     text = it,
                     style = MaterialTheme.typography.labelSmall,
-                    color = ImagoColors.TextTertiary,
+                    color = ImagoUi.colors.tertiaryText,
                 )
             }
         }
@@ -1251,18 +1248,18 @@ private fun PickerTopBar(
                 Icon(
                     Icons.Outlined.Close,
                     contentDescription = stringResource(Res.string.library_clear_selection),
-                    tint = ImagoColors.TextPrimary,
+                    tint = ImagoUi.colors.text,
                 )
             }
         }
         IconButton(onClick = onOpenSearch) {
-            Icon(Icons.Outlined.Search, contentDescription = stringResource(Res.string.library_search), tint = ImagoColors.TextPrimary)
+            Icon(Icons.Outlined.Search, contentDescription = stringResource(Res.string.library_search), tint = ImagoUi.colors.text)
         }
         IconButton(onClick = onOpenDatePicker) {
             Icon(
                 Icons.Outlined.CalendarMonth,
                 contentDescription = stringResource(Res.string.library_jump_to_date),
-                tint = ImagoColors.TextPrimary,
+                tint = ImagoUi.colors.text,
             )
         }
         LibrarySourceButton()
@@ -1278,7 +1275,7 @@ private fun PickerTopBar(
                 Icon(
                     if (onAlbums) Icons.Filled.Photo else Icons.Outlined.Collections,
                     contentDescription = if (onAlbums) stringResource(Res.string.library_show_timeline) else stringResource(Res.string.library_show_albums),
-                    tint = if (onAlbums) ImagoColors.Ivory else ImagoColors.TextPrimary,
+                    tint = if (onAlbums) ImagoUi.colors.emphasis else ImagoUi.colors.text,
                 )
             }
         }
@@ -1303,7 +1300,7 @@ private fun PickerConfirmBar(label: String, count: Int, onConfirm: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val enabled = count > 0
-            val tint = if (enabled) ImagoColors.Ivory else ImagoColors.TextDisabled
+            val tint = if (enabled) ImagoUi.colors.emphasis else ImagoUi.colors.disabledText
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(ImagoRadii.Pill))
@@ -1352,7 +1349,7 @@ private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit, editing: Album
                         else -> Res.string.library_back_to_albums
                     },
                 ),
-                tint = ImagoColors.TextPrimary,
+                tint = ImagoUi.colors.text,
             )
         }
         Column(Modifier.weight(1f).padding(start = ImagoSpacing.Xs)) {
@@ -1366,7 +1363,7 @@ private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit, editing: Album
                         },
                     ),
                 style = MaterialTheme.typography.titleMedium,
-                color = ImagoColors.TextPrimary,
+                color = ImagoUi.colors.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1374,19 +1371,19 @@ private fun AlbumTopBar(album: AlbumUiModel?, onBack: () -> Unit, editing: Album
                 Text(
                     text = pluralStringResource(Res.plurals.library_items, it.assetCount.toInt(), it.assetCount),
                     style = MaterialTheme.typography.labelSmall,
-                    color = ImagoColors.TextTertiary,
+                    color = ImagoUi.colors.tertiaryText,
                 )
             }
         }
         if (album != null && editing != null && album.canEditContent) {
             IconButton(onClick = { editing.onAddPhotos(album) }) {
-                Icon(Icons.Outlined.AddPhotoAlternate, stringResource(Res.string.library_album_add_photos), tint = ImagoColors.TextPrimary)
+                Icon(Icons.Outlined.AddPhotoAlternate, stringResource(Res.string.library_album_add_photos), tint = ImagoUi.colors.text)
             }
         }
         if (album != null && editing != null && album.isOwned) {
             Box {
                 IconButton(onClick = { menu = true }) {
-                    Icon(Icons.Outlined.MoreVert, stringResource(Res.string.library_album_more), tint = ImagoColors.TextPrimary)
+                    Icon(Icons.Outlined.MoreVert, stringResource(Res.string.library_album_more), tint = ImagoUi.colors.text)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(
@@ -1427,7 +1424,7 @@ private fun SelectedMonthChip(month: String, onClear: () -> Unit) {
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(ImagoRadii.Pill))
-                .background(ImagoColors.Charcoal)
+                .background(ImagoUi.colors.choiceSurface)
                 .clickable(onClick = onClear)
                 .padding(start = ImagoSpacing.Lg, end = ImagoSpacing.Md, top = ImagoSpacing.Sm, bottom = ImagoSpacing.Sm),
             verticalAlignment = Alignment.CenterVertically,
@@ -1435,12 +1432,12 @@ private fun SelectedMonthChip(month: String, onClear: () -> Unit) {
             Text(
                 text = formatMonth(month),
                 style = MaterialTheme.typography.titleSmall,
-                color = ImagoColors.TextSecondary,
+                color = ImagoUi.colors.secondaryText,
             )
             Icon(
                 Icons.Outlined.Close,
                 contentDescription = stringResource(Res.string.library_clear_date_filter),
-                tint = ImagoColors.TextTertiary,
+                tint = ImagoUi.colors.tertiaryText,
                 modifier = Modifier.padding(start = ImagoSpacing.Xs).size(ImagoSizes.IconSmall),
             )
         }
@@ -1635,7 +1632,7 @@ private fun AppendError(message: String?, onRetry: () -> Unit) = Column(
     Text(
         text = message ?: stringResource(Res.string.library_load_more_failed),
         style = MaterialTheme.typography.bodySmall,
-        color = ImagoColors.TextSecondary,
+        color = ImagoUi.colors.secondaryText,
         textAlign = TextAlign.Center,
     )
     TextButton(onClick = onRetry) { Text(stringResource(Res.string.library_try_again)) }
@@ -1662,11 +1659,11 @@ private fun AlbumBrowser(
             state.isLoadingNavigation && state.albums.isEmpty() -> LoadingState()
             state.navigationError != null && state.albums.isEmpty() -> ErrorState(state.navigationError.resolve(), onRetry)
             state.albums.isEmpty() && onNewAlbum == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(stringResource(Res.string.library_no_albums), color = ImagoColors.TextSecondary)
+                Text(stringResource(Res.string.library_no_albums), color = ImagoUi.colors.secondaryText)
             }
             state.query.isNotBlank() && shown.isEmpty() ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(Res.string.library_no_album_match, state.query.trim()), color = ImagoColors.TextSecondary)
+                    Text(stringResource(Res.string.library_no_album_match, state.query.trim()), color = ImagoUi.colors.secondaryText)
                 }
             else -> LazyVerticalGrid(
                 columns = GridCells.Adaptive(160.dp),
@@ -1720,10 +1717,10 @@ private fun PeopleBrowser(state: LibraryUiState, onOpenPerson: (PersonUiModel) -
             state.isLoadingPeople && state.people.isEmpty() -> LoadingState()
             state.peopleError != null && state.people.isEmpty() -> ErrorState(state.peopleError.resolve(), onRetry)
             state.people.isEmpty() -> Box(Modifier.fillMaxSize().padding(ImagoSpacing.Xxxl), contentAlignment = Alignment.Center) {
-                Text(stringResource(Res.string.library_people_none), color = ImagoColors.TextSecondary)
+                Text(stringResource(Res.string.library_people_none), color = ImagoUi.colors.secondaryText)
             }
             shown.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(stringResource(Res.string.library_no_person_match, state.query.trim()), color = ImagoColors.TextSecondary)
+                Text(stringResource(Res.string.library_no_person_match, state.query.trim()), color = ImagoUi.colors.secondaryText)
             }
             else -> LazyVerticalGrid(
                 columns = GridCells.Adaptive(96.dp),
@@ -1752,13 +1749,13 @@ private fun PersonTile(person: PersonUiModel, onClick: () -> Unit) {
             model = ImageRequest.Builder(context).data(person.thumbnailUrl).libraryAuth(person.apiKey).crossfade(true).build(),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(CircleShape).background(ImagoColors.SurfaceElevated),
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(CircleShape).background(ImagoUi.colors.elevated),
         )
         // A face without a name has no line under it, as in Immich: the tile still says it to a screen reader.
         Text(
             person.name,
             style = MaterialTheme.typography.bodySmall,
-            color = ImagoColors.TextPrimary,
+            color = ImagoUi.colors.text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = ImagoSpacing.Xs),
@@ -1780,10 +1777,10 @@ private fun NewAlbumTile(onClick: () -> Unit) {
                 .fillMaxWidth()
                 .aspectRatio(1.18f)
                 .clip(RoundedCornerShape(ImagoRadii.Small))
-                .border(1.dp, ImagoColors.BorderSubtle, RoundedCornerShape(ImagoRadii.Small)),
+                .border(1.dp, ImagoUi.colors.subtleBorder, RoundedCornerShape(ImagoRadii.Small)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Outlined.Add, contentDescription = null, tint = ImagoColors.Ivory, modifier = Modifier.size(ImagoSizes.IconDefault))
+            Icon(Icons.Outlined.Add, contentDescription = null, tint = ImagoUi.colors.emphasis, modifier = Modifier.size(ImagoSizes.IconDefault))
         }
         Text(
             text = stringResource(Res.string.library_album_new),
@@ -1808,10 +1805,10 @@ private fun ShowAllAlbumsTile(hiddenCount: Int, onClick: () -> Unit) {
                 .fillMaxWidth()
                 .aspectRatio(1.18f)
                 .clip(RoundedCornerShape(ImagoRadii.Small))
-                .border(1.dp, ImagoColors.BorderSubtle, RoundedCornerShape(ImagoRadii.Small)),
+                .border(1.dp, ImagoUi.colors.subtleBorder, RoundedCornerShape(ImagoRadii.Small)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Outlined.Add, contentDescription = null, tint = ImagoColors.Ivory, modifier = Modifier.size(ImagoSizes.IconDefault))
+            Icon(Icons.Outlined.Add, contentDescription = null, tint = ImagoUi.colors.emphasis, modifier = Modifier.size(ImagoSizes.IconDefault))
         }
         Text(
             text = stringResource(Res.string.library_all_albums_show_all),
@@ -1822,7 +1819,7 @@ private fun ShowAllAlbumsTile(hiddenCount: Int, onClick: () -> Unit) {
         Text(
             text = pluralStringResource(Res.plurals.library_albums_hidden, hiddenCount, hiddenCount),
             style = MaterialTheme.typography.bodySmall,
-            color = ImagoColors.TextTertiary,
+            color = ImagoUi.colors.tertiaryText,
             modifier = Modifier.padding(top = 2.dp),
         )
     }
@@ -1860,7 +1857,7 @@ private fun AlbumTile(
                 .fillMaxWidth()
                 .aspectRatio(1.18f)
                 .clip(RoundedCornerShape(ImagoRadii.Small))
-                .background(ImagoColors.SurfaceElevated),
+                .background(ImagoUi.colors.elevated),
             contentAlignment = Alignment.Center,
         ) {
             if (album.thumbnailUrl != null) {
@@ -1875,7 +1872,7 @@ private fun AlbumTile(
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
-                Icon(Icons.Outlined.Collections, contentDescription = null, tint = ImagoColors.TextTertiary)
+                Icon(Icons.Outlined.Collections, contentDescription = null, tint = ImagoUi.colors.tertiaryText)
             }
             if (album.shared) {
                 PhotoOverlayIcon(
@@ -1885,7 +1882,7 @@ private fun AlbumTile(
                     Icon(
                         Icons.Outlined.Group,
                         contentDescription = stringResource(Res.string.library_shared_album),
-                        tint = ImagoColors.BrandWhite,
+                        tint = ImagoUi.colors.onImage,
                     )
                 }
             }
@@ -1900,7 +1897,7 @@ private fun AlbumTile(
         Text(
             text = pluralStringResource(Res.plurals.library_items, album.assetCount.toInt(), album.assetCount),
             style = MaterialTheme.typography.bodySmall,
-            color = ImagoColors.TextTertiary,
+            color = ImagoUi.colors.tertiaryText,
             modifier = Modifier.padding(top = 2.dp),
         )
     }
@@ -1946,16 +1943,16 @@ private fun AssetTile(
             .fillMaxWidth()
             .aspectRatio(aspectRatio)
             .clip(RoundedCornerShape(TILE_RADIUS))
-            .background(ImagoColors.SurfaceElevated)
+            .background(ImagoUi.colors.elevated)
             // With the detail beside it, the grid stops being just a way in and becomes a list with
             // an active row: without this mark there is no telling which thumbnail is the one open in
             // the pane. The pointer highlight is weaker on purpose — it says "this is where you
             // click", not "this is the one that is open".
             .then(
                 when {
-                    checked -> Modifier.border(3.dp, ImagoColors.Ivory, RoundedCornerShape(TILE_RADIUS))
-                    selected -> Modifier.border(2.dp, ImagoColors.Ivory, RoundedCornerShape(TILE_RADIUS))
-                    hovered -> Modifier.border(1.dp, ImagoColors.BorderStrong, RoundedCornerShape(TILE_RADIUS))
+                    checked -> Modifier.border(3.dp, ImagoUi.colors.emphasis, RoundedCornerShape(TILE_RADIUS))
+                    selected -> Modifier.border(2.dp, ImagoUi.colors.emphasis, RoundedCornerShape(TILE_RADIUS))
+                    hovered -> Modifier.border(1.dp, ImagoUi.colors.strongBorder, RoundedCornerShape(TILE_RADIUS))
                     else -> Modifier
                 }
             )
@@ -2023,7 +2020,7 @@ private fun AssetTile(
         // The chosen one darkens: the frame alone gets lost against a light photo, and the veil does
         // the same job as the disc behind the check mark.
         if (checked) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.38f)))
+            Box(Modifier.fillMaxSize().background(ImagoUi.colors.imageShade.copy(alpha = 0.38f)))
         }
         if (asset.isVideo || asset.stackCount != null || asset.isRaw || asset.motionUrl != null) {
             Row(
@@ -2042,14 +2039,14 @@ private fun AssetTile(
                 size = ImagoSizes.IconSmall,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(ImagoSpacing.Sm),
             ) {
-                Icon(Icons.Outlined.CloudQueue, contentDescription = stringResource(Res.string.library_on_server), tint = ImagoColors.BrandWhite)
+                Icon(Icons.Outlined.CloudQueue, contentDescription = stringResource(Res.string.library_on_server), tint = ImagoUi.colors.onImage)
             }
         }
         if (showsSelection) {
             Icon(
                 imageVector = if (checked) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
                 contentDescription = null,
-                tint = if (checked) ImagoColors.Ivory else ImagoColors.BrandWhite,
+                tint = if (checked) ImagoUi.colors.emphasis else ImagoUi.colors.onImage,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(ImagoSpacing.Sm)
@@ -2081,7 +2078,7 @@ private fun AssetTile(
                 Icon(
                     imageVector = if (asset.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = null,
-                    tint = ImagoColors.BrandWhite,
+                    tint = ImagoUi.colors.onImage,
                     // The shadow does the same job as PhotoOverlayIcon's dark disc without covering the
                     // photo: the icon appears on every tile, not only on favourites.
                     modifier = Modifier.size(ImagoSizes.IconLarge).shadow(elevation = 4.dp, shape = CircleShape),
@@ -2097,8 +2094,8 @@ private fun AssetTile(
                     .padding(ImagoSpacing.Md)
                     .size(EDIT_DOT_SIZE)
                     .clip(CircleShape)
-                    .background(ImagoColors.Gold)
-                    .border(1.dp, Color.Black.copy(alpha = 0.35f), CircleShape)
+                    .background(ImagoUi.colors.accent)
+                    .border(1.dp, ImagoUi.colors.imageShade.copy(alpha = 0.35f), CircleShape)
                     .semantics {
                         contentDescription = editDescription
                     },
@@ -2114,7 +2111,7 @@ private fun PlaceholderTile() {
             .fillMaxWidth()
             .aspectRatio(1f)
             .clip(RoundedCornerShape(TILE_RADIUS))
-            .background(ImagoColors.SurfaceElevated),
+            .background(ImagoUi.colors.elevated),
     )
 }
 
@@ -2134,7 +2131,7 @@ private fun CatalogSyncBar(state: CatalogSyncState, label: String? = null) {
         Text(
             text = label ?: if (state.total == 0) stringResource(Res.string.library_refreshing) else stringResource(Res.string.library_syncing_timeline, state.done, state.total),
             style = MaterialTheme.typography.labelSmall,
-            color = ImagoColors.TextTertiary,
+            color = ImagoUi.colors.tertiaryText,
         )
         val barModifier = Modifier
             .fillMaxWidth()
@@ -2142,12 +2139,12 @@ private fun CatalogSyncBar(state: CatalogSyncState, label: String? = null) {
             .height(2.dp)
         // Without a count there is no fraction to show: the bar moves instead of sitting empty.
         if (state.total == 0) {
-            LinearProgressIndicator(color = ImagoColors.Ivory, trackColor = ImagoColors.BorderSubtle, modifier = barModifier)
+            LinearProgressIndicator(color = ImagoUi.colors.emphasis, trackColor = ImagoUi.colors.subtleBorder, modifier = barModifier)
         } else {
             LinearProgressIndicator(
                 progress = { state.done.toFloat() / state.total },
-                color = ImagoColors.Ivory,
-                trackColor = ImagoColors.BorderSubtle,
+                color = ImagoUi.colors.emphasis,
+                trackColor = ImagoUi.colors.subtleBorder,
                 modifier = barModifier,
             )
         }
@@ -2165,10 +2162,10 @@ private fun RawBadge(modifier: Modifier = Modifier) {
     Text(
         text = stringResource(Res.string.library_raw),
         style = MaterialTheme.typography.labelSmall,
-        color = ImagoColors.BrandWhite,
+        color = ImagoUi.colors.onImage,
         modifier = modifier
             .clip(RoundedCornerShape(ImagoRadii.Small))
-            .background(Color.Black.copy(alpha = 0.55f))
+            .background(ImagoUi.colors.imageShade.copy(alpha = 0.55f))
             .padding(horizontal = ImagoSpacing.Xs, vertical = 2.dp)
             .semantics { contentDescription = description },
     )
@@ -2180,7 +2177,7 @@ private fun StackBadge(count: Int, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(ImagoRadii.Small))
-            .background(Color.Black.copy(alpha = 0.55f))
+            .background(ImagoUi.colors.imageShade.copy(alpha = 0.55f))
             .padding(horizontal = ImagoSpacing.Xs, vertical = 2.dp)
             .semantics(mergeDescendants = true) { contentDescription = description },
         verticalAlignment = Alignment.CenterVertically,
@@ -2188,13 +2185,13 @@ private fun StackBadge(count: Int, modifier: Modifier = Modifier) {
         Icon(
             Icons.Outlined.Layers,
             contentDescription = null,
-            tint = ImagoColors.BrandWhite,
+            tint = ImagoUi.colors.onImage,
             modifier = Modifier.size(ImagoSizes.IconSmall),
         )
         Text(
             text = count.toString(),
             style = MaterialTheme.typography.labelSmall,
-            color = ImagoColors.BrandWhite,
+            color = ImagoUi.colors.onImage,
             modifier = Modifier.padding(start = 2.dp),
         )
     }
@@ -2206,10 +2203,10 @@ private fun MotionBadge(modifier: Modifier = Modifier) {
     Icon(
         Icons.Outlined.MotionPhotosOn,
         contentDescription = null,
-        tint = ImagoColors.BrandWhite,
+        tint = ImagoUi.colors.onImage,
         modifier = modifier
             .clip(RoundedCornerShape(ImagoRadii.Small))
-            .background(Color.Black.copy(alpha = 0.55f))
+            .background(ImagoUi.colors.imageShade.copy(alpha = 0.55f))
             .padding(horizontal = ImagoSpacing.Xs, vertical = 2.dp)
             .size(ImagoSizes.IconSmall),
     )
@@ -2226,21 +2223,21 @@ private fun VideoBadge(durationMs: Long?, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(ImagoRadii.Small))
-            .background(Color.Black.copy(alpha = 0.55f))
+            .background(ImagoUi.colors.imageShade.copy(alpha = 0.55f))
             .padding(horizontal = ImagoSpacing.Xs, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             Icons.Filled.PlayArrow,
             contentDescription = null,
-            tint = ImagoColors.BrandWhite,
+            tint = ImagoUi.colors.onImage,
             modifier = Modifier.size(ImagoSizes.IconSmall),
         )
         formatDuration(durationMs)?.let {
             Text(
                 text = it,
                 style = MaterialTheme.typography.labelSmall,
-                color = ImagoColors.BrandWhite,
+                color = ImagoUi.colors.onImage,
                 modifier = Modifier.padding(start = 2.dp),
             )
         }
@@ -2279,7 +2276,7 @@ private fun LoadingState() {
                 Modifier
                     .aspectRatio(ratios[index % ratios.size])
                     .clip(RoundedCornerShape(TILE_RADIUS))
-                    .background(ImagoColors.SurfaceElevated),
+                    .background(ImagoUi.colors.elevated),
             )
         }
     }
@@ -2295,14 +2292,14 @@ private fun BrowserWithRefreshError(error: UiText?, hasContent: Boolean, onRetry
 
 @Composable
 private fun LoadErrorBanner(message: UiText, onRetry: () -> Unit) = Row(
-    modifier = Modifier.fillMaxWidth().background(ImagoColors.SurfaceElevated)
+    modifier = Modifier.fillMaxWidth().background(ImagoUi.colors.elevated)
         .semantics { liveRegion = LiveRegionMode.Polite }
         .padding(horizontal = ImagoSpacing.Md, vertical = ImagoSpacing.Sm),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
 ) {
-    Icon(Icons.Outlined.BrokenImage, contentDescription = null, tint = ImagoColors.TextSecondary)
-    Text(message.resolve(), modifier = Modifier.weight(1f), color = ImagoColors.TextPrimary, style = MaterialTheme.typography.bodySmall)
+    Icon(Icons.Outlined.BrokenImage, contentDescription = null, tint = ImagoUi.colors.secondaryText)
+    Text(message.resolve(), modifier = Modifier.weight(1f), color = ImagoUi.colors.text, style = MaterialTheme.typography.bodySmall)
     TextButton(onClick = onRetry) { Text(stringResource(Res.string.library_retry)) }
 }
 
@@ -2312,10 +2309,10 @@ private fun ErrorState(message: String?, onRetry: () -> Unit) = Column(
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.Center,
 ) {
-    Icon(Icons.Outlined.BrokenImage, contentDescription = null, tint = ImagoColors.TextTertiary)
+    Icon(Icons.Outlined.BrokenImage, contentDescription = null, tint = ImagoUi.colors.tertiaryText)
     Text(
         message ?: stringResource(Res.string.library_load_failed),
-        color = ImagoColors.TextSecondary,
+        color = ImagoUi.colors.secondaryText,
         modifier = Modifier.padding(vertical = ImagoSpacing.Md),
     )
     TextButton(onClick = onRetry) { Text(stringResource(Res.string.library_retry)) }
@@ -2334,7 +2331,7 @@ private fun EmptyState(filter: LibraryFilter, query: String) = Box(
             filter == LibraryFilter.RECENT -> stringResource(Res.string.library_no_recent)
             else -> stringResource(Res.string.library_empty_view)
         },
-        color = ImagoColors.TextSecondary,
+        color = ImagoUi.colors.secondaryText,
         textAlign = TextAlign.Center,
     )
 }

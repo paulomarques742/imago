@@ -32,7 +32,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.designsystem.i18n.resolve
@@ -95,11 +95,11 @@ fun ConnectionAdvanced(
         }
         if (!open) return@Column
         // New and tried on few setups so far: said where the options are, not only in the release notes.
-        Text(stringResource(Res.string.connection_advanced_testing), style = MaterialTheme.typography.bodySmall, color = ImagoColors.Gold)
-        Text(stringResource(Res.string.connection_advanced_hint), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+        Text(stringResource(Res.string.connection_advanced_testing), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.accent)
+        Text(stringResource(Res.string.connection_advanced_hint), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
             Text(stringResource(Res.string.connection_headers), style = MaterialTheme.typography.titleSmall,
-                color = ImagoColors.TextPrimary, modifier = Modifier.weight(1f))
+                color = ImagoUi.colors.text, modifier = Modifier.weight(1f))
             IconButton(onClick = { reveal = !reveal }) {
                 Icon(if (reveal) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                     stringResource(if (reveal) Res.string.connection_hide_values else Res.string.connection_show_values))
@@ -150,8 +150,8 @@ private fun ClientCertificateSection(
         if (bytes != null) { picked = bytes; password = ""; error = null }
     }
     Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
-        Text(stringResource(Res.string.connection_certificate), style = MaterialTheme.typography.titleSmall, color = ImagoColors.TextPrimary)
-        Text(stringResource(Res.string.connection_certificate_hint), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+        Text(stringResource(Res.string.connection_certificate), style = MaterialTheme.typography.titleSmall, color = ImagoUi.colors.text)
+        Text(stringResource(Res.string.connection_certificate_hint), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
         val info = certificate?.let { remember(it) { support.describe(it) } }
         val file = picked
         when {
@@ -159,12 +159,12 @@ private fun ClientCertificateSection(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
                     Column(Modifier.weight(1f)) {
                         if (info != null) {
-                            Text(stringResource(Res.string.connection_certificate_for, info.subject, info.issuer), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
+                            Text(stringResource(Res.string.connection_certificate_for, info.subject, info.issuer), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.text)
                             val until = validUntil(info)
-                            Text(stringResource(Res.string.connection_certificate_valid_until, until), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
-                            if (info.expired) Text(stringResource(Res.string.connection_certificate_expired_on, until), style = MaterialTheme.typography.bodySmall, color = ImagoColors.Error)
-                            else if (info.expiresSoon()) Text(stringResource(Res.string.connection_certificate_days_left, info.daysLeft()), style = MaterialTheme.typography.bodySmall, color = ImagoColors.Error)
-                        } else Text(stringResource(Res.string.connection_certificate_failed), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.Error)
+                            Text(stringResource(Res.string.connection_certificate_valid_until, until), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
+                            if (info.expired) Text(stringResource(Res.string.connection_certificate_expired_on, until), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.error)
+                            else if (info.expiresSoon()) Text(stringResource(Res.string.connection_certificate_days_left, info.daysLeft()), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.error)
+                        } else Text(stringResource(Res.string.connection_certificate_failed), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.error)
                     }
                     IconButton(enabled = enabled, onClick = { onCertificateChange(null) }) {
                         Icon(Icons.Outlined.Close, stringResource(Res.string.connection_certificate_remove))
@@ -185,7 +185,7 @@ private fun ClientCertificateSection(
             }
             else -> OutlinedButton(enabled = enabled, onClick = pick) { Text(stringResource(Res.string.connection_certificate_import)) }
         }
-        error?.let { Text(it.resolve(), style = MaterialTheme.typography.bodySmall, color = ImagoColors.Error) }
+        error?.let { Text(it.resolve(), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.error) }
     }
 }
 

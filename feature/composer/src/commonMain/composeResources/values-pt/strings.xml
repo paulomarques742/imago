@@ -6,6 +6,9 @@
     <string name="composer_grid_choose_multiple">Selecciona pelo menos dois elementos para criar uma grelha.</string>
     <string name="composer_grid_swap_hint">Toca sem soltar num elemento e arrasta-o sobre outro para os trocar.</string>
     <string name="composer_grid_swap_with">Trocar com %1$s</string>
+    <string name="composer_grid_stage_hint">Toque num elemento para o editar. Toque sem soltar e arraste-o para outro para os trocar, ou para o lixo para o remover.</string>
+    <string name="composer_grid_remove_element">Remover da grelha</string>
+    <string name="composer_grid_locked_notice">Desbloqueie os elementos da grelha para a editar.</string>
     <string name="composer_share_title">Partilhar composição</string>
     <string name="composer_export_failed">A exportação falhou.</string>
     <string name="composer_project_missing">O projeto já não existe.</string>

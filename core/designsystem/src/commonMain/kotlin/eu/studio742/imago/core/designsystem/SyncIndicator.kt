@@ -52,7 +52,7 @@ fun SyncIndicator(modifier: Modifier = Modifier) {
     Text(
         text = syncIndicatorLabel(current).resolve(),
         style = MaterialTheme.typography.labelSmall,
-        color = if (current.failed && !current.offline) ImagoColors.Danger else ImagoColors.TextTertiary,
+        color = if (current.failed && !current.offline) ImagoUi.colors.danger else ImagoUi.colors.tertiaryText,
         maxLines = 1,
         modifier = modifier
             .clip(RoundedCornerShape(ImagoRadii.Medium))

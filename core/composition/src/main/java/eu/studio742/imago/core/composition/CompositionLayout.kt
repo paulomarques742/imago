@@ -50,6 +50,47 @@ fun LayoutNode.swapMembers(first: String, second: String): LayoutNode {
     return swap(this)
 }
 
+/** Null when nothing is left. A split left with one child collapses into that child. */
+fun LayoutNode.withoutMembers(ids: Set<String>): LayoutNode? = when (this) {
+    is LayoutNode.Cell -> takeUnless { elementId in ids }
+    is LayoutNode.Split -> {
+        val kept = children.mapIndexedNotNull { index, child ->
+            child.withoutMembers(ids)?.let { it to weights.getOrElse(index) { 1f } }
+        }
+        when (kept.size) {
+            0 -> null
+            1 -> kept.single().first
+            else -> copy(children = kept.map { it.first }, weights = kept.map { it.second })
+        }
+    }
+}
+
+/**
+ * Neighbours absorb the removed cells instead of the tree being rebuilt, so rows that lost nothing
+ * and hand-tuned proportions stay where they were. A single cell left is not a grid any more:
+ * [reconcileLayouts] releases that element.
+ */
+fun CompositionLayout.withoutMembers(ids: Set<String>): CompositionLayout? {
+    val next = root.withoutMembers(ids) ?: return null
+    val count = next.memberIds().size
+    val split = next as? LayoutNode.Split
+    val stacked = split?.takeIf { it.axis == LayoutAxis.VERTICAL }
+    val lines = stacked?.children?.size ?: 1
+    val widest = stacked?.children?.maxOf { it.memberIds().size } ?: count
+    val featureGone = split?.id == "small"
+    return copy(
+        root = next,
+        kind = when {
+            featureGone && kind == CompositionLayoutKind.FEATURE_LEFT -> CompositionLayoutKind.COLUMN
+            featureGone && kind == CompositionLayoutKind.FEATURE_TOP -> CompositionLayoutKind.ROW
+            else -> kind
+        },
+        columns = if (kind == CompositionLayoutKind.GRID) widest else columns.coerceIn(1, count),
+        rows = if (kind == CompositionLayoutKind.GRID) rows.coerceAtMost(lines) else rows.coerceAtMost(count),
+        content = content - ids,
+    )
+}
+
 fun layoutTree(ids: List<String>, kind: CompositionLayoutKind, columns: Int = 2, rows: Int = 0): LayoutNode {
     require(ids.size >= 2 && ids.distinct().size == ids.size)
     fun split(name: String, axis: LayoutAxis, nodes: List<LayoutNode>, weights: List<Float>? = null): LayoutNode =
@@ -229,8 +270,33 @@ fun CompositionLayout.crossesBoundary(boundary: Int, pageAspect: Float): Boolean
     return bounds.x < boundary && bounds.right > boundary
 }
 
+/**
+ * Every deletion path ends up here, so a grid closes the gap however its member went away.
+ * A grid needs two cells: the last member is released as an ordinary element, placed in the cell it got.
+ */
+private fun CompositionProject.closeRemovedCells(): CompositionProject {
+    val byId = elements.associateBy { it.id }
+    var placed = elements
+    val next = layouts.mapNotNull { layout ->
+        val ids = layout.root.memberIds()
+        val missing = ids.filterTo(mutableSetOf()) { it !in byId }
+        if (missing.isEmpty()) return@mapNotNull layout
+        // A survivor that left the group means the grid was ungrouped: it is not closing a gap.
+        if (ids.any { it !in missing && byId.getValue(it).groupId != layout.groupId }) return@mapNotNull layout
+        val reduced = layout.withoutMembers(missing) ?: return@mapNotNull null
+        placed = reduced.applyTo(placed, format.aspectRatio)
+        val single = (reduced.root as? LayoutNode.Cell)?.elementId ?: return@mapNotNull reduced
+        placed = placed.map { if (it.id == single) it.withGroupId(null) else it }
+        null
+    }
+    return if (next == layouts) this else copy(elements = placed, layouts = next)
+}
+
 /** Follow collective transforms; member content edits must not move the layout's other cells. */
-fun CompositionProject.reconcileLayouts(previous: CompositionProject): CompositionProject {
+fun CompositionProject.reconcileLayouts(previous: CompositionProject): CompositionProject =
+    closeRemovedCells().followCollectiveTransforms(previous)
+
+private fun CompositionProject.followCollectiveTransforms(previous: CompositionProject): CompositionProject {
     val byId = elements.associateBy { it.id }; val oldById = previous.elements.associateBy { it.id }
     val next = layouts.mapNotNull { layout ->
         val ids = layout.root.memberIds()

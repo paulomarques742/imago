@@ -18,7 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.i18n.UiText
 import eu.studio742.imago.core.designsystem.i18n.resolve
@@ -96,14 +96,14 @@ fun PickForOtherAppRoute(
         )
         progress?.let { (done, total) ->
             Box(
-                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)),
+                Modifier.fillMaxSize().background(ImagoUi.colors.imageShade.copy(alpha = 0.6f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = ImagoColors.Ivory)
+                    CircularProgressIndicator(color = ImagoUi.colors.emphasis)
                     Text(
                         pluralStringResource(Res.plurals.library_selection_preparing, total, (done + 1).coerceAtMost(total), total),
-                        color = ImagoColors.TextSecondary,
+                        color = ImagoUi.colors.secondaryText,
                         modifier = Modifier.padding(top = ImagoSpacing.Md),
                     )
                 }

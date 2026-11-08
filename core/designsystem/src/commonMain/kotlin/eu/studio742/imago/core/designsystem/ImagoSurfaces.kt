@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
  * Blurs what is behind this surface.
  *
  * On Android it is `RenderEffect`, which requires Android 12, guaranteed by `minSdk` 31; on desktop
- * it is Skia's blur filter. [ImagoColors.Glass] stays opaque by taste, not by necessity.
+ * it is Skia's blur filter. [ImagoUi.colors.glass] stays opaque by taste, not by necessity.
  */
 fun Modifier.imagoGlassBlur(radius: Dp = 20.dp): Modifier = graphicsLayer {
     val blur = radius.toPx()
@@ -47,7 +47,7 @@ fun PhotoOverlayIcon(
     Box(
         modifier = modifier
             .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.38f))
+            .background(ImagoUi.colors.imageShade.copy(alpha = 0.38f))
             .padding(ImagoSpacing.Xs)
             .size(size),
         contentAlignment = Alignment.Center,
@@ -58,7 +58,7 @@ fun PhotoOverlayIcon(
 /**
  * The navigation or tool bar against the work area.
  *
- * The tone is [ImagoColors.NavBar] and the hairline on top closes the separation where the
+ * The tone is [ImagoUi.colors.navigation] and the hairline on top closes the separation where the
  * difference in tone alone still hesitates.
  *
  * The system bar inset is applied here, and only to the content: the background runs under it,
@@ -69,8 +69,8 @@ fun ImagoNavBarSurface(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier.fillMaxWidth().background(ImagoColors.NavBar)) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(ImagoColors.BorderSubtle))
+    Column(modifier.fillMaxWidth().background(ImagoUi.colors.navigation)) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(ImagoUi.colors.subtleBorder))
         Column(Modifier.navigationBarsPadding(), content = content)
     }
 }

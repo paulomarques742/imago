@@ -73,14 +73,14 @@ class ComposerGridInteractionUiTest {
         beginMultiSelection("a"); toggleElementInSelection("b"); setArrangementReference(CompositionArrangementReference.PAGE)
         beginGrid(); confirmGrid(); return state.value.project!!.layouts.single().groupId
     }
-    private var gridLabel = ""; private var addLabel = ""; private var cancelLabel = ""; private var gridAddLabel = ""
+    private var gridLabel = ""; private var addLabel = ""; private var gridAddLabel = ""; private var adjustLabel = ""
     private var pickerTarget: MediaPickerTarget? = null
     private var picked: ((List<ComposerMedia>) -> Unit)? = null
     private var dismiss: (() -> Unit)? = null
     @Composable private fun screen(vm: ComposerEditorViewModel, width: Int = 420, height: Int = 800) {
         gridLabel = stringResource(Res.string.composer_grid); addLabel = stringResource(Res.string.composer_add_elements)
-        cancelLabel = stringResource(Res.string.composer_cancel)
         gridAddLabel = stringResource(Res.string.composer_grid_add_elements)
+        adjustLabel = stringResource(Res.string.composer_adjust)
         ImagoTheme {
             CompositionLocalProvider(LocalImagoWindow provides ImagoWindow(ImagoBreakpoints.classify(width.dp), width.dp, height.dp),
                 LocalHapticFeedback provides feedback, LocalComposerMediaPicker provides { target, onDismiss, onPicked ->
@@ -100,6 +100,10 @@ class ComposerGridInteractionUiTest {
         }
     }
     private fun incoming(id: String) = ComposerMedia(id, "hash-$id", "$id.png", width = 240, height = 160)
+    private fun ComposeUiTest.stage() = onNodeWithTag("composer_stage")
+    private fun ComposeUiTest.onStage(tag: String): Offset = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.center -
+        stage().fetchSemanticsNode().boundsInRoot.topLeft
+    private fun ComposerEditorViewModel.members() = state.value.project!!.layouts.single().root.memberIds()
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
     @After fun tearDown() = Dispatchers.resetMain()
 
@@ -120,101 +124,112 @@ class ComposerGridInteractionUiTest {
         vm.undo(); assertEquals(before.elements, vm.state.value.project!!.elements)
     }
 
-    @Test(timeout = 30_000) fun `double tap on an unselected grid opens a full screen stage without the modal or group selection`() = runComposeUiTest {
-        val vm = model(); vm.grid(); vm.clearSelection()
+    @Test(timeout = 30_000) fun `double tap on an unselected grid edits it on the normal stage without a modal`() = runComposeUiTest {
+        val vm = model(); val group = vm.grid(); vm.clearSelection()
         setContent { screen(vm) }
         onNodeWithTag("composer_element_a").performTouchInput { doubleClick() }
-        onNodeWithTag("composer-grid-editor").assertIsDisplayed()
         onNodeWithTag("composer-grid-dialog").assertDoesNotExist()
-        onNodeWithTag("composer-multiselection-hint").assertDoesNotExist()
-        assertEquals(onNodeWithTag("grid-interaction-review").fetchSemanticsNode().boundsInRoot,
-            onNodeWithTag("composer-grid-editor").fetchSemanticsNode().boundsInRoot)
-        assertTrue(onNodeWithTag("grid-preview").fetchSemanticsNode().boundsInRoot.height > 550f)
+        onNodeWithTag("composer-multiselection-hint").assertIsDisplayed()
+        onNodeWithTag("composer-grid-tools").assertIsDisplayed()
+        assertEquals(group, vm.state.value.editingGroupId)
+        assertNull(vm.state.value.gridEditor); assertNull(vm.state.value.selectedElementId)
         assertFalse(vm.state.value.multiSelect)
+        onNodeWithTag("composer-finish-group").performClick()
         assertNull(vm.state.value.editingGroupId)
-        assertNotNull(vm.state.value.gridEditor)
+        assertEquals(setOf("a", "b"), vm.state.value.selectedElementIds)
     }
 
-    @Test(timeout = 30_000) fun `holding and dragging between preview cells swaps their photos with haptic feedback and cancel restores them`() = runComposeUiTest {
+    @Test(timeout = 30_000) fun `a tap selects the cell with its tools and another tap returns to the grid tools`() = runComposeUiTest {
+        val vm = model(); val group = vm.grid(); vm.openGrid(group); val before = vm.state.value.project
+        setContent { screen(vm) }
+        val cell = onStage("grid-cell-a")
+        stage().performTouchInput { click(cell) }
+        assertEquals("a", vm.state.value.selectedElementId)
+        onNodeWithTag("grid-selected-cell").assertExists()
+        onNodeWithTag("composer-grid-tools").assertDoesNotExist()
+        Thread.sleep(600) // The double tap window is measured on the wall clock.
+        stage().performTouchInput { click(cell) }
+        assertNull(vm.state.value.selectedElementId)
+        assertEquals(group, vm.state.value.editingGroupId)
+        onNodeWithTag("composer-grid-tools").assertIsDisplayed()
+        assertEquals(before, vm.state.value.project)
+    }
+
+    @Test(timeout = 30_000) fun `a tap outside the grid leaves the mode`() = runComposeUiTest {
+        val vm = model(); val group = vm.grid(); vm.openGrid(group)
+        setContent { screen(vm) }
+        val above = onNodeWithTag("composer_page_0").fetchSemanticsNode().boundsInRoot.topCenter -
+            stage().fetchSemanticsNode().boundsInRoot.topLeft - Offset(0f, 12f)
+        stage().performTouchInput { click(above) }
+        assertNull(vm.state.value.editingGroupId)
+    }
+
+    @Test(timeout = 30_000) fun `holding and dragging between cells swaps at once with haptic feedback and never pans the stage`() = runComposeUiTest {
         val vm = model(); val group = vm.grid(); val before = vm.state.value.project!!; vm.openGrid(group)
         setContent { screen(vm) }
-        val preview = onNodeWithTag("grid-preview").fetchSemanticsNode().boundsInRoot
-        val from = onNodeWithTag("grid-cell-a").fetchSemanticsNode().boundsInRoot.center - preview.topLeft
-        val to = onNodeWithTag("grid-cell-b").fetchSemanticsNode().boundsInRoot.center - preview.topLeft
-        onNodeWithTag("grid-preview").performTouchInput { down(from); advanceEventTime(650); moveTo((from + to) / 2f) }
-        onNodeWithTag("grid-swap-feedback").assertIsDisplayed()
-        onNodeWithTag("composer-multiselection-hint").assertDoesNotExist()
+        val from = onStage("grid-cell-a"); val to = onStage("grid-cell-b")
+        val page = onNodeWithTag("composer_page_0").fetchSemanticsNode().boundsInRoot
+        stage().performTouchInput { down(from); advanceEventTime(650); moveTo((from + to) / 2f) }
+        onNodeWithTag("grid-swap-feedback").assertExists()
         assertFalse(vm.state.value.multiSelect)
-        assertNull(vm.state.value.editingGroupId)
-        capture(onNodeWithTag("composer-grid-editor"), "grid-photo-swap-drag.png")
-        onNodeWithTag("grid-preview").performTouchInput { moveTo(to); up() }
+        capture(onNodeWithTag("grid-interaction-review"), "grid-photo-swap-drag.png")
+        stage().performTouchInput { moveTo(to); up() }
         assertTrue(haptics.contains(HapticFeedbackType.LongPress))
-        assertEquals(before.layouts.single().root.memberIds().reversed(), vm.state.value.gridEditor!!.layout.root.memberIds())
-        assertEquals(before, vm.state.value.project)
-        onNodeWithText(cancelLabel).performClick(); assertEquals(before, vm.state.value.project)
-    }
-
-    @Test(timeout = 30_000) fun `grid editor adds chosen media provisionally and picker cancellation retains the draft`() = runComposeUiTest {
-        val vm = model(); val group = vm.grid(); val before = vm.state.value.project!!; vm.openGrid(group)
-        setContent { screen(vm) }
-        onNodeWithTag("grid-add-elements").performClick()
-        onNodeWithTag("sample-media-picker").assertIsDisplayed()
-        assertEquals(MediaPickerTarget.Grid(group, draft = true), pickerTarget)
-        runOnIdle { dismiss!!.invoke() }; onNodeWithTag("composer-grid-editor").assertIsDisplayed()
-        onNodeWithTag("grid-add-elements").performClick()
-        runOnIdle { picked!!.invoke(listOf(incoming("c"))) }
-        onNodeWithTag("composer-grid-editor").assertIsDisplayed()
-        assertEquals(3, vm.state.value.gridEditor!!.layout.root.memberIds().size)
-        assertEquals(before, vm.state.value.project)
-        onNodeWithTag("grid-confirm").performClick()
-        assertEquals(3, vm.state.value.project!!.elements.size)
+        assertEquals(before.layouts.single().root.memberIds().reversed(), vm.members())
+        assertEquals(group, vm.state.value.editingGroupId)
+        assertEquals(page, onNodeWithTag("composer_page_0").fetchSemanticsNode().boundsInRoot)
         vm.undo(); assertEquals(before.elements, vm.state.value.project!!.elements)
     }
 
-    @Test(timeout = 30_000) fun `cancelling a held drag or dropping outside all cells keeps the draft unchanged`() = runComposeUiTest {
-        val vm = model(); val group = vm.grid(); vm.openGrid(group); val before = vm.state.value.gridEditor
+    @Test(timeout = 30_000) fun `grid tools add chosen media at once and picker cancellation changes nothing`() = runComposeUiTest {
+        val vm = model(); val group = vm.grid(); val before = vm.state.value.project!!; vm.openGrid(group)
         setContent { screen(vm) }
-        val preview = onNodeWithTag("grid-preview").fetchSemanticsNode().boundsInRoot
-        val from = onNodeWithTag("grid-cell-a").fetchSemanticsNode().boundsInRoot.center - preview.topLeft
-        onNodeWithTag("grid-preview").performTouchInput { down(from); advanceEventTime(650); moveTo(from + Offset(20f, 0f)); cancel() }
-        assertEquals(before, vm.state.value.gridEditor)
-        onNodeWithTag("grid-preview").performTouchInput { down(from); advanceEventTime(650); moveTo(Offset(-10f, -10f)); up() }
-        assertEquals(before, vm.state.value.gridEditor)
+        onNodeWithText(gridAddLabel).performClick()
+        onNodeWithTag("sample-media-picker").assertIsDisplayed()
+        assertEquals(MediaPickerTarget.Grid(group), pickerTarget)
+        runOnIdle { dismiss!!.invoke() }; assertEquals(before, vm.state.value.project)
+        onNodeWithText(gridAddLabel).performClick()
+        runOnIdle { picked!!.invoke(listOf(incoming("c"))) }
+        assertEquals(3, vm.members().size)
+        assertEquals(group, vm.state.value.editingGroupId)
+        vm.undo(); assertEquals(before.elements, vm.state.value.project!!.elements)
+    }
+
+    @Test(timeout = 30_000) fun `cancelling a held drag or dropping outside all cells changes nothing`() = runComposeUiTest {
+        val vm = model(); val group = vm.grid(); vm.openGrid(group); val before = vm.state.value.project
+        setContent { screen(vm) }
+        val from = onStage("grid-cell-a")
+        stage().performTouchInput { down(from); advanceEventTime(650); moveTo(from + Offset(20f, 0f)); cancel() }
+        assertEquals(before, vm.state.value.project)
+        stage().performTouchInput { down(from); advanceEventTime(650); moveTo(Offset(-10f, -10f)); up() }
+        assertEquals(before, vm.state.value.project)
         onNodeWithTag("grid-swap-feedback").assertDoesNotExist()
     }
 
-    @Test(timeout = 30_000) fun `holding a cell without dragging never enters multi selection and pinch navigates only the editing stage`() = runComposeUiTest {
-        val vm = model(); val group = vm.grid(); vm.openGrid(group)
-        val before = vm.state.value.project; val draft = vm.state.value.gridEditor
+    @Test(timeout = 30_000) fun `holding a cell without dragging never enters multi selection and pinch only navigates`() = runComposeUiTest {
+        val vm = model(); val group = vm.grid(); vm.openGrid(group); val before = vm.state.value.project
         setContent { screen(vm) }
-        val bounds = onNodeWithTag("grid-preview").fetchSemanticsNode().boundsInRoot
-        val cell = onNodeWithTag("grid-cell-a").fetchSemanticsNode().boundsInRoot.center - bounds.topLeft
-        onNodeWithTag("grid-preview").performTouchInput { down(cell); advanceEventTime(650); up() }
-        assertFalse(vm.state.value.multiSelect); assertNull(vm.state.value.editingGroupId)
-        onNodeWithTag("composer-multiselection-hint").assertDoesNotExist()
+        val cell = onStage("grid-cell-a")
+        stage().performTouchInput { down(cell); advanceEventTime(650); up() }
+        assertFalse(vm.state.value.multiSelect); assertEquals(group, vm.state.value.editingGroupId)
         val page = onNodeWithTag("composer_page_0").fetchSemanticsNode().boundsInRoot
-        onNodeWithTag("grid-preview").performTouchInput {
+        stage().performTouchInput {
             down(0, center - Offset(20f, 0f)); down(1, center + Offset(20f, 0f))
             moveBy(0, Offset(-15f, 0f)); moveBy(1, Offset(15f, 0f)); move()
             moveBy(0, Offset(-10f, 0f)); moveBy(1, Offset(10f, 0f)); move(); up(0); up(1)
         }
         assertNotEquals(page, onNodeWithTag("composer_page_0").fetchSemanticsNode().boundsInRoot)
-        assertEquals(before, vm.state.value.project); assertEquals(draft, vm.state.value.gridEditor)
+        assertEquals(before, vm.state.value.project)
     }
 
-    @Test(timeout = 30_000) fun `full screen settings keep the stage and confirmation reachable in a small window`() = runComposeUiTest {
+    @Test(timeout = 30_000) fun `grid settings apply at once from the stage panel in a small window`() = runComposeUiTest {
         val vm = model(); val group = vm.grid(); vm.openGrid(group); val before = vm.state.value.project!!
         setContent { screen(vm, width = 356, height = 560) }
-        onNodeWithTag("grid-toggle-settings").performClick()
+        onNodeWithText(adjustLabel).performClick()
+        onNodeWithTag("grid-stage-settings").assertIsDisplayed()
         onNodeWithTag("grid-kind-COLUMN").performScrollTo().performClick()
-        onNodeWithTag("grid-preview").assertIsDisplayed()
-        onNodeWithTag("grid-confirm").assertIsDisplayed()
-        onNodeWithText(cancelLabel).assertIsDisplayed()
-        capture(onNodeWithTag("composer-grid-editor"), "grid-fullscreen-small-window.png")
-        assertEquals(before, vm.state.value.project)
-        onNodeWithTag("grid-confirm").performClick()
-        assertNull(vm.state.value.gridEditor)
         assertEquals(CompositionLayoutKind.COLUMN, vm.state.value.project!!.layouts.single().kind)
+        capture(onNodeWithTag("grid-interaction-review"), "grid-settings-small-window.png")
         vm.undo(); assertEquals(before.elements, vm.state.value.project!!.elements)
         assertEquals(before.layouts, vm.state.value.project!!.layouts)
     }
@@ -242,5 +257,60 @@ class ComposerGridInteractionUiTest {
         assertEquals(5, vm.state.value.project!!.elements.size)
         assertNull(vm.state.value.gridEditor)
         vm.undo(); assertEquals(before.elements, vm.state.value.project!!.elements); assertTrue(vm.state.value.project!!.layouts.isEmpty())
+    }
+
+    @Test(timeout = 30_000) fun `dragging a cell to the bin removes it at once with feedback and the grid closes the gap`() = runComposeUiTest {
+        val vm = model(); val group = vm.grid(); vm.addMediaToGrid(listOf(incoming("c")), group)
+        val before = vm.state.value.project!!; val survivors = vm.members() - "a"; vm.openGrid(group)
+        setContent { screen(vm) }
+        onNodeWithTag("grid-trash").assertDoesNotExist()
+        val from = onStage("grid-cell-a")
+        stage().performTouchInput { down(from); advanceEventTime(650); moveTo(from + Offset(20f, 0f)) }
+        onNodeWithTag("grid-trash").assertIsDisplayed()
+        val trash = onStage("grid-trash")
+        stage().performTouchInput { moveTo(trash) }
+        mainClock.advanceTimeBy(400)
+        capture(onNodeWithTag("grid-interaction-review"), "grid-trash-drag.png")
+        stage().performTouchInput { up() }
+        assertEquals(2, haptics.count { it == HapticFeedbackType.LongPress })
+        onNodeWithTag("grid-trash").assertDoesNotExist()
+        assertEquals(survivors, vm.members())
+        assertEquals(group, vm.state.value.editingGroupId)
+        vm.undo()
+        assertEquals(before.elements, vm.state.value.project!!.elements)
+    }
+
+    @Test(timeout = 30_000) fun `the bin takes the second to last cell and the survivor is left in hand`() = runComposeUiTest {
+        val vm = model(); val group = vm.grid(); vm.openGrid(group)
+        setContent { screen(vm) }
+        val from = onStage("grid-cell-a")
+        stage().performTouchInput { down(from); advanceEventTime(650); moveTo(from + Offset(20f, 0f)) }
+        val trash = onStage("grid-trash")
+        stage().performTouchInput { moveTo(trash); up() }
+        assertTrue(vm.state.value.project!!.layouts.isEmpty())
+        assertEquals(listOf("b"), vm.state.value.project!!.elements.map { it.id })
+        assertNull(vm.state.value.editingGroupId)
+        assertEquals("b", vm.state.value.selectedElementId)
+    }
+
+    @Test(timeout = 30_000) fun `leaving the bin before letting go keeps the element and the swap still works`() = runComposeUiTest {
+        val vm = model(); val group = vm.grid(); val members = vm.members(); vm.openGrid(group)
+        setContent { screen(vm) }
+        val from = onStage("grid-cell-a"); val to = onStage("grid-cell-b")
+        stage().performTouchInput { down(from); advanceEventTime(650); moveTo(from + Offset(20f, 0f)) }
+        val trash = onStage("grid-trash")
+        stage().performTouchInput { moveTo(trash); moveTo(to); up() }
+        assertEquals(members.reversed(), vm.members())
+    }
+
+    @Test(timeout = 30_000) fun `each cell offers selection and removal to accessibility services`() = runComposeUiTest {
+        val vm = model(); val group = vm.grid(); vm.addMediaToGrid(listOf(incoming("c")), group); vm.openGrid(group)
+        var label = ""
+        setContent { label = stringResource(Res.string.composer_grid_remove_element); screen(vm) }
+        onNodeWithTag("grid-cell-a").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        assertEquals("a", vm.state.value.selectedElementId)
+        val actions = onNodeWithTag("grid-cell-a").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.CustomActions]
+        runOnIdle { actions.single { it.label == label }.action() }
+        assertTrue("a" !in vm.members())
     }
 }

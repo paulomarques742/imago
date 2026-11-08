@@ -17,6 +17,9 @@ internal actual fun rememberSystemReducedMotion(): Boolean = remember {
     }.getOrDefault(false)
 }
 
+@Composable
+internal actual fun SystemBarsFollow(palette: ImagoUiPalette) = Unit
+
 /** The size of the window the composition lives in — resizing the window recomposes with the new step. */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable

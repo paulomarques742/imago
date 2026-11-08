@@ -28,7 +28,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -110,9 +110,11 @@ internal fun StraightenRuler(
         Text(
             text = if (current == 0f) "0°" else "%+.1f°".format(current),
             style = MaterialTheme.typography.labelSmall,
-            color = if (current == 0f) ImagoColors.TextTertiary else ImagoColors.Gold,
+            color = if (current == 0f) ImagoUi.colors.tertiaryText else ImagoUi.colors.accent,
             textAlign = TextAlign.Center,
         )
+        val tick = ImagoUi.colors.text
+        val cursor = ImagoUi.colors.accent
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
@@ -147,7 +149,7 @@ internal fun StraightenRuler(
                 // looked like a drawing mistake.
                 val fade = 1f - abs(x - centre) / centre
                 drawLine(
-                    color = Color.White.copy(alpha = (if (labelled) 0.7f else 0.4f) * fade.coerceIn(0f, 1f)),
+                    color = tick.copy(alpha = (if (labelled) 0.7f else 0.4f) * fade.coerceIn(0f, 1f)),
                     start = Offset(x, (size.height - height) / 2f),
                     end = Offset(x, (size.height + height) / 2f),
                     strokeWidth = tickWidth,
@@ -155,7 +157,7 @@ internal fun StraightenRuler(
                 )
             }
             drawLine(
-                color = ImagoColors.Gold,
+                color = cursor,
                 start = Offset(centre, size.height * 0.1f),
                 end = Offset(centre, size.height * 0.9f),
                 strokeWidth = cursorWidth,

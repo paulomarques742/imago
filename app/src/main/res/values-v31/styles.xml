@@ -7,11 +7,11 @@
     -->
     <style name="Theme.ImmichRoom" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans-serif</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:colorAccent">#E6E6E3</item>
-        <item name="android:windowBackground">#0B0D0F</item>
-        <item name="android:windowSplashScreenBackground">#0D0D0F</item>
+        <item name="android:windowLightStatusBar">@bool/light_system_bars</item>
+        <item name="android:windowLightNavigationBar">@bool/light_system_bars</item>
+        <item name="android:colorAccent">@color/window_accent</item>
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash</item>
         <item name="android:windowSplashScreenAnimationDuration">650</item>
     </style>

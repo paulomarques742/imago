@@ -21,6 +21,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import eu.studio742.imago.desktop.platform.AppPaths
+import eu.studio742.imago.desktop.platform.DesktopAppearanceSettings
 import eu.studio742.imago.desktop.platform.DesktopLanguageSettings
 import eu.studio742.imago.desktop.platform.ImagoProtocol
 import eu.studio742.imago.desktop.platform.SingleInstance
@@ -29,8 +30,9 @@ import eu.studio742.imago.desktop.sync.DesktopAccount
 import eu.studio742.imago.core.data.DesktopDataGraph
 import eu.studio742.imago.core.data.observeDiagnosticVersions
 import eu.studio742.imago.core.data.LocalDesktopDataGraph
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoTheme
+import eu.studio742.imago.core.designsystem.LocalAppearanceSettings
 import eu.studio742.imago.core.designsystem.i18n.AppSyncTexts
 import eu.studio742.imago.core.designsystem.i18n.LocalLanguageSettings
 import eu.studio742.imago.core.designsystem.i18n.ProvideAppLanguage
@@ -99,6 +101,7 @@ fun main(args: Array<String>) {
     }
     CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { graph.configuration.observeDiagnosticVersions() }
     val languageSettings = DesktopLanguageSettings(paths.root.resolve("language"))
+    val appearanceSettings = DesktopAppearanceSettings(paths.root.resolve("appearance"))
     val secrets = WindowsSecretStore(paths.secrets)
     val backend = DesktopAccount.backend(secrets)
     val account = DesktopAccount.create(paths, secrets, graph, backend = backend)
@@ -144,6 +147,7 @@ fun main(args: Array<String>) {
                 LocalAccountRepository provides account,
                 LocalSyncEngine provides sync,
                 LocalLanguageSettings provides languageSettings,
+                LocalAppearanceSettings provides appearanceSettings,
             ) {
                 ProvideAppLanguage(languagePreference, systemLocale) {
                 ImagoTheme {
@@ -174,8 +178,8 @@ fun main(args: Array<String>) {
                     Surface(
                         Modifier.fillMaxSize()
                             .dragAndDropTarget(shouldStartDragAndDrop = { it.dragData() is DragData.FilesList }, target = dropTarget)
-                            .then(if (dragging) Modifier.border(2.dp, ImagoColors.Ivory) else Modifier),
-                        color = ImagoColors.Background,
+                            .then(if (dragging) Modifier.border(2.dp, ImagoUi.colors.emphasis) else Modifier),
+                        color = ImagoUi.colors.background,
                     ) {
                         ImagoApp(shell, syncIndicator = indicator)
                     }

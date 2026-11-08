@@ -24,6 +24,11 @@ interface ConfigurationRepository {
 
     fun setShowOnThisDay(show: Boolean) = Unit
 
+    /** What the photo sits on in the editor, by name; null follows the theme. It belongs to the device. */
+    val editorBackground: kotlinx.coroutines.flow.StateFlow<String?> get() = NoEditorBackground
+
+    fun setEditorBackground(background: String) = Unit
+
     /** The style of the last "Show your edit" video, by name; null before the first one. */
     val reelStyle: String? get() = null
 
@@ -123,5 +128,6 @@ fun ConfigurationRepository.activeSource(): kotlinx.coroutines.flow.Flow<eu.stud
     }
 
 private val AlwaysShown: kotlinx.coroutines.flow.StateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(true)
+private val NoEditorBackground: kotlinx.coroutines.flow.StateFlow<String?> = kotlinx.coroutines.flow.MutableStateFlow(null)
 private val NothingHiddenFromGrid: kotlinx.coroutines.flow.StateFlow<Map<String, Set<String>>> =
     kotlinx.coroutines.flow.MutableStateFlow(emptyMap())

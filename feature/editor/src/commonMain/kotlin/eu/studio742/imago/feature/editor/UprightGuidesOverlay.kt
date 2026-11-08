@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.unit.dp
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.model.UprightGuide
 import eu.studio742.imago.core.render.FrameGeometry
 import eu.studio742.imago.core.render.Homography
@@ -78,6 +78,7 @@ internal fun UprightGuidesOverlay(
     modifier: Modifier = Modifier,
 ) {
     val projection = MaskProjection(bounds, geometry)
+    val uiColors = ImagoUi.colors
     Canvas(modifier) {
         val line = 2.dp.toPx()
         val handle = 7.dp.toPx()
@@ -85,16 +86,16 @@ internal fun UprightGuidesOverlay(
             guides.forEach { guide ->
                 val start = map(projection.toScreen(guide.x1, guide.y1))
                 val end = map(projection.toScreen(guide.x2, guide.y2))
-                drawLine(Color.Black.copy(alpha = 0.5f), start, end, width + 2.dp.toPx())
-                drawLine(ImagoColors.Gold, start, end, width)
+                drawLine(uiColors.imageShade.copy(alpha = 0.5f), start, end, width + 2.dp.toPx())
+                drawLine(uiColors.imageAccent, start, end, width)
             }
         }
         drawGuides({ it }, line)
         guides.forEach { guide ->
             for (point in listOf(projection.toScreen(guide.x1, guide.y1), projection.toScreen(guide.x2, guide.y2))) {
-                drawCircle(Color.Black.copy(alpha = 0.5f), handle + 1.dp.toPx(), point)
-                drawCircle(Color.White, handle, point)
-                drawCircle(ImagoColors.Gold, handle * 0.55f, point)
+                drawCircle(uiColors.imageShade.copy(alpha = 0.5f), handle + 1.dp.toPx(), point)
+                drawCircle(uiColors.onImage, handle, point)
+                drawCircle(uiColors.imageAccent, handle * 0.55f, point)
             }
         }
 
@@ -110,7 +111,7 @@ internal fun UprightGuidesOverlay(
             Homography.scale(LOUPE_ZOOM, LOUPE_ZOOM) *
             Homography.translate(-touch.x.toDouble(), -touch.y.toDouble())
         val circle = Path().apply { addOval(androidx.compose.ui.geometry.Rect(centre, radius)) }
-        drawCircle(Color.Black, radius, centre)
+        drawCircle(uiColors.imageShade, radius, centre)
         clipPath(circle) {
             if (photo != null) {
                 // Exact under the finger, should a lens distortion bend the rest.
@@ -132,9 +133,9 @@ internal fun UprightGuidesOverlay(
             }, line)
         }
         val cross = 9.dp.toPx()
-        drawLine(Color.White, centre - Offset(cross, 0f), centre + Offset(cross, 0f), 1.dp.toPx())
-        drawLine(Color.White, centre - Offset(0f, cross), centre + Offset(0f, cross), 1.dp.toPx())
-        drawCircle(Color.White, radius, centre, style = Stroke(2.dp.toPx()))
+        drawLine(uiColors.onImage, centre - Offset(cross, 0f), centre + Offset(cross, 0f), 1.dp.toPx())
+        drawLine(uiColors.onImage, centre - Offset(0f, cross), centre + Offset(0f, cross), 1.dp.toPx())
+        drawCircle(uiColors.onImage, radius, centre, style = Stroke(2.dp.toPx()))
     }
 }
 

@@ -16,6 +16,7 @@ import androidx.core.content.FileProvider
 import dagger.hilt.android.AndroidEntryPoint
 import eu.studio742.imago.core.data.LibraryRepository
 import eu.studio742.imago.core.designsystem.ImagoTheme
+import eu.studio742.imago.core.designsystem.LocalAppearanceSettings
 import eu.studio742.imago.core.designsystem.i18n.LocalLanguageSettings
 import eu.studio742.imago.core.designsystem.i18n.ProvideAppLanguage
 import eu.studio742.imago.core.model.AssetReference
@@ -40,6 +41,7 @@ import kotlinx.coroutines.withContext
 @AndroidEntryPoint
 class PickerActivity : ComponentActivity() {
     @Inject lateinit var languageSettings: AndroidLanguageSettings
+    @Inject lateinit var appearanceSettings: AndroidAppearanceSettings
     @Inject lateinit var library: LibraryRepository
     @Inject lateinit var exporter: EditorExporter
 
@@ -55,7 +57,7 @@ class PickerActivity : ComponentActivity() {
         setContent {
             val preference by languageSettings.preference.collectAsState()
             val systemLocale = LocalConfiguration.current.locales[0]
-            CompositionLocalProvider(LocalLanguageSettings provides languageSettings) {
+            CompositionLocalProvider(LocalLanguageSettings provides languageSettings, LocalAppearanceSettings provides appearanceSettings) {
                 ProvideAppLanguage(preference, systemLocale) {
                     ImagoTheme {
                         PickForOtherAppRoute(

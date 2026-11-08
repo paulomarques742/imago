@@ -38,7 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.studio742.imago.core.data.DeviceLibrary
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.feature.library.resources.*
@@ -65,12 +65,12 @@ internal fun AllViewAlbumsSetting(device: DeviceLibrary) {
     var choosing by remember { mutableStateOf(false) }
     // The settings page outlives the dialog: saving from the dialog's own scope was cancelled as it closed.
     val scope = rememberCoroutineScope()
-    Text(stringResource(Res.string.library_all_albums_setting), style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextPrimary)
+    Text(stringResource(Res.string.library_all_albums_setting), style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.text)
     Text(
         if (hidden.isEmpty()) stringResource(Res.string.library_all_albums_every)
         else pluralStringResource(Res.plurals.library_all_albums_hidden, hidden.size, hidden.size),
         style = MaterialTheme.typography.bodySmall,
-        color = ImagoColors.TextSecondary,
+        color = ImagoUi.colors.secondaryText,
     )
     OutlinedButton(onClick = { choosing = true }) { Text(stringResource(Res.string.library_all_albums_choose)) }
     if (choosing) {
@@ -118,7 +118,7 @@ internal fun AlbumChoiceDialog(
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
-                Text(body, style = MaterialTheme.typography.bodyMedium, color = ImagoColors.TextSecondary)
+                Text(body, style = MaterialTheme.typography.bodyMedium, color = ImagoUi.colors.secondaryText)
                 val listed = sorted
                 when {
                     listed == null -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
@@ -147,7 +147,7 @@ internal fun AlbumChoiceDialog(
                                     Text(
                                         album.count.toString(),
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = ImagoColors.TextSecondary,
+                                        color = ImagoUi.colors.secondaryText,
                                         modifier = Modifier.padding(start = ImagoSpacing.Sm),
                                     )
                                 }
@@ -182,10 +182,10 @@ internal fun GridAlbumsSetting(viewModel: LibrarySettingsViewModel, sources: Lis
     val libraries = sources.filter { it.isDevice || it.isConnected }.map { it.id to it.displayName() } +
         listOfNotNull((UNIFIED_LIBRARY_ID to unifiedName).takeIf { viewModel.configuration.unifiedPartnerId != null })
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md)) {
-        Icon(Icons.Outlined.Collections, null, tint = ImagoColors.Ivory)
+        Icon(Icons.Outlined.Collections, null, tint = ImagoUi.colors.emphasis)
         Column(Modifier.weight(1f)) {
             Text(stringResource(Res.string.library_grid_albums_setting), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(Res.string.library_grid_albums_setting_body), style = MaterialTheme.typography.bodySmall, color = ImagoColors.TextSecondary)
+            Text(stringResource(Res.string.library_grid_albums_setting_body), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
         }
     }
     libraries.forEach { (id, name) ->
@@ -199,10 +199,10 @@ internal fun GridAlbumsSetting(viewModel: LibrarySettingsViewModel, sources: Lis
                 if (hiddenCount == 0) stringResource(Res.string.library_grid_albums_all)
                 else pluralStringResource(Res.plurals.library_albums_hidden, hiddenCount, hiddenCount),
                 style = MaterialTheme.typography.bodySmall,
-                color = ImagoColors.TextSecondary,
+                color = ImagoUi.colors.secondaryText,
                 modifier = Modifier.padding(start = ImagoSpacing.Sm),
             )
-            Icon(Icons.Outlined.ChevronRight, null, tint = ImagoColors.TextSecondary)
+            Icon(Icons.Outlined.ChevronRight, null, tint = ImagoUi.colors.secondaryText)
         }
     }
     choosing?.let { (id, name) ->
