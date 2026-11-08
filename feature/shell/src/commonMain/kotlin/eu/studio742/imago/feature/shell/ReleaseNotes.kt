@@ -15,6 +15,12 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.JoinInner
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Palette
@@ -29,6 +35,27 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.WbAuto
 import androidx.compose.ui.graphics.vector.ImageVector
 import eu.studio742.imago.feature.shell.resources.Res
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_1_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_1_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_2_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_2_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_3_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_3_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_4_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_4_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_5_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_5_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_6_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_6_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_7_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_7_1
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_7_2
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_7_3
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_7_4
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_7_5
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_7_6
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_7_7
+import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_7_8
 import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_1_title
 import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_1_body
 import eu.studio742.imago.feature.shell.resources.shell_news_0_30_0_2_title
@@ -131,7 +158,8 @@ internal data class AppVersion(val major: Int, val minor: Int, val patch: Int) :
 /**
  * One page of a big release's news: what it is about, in a title and a couple of sentences, or in a
  * title and a short list of [items] for the smaller things. A [featured] page is the release's lead,
- * set in gold.
+ * set in gold. The page that [turnsLight] announces the light mode: the deck turns light on it, in a
+ * circle, and stays light to the end.
  */
 internal class NewsPage(
     val icon: ImageVector,
@@ -139,6 +167,7 @@ internal class NewsPage(
     val body: StringResource? = null,
     val items: List<StringResource> = emptyList(),
     val featured: Boolean = false,
+    val turnsLight: Boolean = false,
 ) {
     init { require((body != null) != items.isNotEmpty()) { "A news page has either a body or items." } }
 }
@@ -159,6 +188,31 @@ internal class Release(
  * A version without an entry — a fix nobody would notice — opens nothing after the update.
  */
 internal val Releases: List<Release> = listOf(
+    Release(
+        AppVersion(0, 40, 0),
+        pages = listOf(
+            NewsPage(Icons.Outlined.Dashboard, Res.string.shell_news_0_40_0_1_title, Res.string.shell_news_0_40_0_1_body, featured = true),
+            NewsPage(Icons.Outlined.GridView, Res.string.shell_news_0_40_0_2_title, Res.string.shell_news_0_40_0_2_body),
+            NewsPage(Icons.Outlined.Category, Res.string.shell_news_0_40_0_3_title, Res.string.shell_news_0_40_0_3_body),
+            NewsPage(Icons.Outlined.TextFields, Res.string.shell_news_0_40_0_4_title, Res.string.shell_news_0_40_0_4_body),
+            NewsPage(Icons.Outlined.LightMode, Res.string.shell_news_0_40_0_5_title, Res.string.shell_news_0_40_0_5_body, turnsLight = true),
+            NewsPage(Icons.Outlined.Speed, Res.string.shell_news_0_40_0_6_title, Res.string.shell_news_0_40_0_6_body),
+            NewsPage(
+                Icons.Outlined.Checklist,
+                Res.string.shell_news_0_40_0_7_title,
+                items = listOf(
+                    Res.string.shell_news_0_40_0_7_1,
+                    Res.string.shell_news_0_40_0_7_2,
+                    Res.string.shell_news_0_40_0_7_3,
+                    Res.string.shell_news_0_40_0_7_4,
+                    Res.string.shell_news_0_40_0_7_5,
+                    Res.string.shell_news_0_40_0_7_6,
+                    Res.string.shell_news_0_40_0_7_7,
+                    Res.string.shell_news_0_40_0_7_8,
+                ),
+            ),
+        ),
+    ),
     Release(
         AppVersion(0, 30, 0),
         pages = listOf(

@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.studio742.imago.core.data.ConfigurationRepository
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.LocalImagoWindow
 import eu.studio742.imago.core.designsystem.withWidth
 import eu.studio742.imago.feature.account.AccountRoute
@@ -442,7 +442,7 @@ private fun LibraryPane(
             )
         }
         if (photo != null) {
-            if (!listFolded) Box(Modifier.fillMaxHeight().width(1.dp).background(ImagoColors.BorderSubtle))
+            if (!listFolded) Box(Modifier.fillMaxHeight().width(1.dp).background(ImagoUi.colors.subtleBorder))
             PhotoDetail(
                 current = photo,
                 onDestination = onDestination,

@@ -14,9 +14,12 @@ import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -26,6 +29,7 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.getString
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.util.Locale
@@ -94,6 +98,55 @@ class WhatsNewCardsTest {
             onNodeWithText("Version ${lines.version}").fetchSemanticsNode()
             onNodeWithText(runBlocking { getString(lines.notes.first()) }).fetchSemanticsNode()
             onNodeWithText("Get started").fetchSemanticsNode()
+        }
+    }
+
+    /**
+     * The card that announces the light mode turns the deck light, and going back turns it dark again.
+     * With `IMAGO_SCREENSHOTS` set, the circle is saved as it opens.
+     */
+    @Test fun theLightModeCardTurnsTheDeckLight() {
+        Locale.setDefault(Locale.ENGLISH)
+        val light = release.pages.indexOfFirst { it.turnsLight }
+        assertTrue("the latest release announces the light mode", light > 0)
+        val folder = System.getenv("IMAGO_SCREENSHOTS")?.let(::File)?.also { it.mkdirs() }
+        runDesktopComposeUiTest(width = 1082, height = 2402) {
+            setContent {
+                CompositionLocalProvider(LocalDensity provides Density(2.625f)) {
+                    ImmichRoomTheme {
+                        Box(Modifier.fillMaxSize().background(ImagoColors.Background).background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
+                            WhatsNewCards(
+                                release = release,
+                                older = emptyList(),
+                                onDone = {},
+                                initialPage = light - 1,
+                                animate = false,
+                                modifier = Modifier.padding(16.dp).widthIn(max = 440.dp).fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            }
+            onNodeWithTag("news-cards").assertExists()
+            onNodeWithText("Next").performClick()
+            if (folder != null) {
+                // The page slides in first; then the circle opens over 620 ms.
+                mainClock.autoAdvance = false
+                var frame = 0
+                repeat(40) {
+                    mainClock.advanceTimeBy(50)
+                    if (it >= 8 && it % 2 == 0) {
+                        ImageIO.write(onRoot().captureToImage().toAwtImage(), "png", File(folder, "news-reveal-${frame++}.png"))
+                    }
+                }
+                mainClock.autoAdvance = true
+            }
+            waitForIdle()
+            onNodeWithTag("news-cards-light").assertExists()
+
+            onNodeWithTag("news-cards-light").performTouchInput { swipeRight() }
+            waitForIdle()
+            onNodeWithTag("news-cards").assertExists()
         }
     }
 

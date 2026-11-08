@@ -24,7 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import eu.studio742.imago.core.designsystem.ImagoColors
+import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.feature.shell.resources.Res
@@ -65,7 +65,7 @@ internal fun AboutSettingsCard() {
             Text(
                 stringResource(Res.string.shell_about_version, InstalledVersion.toString()),
                 style = MaterialTheme.typography.bodyMedium,
-                color = ImagoColors.TextSecondary,
+                color = ImagoUi.colors.secondaryText,
             )
             if (release != null) {
                 TextButton(onClick = { showingNews = true }) { Text(stringResource(Res.string.shell_news_title)) }
