@@ -23,12 +23,21 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import eu.studio742.imago.core.data.SavedRecipeRepository
+import eu.studio742.imago.core.interchange.ImagoFileContent
+import eu.studio742.imago.core.interchange.ReadImagoFile
+import eu.studio742.imago.core.interchange.RecipeImportPlan
+import eu.studio742.imago.core.interchange.decodeImagoFile
+import eu.studio742.imago.core.interchange.decodeRecipeFile
+import eu.studio742.imago.core.interchange.planRecipeImport
 import eu.studio742.imago.core.model.RecipePart
 import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.designsystem.i18n.appString
 import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.SavedRecipe
+import eu.studio742.imago.core.model.storedForParts
 import eu.studio742.imago.feature.library.LibraryNavBar
 import eu.studio742.imago.feature.library.LibraryNavDestination
 import java.time.Instant
@@ -38,6 +47,12 @@ data class RecipeLibraryUiState(
     val recipes: List<SavedRecipe> = emptyList(),
     val builtInMarks: List<BuiltInRecipeMark> = emptyList(),
     val isLoading: Boolean = true,
+    /** What the files being imported would add; null when none are. */
+    val importPlan: RecipeImportPlan? = null,
+    val isAddingImport: Boolean = false,
+    val importAddFailed: Boolean = false,
+    /** Goes up with each import that lands, so that the grid can show where the recipes went. */
+    val importsAdded: Int = 0,
 )
 
 open class RecipeLibraryViewModel(
@@ -74,12 +89,14 @@ open class RecipeLibraryViewModel(
         val recipe = mutableState.value.recipes.firstOrNull { it.id == id } ?: return
         val cleanName = name.trim()
         if (cleanName.isBlank()) return
+        val chosen = parts?.let(recipe::partsAfterChoosing) ?: recipe.parts
         persist(
             recipe.copy(
                 name = cleanName,
                 collection = collection.trim(),
+                recipe = if (parts != null) recipe.recipe.storedForParts(chosen) else recipe.recipe,
                 updatedAt = Instant.now().toString(),
-                parts = parts?.let(recipe::partsAfterChoosing) ?: recipe.parts,
+                parts = chosen,
             ),
         )
     }
@@ -113,6 +130,46 @@ open class RecipeLibraryViewModel(
         }
     }
 
+    /** Reads the files and says what adding them would do; nothing is saved until [addImported]. */
+    fun openFiles(files: List<RecipeFile>, importedCollection: String = "") {
+        if (files.isEmpty()) return
+        viewModelScope.launch {
+            val library = runCatching { savedRecipes.list() }.getOrDefault(mutableState.value.recipes)
+            val plan = withContext(Dispatchers.Default) {
+                planRecipeImport(
+                    files = files.map { file ->
+                        ReadImagoFile(file.name, file.bytes?.let { decodeRecipeFile(file.name, it) } ?: ImagoFileContent.Unreadable)
+                    },
+                    library = library,
+                    now = Instant.now().toString(),
+                    newId = { UUID.randomUUID().toString() },
+                    importedCollection = importedCollection,
+                )
+            }
+            mutableState.update { it.copy(importPlan = plan, importAddFailed = false) }
+        }
+    }
+
+    /** Pressing it again after a failure is safe: the ids are the plan's, so what already landed is rewritten. */
+    fun addImported() {
+        val plan = mutableState.value.importPlan ?: return
+        if (mutableState.value.isAddingImport) return
+        mutableState.update { it.copy(isAddingImport = true, importAddFailed = false) }
+        viewModelScope.launch {
+            val failed = plan.recipes.count { recipe -> runCatching { savedRecipes.save(recipe) }.isFailure }
+            mutableState.update {
+                if (failed == 0) {
+                    it.copy(importPlan = null, isAddingImport = false, importsAdded = it.importsAdded + 1)
+                } else {
+                    it.copy(isAddingImport = false, importAddFailed = true)
+                }
+            }
+            refresh()
+        }
+    }
+
+    fun dismissImport() = mutableState.update { it.copy(importPlan = null, importAddFailed = false) }
+
     private fun persist(recipe: SavedRecipe) {
         viewModelScope.launch {
             runCatching { savedRecipes.save(recipe) }
@@ -133,14 +190,54 @@ fun RecipeLibraryRoute(
     onBack: () -> Unit,
     onNavigate: (LibraryNavDestination) -> Unit,
     onOpenSettings: () -> Unit,
+    /** Files another app or the window handed over, waiting to be looked at. */
+    incomingFiles: List<RecipeFile>? = null,
+    onIncomingFilesTaken: () -> Unit = {},
     viewModel: RecipeLibraryViewModel = recipeLibraryViewModel(),
     editor: EditorViewModel = editorViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var renaming by remember { mutableStateOf<SavedRecipe?>(null) }
     var deleting by remember { mutableStateOf<SavedRecipe?>(null) }
+    var fileFailed by remember { mutableStateOf(false) }
     var sampleIndex by rememberSampleIndex()
     val sampleAssetId = rememberSampleRecipeSource(sampleIndex)
+    val importedCollection = stringResource(Res.string.editor_recipe_imported_collection)
+    val recipeFiles = rememberRecipeFileActions(onOpened = { viewModel.openFiles(it, importedCollection) }, onFailed = { fileFailed = true })
+    val exporter = rememberRecipeExporter(recipeFiles, onFailed = { fileFailed = true })
+
+    LaunchedEffect(incomingFiles) {
+        if (incomingFiles != null) {
+            viewModel.openFiles(incomingFiles, importedCollection)
+            onIncomingFilesTaken()
+        }
+    }
+    if (fileFailed) {
+        AlertDialog(
+            onDismissRequest = { fileFailed = false },
+            text = { Text(stringResource(Res.string.editor_recipe_file_failed)) },
+            confirmButton = { TextButton(onClick = { fileFailed = false }) { Text(stringResource(Res.string.editor_ok)) } },
+        )
+    }
+
+    // Over the editor as well: a file that arrives while a recipe is open is looked at, and then back to it.
+    state.importPlan?.let { plan ->
+        BackHandler(onBack = viewModel::dismissImport)
+        RecipeImportScreen(
+            plan = plan,
+            assetId = sampleAssetId,
+            sampleIndex = sampleIndex,
+            onSampleIndex = { sampleIndex = it },
+            isAdding = state.isAddingImport,
+            addFailed = state.importAddFailed,
+            onBack = viewModel::dismissImport,
+            onAdd = viewModel::addImported,
+        )
+        return
+    }
+
+    fun savedOf(cards: List<RecipeCard>) = cards.mapNotNull { card -> state.recipes.firstOrNull { it.id == card.id } }
+
     // The key, and not the source: it survives a rotation, and the source is rebuilt from it.
     var editingKey by rememberSaveable { mutableStateOf<String?>(null) }
     // The grid stays where it was — tab, filter, scroll — while the editor is open over it.
@@ -186,6 +283,10 @@ fun RecipeLibraryRoute(
             onRename = { card -> renaming = state.recipes.firstOrNull { it.id == card.id } },
             onDuplicate = { viewModel.duplicate(it.id) },
             onDelete = { card -> deleting = state.recipes.firstOrNull { it.id == card.id } },
+            onShareRecipes = if (exporter.canShare) { cards -> exporter.start(savedOf(cards), RecipeDelivery.SHARE) } else null,
+            onSaveRecipes = { cards -> exporter.start(savedOf(cards), RecipeDelivery.SAVE) },
+            onImport = recipeFiles.open,
+            showMineSignal = state.importsAdded,
             onCreate = { editingKey = RecipeSource.New().key },
             createLabel = stringResource(Res.string.editor_new_recipe),
             createHint = stringResource(Res.string.editor_new_recipe_hint),
@@ -199,6 +300,7 @@ fun RecipeLibraryRoute(
         )
     }
 
+    RecipeExportDialog(exporter)
     renaming?.let { recipe ->
         RecipeDetailsDialog(
             title = stringResource(Res.string.editor_organize_recipe),

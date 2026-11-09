@@ -11,6 +11,7 @@ import eu.studio742.imago.core.model.BuiltInRecipeMark
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.Effects
 import eu.studio742.imago.core.model.Geometry
+import eu.studio742.imago.core.model.RecipeOrigin
 import eu.studio742.imago.core.model.RecipePart
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.Tone
@@ -215,6 +216,16 @@ class RecipeEditorTest {
     }
 
     @Test
+    fun `a copy of an imported recipe is still imported`() {
+        openRecipe(RecipeSource.Saved(original.copy(origin = RecipeOrigin.XMP)))
+
+        viewModel.duplicateRecipeEdit()
+        awaitState { it.recipeEdit?.saved?.id.let { id -> id != null && id != "mine" } }
+
+        assertEquals(RecipeOrigin.XMP, viewModel.state.value.recipeEdit!!.saved!!.origin)
+    }
+
+    @Test
     fun `pasting writes only what was ticked when copying, and the geometry starts unticked`() {
         openRecipe(RecipeSource.New())
         assertEquals(RecipePart.LOOK, viewModel.state.value.recipeParts)
@@ -241,7 +252,7 @@ class RecipeEditorTest {
         viewModel.copyCurrentRecipe(chosen)
 
         assertEquals(chosen, viewModel.state.value.recipeParts)
-        assertEquals("EXPOSURE,STRAIGHTEN", partsChoice)
+        assertEquals("EXPOSURE,STRAIGHTEN,FINISHING_OFFERED", partsChoice)
     }
 
     @Test

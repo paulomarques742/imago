@@ -96,6 +96,7 @@ import eu.studio742.imago.core.model.HslBand
 import eu.studio742.imago.core.model.ToneCurve
 import eu.studio742.imago.core.model.RecipePart
 import eu.studio742.imago.core.model.SavedRecipe
+import eu.studio742.imago.core.model.storedForParts
 import eu.studio742.imago.core.model.withPartsFrom
 import eu.studio742.imago.core.immich.ImmichApi
 import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
@@ -111,7 +112,9 @@ import eu.studio742.imago.core.model.RAW_RENDERING_LINEAR
 import eu.studio742.imago.core.model.rawEngine
 import eu.studio742.imago.core.render.decodeRawEditorPreview
 import eu.studio742.imago.core.render.CameraLight
-import eu.studio742.imago.core.render.KelvinTint
+import eu.studio742.imago.core.model.KelvinTint
+import eu.studio742.imago.core.render.landedOn
+import eu.studio742.imago.core.render.withLightOf
 import eu.studio742.imago.core.render.CameraExposureMatch
 import eu.studio742.imago.core.render.shouldInspectRawOriginal
 import eu.studio742.imago.core.render.LibraryRaw
@@ -888,6 +891,8 @@ open class EditorViewModel(
     }
 
     fun open(target: PhotoEditTarget) {
+        // This ViewModel outlives each photo, and recipes also arrive from the library's import and from sync.
+        refreshSavedRecipes()
         val asset = target.asset
         val sameRecipeSession = target is PhotoEditTarget.Recipe && target.source.key == recipeSessionKey
         val keyMatches = when (val active = activeTarget) {
@@ -1111,7 +1116,7 @@ open class EditorViewModel(
                 id = UUID.randomUUID().toString(),
                 name = cleanName,
                 collection = collection?.trim().orEmpty(),
-                recipe = current.copy(updatedAt = now),
+                recipe = current.copy(updatedAt = now).storedForParts(chosen),
                 createdAt = now,
                 updatedAt = now,
                 parts = chosen,
@@ -1141,10 +1146,21 @@ open class EditorViewModel(
                 createdAt = now,
                 updatedAt = now,
                 parts = (edit.saved?.appliedParts ?: RecipePart.LOOK) + edit.baseline.changedParts(current),
+                origin = edit.saved?.origin,
             )
             persistRecipeEdit(copy, current, uiText(Res.string.editor_recipe_duplicated, copy.name))
         }
     }
+
+    /** The recipe as it is on the screen, saved or not: what a file made from here should hold. */
+    internal fun recipeAsEdited(): SavedRecipe? {
+        val edit = state.value.recipeEdit ?: return null
+        val saved = edit.saved ?: return null
+        val current = state.value.recipe ?: return null
+        return saved.copy(recipe = current, parts = saved.appliedParts + edit.baseline.changedParts(current))
+    }
+
+    fun reportRecipeFileFailed() = mutableState.update { it.copy(recipeNotice = uiText(Res.string.editor_recipe_file_failed)) }
 
     /** Deletes the recipe being edited. Only one that is the user's can be: a filter never is. */
     fun deleteRecipeEdit(onDeleted: () -> Unit) {
@@ -1239,7 +1255,7 @@ open class EditorViewModel(
             mutableState.update { it.copy(whiteBalanceUnreadable = true) }
             return
         }
-        val balance = current.whiteBalance.copy(temp = pick.temperature, tint = pick.tint, auto = false)
+        val balance = WhiteBalance(temp = pick.temperature, tint = pick.tint)
         if (balance == current.whiteBalance) {
             mutableState.update { it.copy(whiteBalanceUnreadable = false) }
             return
@@ -2064,7 +2080,7 @@ open class EditorViewModel(
 
     /** Copies the [parts] chosen in the dialog; pasting writes only those over the other photo. */
     fun copyCurrentRecipe(parts: Set<RecipePart>) {
-        copiedRecipe = state.value.recipe ?: return
+        copiedRecipe = state.value.recipe?.leavingThePhoto() ?: return
         copiedParts = parts
         rememberRecipeParts(parts)
         mutableState.update { it.copy(canPasteRecipe = true, recipeNotice = uiText(Res.string.editor_recipe_copied)) }
@@ -2143,7 +2159,7 @@ open class EditorViewModel(
             name = cleanName,
             // The default collection comes already written in the person's language (RecipeDetailsDialog).
             collection = collection.trim(),
-            recipe = current,
+            recipe = current.leavingThePhoto().storedForParts(parts),
             createdAt = now,
             updatedAt = now,
             parts = parts,
@@ -2162,11 +2178,13 @@ open class EditorViewModel(
         val existing = state.value.savedRecipes.firstOrNull { it.id == id } ?: return
         val cleanName = name.trim()
         if (cleanName.isBlank()) return
+        val chosen = existing.partsAfterChoosing(parts)
         val updated = existing.copy(
             name = cleanName,
             collection = collection.trim(),
+            recipe = existing.recipe.storedForParts(chosen),
             updatedAt = Instant.now().toString(),
-            parts = existing.partsAfterChoosing(parts),
+            parts = chosen,
         )
         viewModelScope.launch {
             runCatching { savedRecipes.save(updated) }
@@ -2188,6 +2206,9 @@ open class EditorViewModel(
     }
 
     fun consumeRecipeNotice() = mutableState.update { it.copy(recipeNotice = null) }
+
+    /** The open photo's recipe on its way to other photos: only here is its camera known. */
+    private fun EditRecipe.leavingThePhoto(): EditRecipe = copy(whiteBalance = whiteBalance.withLightOf(state.value.cameraLight))
 
     private fun rememberRecipeParts(parts: Set<RecipePart>) {
         configuration.rememberRecipeParts(parts)
@@ -2482,17 +2503,23 @@ open class EditorViewModel(
         val current = state.value.recipe ?: return
         editStart = null
         pendingChange = null
-        val rebased = source.rebasedOnto(current, Instant.now().toString(), parts)
-        // The white balance travels as the light's difference from As Shot. Between a RAW and a JPEG that
-        // is the nearest thing to the same light, and Lightroom says it may not match; so does this.
-        val sourceRaw = source.rawDevelopment != null
+        val rebased = source.rebasedOnto(current, Instant.now().toString(), parts).let {
+            // A recipe being edited is not a photo yet: it stays a recipe, and keeps the light it carries.
+            if (state.value.recipeEdit != null) it else it.copy(whiteBalance = it.whiteBalance.landedOn(state.value.cameraLight))
+        }
+        // Between RAWs the white balance is the same light. Between a RAW and a JPEG it travels as the
+        // difference from As Shot, the nearest thing to it, and Lightroom says it may not match; so does
+        // this. A recipe that came out of a file has no development left, only its light, to tell a RAW by.
+        val sourceRaw = source.rawDevelopment != null || source.whiteBalance.light != null
         val targetRaw = state.value.highPrecisionSource?.linear == true
-        val notice = if (fromPhoto && RecipePart.WHITE_BALANCE in parts && sourceRaw != targetRaw &&
-            !source.whiteBalance.isAsShot && !source.whiteBalance.auto
-        ) {
-            uiText(if (sourceRaw) Res.string.editor_white_balance_from_raw else Res.string.editor_white_balance_from_jpeg)
-        } else {
-            message
+        // A preset written for a RAW holds only the light, with no difference from As Shot to fall back on.
+        val lightOnly = source.whiteBalance.light != null && source.whiteBalance.isAsShot
+        val notice = when {
+            !fromPhoto || RecipePart.WHITE_BALANCE !in parts || source.whiteBalance.auto -> message
+            lightOnly && !targetRaw -> uiText(Res.string.editor_white_balance_needs_raw)
+            sourceRaw != targetRaw && !source.whiteBalance.isAsShot ->
+                uiText(if (sourceRaw) Res.string.editor_white_balance_from_raw else Res.string.editor_white_balance_from_jpeg)
+            else -> message
         }
         val bitmap = state.value.bitmap
         if (!rebased.whiteBalance.auto || bitmap == null) {
@@ -3646,8 +3673,9 @@ internal fun EditRecipe.withAdjustment(adjustment: Adjustment, value: Float): Ed
     Adjustment.WHITES -> copy(tone = tone.copy(whites = value))
     Adjustment.BLACKS -> copy(tone = tone.copy(blacks = value))
     // A hand on either slider makes the white balance Custom, as in Lightroom.
-    Adjustment.TEMPERATURE -> copy(whiteBalance = whiteBalance.copy(temp = value, auto = false))
-    Adjustment.TINT -> copy(whiteBalance = whiteBalance.copy(tint = value, auto = false))
+    // Moved by hand the sliders are no longer the light they were saved with.
+    Adjustment.TEMPERATURE -> copy(whiteBalance = whiteBalance.copy(temp = value, auto = false, light = null))
+    Adjustment.TINT -> copy(whiteBalance = whiteBalance.copy(tint = value, auto = false, light = null))
     Adjustment.VIBRANCE -> copy(presence = presence.copy(vibrance = value))
     Adjustment.SATURATION -> copy(presence = presence.copy(saturation = value))
     Adjustment.TEXTURE -> copy(presence = presence.copy(texture = value))

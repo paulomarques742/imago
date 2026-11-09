@@ -113,7 +113,7 @@ class LocalMotionCatalogueTest {
         old.close()
 
         val upgraded = Room.databaseBuilder(context, ImmichRoomDatabase::class.java, name)
-            .addMigrations(UnifiedMigration.MIGRATION_21_22).allowMainThreadQueries().build()
+            .addMigrations(UnifiedMigration.MIGRATION_21_22, UnifiedMigration.MIGRATION_22_23).allowMainThreadQueries().build()
         try {
             upgraded.openHelper.writableDatabase
             upgraded.assetDao().upsertAll(listOf(row("1")))

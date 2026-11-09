@@ -1,10 +1,12 @@
 package eu.studio742.imago.feature.editor
 
 import eu.studio742.imago.core.model.EditRecipe
+import eu.studio742.imago.core.model.KelvinTint
 import eu.studio742.imago.core.model.WhiteBalance
 import eu.studio742.imago.core.render.CameraLight
 import eu.studio742.imago.core.render.WhiteBalanceModel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -26,6 +28,13 @@ class WhiteBalanceKelvinTest {
         assertEquals("+20", EditorUiState(recipe = recipe).formatValue(Adjustment.TEMPERATURE, 20f))
         val masked = raw.copy(selectedMaskId = "m", sheet = EditorSheet.MASK_ADJUSTMENTS)
         assertEquals("+20", masked.formatValue(Adjustment.TEMPERATURE, 20f))
+    }
+
+    @Test fun `moving a slider on a saved recipe lets go of the light it carried`() {
+        val carrying = recipe.copy(whiteBalance = WhiteBalance(temp = -30f, tint = 8f, light = KelvinTint(3000f, 10f)))
+        assertNull(carrying.withAdjustment(Adjustment.TEMPERATURE, -10f).whiteBalance.light)
+        assertNull(carrying.withAdjustment(Adjustment.TINT, 2f).whiteBalance.light)
+        assertEquals(KelvinTint(3000f, 10f), carrying.withAdjustment(Adjustment.EXPOSURE, 0.5f).whiteBalance.light)
     }
 
     @Test fun `the lights are offered only where the camera's colour says what they are`() {

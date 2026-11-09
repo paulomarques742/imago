@@ -32,7 +32,7 @@ import androidx.room.RoomDatabaseConstructor
         AlbumMemberEntity::class,
         LocalMotionEntity::class,
     ],
-    version = 22,
+    version = 23,
     exportSchema = true,
 )
 @ConstructedBy(ImmichRoomDatabaseConstructor::class)

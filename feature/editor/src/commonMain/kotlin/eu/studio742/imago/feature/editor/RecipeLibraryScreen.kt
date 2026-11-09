@@ -1,11 +1,17 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+
 package eu.studio742.imago.feature.editor
 
 import eu.studio742.imago.core.designsystem.i18n.resolve
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import eu.studio742.imago.feature.editor.resources.*
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,13 +32,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.SaveAlt
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -148,11 +160,39 @@ fun RecipeLibraryScreen(
     onDuplicate: ((RecipeCard) -> Unit)? = null,
     createLabel: String = stringResource(Res.string.editor_create_recipe),
     createHint: String = stringResource(Res.string.editor_create_recipe_hint),
+    /** Null where the system has no share menu. With [onSaveRecipes], what lets the person's recipes be selected. */
+    onShareRecipes: ((List<RecipeCard>) -> Unit)? = null,
+    onSaveRecipes: ((List<RecipeCard>) -> Unit)? = null,
+    onImport: (() -> Unit)? = null,
+    /** A new value shows the person's own recipes, which is where an import just went. */
+    showMineSignal: Int = 0,
     bottomBar: @Composable () -> Unit = {},
 ) {
     // Saveable, so that coming back from editing a recipe finds the same tab and the same filter.
     var tab by rememberSaveable { mutableStateOf(if (saved.isEmpty()) RecipeTab.IMAGO else RecipeTab.MINE) }
     var group by rememberSaveable(tab) { mutableStateOf(ALL_GROUPS) }
+    // Compared with the last one seen and not keyed on: the grid leaves the composition while a recipe is
+    // edited, and coming back from that must not move it off the tab it was on.
+    var seenMineSignal by rememberSaveable { mutableStateOf(0) }
+    if (showMineSignal != seenMineSignal) {
+        seenMineSignal = showMineSignal
+        tab = RecipeTab.MINE
+        group = ALL_GROUPS
+    }
+
+    val selectable = onShareRecipes != null || onSaveRecipes != null
+    // An ArrayList because that is what saved state can hold.
+    var selectedIds by rememberSaveable { mutableStateOf(ArrayList<String>()) }
+    // A recipe deleted on another device while selected simply stops counting.
+    val selection = saved.filter { it.id in selectedIds }
+    val selecting = selection.isNotEmpty()
+    fun toggle(card: RecipeCard) {
+        selectedIds = ArrayList(if (card.id in selectedIds) selectedIds - card.id else selectedIds + card.id)
+    }
+    fun clearSelection() {
+        selectedIds = ArrayList()
+    }
+    BackHandler(enabled = selecting, onBack = ::clearSelection)
 
     val visible = when (tab) {
         RecipeTab.MINE -> saved
@@ -173,19 +213,62 @@ fun RecipeLibraryScreen(
                     .padding(horizontal = ImagoSpacing.Sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.AutoMirrored.Outlined.ArrowBack,
-                        contentDescription = stringResource(Res.string.editor_back),
-                        tint = ImagoUi.colors.text,
+                if (selecting) {
+                    IconButton(onClick = ::clearSelection) {
+                        Icon(
+                            Icons.Outlined.Close,
+                            contentDescription = stringResource(Res.string.editor_recipe_clear_selection),
+                            tint = ImagoUi.colors.text,
+                        )
+                    }
+                    Text(
+                        text = pluralStringResource(Res.plurals.editor_recipes_selected, selection.size, selection.size),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = ImagoUi.colors.text,
+                        modifier = Modifier.weight(1f),
                     )
+                    onShareRecipes?.let { share ->
+                        IconButton(onClick = { share(selection); clearSelection() }) {
+                            Icon(
+                                Icons.Outlined.Share,
+                                contentDescription = stringResource(Res.string.editor_recipe_share),
+                                tint = ImagoUi.colors.text,
+                            )
+                        }
+                    }
+                    onSaveRecipes?.let { save ->
+                        IconButton(onClick = { save(selection); clearSelection() }) {
+                            Icon(
+                                Icons.Outlined.SaveAlt,
+                                contentDescription = stringResource(Res.string.editor_save_as),
+                                tint = ImagoUi.colors.text,
+                            )
+                        }
+                    }
+                } else {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = stringResource(Res.string.editor_back),
+                            tint = ImagoUi.colors.text,
+                        )
+                    }
+                    Text(
+                        text = stringResource(Res.string.editor_recipes_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = ImagoUi.colors.text,
+                        modifier = Modifier.weight(1f),
+                    )
+                    onImport?.let { import ->
+                        IconButton(onClick = import) {
+                            Icon(
+                                Icons.Outlined.FileOpen,
+                                contentDescription = stringResource(Res.string.editor_recipe_import),
+                                tint = ImagoUi.colors.text,
+                            )
+                        }
+                    }
                 }
-                Text(
-                    text = stringResource(Res.string.editor_recipes_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = ImagoUi.colors.text,
-                    modifier = Modifier.weight(1f),
-                )
             }
             ImagoTabRow(
                 options = RecipeTab.entries,
@@ -232,16 +315,26 @@ fun RecipeLibraryScreen(
                         RecipeTile(
                             card = card,
                             assetId = assetId,
-                            onSelect = { onSelect(card) },
+                            selecting = selecting,
+                            selected = card.id in selectedIds,
+                            onSelect = {
+                                when {
+                                    !selecting -> onSelect(card)
+                                    !card.isBuiltIn -> toggle(card)
+                                }
+                            },
+                            onStartSelecting = if (selectable && !card.isBuiltIn) { { toggle(card) } } else null,
                             onToggleFavorite = { onToggleFavorite(card) },
                             onRename = { onRename(card) },
                             onDuplicate = onDuplicate?.let { { it(card) } },
+                            onShare = onShareRecipes?.let { { it(listOf(card)) } },
+                            onSaveAs = onSaveRecipes?.let { { it(listOf(card)) } },
                             onDelete = { onDelete(card) },
                         )
                     }
                 }
             }
-            onCreate?.let { CreateRecipeRow(label = createLabel, hint = createHint, onClick = it) }
+            if (!selecting) onCreate?.let { CreateRecipeRow(label = createLabel, hint = createHint, onClick = it) }
         }
     }
 }
@@ -250,19 +343,26 @@ fun RecipeLibraryScreen(
 private fun RecipeTile(
     card: RecipeCard,
     assetId: String?,
+    selecting: Boolean,
+    selected: Boolean,
     onSelect: () -> Unit,
+    onStartSelecting: (() -> Unit)?,
     onToggleFavorite: () -> Unit,
     onRename: () -> Unit,
     onDuplicate: (() -> Unit)?,
+    onShare: (() -> Unit)?,
+    onSaveAs: (() -> Unit)?,
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val preview by rememberRecipePreview(assetId, card.id, card.recipe)
+    val shape = RoundedCornerShape(ImagoRadii.Medium)
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(ImagoRadii.Medium))
+            .clip(shape)
             .background(ImagoUi.colors.surface)
-            .clickable(role = Role.Button, onClick = onSelect),
+            .then(if (selected) Modifier.border(2.dp, ImagoUi.colors.emphasis, shape) else Modifier)
+            .combinedClickable(role = Role.Button, onClick = onSelect, onLongClick = onStartSelecting),
     ) {
         Box(
             Modifier
@@ -276,6 +376,14 @@ private fun RecipeTile(
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
+                )
+            }
+            if (selected) {
+                Icon(
+                    Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = ImagoUi.colors.emphasis,
+                    modifier = Modifier.align(Alignment.TopStart).padding(ImagoSpacing.Sm).size(ImagoSizes.IconDefault),
                 )
             }
             Box(
@@ -330,7 +438,7 @@ private fun RecipeTile(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (!card.isBuiltIn) {
+            if (!card.isBuiltIn && !selecting) {
                 Box {
                     IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(32.dp)) {
                         Icon(
@@ -356,6 +464,36 @@ private fun RecipeTile(
                                 onClick = {
                                     menuExpanded = false
                                     duplicate()
+                                },
+                            )
+                        }
+                        onShare?.let { share ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.editor_recipe_share)) },
+                                leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    share()
+                                },
+                            )
+                        }
+                        onSaveAs?.let { saveAs ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.editor_save_as)) },
+                                leadingIcon = { Icon(Icons.Outlined.SaveAlt, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    saveAs()
+                                },
+                            )
+                        }
+                        onStartSelecting?.let { select ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.editor_recipe_select)) },
+                                leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    select()
                                 },
                             )
                         }

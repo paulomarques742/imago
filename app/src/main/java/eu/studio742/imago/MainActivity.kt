@@ -10,7 +10,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import eu.studio742.imago.feature.editor.readRecipeFiles
+import eu.studio742.imago.feature.editor.recipeFileUris
+import kotlinx.coroutines.launch
 import eu.studio742.imago.core.designsystem.ImagoTheme
 import eu.studio742.imago.core.designsystem.LocalAppearanceSettings
 import eu.studio742.imago.core.designsystem.i18n.LocalLanguageSettings
@@ -34,6 +38,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleAuthLink(intent)
+        handleRecipeFiles(intent)
+    }
+
+    /** The read permission lasts while this activity does, so the files are read now and handed over as bytes. */
+    private fun handleRecipeFiles(intent: Intent?) {
+        val uris = intent?.recipeFileUris(this).orEmpty()
+        if (uris.isEmpty()) return
+        lifecycleScope.launch { shell.openRecipeFiles(readRecipeFiles(this@MainActivity, uris)) }
     }
 
     /** An account link (confirmation, recovery) opens the account, where the outcome is shown. */
@@ -60,6 +72,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        if (savedInstanceState == null) handleAuthLink(intent)
+        if (savedInstanceState == null) {
+            handleAuthLink(intent)
+            handleRecipeFiles(intent)
+        }
     }
 }

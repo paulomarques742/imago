@@ -16,5 +16,7 @@ data class SavedRecipeEntity(
     val usedAt: String? = null,
     /** The `RecipePart` names applying it writes, separated by commas; null when saved before there was a choice. */
     val parts: String? = null,
+    /** The `RecipeOrigin` it was imported from; null in one made in IMAGO. */
+    val origin: String? = null,
     @Embedded val sync: SyncState = SyncState(),
 )

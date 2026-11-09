@@ -13,6 +13,9 @@ enum class RecipePart {
     EXPOSURE, CONTRAST, HIGHLIGHTS, SHADOWS, WHITES, BLACKS, TONE_CURVE,
     WHITE_BALANCE, VIBRANCE, SATURATION, COLOR_MIXER, COLOR_GRADING,
     TEXTURE, CLARITY, DEHAZE,
+    SHARPENING, LUMINANCE_NOISE_REDUCTION, COLOR_NOISE_REDUCTION,
+    CALIBRATION,
+    LENS_VIGNETTE, DEFRINGE,
     VIGNETTE, GRAIN,
     MASKS,
     /** The Remove tool's corrections: off unless asked for, as the dust on a sensor is the one reason to copy them. */
@@ -30,14 +33,24 @@ enum class RecipePart {
         val LOOK: Set<RecipePart> = entries.toSet() - GEOMETRY - MASKS - REMOVE
 
         /**
+         * Sharpening, noise reduction, calibration and the lens, which became parts after recipes had
+         * been saved without them. See [SavedRecipe.appliedParts] for what those recipes do.
+         */
+        val FINISHING: Set<RecipePart> =
+            setOf(SHARPENING, LUMINANCE_NOISE_REDUCTION, COLOR_NOISE_REDUCTION, CALIBRATION, LENS_VIGNETTE, DEFRINGE)
+
+        /**
          * What a recipe saved before the choice existed carries. Its geometry came along by accident,
          * and applying it cropped and tilted every photo it touched; its masks were there on purpose.
          * It never chose a profile: there were none.
          */
-        val LEGACY: Set<RecipePart> = entries.toSet() - GEOMETRY - PROFILE - REMOVE
+        val LEGACY: Set<RecipePart> = entries.toSet() - GEOMETRY - PROFILE - REMOVE - FINISHING
 
-        /** What the app's filters write: a look made on top of whichever profile the photo has. */
-        val BUILT_IN: Set<RecipePart> = LOOK - PROFILE
+        /**
+         * What the app's filters write: a look made on top of whichever profile the photo has. They say
+         * nothing about sharpening or noise, and writing their neutral values would wipe the photo's.
+         */
+        val BUILT_IN: Set<RecipePart> = LOOK - PROFILE - FINISHING
 
         /** A stored list back as a set. Names from a newer app are skipped, not fatal. */
         fun parse(names: Iterable<String>): Set<RecipePart> =
@@ -75,6 +88,26 @@ fun EditRecipe.withPartsFrom(source: EditRecipe, parts: Set<RecipePart>): EditRe
         grainSize = pick(RecipePart.GRAIN, source.effects.grainSize, effects.grainSize),
         grainRoughness = pick(RecipePart.GRAIN, source.effects.grainRoughness, effects.grainRoughness),
     )
+    val detail = Detail(
+        sharpenAmount = pick(RecipePart.SHARPENING, source.detail.sharpenAmount, detail.sharpenAmount),
+        sharpenRadius = pick(RecipePart.SHARPENING, source.detail.sharpenRadius, detail.sharpenRadius),
+        sharpenDetail = pick(RecipePart.SHARPENING, source.detail.sharpenDetail, detail.sharpenDetail),
+        sharpenMasking = pick(RecipePart.SHARPENING, source.detail.sharpenMasking, detail.sharpenMasking),
+        noiseReductionLuminance = pick(RecipePart.LUMINANCE_NOISE_REDUCTION, source.detail.noiseReductionLuminance, detail.noiseReductionLuminance),
+        noiseReductionLuminanceDetail = pick(RecipePart.LUMINANCE_NOISE_REDUCTION, source.detail.noiseReductionLuminanceDetail, detail.noiseReductionLuminanceDetail),
+        noiseReductionContrast = pick(RecipePart.LUMINANCE_NOISE_REDUCTION, source.detail.noiseReductionContrast, detail.noiseReductionContrast),
+        noiseReductionColor = pick(RecipePart.COLOR_NOISE_REDUCTION, source.detail.noiseReductionColor, detail.noiseReductionColor),
+        noiseReductionColorDetail = pick(RecipePart.COLOR_NOISE_REDUCTION, source.detail.noiseReductionColorDetail, detail.noiseReductionColorDetail),
+        noiseReductionColorSmoothness = pick(RecipePart.COLOR_NOISE_REDUCTION, source.detail.noiseReductionColorSmoothness, detail.noiseReductionColorSmoothness),
+    )
+    val lens = lens.copy(
+        vignetteAmount = pick(RecipePart.LENS_VIGNETTE, source.lens.vignetteAmount, lens.vignetteAmount),
+        vignetteMidpoint = pick(RecipePart.LENS_VIGNETTE, source.lens.vignetteMidpoint, lens.vignetteMidpoint),
+        purpleAmount = pick(RecipePart.DEFRINGE, source.lens.purpleAmount, lens.purpleAmount),
+        purpleRange = pick(RecipePart.DEFRINGE, source.lens.purpleRange, lens.purpleRange),
+        greenAmount = pick(RecipePart.DEFRINGE, source.lens.greenAmount, lens.greenAmount),
+        greenRange = pick(RecipePart.DEFRINGE, source.lens.greenRange, lens.greenRange),
+    )
     // The crop keeps its aspect lock: the lock is how the frame was drawn, not a separate setting.
     val geometry = geometry.copy(
         cropRect = pick(RecipePart.CROP, source.geometry.cropRect, geometry.cropRect),
@@ -93,6 +126,9 @@ fun EditRecipe.withPartsFrom(source: EditRecipe, parts: Set<RecipePart>): EditRe
         toneCurve = pick(RecipePart.TONE_CURVE, source.toneCurve, toneCurve),
         hsl = pick(RecipePart.COLOR_MIXER, source.hsl, hsl),
         colorGrading = pick(RecipePart.COLOR_GRADING, source.colorGrading, colorGrading),
+        detail = detail,
+        calibration = pick(RecipePart.CALIBRATION, source.calibration, calibration),
+        lens = lens,
         effects = effects,
         geometry = geometry,
         masks = pick(RecipePart.MASKS, source.masks, masks),

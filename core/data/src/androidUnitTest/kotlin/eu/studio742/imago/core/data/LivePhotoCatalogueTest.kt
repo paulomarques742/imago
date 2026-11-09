@@ -188,7 +188,7 @@ class LivePhotoCatalogueTest {
         old.close()
 
         val upgraded = Room.databaseBuilder(context, ImmichRoomDatabase::class.java, "live-photo-migration.db")
-            .addMigrations(UnifiedMigration.MIGRATION_20_21, UnifiedMigration.MIGRATION_21_22).allowMainThreadQueries().build()
+            .addMigrations(UnifiedMigration.MIGRATION_20_21, UnifiedMigration.MIGRATION_21_22, UnifiedMigration.MIGRATION_22_23).allowMainThreadQueries().build()
         try {
             // Room validates the whole version 21 schema on opening.
             val sql = upgraded.openHelper.writableDatabase

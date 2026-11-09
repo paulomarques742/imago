@@ -256,11 +256,24 @@ data class EditRecipe(
  * Auto found on this photo, and render as they are. It matters when the recipe goes to another photo,
  * where Auto is found again for that photo, as Lightroom does when it syncs an Auto white balance.
  * Touching either slider or picking with the selector makes it Custom.
+ *
+ * [light] is the scene's light when a recipe leaves a RAW, since the same sliders mean another light on
+ * a RAW whose camera recorded another one. Nothing renders from it: [temp] and [tint] stay what this
+ * photo draws, and what an app without the field applies. A photo's own recipe never holds it.
  */
 @Serializable
-data class WhiteBalance(val temp: Float = 0f, val tint: Float = 0f, val auto: Boolean = false) {
+data class WhiteBalance(
+    val temp: Float = 0f,
+    val tint: Float = 0f,
+    val auto: Boolean = false,
+    val light: KelvinTint? = null,
+) {
     val isAsShot: Boolean get() = !auto && temp == 0f && tint == 0f
 }
+
+/** A light as it is named for a RAW: on the absolute scale, whatever camera recorded the photo. */
+@Serializable
+data class KelvinTint(val kelvin: Float, val tint: Float)
 
 @Serializable
 data class Tone(

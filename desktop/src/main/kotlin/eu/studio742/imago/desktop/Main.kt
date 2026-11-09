@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import eu.studio742.imago.desktop.platform.AppPaths
 import eu.studio742.imago.desktop.platform.DesktopAppearanceSettings
 import eu.studio742.imago.desktop.platform.DesktopLanguageSettings
@@ -40,6 +41,8 @@ import eu.studio742.imago.core.sync.SyncEngine
 import eu.studio742.imago.feature.account.LocalAccountRepository
 import eu.studio742.imago.feature.account.LocalSyncEngine
 import eu.studio742.imago.feature.account.toIndicator
+import eu.studio742.imago.feature.editor.isRecipeFileName
+import eu.studio742.imago.feature.editor.readRecipeFile
 import eu.studio742.imago.feature.shell.ImagoApp
 import eu.studio742.imago.feature.shell.shellViewModel
 import java.net.URI
@@ -166,9 +169,13 @@ fun main(args: Array<String>) {
                                 val files = (event.dragData() as? DragData.FilesList)?.readFiles().orEmpty()
                                     .mapNotNull { runCatching { Path.of(URI(it)) }.getOrNull() }
                                 if (files.isEmpty()) return false
+                                val (recipeFiles, others) = files.partition { isRecipeFileName(it.fileName.toString()) }
                                 scope.launch {
+                                    if (recipeFiles.isNotEmpty()) {
+                                        shell.openRecipeFiles(withContext(Dispatchers.IO) { recipeFiles.map(::readRecipeFile) })
+                                    }
                                     // A dropped photo adds the folder it is in.
-                                    files.map { if (Files.isDirectory(it)) it else it.parent }.distinct()
+                                    others.map { if (Files.isDirectory(it)) it else it.parent }.distinct()
                                         .forEach { folder -> runCatching { graph.folders.addFolder(folder) } }
                                 }
                                 return true

@@ -70,4 +70,9 @@ object UnifiedMigration {
             db.execSQL(LOCAL_MOTIONS_SQL)
         }
     }
+    val MIGRATION_22_23 = object : Migration(22, 23) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(SAVED_RECIPE_ORIGIN_SQL)
+        }
+    }
 }

@@ -66,6 +66,9 @@ val LIVE_PHOTO_SQL = listOf(
     "DELETE FROM `catalog_months`",
 )
 
+/** Version 23: the format a saved recipe was imported from. Null in everything made in IMAGO. */
+const val SAVED_RECIPE_ORIGIN_SQL = "ALTER TABLE `saved_recipes` ADD COLUMN `origin` TEXT"
+
 /** Version 22: what a look inside each device photo found about its movement. */
 const val LOCAL_MOTIONS_SQL =
     "CREATE TABLE IF NOT EXISTS `local_motions` (`libraryKey` TEXT NOT NULL, `assetId` TEXT NOT NULL, `identity` TEXT NOT NULL, " +

@@ -1,6 +1,79 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Base language: English. Translations live in values-<language>/ with the same keys. -->
 <resources>
+    <string name="editor_ok">OK</string>
+    <string name="editor_recipe_share">Share</string>
+    <string name="editor_recipe_save_file">Save</string>
+    <string name="editor_recipe_select">Select</string>
+    <string name="editor_recipe_clear_selection">Clear selection</string>
+    <string name="editor_recipe_import">Import</string>
+    <string name="editor_recipe_file_default_name">IMAGO recipes</string>
+    <string name="editor_recipe_file_failed">Couldn’t write the recipe file.</string>
+    <string name="editor_recipe_export_parts_title">What goes in the file</string>
+    <string name="editor_recipe_share_rights_title">Can you share this?</string>
+    <plurals name="editor_recipe_share_rights">
+        <item quantity="one">This includes a recipe that came from another app’s file. Many presets are paid or licensed: share it only if you’re allowed to.</item>
+        <item quantity="other">This includes %1$d recipes that came from other apps’ files. Many presets are paid or licensed: share them only if you’re allowed to.</item>
+    </plurals>
+    <string name="editor_recipe_import_title">Import recipes</string>
+    <string name="editor_recipe_import_failed">Couldn’t add the recipes. Try again.</string>
+    <string name="editor_recipe_import_nothing">There is nothing to add.</string>
+    <string name="editor_recipe_import_already">Already in the library: %1$s</string>
+    <string name="editor_recipe_import_newer">Need a newer version of IMAGO: %1$s</string>
+    <string name="editor_recipe_import_partly">Left without settings only a newer version of IMAGO knows: %1$s</string>
+    <string name="editor_recipe_import_sample">Sample %1$d of %2$d</string>
+    <string name="editor_recipe_import_previous_sample">Previous sample</string>
+    <string name="editor_recipe_import_next_sample">Next sample</string>
+    <plurals name="editor_recipes_selected">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <plurals name="editor_recipe_import_add">
+        <item quantity="one">Add to recipes</item>
+        <item quantity="other">Add %1$d to recipes</item>
+    </plurals>
+    <string name="editor_recipe_import_gaps">%1$s: %2$s</string>
+    <string name="editor_recipe_gap_item">%1$s (%2$s)</string>
+    <string name="editor_recipe_gap_limited">%1$s brought into range (was %2$s)</string>
+    <string name="editor_recipe_gap_reason_not_in_app">not in IMAGO</string>
+    <string name="editor_recipe_gap_reason_not_imported">not imported</string>
+    <string name="editor_recipe_gap_reason_old_process">older process</string>
+    <string name="editor_recipe_gap_reason_approximated">approximated</string>
+    <string name="editor_recipe_gap_parametric_curve">Parametric curve</string>
+    <string name="editor_recipe_gap_tone_curve">Tone curve</string>
+    <string name="editor_recipe_gap_creative_profile">Creative profile</string>
+    <string name="editor_recipe_gap_camera_profile">Camera profile</string>
+    <string name="editor_recipe_gap_masks">Masks</string>
+    <string name="editor_recipe_gap_geometry">Crop and perspective</string>
+    <string name="editor_recipe_gap_gray_mixer">Black and white mix</string>
+    <string name="editor_recipe_gap_lens_profile">Lens profile</string>
+    <string name="editor_recipe_gap_chromatic_aberration">Chromatic aberration</string>
+    <string name="editor_recipe_gap_defringe_hue">Defringe hues</string>
+    <string name="editor_recipe_gap_vignette_style">Vignette style</string>
+    <string name="editor_recipe_gap_auto_tone">Auto tone</string>
+    <string name="editor_recipe_gap_iso_adaptive">Settings that change with ISO</string>
+    <string name="editor_recipe_gap_point_color">Point colour</string>
+    <string name="editor_recipe_gap_lens_blur">Lens blur</string>
+    <string name="editor_recipe_gap_old_tone">Basic tone settings</string>
+    <string name="editor_recipe_gap_white_balance">White balance preset</string>
+    <string name="editor_recipe_gap_other">Other settings</string>
+    <string name="editor_recipe_imported_collection">Imported</string>
+    <plurals name="editor_recipe_import_skipped">
+        <item quantity="one">%1$d file in the pack is in a format IMAGO can’t read yet.</item>
+        <item quantity="other">%1$d files in the pack are in a format IMAGO can’t read yet.</item>
+    </plurals>
+    <plurals name="editor_recipe_import_invalid">
+        <item quantity="one">%1$d recipe is damaged and was left out.</item>
+        <item quantity="other">%1$d recipes are damaged and were left out.</item>
+    </plurals>
+    <plurals name="editor_recipe_import_unreadable">
+        <item quantity="one">%1$d file couldn’t be read.</item>
+        <item quantity="other">%1$d files couldn’t be read.</item>
+    </plurals>
+    <plurals name="editor_recipe_import_newer_files">
+        <item quantity="one">%1$d file needs a newer version of IMAGO.</item>
+        <item quantity="other">%1$d files need a newer version of IMAGO.</item>
+    </plurals>
     <string name="editor_saved_to_gallery">Export saved to Pictures/IMAGO.</string>
     <string name="editor_save_to_gallery">Save to gallery</string>
     <string name="editor_share_edited">Share</string>
@@ -158,6 +231,7 @@
     <string name="editor_white_balance_tungsten">Tungsten</string>
     <string name="editor_white_balance_fluorescent">Fluorescent</string>
     <string name="editor_white_balance_flash">Flash</string>
+    <string name="editor_white_balance_needs_raw">Applied, except the white balance: it names a light, which only a RAW photo can use.</string>
     <string name="editor_white_balance_from_raw">Applied. Its white balance came from a RAW photo and may not match on this one.</string>
     <string name="editor_white_balance_from_jpeg">Applied. Its white balance came from a JPEG and may not match on this RAW.</string>
     <string name="editor_white_balance_custom">Custom</string>

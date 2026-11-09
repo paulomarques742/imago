@@ -1,6 +1,79 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Português europeu. -->
 <resources>
+    <string name="editor_ok">OK</string>
+    <string name="editor_recipe_share">Partilhar</string>
+    <string name="editor_recipe_save_file">Guardar</string>
+    <string name="editor_recipe_select">Seleccionar</string>
+    <string name="editor_recipe_clear_selection">Limpar a selecção</string>
+    <string name="editor_recipe_import">Importar</string>
+    <string name="editor_recipe_file_default_name">Receitas IMAGO</string>
+    <string name="editor_recipe_file_failed">Não foi possível escrever o ficheiro de receitas.</string>
+    <string name="editor_recipe_export_parts_title">O que vai no ficheiro</string>
+    <string name="editor_recipe_share_rights_title">Pode partilhar isto?</string>
+    <plurals name="editor_recipe_share_rights">
+        <item quantity="one">Isto inclui uma receita que veio de um ficheiro de outra app. Muitos presets são pagos ou têm licença: partilhe-a só se puder fazê-lo.</item>
+        <item quantity="other">Isto inclui %1$d receitas que vieram de ficheiros de outras apps. Muitos presets são pagos ou têm licença: partilhe-as só se puder fazê-lo.</item>
+    </plurals>
+    <string name="editor_recipe_import_title">Importar receitas</string>
+    <string name="editor_recipe_import_failed">Não foi possível adicionar as receitas. Tente outra vez.</string>
+    <string name="editor_recipe_import_nothing">Não há nada para adicionar.</string>
+    <string name="editor_recipe_import_already">Já estão na biblioteca: %1$s</string>
+    <string name="editor_recipe_import_newer">Precisam de uma versão mais recente do IMAGO: %1$s</string>
+    <string name="editor_recipe_import_partly">Ficaram sem definições que só uma versão mais recente do IMAGO conhece: %1$s</string>
+    <string name="editor_recipe_import_sample">Amostra %1$d de %2$d</string>
+    <string name="editor_recipe_import_previous_sample">Amostra anterior</string>
+    <string name="editor_recipe_import_next_sample">Amostra seguinte</string>
+    <plurals name="editor_recipes_selected">
+        <item quantity="one">%1$d seleccionada</item>
+        <item quantity="other">%1$d seleccionadas</item>
+    </plurals>
+    <plurals name="editor_recipe_import_add">
+        <item quantity="one">Adicionar às receitas</item>
+        <item quantity="other">Adicionar %1$d às receitas</item>
+    </plurals>
+    <string name="editor_recipe_import_gaps">%1$s: %2$s</string>
+    <string name="editor_recipe_gap_item">%1$s (%2$s)</string>
+    <string name="editor_recipe_gap_limited">%1$s ajustado ao alcance (era %2$s)</string>
+    <string name="editor_recipe_gap_reason_not_in_app">não existe no IMAGO</string>
+    <string name="editor_recipe_gap_reason_not_imported">não importado</string>
+    <string name="editor_recipe_gap_reason_old_process">processo antigo</string>
+    <string name="editor_recipe_gap_reason_approximated">aproximada</string>
+    <string name="editor_recipe_gap_parametric_curve">Curva paramétrica</string>
+    <string name="editor_recipe_gap_tone_curve">Curva de tons</string>
+    <string name="editor_recipe_gap_creative_profile">Perfil criativo</string>
+    <string name="editor_recipe_gap_camera_profile">Perfil de câmara</string>
+    <string name="editor_recipe_gap_masks">Máscaras</string>
+    <string name="editor_recipe_gap_geometry">Recorte e perspectiva</string>
+    <string name="editor_recipe_gap_gray_mixer">Mistura de preto e branco</string>
+    <string name="editor_recipe_gap_lens_profile">Perfil da lente</string>
+    <string name="editor_recipe_gap_chromatic_aberration">Aberração cromática</string>
+    <string name="editor_recipe_gap_defringe_hue">Tons das franjas</string>
+    <string name="editor_recipe_gap_vignette_style">Estilo da vinheta</string>
+    <string name="editor_recipe_gap_auto_tone">Tom automático</string>
+    <string name="editor_recipe_gap_iso_adaptive">Definições que mudam com o ISO</string>
+    <string name="editor_recipe_gap_point_color">Cor pontual</string>
+    <string name="editor_recipe_gap_lens_blur">Desfoque de lente</string>
+    <string name="editor_recipe_gap_old_tone">Definições básicas de tom</string>
+    <string name="editor_recipe_gap_white_balance">Predefinição de balanço de brancos</string>
+    <string name="editor_recipe_gap_other">Outras definições</string>
+    <string name="editor_recipe_imported_collection">Importadas</string>
+    <plurals name="editor_recipe_import_skipped">
+        <item quantity="one">%1$d ficheiro do pacote está num formato que o IMAGO ainda não lê.</item>
+        <item quantity="other">%1$d ficheiros do pacote estão num formato que o IMAGO ainda não lê.</item>
+    </plurals>
+    <plurals name="editor_recipe_import_invalid">
+        <item quantity="one">%1$d receita está danificada e ficou de fora.</item>
+        <item quantity="other">%1$d receitas estão danificadas e ficaram de fora.</item>
+    </plurals>
+    <plurals name="editor_recipe_import_unreadable">
+        <item quantity="one">Não foi possível ler %1$d ficheiro.</item>
+        <item quantity="other">Não foi possível ler %1$d ficheiros.</item>
+    </plurals>
+    <plurals name="editor_recipe_import_newer_files">
+        <item quantity="one">%1$d ficheiro precisa de uma versão mais recente do IMAGO.</item>
+        <item quantity="other">%1$d ficheiros precisam de uma versão mais recente do IMAGO.</item>
+    </plurals>
     <string name="editor_saved_to_gallery">Exportação guardada em Pictures/IMAGO.</string>
     <string name="editor_save_to_gallery">Guardar na galeria</string>
     <string name="editor_share_edited">Partilhar</string>
@@ -158,6 +231,7 @@
     <string name="editor_white_balance_tungsten">Tungsténio</string>
     <string name="editor_white_balance_fluorescent">Fluorescente</string>
     <string name="editor_white_balance_flash">Flash</string>
+    <string name="editor_white_balance_needs_raw">Aplicada, menos o equilíbrio de brancos: indica uma luz, que só uma fotografia RAW consegue usar.</string>
     <string name="editor_white_balance_from_raw">Aplicada. O equilíbrio de brancos veio de uma fotografia RAW e pode não corresponder nesta.</string>
     <string name="editor_white_balance_from_jpeg">Aplicada. O equilíbrio de brancos veio de um JPEG e pode não corresponder neste RAW.</string>
     <string name="editor_white_balance_custom">Personalizado</string>

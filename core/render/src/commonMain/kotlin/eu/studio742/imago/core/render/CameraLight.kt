@@ -1,5 +1,7 @@
 package eu.studio742.imago.core.render
 
+import eu.studio742.imago.core.model.KelvinTint
+import eu.studio742.imago.core.model.WhiteBalance
 import kotlin.math.abs
 
 /**
@@ -61,5 +63,23 @@ class CameraLight private constructor(private val toDeveloped: DoubleArray, priv
     }
 }
 
-/** A light as Lightroom names it for a RAW. */
-data class KelvinTint(val kelvin: Float, val tint: Float)
+/**
+ * This white balance as it leaves a photo developed with [camera]: with the light it stands for. As Shot
+ * and Auto are not lights but choices, which every photo answers for itself, so they carry none.
+ */
+fun WhiteBalance.withLightOf(camera: CameraLight?): WhiteBalance = when {
+    camera == null -> this
+    auto || isAsShot -> copy(light = null)
+    else -> copy(light = camera.kelvinTint(temp, tint))
+}
+
+/**
+ * This white balance as it lands on a photo developed with [camera]: the same light when there is one to
+ * convert to, and otherwise the difference from As Shot that [WhiteBalance.temp] and [WhiteBalance.tint] already are.
+ */
+fun WhiteBalance.landedOn(camera: CameraLight?): WhiteBalance {
+    val carried = light ?: return this
+    if (camera == null || auto) return copy(light = null)
+    val (temperature, sliderTint) = camera.sliders(carried.kelvin, carried.tint)
+    return copy(temp = temperature, tint = sliderTint, light = null)
+}

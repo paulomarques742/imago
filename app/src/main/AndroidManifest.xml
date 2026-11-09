@@ -63,6 +63,22 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="imago" android:host="auth" />
             </intent-filter>
+            <!-- Recipe files: opened from a file manager, or shared from another app. Android does not
+                 match a content:// URI by its extension, and an extension it does not know reaches an
+                 app as octet-stream, so that type has to be here for a received file to open at all. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/vnd.imago+json" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.imago+json" />
+            </intent-filter>
         </activity>
 
         <!-- Photos and videos other apps open with IMAGO: "Open with", the camera's last photo (also

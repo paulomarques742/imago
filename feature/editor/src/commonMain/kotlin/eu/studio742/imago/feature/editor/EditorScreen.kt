@@ -287,6 +287,8 @@ internal class RecipeEditActions(
     val onSave: () -> Unit,
     val onDuplicate: () -> Unit,
     val onDelete: () -> Unit,
+    val onExport: (RecipeDelivery) -> Unit,
+    val canShare: Boolean,
 )
 
 @Composable
@@ -334,6 +336,12 @@ fun EditorRoute(
         }
     }
     BackHandler { requestLeave() }
+    val recipeExporter = if (recipeMode) {
+        val files = rememberRecipeFileActions(onOpened = {}, onFailed = viewModel::reportRecipeFileFailed)
+        rememberRecipeExporter(files, onFailed = viewModel::reportRecipeFileFailed).also { RecipeExportDialog(it) }
+    } else {
+        null
+    }
     val background by viewModel.editorBackground.collectAsStateWithLifecycle()
     EditorScreen(
         state = state,
@@ -495,6 +503,10 @@ fun EditorRoute(
                 onSave = { saveRecipe(false) },
                 onDuplicate = viewModel::duplicateRecipeEdit,
                 onDelete = { confirmingDelete = true },
+                onExport = { delivery ->
+                    viewModel.recipeAsEdited()?.let { recipeExporter?.start(listOf(it), delivery) }
+                },
+                canShare = recipeExporter?.canShare == true,
             )
         } else {
             null
@@ -962,7 +974,7 @@ private fun EditorScreen(
     LaunchedEffect(assetId, state.bitmap) {
         val bitmap = state.bitmap ?: return@LaunchedEffect
         RecipePreviewCache.setSource(assetId ?: return@LaunchedEffect, bitmap, state.highPrecisionSource,
-            state.recipe?.rawRendering() ?: CURRENT_RAW_RENDERING, state.recipe?.rawExposure() ?: 0f)
+            state.recipe?.rawRendering() ?: CURRENT_RAW_RENDERING, state.recipe?.rawExposure() ?: 0f, state.cameraLight)
     }
     // Undo, redo and compare are what is done most often while developing a photo, and on a tablet
     // with a keyboard there is no reason to fetch them from the bar every time. Backslash is the compare
@@ -2365,6 +2377,26 @@ private fun EditorScreen(
                                 )
                                 // A filter is not the user's to delete, and a new recipe has nothing yet.
                                 if (state.recipeEdit?.saved != null) {
+                                    if (actions.canShare) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(Res.string.editor_recipe_share)) },
+                                            leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null) },
+                                            enabled = state.recipe != null && !state.needsNewerApp,
+                                            onClick = {
+                                                showContextMenu = false
+                                                actions.onExport(RecipeDelivery.SHARE)
+                                            },
+                                        )
+                                    }
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(Res.string.editor_save_as)) },
+                                        leadingIcon = { Icon(Icons.Outlined.Save, contentDescription = null) },
+                                        enabled = state.recipe != null && !state.needsNewerApp,
+                                        onClick = {
+                                            showContextMenu = false
+                                            actions.onExport(RecipeDelivery.SAVE)
+                                        },
+                                    )
                                     DropdownMenuItem(
                                         text = { Text(stringResource(Res.string.editor_delete), color = ImagoUi.colors.danger) },
                                         leadingIcon = {

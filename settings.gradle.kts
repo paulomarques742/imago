@@ -25,6 +25,7 @@ include(
     ":core:data",
     ":core:designsystem",
     ":core:composition",
+    ":core:interchange",
     ":core:sync",
     ":core:sync-supabase",
     ":feature:library",

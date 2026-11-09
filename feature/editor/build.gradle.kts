@@ -26,6 +26,7 @@ kotlin {
             implementation(project(":core:immich"))
             implementation(project(":core:render"))
             implementation(project(":core:designsystem"))
+            implementation(project(":core:interchange"))
             implementation(compose.materialIconsExtended)
             implementation(libs.compose.backhandler)
             implementation(libs.jetbrains.lifecycle.viewmodel.compose)

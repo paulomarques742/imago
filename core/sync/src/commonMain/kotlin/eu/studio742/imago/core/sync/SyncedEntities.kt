@@ -170,6 +170,7 @@ internal class SavedRecipeSync(
                 isFavorite = payload.boolean("isFavorite"),
                 usedAt = payload.string("usedAt"),
                 parts = (payload["parts"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }?.joinToString(","),
+                origin = payload.string("origin"),
                 sync = change.syncState(),
             ),
         )
@@ -197,6 +198,7 @@ internal class SavedRecipeSync(
                 entity.parts?.let { parts ->
                     put("parts", JsonArray(parts.split(',').filter(String::isNotEmpty).map(::JsonPrimitive)))
                 }
+                entity.origin?.let { put("origin", JsonPrimitive(it)) }
             },
             editedAt = entity.sync.editedAt,
             deleted = entity.sync.deletedAt != null,

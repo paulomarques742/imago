@@ -1,9 +1,12 @@
 package eu.studio742.imago.core.render
 
+import eu.studio742.imago.core.model.KelvinTint
+import eu.studio742.imago.core.model.WhiteBalance
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 
 class CameraLightTest {
     /** XYZ to linear sRGB, D65. */
@@ -45,6 +48,42 @@ class CameraLightTest {
         assertNull(CameraLight.of(null))
         assertNull(CameraLight.of(FloatArray(9)))
         assertNull(CameraLight.of(FloatArray(8) { 1f }))
+    }
+
+    @Test fun `a light that leaves one camera lands as the same light on another`() {
+        val from = CameraLight.of(balancedFor(5200f))!!
+        val to = CameraLight.of(balancedFor(3400f, 12f))!!
+        val (temperature, tint) = from.sliders(3000f, 10f)
+
+        val leaving = WhiteBalance(temperature, tint).withLightOf(from)
+        assertEquals(3000f, leaving.light!!.kelvin, 30f)
+        assertEquals(10f, leaving.light!!.tint, 1f)
+
+        val landed = leaving.landedOn(to)
+        assertNull("a photo's own recipe holds no light", landed.light)
+        assertEquals(3000f, to.kelvinTint(landed.temp, landed.tint).kelvin, 30f)
+        assertEquals(10f, to.kelvinTint(landed.temp, landed.tint).tint, 1f)
+        assertTrue("the sliders moved, or it would have been the difference", abs(landed.temp - temperature) > 5f)
+    }
+
+    @Test fun `with no camera to convert to the recipe keeps the difference`() {
+        val carried = WhiteBalance(temp = -30f, tint = 8f, light = KelvinTint(3000f, 10f))
+        assertEquals(WhiteBalance(temp = -30f, tint = 8f), carried.landedOn(null))
+    }
+
+    @Test fun `As Shot and Auto are choices, and carry no light`() {
+        val camera = CameraLight.of(balancedFor(5200f))!!
+        assertEquals(WhiteBalance(), WhiteBalance().withLightOf(camera))
+        val auto = WhiteBalance(temp = 12f, tint = -3f, auto = true)
+        assertEquals(auto, auto.withLightOf(camera))
+        assertEquals(auto, auto.copy(light = KelvinTint(3000f, 0f)).landedOn(camera))
+    }
+
+    @Test fun `a white balance that carries no light lands unchanged, and a JPEG never gets one`() {
+        val camera = CameraLight.of(balancedFor(5200f))!!
+        val relative = WhiteBalance(temp = -30f, tint = 8f)
+        assertEquals(relative, relative.landedOn(camera))
+        assertEquals(relative, relative.withLightOf(null))
     }
 
     @Test fun `kelvin and tint round trip through XYZ`() {

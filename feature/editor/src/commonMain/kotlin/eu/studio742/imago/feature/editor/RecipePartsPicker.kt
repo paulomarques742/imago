@@ -45,12 +45,21 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** The last choice of parts made on this device, or the look alone before there was one. */
-internal fun ConfigurationRepository.rememberedRecipeParts(): Set<RecipePart> =
-    recipePartsChoice?.let { RecipePart.parse(it.split(',')) } ?: RecipePart.LOOK
+internal fun ConfigurationRepository.rememberedRecipeParts(): Set<RecipePart> {
+    val names = recipePartsChoice?.split(',') ?: return RecipePart.LOOK
+    val chosen = RecipePart.parse(names)
+    return if (FINISHING_OFFERED in names) chosen else chosen + RecipePart.FINISHING
+}
 
 internal fun ConfigurationRepository.rememberRecipeParts(parts: Set<RecipePart>) {
-    recipePartsChoice = parts.sorted().joinToString(",") { it.name }
+    recipePartsChoice = (parts.sorted().map { it.name } + FINISHING_OFFERED).joinToString(",")
 }
+
+/**
+ * Stored beside the names, and skipped when they are read. Without it a choice made before the
+ * finishing boxes existed could not be told from one that unticked them.
+ */
+private const val FINISHING_OFFERED = "FINISHING_OFFERED"
 
 /**
  * The parts a recipe ends with once the person confirmed [chosen] for it. A recipe from before the
@@ -84,6 +93,7 @@ internal val RECIPE_PART_GROUPS: List<RecipePartGroup> = listOf(
             RecipePart.SATURATION to Res.string.editor_adj_saturation,
             RecipePart.COLOR_MIXER to Res.string.editor_color_mixer,
             RecipePart.COLOR_GRADING to Res.string.editor_color_grading,
+            RecipePart.CALIBRATION to Res.string.editor_group_calibration,
         ),
     ),
     RecipePartGroup(
@@ -92,6 +102,16 @@ internal val RECIPE_PART_GROUPS: List<RecipePartGroup> = listOf(
             RecipePart.TEXTURE to Res.string.editor_adj_texture,
             RecipePart.CLARITY to Res.string.editor_adj_clarity,
             RecipePart.DEHAZE to Res.string.editor_adj_dehaze,
+            RecipePart.SHARPENING to Res.string.editor_group_sharpening,
+            RecipePart.LUMINANCE_NOISE_REDUCTION to Res.string.editor_adj_nr_luminance,
+            RecipePart.COLOR_NOISE_REDUCTION to Res.string.editor_adj_nr_color,
+        ),
+    ),
+    RecipePartGroup(
+        Res.string.editor_panel_optics,
+        listOf(
+            RecipePart.LENS_VIGNETTE to Res.string.editor_group_lens_vignette,
+            RecipePart.DEFRINGE to Res.string.editor_group_defringe,
         ),
     ),
     RecipePartGroup(
@@ -232,3 +252,6 @@ internal fun CopyRecipeDialog(initial: Set<RecipePart>, onDismiss: () -> Unit, o
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.editor_cancel)) } },
     )
 }
+
+internal fun recipePartLabel(part: RecipePart): StringResource =
+    RECIPE_PART_GROUPS.firstNotNullOf { group -> group.parts.firstOrNull { it.first == part }?.second }

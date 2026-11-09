@@ -28,6 +28,8 @@ import eu.studio742.imago.core.render.decodePixels
 import eu.studio742.imago.core.render.toImageBitmap
 import eu.studio742.imago.core.render.toPixelBuffer
 import eu.studio742.imago.core.render.toRenderParameters
+import eu.studio742.imago.core.render.CameraLight
+import eu.studio742.imago.core.render.landedOn
 import eu.studio742.imago.core.render.withAutoWhiteBalance
 import eu.studio742.imago.feature.editor.resources.Res
 
@@ -59,6 +61,9 @@ object RecipePreviewCache {
     private var rawRendering: Int = CURRENT_RAW_RENDERING
     private var rawExposure: Float = 0f
 
+    /** What says which light a recipe's kelvin is on the source; null on anything but a RAW. */
+    private var sourceCamera: CameraLight? = null
+
     /** The source's Auto white balance, found the first time a recipe with Auto asks for it. */
     private var sourceAuto: Pair<PixelBuffer, NeutralWhiteBalance?>? = null
 
@@ -69,7 +74,8 @@ object RecipePreviewCache {
         highPrecision: FloatPixelBuffer? = null,
         rendering: Int = CURRENT_RAW_RENDERING,
         exposure: Float = 0f,
-    ) = setSource(assetId, bitmap.toPixelBuffer(), highPrecision, rendering, exposure)
+        camera: CameraLight? = null,
+    ) = setSource(assetId, bitmap.toPixelBuffer(), highPrecision, rendering, exposure, camera)
 
     @Synchronized
     fun setSource(
@@ -78,11 +84,14 @@ object RecipePreviewCache {
         highPrecision: FloatPixelBuffer? = null,
         rendering: Int = CURRENT_RAW_RENDERING,
         exposure: Float = 0f,
+        camera: CameraLight? = null,
     ) {
         // A photo moved to another development has the same id and other pixels.
-        if (sourceKey == assetId && source != null && rawRendering == rendering && rawExposure == exposure) return
+        val sameCamera = (camera == null) == (sourceCamera == null)
+        if (sourceKey == assetId && source != null && rawRendering == rendering && rawExposure == exposure && sameCamera) return
         rawRendering = rendering
         rawExposure = exposure
+        sourceCamera = camera
         cache.clear()
         sourceKey = assetId
         source = RecipePixels.reduce(pixels, PREVIEW_MAX_EDGE)
@@ -95,6 +104,15 @@ object RecipePreviewCache {
         sourceKey = null
         source = null
         floatSource = null
+        sourceCamera = null
+    }
+
+    /** A preview shows what applying the recipe does: its light on this camera, and what Auto finds here. */
+    @Synchronized
+    private fun shownOver(origin: PixelBuffer, recipe: EditRecipe): EditRecipe {
+        val balance = recipe.whiteBalance.landedOn(sourceCamera)
+        val landed = if (balance === recipe.whiteBalance) recipe else recipe.copy(whiteBalance = balance)
+        return if (landed.whiteBalance.auto) landed.withAutoWhiteBalance(autoOf(origin)) else landed
     }
 
     @Synchronized
@@ -131,8 +149,7 @@ object RecipePreviewCache {
         val rendering = renderingFor(assetId)
         val exposure = exposureFor(assetId)
         return withContext(Dispatchers.Default) {
-            val shown = if (recipe.whiteBalance.auto) recipe.withAutoWhiteBalance(autoOf(origin)) else recipe
-            val parameters = shown.toRenderParameters(rawRendering = rendering, rawExposure = exposure)
+            val parameters = shownOver(origin, recipe).toRenderParameters(rawRendering = rendering, rawExposure = exposure)
             Histogram.of(
                 if (precise != null) RecipePixels.renderFloat(precise, parameters).toPixelBuffer()
                 else renderOver(origin, parameters),
@@ -156,9 +173,7 @@ object RecipePreviewCache {
         val rendering = renderingFor(assetId)
         val exposure = exposureFor(assetId)
         val rendered = withContext(Dispatchers.Default) {
-            // A recipe with Auto shows what Auto finds on this photo, which is what applying it does.
-            val shown = if (recipe.whiteBalance.auto) recipe.withAutoWhiteBalance(autoOf(origin)) else recipe
-            val parameters = shown.toRenderParameters(rawRendering = rendering, rawExposure = exposure)
+            val parameters = shownOver(origin, recipe).toRenderParameters(rawRendering = rendering, rawExposure = exposure)
             if (precise != null) RecipePixels.renderFloat(precise, parameters).toPixelBuffer().toImageBitmap()
             else renderOver(origin, parameters).toImageBitmap()
         }

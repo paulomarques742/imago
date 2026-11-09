@@ -115,6 +115,79 @@ class RecipePartTest {
         assertEquals(setOf(RecipePart.CROP), saved.copy(parts = setOf(RecipePart.CROP)).appliedParts)
     }
 
+    private val finished = source.copy(
+        detail = Detail(sharpenAmount = 70f, sharpenRadius = 2f, noiseReductionLuminance = 30f, noiseReductionColor = 60f),
+        calibration = Calibration(redHue = 15f),
+        lens = LensCorrection(vignetteAmount = 20f, purpleAmount = 40f),
+    )
+
+    @Test
+    fun theFinishingGoesWithTheLookPartByPart() {
+        val look = target.withPartsFrom(finished, RecipePart.LOOK)
+        assertEquals(finished.detail, look.detail)
+        assertEquals(finished.calibration, look.calibration)
+        assertEquals(finished.lens, look.lens)
+
+        val sharpening = target.withPartsFrom(finished, setOf(RecipePart.SHARPENING))
+        assertEquals(70f, sharpening.detail.sharpenAmount)
+        assertEquals(2f, sharpening.detail.sharpenRadius)
+        assertEquals(0f, sharpening.detail.noiseReductionLuminance)
+        assertEquals(25f, sharpening.detail.noiseReductionColor)
+
+        val colorNoise = target.withPartsFrom(finished, setOf(RecipePart.COLOR_NOISE_REDUCTION))
+        assertEquals(60f, colorNoise.detail.noiseReductionColor)
+        assertEquals(0f, colorNoise.detail.noiseReductionLuminance)
+
+        val defringe = target.withPartsFrom(finished, setOf(RecipePart.DEFRINGE))
+        assertEquals(40f, defringe.lens.purpleAmount)
+        assertEquals(0f, defringe.lens.vignetteAmount)
+    }
+
+    @Test
+    fun theAppsFiltersLeaveTheFinishingOfThePhoto() {
+        val sharpened = target.copy(detail = Detail(sharpenAmount = 40f))
+        assertEquals(40f, sharpened.withPartsFrom(source, RecipePart.BUILT_IN).detail.sharpenAmount)
+    }
+
+    private fun savedWith(recipe: EditRecipe, parts: Set<RecipePart>?) =
+        SavedRecipe(id = "r", name = "R", collection = "", recipe = recipe, createdAt = "", updatedAt = "", parts = parts)
+
+    @Test
+    fun aRecipeFromBeforeTheFinishingCarriesWhatItHolds() {
+        val held = savedWith(finished.copy(lens = LensCorrection()), RecipePart.LOOK - RecipePart.FINISHING).appliedParts
+
+        assertTrue(RecipePart.SHARPENING in held)
+        assertTrue(RecipePart.CALIBRATION in held)
+        assertFalse(RecipePart.LENS_VIGNETTE in held)
+        assertTrue(RecipePart.SHARPENING in savedWith(finished, null).appliedParts)
+    }
+
+    @Test
+    fun aRecipeWithTheDefaultFinishingLeavesThePhotoAlone() {
+        assertEquals(RecipePart.LEGACY, savedWith(source, null).appliedParts)
+    }
+
+    @Test
+    fun finishingStoredBeforeItWasReadWasNeverChosen() {
+        assertEquals(RecipePart.LEGACY, savedWith(finished.copy(processVersion = 20), null).appliedParts)
+    }
+
+    @Test
+    fun aChoiceThatNamesTheFinishingIsKeptAsItIs() {
+        val chosen = setOf(RecipePart.EXPOSURE, RecipePart.SHARPENING)
+        assertEquals(chosen, savedWith(finished, chosen).appliedParts)
+    }
+
+    @Test
+    fun uncheckingAllTheFinishingSticks() {
+        val parts = RecipePart.LOOK - RecipePart.FINISHING
+        val saved = savedWith(finished.storedForParts(parts), parts)
+
+        assertEquals(parts, saved.appliedParts)
+        assertEquals(finished, finished.storedForParts(setOf(RecipePart.DEFRINGE)))
+        assertEquals(finished, finished.storedForParts(null))
+    }
+
     @Test
     fun namesFromANewerAppAreSkipped() {
         assertEquals(setOf(RecipePart.CROP, RecipePart.GRAIN), RecipePart.parse(listOf("CROP", "LENS_PROFILE", "GRAIN")))

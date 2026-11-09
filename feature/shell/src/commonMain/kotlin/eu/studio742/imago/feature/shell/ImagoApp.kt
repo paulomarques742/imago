@@ -40,6 +40,7 @@ import eu.studio742.imago.feature.detail.DetailAsset
 import eu.studio742.imago.feature.detail.DetailRoute
 import eu.studio742.imago.feature.editor.EditorAsset
 import eu.studio742.imago.feature.editor.EditorRoute
+import eu.studio742.imago.feature.editor.RecipeFile
 import eu.studio742.imago.feature.editor.RecipeLibraryRoute
 import eu.studio742.imago.feature.library.PersonUiModel
 import eu.studio742.imago.feature.library.LibraryRequest
@@ -101,6 +102,16 @@ open class ShellViewModel(private val configuration: ConfigurationRepository) : 
 
     /** An account link (confirmation, recovery) opens the account, where the outcome is shown. */
     fun openAccount() { destinationState.value = AppDestination.Account() }
+
+    /** Recipe files handed to the app, until the recipe library takes them. */
+    internal val incomingRecipeFiles: MutableState<List<RecipeFile>?> = mutableStateOf(null)
+
+    /** During the first launch they wait: the library's choice comes first, and the files are looked at after it. */
+    fun openRecipeFiles(files: List<RecipeFile>) {
+        if (files.isEmpty()) return
+        incomingRecipeFiles.value = files
+        if (welcomeCompleted.value) destinationState.value = AppDestination.Recipes
+    }
 
     /** What another app opened: the shell starts on the photo, or in its editor for "Edit with". */
     fun openViewer(assets: List<AssetUiModel>, index: Int, editing: Boolean) {
@@ -256,7 +267,9 @@ private fun ImagoAppContent(viewModel: ShellViewModel, onLeaveViewer: (() -> Uni
         }
 
         current is AppDestination.Welcome -> WelcomeRoute(
-            onFinished = { destination = AppDestination.Library() },
+            onFinished = {
+                destination = if (viewModel.incomingRecipeFiles.value != null) AppDestination.Recipes else AppDestination.Library()
+            },
             accountPrompt = { WelcomeAccountPrompt(onOpenAccount = { signUp -> destination = AppDestination.Account(signUp) }) },
         )
 
@@ -284,6 +297,8 @@ private fun ImagoAppContent(viewModel: ShellViewModel, onLeaveViewer: (() -> Uni
             onBack = { destination = AppDestination.Library() },
             onNavigate = { destination = it.toAppDestination() },
             onOpenSettings = { destination = AppDestination.Settings },
+            incomingFiles = viewModel.incomingRecipeFiles.value,
+            onIncomingFilesTaken = { viewModel.incomingRecipeFiles.value = null },
         )
 
         current is AppDestination.Compositions -> ComposerHubRoute(
