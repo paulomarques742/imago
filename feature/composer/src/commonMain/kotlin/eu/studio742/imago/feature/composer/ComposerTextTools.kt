@@ -32,6 +32,7 @@ internal fun ComposerTextTools(text: CompositionElement.Text, state: ComposerEdi
     var naming by remember(text.id) { mutableStateOf<Pair<String?, String>?>(null) }
     var color by remember(text.id) { mutableStateOf<PendingColor?>(null) }
     val session = state.textSession
+    val inGrid = state.project?.layouts?.any { it.groupId == text.groupId } == true
     val propertiesHeight = (LocalImagoWindow.current.height * .35f).coerceIn(120.dp, 280.dp)
     Column(Modifier.padding(horizontal = 8.dp)) {
         if (session?.contentEditing == true) {
@@ -48,6 +49,8 @@ internal fun ComposerTextTools(text: CompositionElement.Text, state: ComposerEdi
                 color = PendingColor(uiText(Res.string.composer_text_color), text.colorArgb, actions::setElementColor)
             }
             ToolButton(stringResource(Res.string.composer_text_styles), Icons.Outlined.Style, active = styles) { styles = !styles }
+            ComposerTextAlignmentMenu(text, actions)
+            if (!inGrid) ComposerArrangementMenu(state, actions)
             ToolButton(stringResource(Res.string.composer_adjust), Icons.Outlined.Tune, active = advanced) { advanced = !advanced }
         }
         if (session?.fontBeforePreview != null) {
@@ -65,8 +68,8 @@ internal fun ComposerTextTools(text: CompositionElement.Text, state: ComposerEdi
             }
         }
         Column(Modifier.heightIn(max = propertiesHeight).verticalScroll(rememberScrollState())) {
-        if (session?.contentEditing != true || advanced) {
-            TextStyleControls(text, actions, rail, onPickColor = { color = it }, advanced = advanced)
+        if (advanced) {
+            TextStyleControls(text, actions, rail, onPickColor = { color = it }, showAlignment = false)
         }
         if (styles) {
             Row(Modifier.horizontalScroll(rememberScrollState())) {
@@ -83,7 +86,6 @@ internal fun ComposerTextTools(text: CompositionElement.Text, state: ComposerEdi
             }
         }
         if (advanced) {
-            val inGrid = state.project?.layouts?.any { it.groupId == text.groupId } == true
             if (!inGrid) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(Res.string.composer_text_auto_height), color = ui.text, modifier = Modifier.weight(1f))

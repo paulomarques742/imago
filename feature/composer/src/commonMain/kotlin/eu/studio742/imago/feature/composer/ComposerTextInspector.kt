@@ -55,7 +55,30 @@ import eu.studio742.imago.core.designsystem.ImagoUi
 import kotlin.math.abs
 
 /**
- * A text's controls in the adjustments drawer: the alignment, the weight, the size, the spacings and
+ * Paragraph alignment stays separate from arranging the text box on the page.
+ */
+@Composable
+internal fun ComposerTextAlignmentMenu(text: CompositionElement.Text, actions: ComposerEditorViewModel) {
+    val icon = when (text.alignment) {
+        TextAlignment.START -> Icons.AutoMirrored.Outlined.FormatAlignLeft
+        TextAlignment.CENTER -> Icons.Outlined.FormatAlignCenter
+        TextAlignment.END -> Icons.AutoMirrored.Outlined.FormatAlignRight
+    }
+    ToolMenuButton(stringResource(Res.string.composer_align), icon) { dismiss ->
+        ToolMenuItem(stringResource(Res.string.composer_align_text_left), Icons.AutoMirrored.Outlined.FormatAlignLeft, dismiss) {
+            actions.setTextAlignment(TextAlignment.START)
+        }
+        ToolMenuItem(stringResource(Res.string.composer_align_text_center), Icons.Outlined.FormatAlignCenter, dismiss) {
+            actions.setTextAlignment(TextAlignment.CENTER)
+        }
+        ToolMenuItem(stringResource(Res.string.composer_align_text_right), Icons.AutoMirrored.Outlined.FormatAlignRight, dismiss) {
+            actions.setTextAlignment(TextAlignment.END)
+        }
+    }
+}
+
+/**
+ * A text's controls in the adjustments drawer: the case, the weight, the size, the spacings and
  * the three effects.
  *
  * Letter spacing appears in thousandths of an em, and the outline thickness as a percentage of the
@@ -69,6 +92,7 @@ internal fun TextStyleControls(
     rail: Boolean,
     onPickColor: (PendingColor) -> Unit,
     advanced: Boolean = true,
+    showAlignment: Boolean = true,
 ) {
     // While a value is being dragged only it stays on scene; the rest of these controls is chrome and
     // leaves with the panel.
@@ -78,15 +102,7 @@ internal fun TextStyleControls(
             Modifier.fillMaxWidth().alpha(chrome).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            ToolButton(stringResource(Res.string.composer_align_text_left), Icons.AutoMirrored.Outlined.FormatAlignLeft, active = text.alignment == TextAlignment.START) {
-                actions.setTextAlignment(TextAlignment.START)
-            }
-            ToolButton(stringResource(Res.string.composer_align_text_center), Icons.Outlined.FormatAlignCenter, active = text.alignment == TextAlignment.CENTER) {
-                actions.setTextAlignment(TextAlignment.CENTER)
-            }
-            ToolButton(stringResource(Res.string.composer_align_text_right), Icons.AutoMirrored.Outlined.FormatAlignRight, active = text.alignment == TextAlignment.END) {
-                actions.setTextAlignment(TextAlignment.END)
-            }
+            if (showAlignment) ComposerTextAlignmentMenu(text, actions)
             ToolButton(stringResource(Res.string.composer_all_caps), Icons.Outlined.KeyboardCapslock, active = text.allCaps, onClick = actions::toggleTextAllCaps)
         }
         // The weights only appear when there is something to choose: Bebas Neue and Great Vibes have a single one.

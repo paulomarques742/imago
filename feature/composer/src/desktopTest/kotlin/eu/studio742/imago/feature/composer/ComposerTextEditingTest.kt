@@ -80,6 +80,79 @@ class ComposerTextEditingTest {
         assertEquals("Selected", (vm.state.value.project!!.elements.single() as CompositionElement.Text).text)
     }
 
+    @Test fun `new text fits both dimensions and grows and shrinks while typing`() {
+        val vm = model(emptyList())
+        vm.addText("Hi", edit = true)
+        val initial = vm.state.value.textSession!!.draft.transform.bounds
+        assertTrue(initial.width < .15f)
+        assertTrue(initial.height < .1f)
+        vm.updateTextDraft("A longer title")
+        val longer = vm.state.value.textSession!!.draft.transform.bounds
+        assertTrue(longer.width > initial.width)
+        assertEquals(initial.x, longer.x, .0001f)
+        assertEquals(initial.y, longer.y, .0001f)
+        vm.updateTextDraft("Hi")
+        val fitted = vm.state.value.textSession!!.draft.transform.bounds
+        assertEquals(initial.x, fitted.x, .0001f)
+        assertEquals(initial.y, fitted.y, .0001f)
+        assertEquals(initial.width, fitted.width, .0001f)
+        assertEquals(initial.height, fitted.height, .0001f)
+        vm.confirmTextEditing()
+        assertEquals(fitted, vm.state.value.project!!.elements.single().transform.bounds)
+        vm.undo()
+        assertTrue(vm.state.value.project!!.elements.isEmpty())
+    }
+
+    @Test fun `new text wraps at the available width and fits explicit lines and empty input`() {
+        val vm = model(emptyList())
+        vm.addText("Title", edit = true)
+        val singleHeight = vm.state.value.textSession!!.draft.transform.bounds.height
+        vm.updateTextDraft("First line\nSecond line")
+        val multiline = vm.state.value.textSession!!.draft
+        assertTrue(multiline.transform.bounds.width < .5f)
+        assertTrue(multiline.transform.bounds.height > singleHeight)
+        vm.updateTextDraft("A long heading with many words and accents that needs to wrap. ".repeat(5))
+        val wrapped = vm.state.value.textSession!!.draft
+        assertTrue(wrapped.transform.bounds.width <= .76f)
+        val result = measureCompositionText(wrapped, wrapped.transform.bounds.width * REFERENCE_PAGE_WIDTH,
+            wrapped.transform.bounds.height * REFERENCE_PAGE_WIDTH, 1f, ComposerFontFiles.loadedOrNull(CompositionFonts.Inter))
+        assertTrue(result.lines.size > 2)
+        assertEquals(result.contentHeight / REFERENCE_PAGE_WIDTH, wrapped.transform.bounds.height, .0001f)
+        vm.updateTextDraft("")
+        val empty = vm.state.value.textSession!!.draft.transform.bounds
+        assertEquals(MIN_ELEMENT_SIZE, empty.width, .0001f)
+        assertTrue(empty.height.isFinite() && empty.height >= MIN_ELEMENT_SIZE)
+    }
+
+    @Test fun `creating without inline editing also fits the box and existing widths remain explicit`() {
+        val vm = model(emptyList())
+        vm.addText("Hi")
+        val created = vm.state.value.project!!.elements.single() as CompositionElement.Text
+        assertTrue(created.transform.bounds.width < .15f)
+        vm.beginTextEditing(created.id)
+        vm.updateTextDraft("A longer title that wraps inside the chosen box")
+        assertEquals(created.transform.bounds.width, vm.state.value.textSession!!.draft.transform.bounds.width, 0f)
+        vm.cancelTextEditing()
+        assertEquals(created, vm.state.value.project!!.elements.single())
+    }
+
+    @Test fun `arranging provisional text updates the draft and accepts as one undo step`() {
+        val vm = model(emptyList())
+        vm.addText("Title", edit = true)
+        vm.alignSelectedHorizontal(0)
+        vm.alignSelectedVertical(0)
+        val draft = vm.state.value.textSession!!.draft
+        val bounds = draft.transform.bounds
+        assertEquals(.5f, bounds.x + bounds.width / 2f, .0001f)
+        assertEquals(.5f, bounds.y + bounds.height / 2f, .0001f)
+        assertTrue(vm.state.value.project!!.elements.isEmpty())
+        assertFalse(vm.state.value.canUndo)
+        vm.confirmTextEditing()
+        assertEquals(draft, vm.state.value.project!!.elements.single())
+        vm.undo()
+        assertTrue(vm.state.value.project!!.elements.isEmpty())
+    }
+
     @Test fun `locked elements and locked groups cannot enter text editing`() {
         val vm = model(listOf(original.copy(groupId = "g"), original.copy(id = "locked", groupId = "g", locked = true)))
         vm.beginTextEditing(original.id); assertNull(vm.state.value.textSession)

@@ -207,4 +207,35 @@ class ComposerInlineTextTest {
         runOnIdle { vm.finishFontPreview(false) }
         assertEquals(before, vm.state.value.project)
     }
+
+    @Test(timeout = 30_000) fun `text tools collapse alignment and size and expose page arrangement`() = runComposeUiTest {
+        val vm = model(); vm.selectElement(text.id)
+        var align = ""; var center = ""; var size = ""; var adjust = ""; var distribute = ""; var right = ""
+        setContent { ImagoTheme(ImagoUiPalette(accent = Color.Magenta, text = Color.Cyan)) {
+            align = stringResource(Res.string.composer_align)
+            center = stringResource(Res.string.composer_align_text_center)
+            size = stringResource(Res.string.composer_size)
+            adjust = stringResource(Res.string.composer_adjust)
+            distribute = stringResource(Res.string.composer_distribute)
+            right = stringResource(Res.string.composer_align_right)
+            val state by vm.state.collectAsState()
+            Box(Modifier.width(600.dp).testTag("compact-text-tools")) {
+                ComposerTextTools(state.selectionElements().single() as CompositionElement.Text, state, vm, false)
+            }
+        } }
+        onNodeWithText(size).assertDoesNotExist()
+        onNodeWithText(center).assertDoesNotExist()
+        onNodeWithContentDescription(align).performClick()
+        onNodeWithText(center).performClick()
+        assertEquals(TextAlignment.CENTER, (vm.state.value.project!!.elements.single() as CompositionElement.Text).alignment)
+        onNodeWithText(center).assertDoesNotExist()
+        onNodeWithContentDescription(distribute).performClick()
+        onNodeWithText(right).performClick()
+        assertEquals(1f, vm.state.value.project!!.elements.single().transform.bounds.right, .0001f)
+        onNodeWithContentDescription(adjust).performClick()
+        onNodeWithText(size).assertIsDisplayed()
+        capture(onNodeWithTag("compact-text-tools"), "compact-text-adjustments-alternate.png")
+        onNodeWithContentDescription(adjust).performClick()
+        onNodeWithText(size).assertDoesNotExist()
+    }
 }

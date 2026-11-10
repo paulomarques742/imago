@@ -220,7 +220,8 @@ open class ComposerEditorViewModel(
     private var gestureCommitted = false
     private var moveSnapping: CompositionMoveSnapping? = null
     private var resizeSnapping: CompositionResizeSnapping? = null
-    private val pendingTextMetrics = mutableMapOf<String, CompositionElement.Text>()
+    private data class PendingTextMetrics(val text: CompositionElement.Text, val fitWidth: Boolean)
+    private val pendingTextMetrics = mutableMapOf<String, PendingTextMetrics>()
     /** The absolute angle the handle has already asked of the block, and the selection it belongs to. */
     private var groupRotationPivot: Pair<Float, Float>? = null
 
@@ -509,9 +510,9 @@ open class ComposerEditorViewModel(
         val id = UUID.randomUUID().toString()
         val page = state.value.currentPage.toFloat()
         val text = fitTextHeight(CompositionElement.Text(
-            id, ElementTransform(NormalizedRect(page + .12f, .38f, .76f, .22f)), nextZ(project), placeholder,
+            id, ElementTransform(NormalizedRect(page + .12f, .38f, MIN_ELEMENT_SIZE, MIN_ELEMENT_SIZE)), nextZ(project), placeholder,
             autoHeight = true, verticalAlignment = TextVerticalAlignment.TOP,
-        ), project)
+        ), project, fitWidth = true)
         if (edit) startTextSession(null, text) else {
             commit { project.copy(elements = project.elements + text) }
             selectElement(id)
@@ -1288,6 +1289,11 @@ open class ComposerEditorViewModel(
     }
 
     private fun applyArrangedSelection(members: List<CompositionElement>) {
+        state.value.textSession?.let { session ->
+            val arranged = members.firstOrNull { it.id == session.draft.id } as? CompositionElement.Text ?: return
+            mutableState.update { it.copy(textSession = session.copy(draft = arranged)) }
+            return
+        }
         val project = requireProject()
         val replacements = members.associateBy { it.id }
         val offsets = if (state.value.editingGroupId != null) emptyMap() else project.layouts.mapNotNull { layout ->
@@ -2081,7 +2087,7 @@ open class ComposerEditorViewModel(
     private fun mutateSelected(block: (CompositionElement) -> CompositionElement) {
         state.value.textSession?.let { session ->
             val draft = block(session.draft) as? CompositionElement.Text ?: return
-            mutableState.update { it.copy(textSession = session.copy(draft = fitTextHeight(draft, requireProject()))) }
+            mutableState.update { it.copy(textSession = session.copy(draft = fitTextHeight(draft, requireProject(), fitWidth = session.original == null))) }
             return
         }
         val project = requireProject()
@@ -2093,15 +2099,25 @@ open class ComposerEditorViewModel(
         } else it }) }
     }
 
-    private fun fitTextHeight(text: CompositionElement.Text, project: CompositionProject): CompositionElement.Text {
+    private fun fitTextHeight(text: CompositionElement.Text, project: CompositionProject, fitWidth: Boolean = false): CompositionElement.Text {
         if (!text.autoHeight || project.layouts.any { it.groupId == text.groupId }) return text
         val bounds = text.transform.bounds
         val bytes = ComposerFontFiles.loadedOrNull(CompositionFonts.resolve(text.fontFamily))
-        if (bytes == null) { pendingTextMetrics[text.id] = text; return text }
-        val result = measureCompositionText(text, bounds.width * REFERENCE_PAGE_WIDTH,
+        if (bytes == null) { pendingTextMetrics[text.id] = PendingTextMetrics(text, fitWidth); return text }
+        // New drafts grow to their words, then wrap at the original page margin. Existing boxes
+        // retain the width the user chose. Wait for the bundled font so the first fit is accurate.
+        val width = if (fitWidth) {
+            val maximum = .76f * REFERENCE_PAGE_WIDTH
+            val layout = measureCompositionText(text, maximum, bounds.height * REFERENCE_PAGE_WIDTH / project.format.aspectRatio, 1f, bytes)
+            val padding = if (text.backgroundArgb != null) text.backgroundPadding * 2f else 0f
+            kotlin.math.ceil(layout.lines.maxOf { it.width } + padding + 1f)
+                .coerceIn(MIN_ELEMENT_SIZE * REFERENCE_PAGE_WIDTH, maximum) / REFERENCE_PAGE_WIDTH
+        } else bounds.width
+        val sized = text.copy(transform = text.transform.withAnchoredTextBounds(width, bounds.height, aspect = project.format.aspectRatio))
+        val result = measureCompositionText(sized, width * REFERENCE_PAGE_WIDTH,
             bounds.height * REFERENCE_PAGE_WIDTH / project.format.aspectRatio, 1f,
             bytes)
-        val fitted = text.withAutomaticTextHeight(result.contentHeight * project.format.aspectRatio / REFERENCE_PAGE_WIDTH,
+        val fitted = sized.withAutomaticTextHeight(result.contentHeight * project.format.aspectRatio / REFERENCE_PAGE_WIDTH,
             project.format.aspectRatio)
         pendingTextMetrics.remove(text.id)
         return fitted
@@ -2161,21 +2177,21 @@ open class ComposerEditorViewModel(
         } else {
             val draft = if (!apply && session.fontBeforePreview != null)
                 session.draft.copy(fontFamily = session.fontBeforePreview.first, fontWeight = session.fontBeforePreview.second) else session.draft
-            mutableState.update { it.copy(textSession = session.copy(draft = fitTextHeight(draft, requireProject()), fontBeforePreview = null)) }
+            mutableState.update { it.copy(textSession = session.copy(draft = fitTextHeight(draft, requireProject(), fitWidth = session.original == null), fontBeforePreview = null)) }
         }
     }
 
     fun refreshTextMetrics(id: String) {
         state.value.textSession?.takeIf { it.draft.id == id }?.let { session ->
-            mutableState.update { it.copy(textSession = session.copy(draft = fitTextHeight(session.draft, requireProject()))) }
+            mutableState.update { it.copy(textSession = session.copy(draft = fitTextHeight(session.draft, requireProject(), fitWidth = session.original == null))) }
             return
         }
         val pending = pendingTextMetrics[id] ?: return
         val project = requireProject()
-        if (project.elements.firstOrNull { it.id == id } != pending ||
-            ComposerFontFiles.loadedOrNull(CompositionFonts.resolve(pending.fontFamily)) == null) return
-        val fitted = fitTextHeight(pending, project)
-        if (fitted != pending) commit(replaceCurrent = true) { project.copy(elements = project.elements.map { if (it.id == id) fitted else it }) }
+        if (project.elements.firstOrNull { it.id == id } != pending.text ||
+            ComposerFontFiles.loadedOrNull(CompositionFonts.resolve(pending.text.fontFamily)) == null) return
+        val fitted = fitTextHeight(pending.text, project, fitWidth = pending.fitWidth)
+        if (fitted != pending.text) commit(replaceCurrent = true) { project.copy(elements = project.elements.map { if (it.id == id) fitted else it }) }
     }
 
     /**
