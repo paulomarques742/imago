@@ -209,6 +209,7 @@ class ImmichGeometryMirrorTest {
         override suspend fun deleteAsset(connection: ImmichConnection, assetId: String, force: Boolean) = unused()
         override fun thumbnailUrl(connection: ImmichConnection, assetId: String): String = unused()
         override fun previewUrl(connection: ImmichConnection, assetId: String): String = unused()
+        override fun originalUrl(connection: ImmichConnection, assetId: String): String = unused()
         override fun videoPlaybackUrl(connection: ImmichConnection, assetId: String): String = unused()
         override suspend fun downloadOriginal(connection: ImmichConnection, assetId: String, destination: File) = unused()
         override suspend fun exportEditedAsset(
