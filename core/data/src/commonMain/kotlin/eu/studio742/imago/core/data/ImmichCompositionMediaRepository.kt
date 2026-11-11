@@ -17,6 +17,7 @@ class ImmichCompositionMediaRepository @Inject constructor(
     override fun media(query: String?) = library.assets(LibraryFilter.ALL, query = query)
     override fun thumbnailUrl(assetId: String) = library.thumbnailUrl(assetId)
     override fun previewUrl(assetId: String) = library.previewUrl(assetId)
+    override fun originalUrl(assetId: String) = library.originalUrl(assetId)
     override fun videoPlaybackUrl(assetId: String) = library.videoPlaybackUrl(assetId)
     override fun apiKey(assetId: String) = library.apiKey(assetId)
     override suspend fun downloadOriginal(assetId: String, destination: File) = library.downloadOriginal(assetId, destination)

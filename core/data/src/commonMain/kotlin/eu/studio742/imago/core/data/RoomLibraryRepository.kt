@@ -462,6 +462,7 @@ class RoomLibraryRepository @Inject constructor(
 
     override fun thumbnailUrl(assetId: String): String = api.thumbnailUrl(requireConnection(), assetId)
     override fun previewUrl(assetId: String): String = api.previewUrl(requireConnection(), assetId)
+    override fun originalUrl(assetId: String): String = api.originalUrl(requireConnection(), assetId)
     override fun videoPlaybackUrl(assetId: String): String = api.videoPlaybackUrl(requireConnection(), assetId)
     override fun apiKey(assetId: String): String = requireConnection().apiKey
 

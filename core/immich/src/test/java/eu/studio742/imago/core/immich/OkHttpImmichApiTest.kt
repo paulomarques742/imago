@@ -978,6 +978,11 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun theOriginalImageIsTheDownloadEndpoint() {
+        assertEquals(server.url("/api/assets/asset-1/original").toString(), api.originalUrl(connection(), "asset-1"))
+    }
+
+    @Test
     fun aPersonsPhotosComeFromTheSearch() = runTest {
         server.enqueue(MockResponse().setBody(EMPTY_SEARCH_RESPONSE))
 

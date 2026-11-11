@@ -204,6 +204,18 @@ data class MediaReference(
     val takenAt: String? = null,
 )
 
+private val TRANSPARENT_MIME_TYPES = setOf("image/png", "image/apng", "image/webp", "image/gif", "image/avif")
+private val TRANSPARENT_EXTENSIONS = setOf("png", "apng", "webp", "gif", "avif")
+
+/**
+ * Whether this file's format can carry transparency. The server's preview of such a file is a JPEG by
+ * default, with the transparent areas flattened to black, so only the original shows them. It says
+ * nothing about this particular file: plenty of PNGs are opaque, and those simply cost a larger download.
+ */
+val MediaReference.mayHaveTransparency: Boolean
+    get() = mimeType?.takeIf(String::isNotBlank)?.let { it.lowercase() in TRANSPARENT_MIME_TYPES }
+        ?: (fileName.substringAfterLast('.', "").lowercase() in TRANSPARENT_EXTENSIONS)
+
 @Serializable
 data class PhotoRecipeSnapshot(val recipe: EditRecipe)
 

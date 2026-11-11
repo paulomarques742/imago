@@ -336,6 +336,7 @@ class UnifiedLibrary(
 
     override fun thumbnailUrl(assetId: String) = routed(assetId) { thumbnailUrl(it) }
     override fun previewUrl(assetId: String) = routed(assetId) { previewUrl(it) }
+    override fun originalUrl(assetId: String) = routed(assetId) { originalUrl(it) }
     override fun videoPlaybackUrl(assetId: String) = routed(assetId) { videoPlaybackUrl(it) }
     override fun apiKey(assetId: String) = routed(assetId) { apiKey(it) }
     override val canStack: Boolean get() = server.canStack || device.canStack

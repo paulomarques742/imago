@@ -213,6 +213,7 @@ class SourceLibraryRepository @Inject constructor(
     }
     override fun thumbnailUrl(assetId: String) = location(assetId) { thumbnailUrl(it) }
     override fun previewUrl(assetId: String) = location(assetId) { previewUrl(it) }
+    override fun originalUrl(assetId: String) = location(assetId) { originalUrl(it) }
     override fun videoPlaybackUrl(assetId: String) = location(assetId) { videoPlaybackUrl(it) }
     override fun apiKey(assetId: String): String = configuration.source(AssetReference.parse(assetId).libraryId).apiKey.orEmpty()
     override val canStack: Boolean

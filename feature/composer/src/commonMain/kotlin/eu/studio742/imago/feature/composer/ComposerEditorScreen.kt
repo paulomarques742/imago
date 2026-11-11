@@ -874,7 +874,7 @@ private fun ComposerEditorScreenBody(
                         multiSelect = multiSelect,
                         positioningBackground = positioningBackground,
                         positioningMedia = positioningMedia,
-                        previewUrl = actions::previewUrl,
+                        previewUrl = actions::stagePhotoUrl,
                         thumbnailUrl = actions::thumbnailUrl,
                         videoPlaybackUrl = actions::videoPlaybackUrl,
                         apiKey = actions::apiKey,
@@ -1728,7 +1728,9 @@ internal fun ComposerCanvas(
         val modelSize = androidx.compose.ui.geometry.Size(project.format.pixelWidth.toFloat(), project.format.pixelHeight.toFloat())
         val fit = minOf((viewportSize.width - marginPx * 2).coerceAtLeast(1f) / modelSize.width,
             (viewportSize.height - topPx - bottomPx - marginPx * 2).coerceAtLeast(1f) / modelSize.height)
-        LaunchedEffect(viewportSize, project.format) {
+        // Keyed on the viewport too: each project gets a new one, and the next project often has the
+        // same format, which would leave it unfitted at scale zero with navigation dead.
+        LaunchedEffect(viewport, viewportSize, project.format) {
             viewport.resize(viewportSize, fit, state.currentPage, modelSize, topPx, bottomPx)
         }
         val scale = viewport.scale.takeIf { it > 0f } ?: fit

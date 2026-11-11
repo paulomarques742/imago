@@ -653,6 +653,9 @@ class OkHttpImmichApi(
     override fun previewUrl(connection: ImmichConnection, assetId: String): String =
         assetUrl(connection, assetId, "preview")
 
+    override fun originalUrl(connection: ImmichConnection, assetId: String): String =
+        endpoint(connection, ImmichContract.DOWNLOAD_ASSET.replace("{id}", assetId)).toString()
+
     override fun videoPlaybackUrl(connection: ImmichConnection, assetId: String): String {
         val path = ImmichContract.PLAY_ASSET_VIDEO.replace("{id}", assetId)
         return endpoint(connection, path).toString()

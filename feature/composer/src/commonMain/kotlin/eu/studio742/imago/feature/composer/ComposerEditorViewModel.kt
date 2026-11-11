@@ -1978,6 +1978,20 @@ open class ComposerEditorViewModel(
     fun consumeNotice() = mutableState.update { it.copy(notice = null) }
     fun consumeError() = mutableState.update { it.copy(error = null) }
     fun previewUrl(assetId: String) = mediaRepository.previewUrl(assetId)
+
+    /**
+     * What the stage draws a photo from. The preview is the light version, but a format with
+     * transparency loses it there, and the stage would show black where the export does not.
+     */
+    fun stagePhotoUrl(assetId: String): String =
+        if (state.value.displayProject()?.photoMedia(assetId)?.mayHaveTransparency == true) mediaRepository.originalUrl(assetId)
+        else mediaRepository.previewUrl(assetId)
+
+    private fun CompositionProject.photoMedia(assetId: String): MediaReference? =
+        elements.asSequence().filterIsInstance<CompositionElement.Photo>().map { it.media }
+            .plus((listOf(background) + pages.map { it.backgroundOverride }).filterIsInstance<CompositionBackground.Photo>().map { it.media })
+            .firstOrNull { it.assetId == assetId }
+
     fun thumbnailUrl(assetId: String) = mediaRepository.thumbnailUrl(assetId)
     fun videoPlaybackUrl(assetId: String) = mediaRepository.videoPlaybackUrl(assetId)
     fun apiKey(assetId: String) = mediaRepository.apiKey(assetId)

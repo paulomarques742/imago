@@ -9,6 +9,7 @@ interface CompositionMediaRepository {
     fun media(query: String? = null): Flow<PagingData<ImmichAsset>>
     fun thumbnailUrl(assetId: String): String
     fun previewUrl(assetId: String): String
+    fun originalUrl(assetId: String): String = previewUrl(assetId)
     fun videoPlaybackUrl(assetId: String): String
     fun apiKey(assetId: String): String
     suspend fun downloadOriginal(assetId: String, destination: File)

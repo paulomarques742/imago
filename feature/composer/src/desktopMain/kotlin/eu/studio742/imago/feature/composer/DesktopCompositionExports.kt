@@ -17,6 +17,7 @@ import eu.studio742.imago.core.composition.CompositionProject
 import eu.studio742.imago.core.composition.MediaReference
 import eu.studio742.imago.core.composition.PageVideoPlan
 import eu.studio742.imago.core.composition.intersectionWithPage
+import eu.studio742.imago.core.composition.mayHaveTransparency
 import eu.studio742.imago.core.data.CompositionMediaRepository
 import eu.studio742.imago.core.immich.IMMICH_API_KEY_HEADER
 import eu.studio742.imago.core.model.EditRecipe
@@ -213,7 +214,7 @@ class DesktopCompositionExports(
 
         suspend fun add(key: String, reference: MediaReference, recipe: EditRecipe? = null) {
             try {
-                val source = if (strict || side > PREVIEW_SIDE) {
+                val source = if (strict || side > PREVIEW_SIDE || reference.mayHaveTransparency) {
                     Files.readAllBytes(originalOf(reference))
                 } else {
                     download(media.previewUrl(reference.assetId), media.apiKey(reference.assetId))

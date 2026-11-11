@@ -238,6 +238,29 @@ class ComposerFreeMovementTest {
             { "" }, { "" }, { "" }, { "" }, vm, onDrawing, {}, {}, insets, Modifier.size(600.dp, 800.dp))
     }
 
+    @Test(timeout = 30_000) fun `the next project of the same format opens on its first page and can be navigated`() = runComposeUiTest {
+        val first = project(listOf(shape))
+        val repository = Projects(first)
+        val vm = model(first, repository)
+        setContent { canvas(vm) }
+        waitForIdle()
+        // The view model outlives the trip to the hub, so the stage is composed before the next project loads.
+        repository.stored = project(emptyList(), pages = 3).copy(id = "next")
+        vm.open("next")
+        waitForIdle()
+        assertEquals(0, vm.state.value.currentPage)
+
+        val before = onNodeWithTag("composer_page_0").fetchSemanticsNode().boundsInRoot.left
+        onNodeWithTag("composer_stage").performTouchInput { swipe(Offset(100f, 400f), Offset(500f, 400f), 400) }
+        waitForIdle()
+        assertEquals(before + 400f, onNodeWithTag("composer_page_0").fetchSemanticsNode().boundsInRoot.left, 40f)
+        assertEquals(0, vm.state.value.currentPage)
+
+        onNodeWithText("+").performClick()
+        waitForIdle()
+        onNodeWithTag("composer_fit_page").assertTextEquals("125%")
+    }
+
     @Test(timeout = 30_000) fun `two fingers navigate with a selected element without editing it`() = runComposeUiTest {
         val vm = model(project(listOf(shape)))
         vm.selectElement(shape.id)

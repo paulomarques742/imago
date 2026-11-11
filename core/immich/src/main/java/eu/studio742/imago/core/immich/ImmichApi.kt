@@ -193,6 +193,7 @@ interface ImmichApi {
 
     fun thumbnailUrl(connection: ImmichConnection, assetId: String): String
     fun previewUrl(connection: ImmichConnection, assetId: String): String
+    fun originalUrl(connection: ImmichConnection, assetId: String): String
     fun videoPlaybackUrl(connection: ImmichConnection, assetId: String): String
 
     suspend fun downloadOriginal(connection: ImmichConnection, assetId: String, destination: File)

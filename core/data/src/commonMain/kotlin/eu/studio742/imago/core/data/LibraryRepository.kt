@@ -99,6 +99,9 @@ interface LibraryRepository {
     fun thumbnailUrl(assetId: String): String
     fun previewUrl(assetId: String): String
 
+    /** The file itself, to load as an image. In a local library the preview already is that file. */
+    fun originalUrl(assetId: String): String = previewUrl(assetId)
+
     /** The video stream, for the detail to play it without downloading the original. */
     fun videoPlaybackUrl(assetId: String): String
     fun apiKey(assetId: String): String
