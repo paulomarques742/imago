@@ -41,6 +41,7 @@ import eu.studio742.imago.core.sync.SyncEngine
 import eu.studio742.imago.feature.account.LocalAccountRepository
 import eu.studio742.imago.feature.account.LocalSyncEngine
 import eu.studio742.imago.feature.account.toIndicator
+import eu.studio742.imago.feature.editor.LocalRecipeLinks
 import eu.studio742.imago.feature.editor.isRecipeFileName
 import eu.studio742.imago.feature.editor.readRecipeFile
 import eu.studio742.imago.feature.shell.ImagoApp
@@ -147,6 +148,7 @@ fun main(args: Array<String>) {
             val languagePreference by languageSettings.preference.collectAsState()
             CompositionLocalProvider(
                 LocalDesktopDataGraph provides graph,
+                LocalRecipeLinks provides account.recipeLinks,
                 LocalAccountRepository provides account,
                 LocalSyncEngine provides sync,
                 LocalLanguageSettings provides languageSettings,

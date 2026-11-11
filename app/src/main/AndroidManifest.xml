@@ -63,6 +63,20 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="imago" android:host="auth" />
             </intent-filter>
+            <!-- A recipe shared by link. The website's button uses the scheme, for when the link did not
+                 open here by itself. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="imago.742studio.eu" android:pathPrefix="/r/" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="imago" android:host="r" />
+            </intent-filter>
             <!-- Recipe files: opened from a file manager, or shared from another app. Android does not
                  match a content:// URI by its extension, and an extension it does not know reaches an
                  app as octet-stream, so that type has to be here for a received file to open at all. -->

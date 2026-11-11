@@ -273,48 +273,11 @@ class ReelFramePainter(
      * instead of a flat black around a picture that is rarely 9:16.
      */
     private fun DrawScope.drawBackdrop(photo: ImageBitmap) {
-        val layer = backdrop.takeIf { backdropOf === photo } ?: backdropLayer(photo).also {
+        val layer = backdrop.takeIf { backdropOf === photo } ?: reelBackdrop(photo, width, height).also {
             backdrop = it
             backdropOf = photo
         }
         drawImage(layer)
-    }
-
-    /** The background at the frame's size, darkened already: each frame only copies it. */
-    private fun backdropLayer(photo: ImageBitmap): ImageBitmap {
-        val blurred = blur(photo)
-        val layer = ImageBitmap(width, height)
-        CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(layer), Size(width.toFloat(), height.toFloat())) {
-            drawImage(blurred, dstOffset = IntOffset.Zero, dstSize = IntSize(width, height), filterQuality = FilterQuality.Low)
-            drawRect(Color.Black.copy(alpha = 0.6f))
-        }
-        return layer
-    }
-
-    /**
-     * A real blur, small: the photo shrunk to an eighth of the frame and blurred three times with a
-     * box, which together approach a Gaussian. Only a picture with no detail left survives being
-     * enlarged eight times without showing blocks; shrinking alone left the pixels visible.
-     */
-    private fun blur(photo: ImageBitmap): ImageBitmap {
-        val small = ImageBitmap(BACKDROP_WIDTH, BACKDROP_HEIGHT)
-        CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(small), Size(BACKDROP_WIDTH.toFloat(), BACKDROP_HEIGHT.toFloat())) {
-            val scale = maxOf(size.width / photo.width, size.height / photo.height)
-            val width = (photo.width * scale).roundToInt()
-            val height = (photo.height * scale).roundToInt()
-            drawImage(
-                photo,
-                dstOffset = IntOffset(((size.width - width) / 2).roundToInt(), ((size.height - height) / 2).roundToInt()),
-                dstSize = IntSize(width, height),
-                filterQuality = FilterQuality.Medium,
-            )
-        }
-        val pixels = IntArray(BACKDROP_WIDTH * BACKDROP_HEIGHT).also { small.readPixels(it) }
-        repeat(3) {
-            boxBlur(pixels, BACKDROP_WIDTH, BACKDROP_HEIGHT, BACKDROP_RADIUS, horizontal = true)
-            boxBlur(pixels, BACKDROP_WIDTH, BACKDROP_HEIGHT, BACKDROP_RADIUS, horizontal = false)
-        }
-        return PixelBuffer(BACKDROP_WIDTH, BACKDROP_HEIGHT, pixels).toImageBitmap()
     }
 
     private fun DrawScope.drawPhoto(photo: ImageBitmap, rect: Rect, alpha: Float = 1f) {
@@ -960,7 +923,7 @@ private fun boxBlur(pixels: IntArray, width: Int, height: Int, radius: Int, hori
     }
 }
 
-private fun DrawScope.drawBrand(vector: ImageVector, topLeft: Offset, height: Float, color: Color) {
+internal fun DrawScope.drawBrand(vector: ImageVector, topLeft: Offset, height: Float, color: Color) {
     val factor = height / vector.viewportHeight
     translate(topLeft.x, topLeft.y) {
         scale(factor, factor, pivot = Offset.Zero) { drawVectorGroup(vector.root, color) }
@@ -974,4 +937,41 @@ private fun DrawScope.drawVectorGroup(group: VectorGroup, color: Color) {
             is VectorGroup -> drawVectorGroup(node, color)
         }
     }
+}
+
+/** The background at the frame's size, darkened already: each frame only copies it. */
+internal fun reelBackdrop(photo: ImageBitmap, width: Int, height: Int): ImageBitmap {
+    val blurred = blur(photo)
+    val layer = ImageBitmap(width, height)
+    CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(layer), Size(width.toFloat(), height.toFloat())) {
+        drawImage(blurred, dstOffset = IntOffset.Zero, dstSize = IntSize(width, height), filterQuality = FilterQuality.Low)
+        drawRect(Color.Black.copy(alpha = 0.6f))
+    }
+    return layer
+}
+
+/**
+ * A real blur, small: the photo shrunk to an eighth of the frame and blurred three times with a
+ * box, which together approach a Gaussian. Only a picture with no detail left survives being
+ * enlarged eight times without showing blocks; shrinking alone left the pixels visible.
+ */
+private fun blur(photo: ImageBitmap): ImageBitmap {
+    val small = ImageBitmap(BACKDROP_WIDTH, BACKDROP_HEIGHT)
+    CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(small), Size(BACKDROP_WIDTH.toFloat(), BACKDROP_HEIGHT.toFloat())) {
+        val scale = maxOf(size.width / photo.width, size.height / photo.height)
+        val width = (photo.width * scale).roundToInt()
+        val height = (photo.height * scale).roundToInt()
+        drawImage(
+            photo,
+            dstOffset = IntOffset(((size.width - width) / 2).roundToInt(), ((size.height - height) / 2).roundToInt()),
+            dstSize = IntSize(width, height),
+            filterQuality = FilterQuality.Medium,
+        )
+    }
+    val pixels = IntArray(BACKDROP_WIDTH * BACKDROP_HEIGHT).also { small.readPixels(it) }
+    repeat(3) {
+        boxBlur(pixels, BACKDROP_WIDTH, BACKDROP_HEIGHT, BACKDROP_RADIUS, horizontal = true)
+        boxBlur(pixels, BACKDROP_WIDTH, BACKDROP_HEIGHT, BACKDROP_RADIUS, horizontal = false)
+    }
+    return PixelBuffer(BACKDROP_WIDTH, BACKDROP_HEIGHT, pixels).toImageBitmap()
 }

@@ -21,6 +21,8 @@ import eu.studio742.imago.core.interchange.ImportGapReason
 import eu.studio742.imago.core.interchange.ImportedSetting
 import eu.studio742.imago.core.interchange.RecipeImportGaps
 import eu.studio742.imago.core.interchange.RecipeImportPlan
+import eu.studio742.imago.core.interchange.XmpLeftOut
+import eu.studio742.imago.core.interchange.decodeRecipeFile
 import eu.studio742.imago.core.interchange.decodeImagoFile
 import eu.studio742.imago.core.interchange.ImagoFileContent
 import eu.studio742.imago.core.interchange.ImagoFileEntry
@@ -241,6 +243,41 @@ class RecipeFilesTest {
     }
 
     @Test
+    fun `a recipe a preset can hold goes straight to the file`() = runBlocking {
+        val delivered = CompletableDeferred<Pair<String, ByteArray>>()
+        val exporter = exporter({ name, bytes -> delivered.complete(name to bytes) })
+
+        exporter.startXmp(saved("Warm"))
+
+        val (name, bytes) = withTimeout(5_000) { delivered.await() }
+        assertEquals("Warm.xmp", name)
+        assertTrue(decodeRecipeFile(name, bytes) is ImagoFileContent.Recipes)
+        assertNull(exporter.askingXmp)
+    }
+
+    @Test
+    fun `a preset that leaves something out asks first, and cancelling writes nothing`() = runBlocking {
+        val delivered = CompletableDeferred<Pair<String, ByteArray>>()
+        val exporter = exporter({ name, bytes -> delivered.complete(name to bytes) })
+        val cropped = saved("Framed").let {
+            it.copy(
+                parts = setOf(RecipePart.CROP, RecipePart.EXPOSURE),
+                recipe = it.recipe.copy(geometry = Geometry(cropRect = CropRect(0.1f, 0.1f, 0.5f, 0.5f))),
+            )
+        }
+
+        exporter.startXmp(cropped)
+        assertEquals(setOf(XmpLeftOut.GEOMETRY), exporter.askingXmp!!.leftOut)
+        exporter.cancel()
+        assertNull(exporter.askingXmp)
+        assertFalse(delivered.isCompleted)
+
+        exporter.startXmp(cropped)
+        exporter.confirmXmp()
+        assertEquals("Framed.xmp", withTimeout(5_000) { delivered.await() }.first)
+    }
+
+        @Test
     fun `opening a file saves nothing until it is confirmed`() = runBlocking {
         val library = Library()
         val viewModel = RecipeLibraryViewModel(library)

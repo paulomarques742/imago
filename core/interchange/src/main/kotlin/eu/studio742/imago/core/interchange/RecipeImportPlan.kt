@@ -24,6 +24,8 @@ data class RecipeImportPlan(
     val gaps: List<RecipeImportGaps> = emptyList(),
     /** Files in a pack in a format only a later version reads. */
     val skippedFiles: Int = 0,
+    val linksGone: Int = 0,
+    val linksFailed: Int = 0,
 )
 
 private const val FILE_NAME_LIMIT = 60
@@ -45,6 +47,8 @@ fun planRecipeImport(
     var unreadable = 0
     var newerFiles = 0
     var skipped = 0
+    var linksGone = 0
+    var linksFailed = 0
     val gaps = mutableListOf<RecipeImportGaps>()
 
     for (file in files) {
@@ -52,6 +56,8 @@ fun planRecipeImport(
         val entries = when (val content = file.content) {
             ImagoFileContent.Unreadable -> { unreadable++; continue }
             ImagoFileContent.NeedsNewerApp -> { newerFiles++; continue }
+            ImagoFileContent.LinkGone -> { linksGone++; continue }
+            ImagoFileContent.LinkFailed -> { linksFailed++; continue }
             is ImagoFileContent.Recipes -> { skipped += content.skippedFiles; content.entries }
         }
         for (entry in entries) {
@@ -82,7 +88,7 @@ fun planRecipeImport(
             }
         }
     }
-    return RecipeImportPlan(added, alreadyThere, newer, partly, invalid, unreadable, newerFiles, gaps, skipped)
+    return RecipeImportPlan(added, alreadyThere, newer, partly, invalid, unreadable, newerFiles, gaps, skipped, linksGone, linksFailed)
 }
 
 /**

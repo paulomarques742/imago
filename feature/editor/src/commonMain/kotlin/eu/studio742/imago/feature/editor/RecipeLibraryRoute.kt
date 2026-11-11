@@ -30,6 +30,7 @@ import eu.studio742.imago.core.interchange.ImagoFileContent
 import eu.studio742.imago.core.interchange.ReadImagoFile
 import eu.studio742.imago.core.interchange.RecipeImportPlan
 import eu.studio742.imago.core.interchange.decodeImagoFile
+import eu.studio742.imago.core.interchange.RecipeLinkError
 import eu.studio742.imago.core.interchange.decodeRecipeFile
 import eu.studio742.imago.core.interchange.planRecipeImport
 import eu.studio742.imago.core.model.RecipePart
@@ -138,7 +139,7 @@ open class RecipeLibraryViewModel(
             val plan = withContext(Dispatchers.Default) {
                 planRecipeImport(
                     files = files.map { file ->
-                        ReadImagoFile(file.name, file.bytes?.let { decodeRecipeFile(file.name, it) } ?: ImagoFileContent.Unreadable)
+                        ReadImagoFile(file.name, readFile(file))
                     },
                     library = library,
                     now = Instant.now().toString(),
@@ -170,6 +171,12 @@ open class RecipeLibraryViewModel(
 
     fun dismissImport() = mutableState.update { it.copy(importPlan = null, importAddFailed = false) }
 
+    private fun readFile(file: RecipeFile): ImagoFileContent = when {
+        file.linkError == RecipeLinkError.GONE -> ImagoFileContent.LinkGone
+        file.linkError != null -> ImagoFileContent.LinkFailed
+        else -> file.bytes?.let { decodeRecipeFile(file.name, it) } ?: ImagoFileContent.Unreadable
+    }
+
     private fun persist(recipe: SavedRecipe) {
         viewModelScope.launch {
             runCatching { savedRecipes.save(recipe) }
@@ -190,6 +197,7 @@ fun RecipeLibraryRoute(
     onBack: () -> Unit,
     onNavigate: (LibraryNavDestination) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenAccount: () -> Unit = onOpenSettings,
     /** Files another app or the window handed over, waiting to be looked at. */
     incomingFiles: List<RecipeFile>? = null,
     onIncomingFilesTaken: () -> Unit = {},
@@ -204,7 +212,8 @@ fun RecipeLibraryRoute(
     val sampleAssetId = rememberSampleRecipeSource(sampleIndex)
     val importedCollection = stringResource(Res.string.editor_recipe_imported_collection)
     val recipeFiles = rememberRecipeFileActions(onOpened = { viewModel.openFiles(it, importedCollection) }, onFailed = { fileFailed = true })
-    val exporter = rememberRecipeExporter(recipeFiles, onFailed = { fileFailed = true })
+    val links = rememberRecipeLinkController()
+    val exporter = rememberRecipeExporter(recipeFiles, onFailed = { fileFailed = true }, onLink = links::publish)
 
     LaunchedEffect(incomingFiles) {
         if (incomingFiles != null) {
@@ -284,7 +293,9 @@ fun RecipeLibraryRoute(
             onDuplicate = { viewModel.duplicate(it.id) },
             onDelete = { card -> deleting = state.recipes.firstOrNull { it.id == card.id } },
             onShareRecipes = if (exporter.canShare) { cards -> exporter.start(savedOf(cards), RecipeDelivery.SHARE) } else null,
+            onShareRecipe = if (links.available) { card -> savedOf(listOf(card)).singleOrNull()?.let(links::open) } else null,
             onSaveRecipes = { cards -> exporter.start(savedOf(cards), RecipeDelivery.SAVE) },
+            onSaveXmp = { card -> savedOf(listOf(card)).singleOrNull()?.let(exporter::startXmp) },
             onImport = recipeFiles.open,
             showMineSignal = state.importsAdded,
             onCreate = { editingKey = RecipeSource.New().key },
@@ -300,6 +311,17 @@ fun RecipeLibraryRoute(
         )
     }
 
+    RecipeLinkDialog(
+        links = links,
+        onPublish = { links.target?.let { exporter.start(listOf(it), RecipeDelivery.LINK) } },
+        onSendFile = if (exporter.canShare) { { links.target?.let { exporter.start(listOf(it), RecipeDelivery.SHARE) } } } else null,
+        onSendLink = recipeFiles.shareText,
+        onOpenAccount = onOpenAccount,
+        onSaveImage = recipeFiles.saveAs,
+        onShareImage = recipeFiles.shareImage,
+        sampleIndex = sampleIndex,
+        onSampleIndex = { sampleIndex = it },
+    )
     RecipeExportDialog(exporter)
     renaming?.let { recipe ->
         RecipeDetailsDialog(

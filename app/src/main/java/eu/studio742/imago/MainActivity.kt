@@ -12,7 +12,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import eu.studio742.imago.core.interchange.recipeLinkId
+import eu.studio742.imago.feature.editor.LocalRecipeLinks
 import eu.studio742.imago.feature.editor.readRecipeFiles
+import eu.studio742.imago.feature.editor.readRecipeLink
 import eu.studio742.imago.feature.editor.recipeFileUris
 import kotlinx.coroutines.launch
 import eu.studio742.imago.core.designsystem.ImagoTheme
@@ -39,6 +42,16 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         handleAuthLink(intent)
         handleRecipeFiles(intent)
+        handleRecipeLink(intent)
+    }
+
+    private fun handleRecipeLink(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val data = intent.data ?: return
+        val links = account.recipeLinks
+        val site = links.baseUrl?.let { android.net.Uri.parse(it).host }
+        val id = recipeLinkId(data.scheme, data.host, data.path, site) ?: return
+        lifecycleScope.launch { shell.openRecipeFiles(listOf(readRecipeLink(links, id))) }
     }
 
     /** The read permission lasts while this activity does, so the files are read now and handed over as bytes. */
@@ -66,7 +79,7 @@ class MainActivity : ComponentActivity() {
             val preference by languageSettings.preference.collectAsState()
             // The system language comes from the configuration, which on Android 13+ already carries the per-app language.
             val systemLocale = LocalConfiguration.current.locales[0]
-            CompositionLocalProvider(LocalLanguageSettings provides languageSettings, LocalAppearanceSettings provides appearanceSettings) {
+            CompositionLocalProvider(LocalRecipeLinks provides account.recipeLinks, LocalLanguageSettings provides languageSettings, LocalAppearanceSettings provides appearanceSettings) {
                 ProvideAppLanguage(preference, systemLocale) {
                     ImagoTheme { ImagoApp(shell, syncIndicator = indicator) }
                 }
@@ -75,6 +88,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             handleAuthLink(intent)
             handleRecipeFiles(intent)
+            handleRecipeLink(intent)
         }
     }
 }

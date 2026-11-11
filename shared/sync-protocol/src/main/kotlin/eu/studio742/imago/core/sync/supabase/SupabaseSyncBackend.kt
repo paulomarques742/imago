@@ -115,6 +115,20 @@ class SupabaseSyncBackend(
         ?.stateIn(scope, SharingStarted.Eagerly, null)
         ?: MutableStateFlow(null)
 
+    // A link needs a website to open it: without one the option is not offered.
+    override val recipeLinks: eu.studio742.imago.core.sync.RecipeLinkBackend? by lazy { forum?.websiteUrl?.let { website ->
+        SupabaseRecipeLinkBackend(settings, httpClient, website) {
+            val active = client
+            if (active == null) null else try {
+                active.withFreshSession { auth.currentSessionOrNull()?.accessToken }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                throw eu.studio742.imago.core.sync.RecipeLinkBackendException(eu.studio742.imago.core.sync.RecipeLinkBackendException.Reason.NO_ACCOUNT)
+            }
+        }
+    } }
+
     override val forum = if (!settings.isComplete) null else SupabaseForumBackend(settings, httpClient) {
         val active = client
         if (active == null) null else try {

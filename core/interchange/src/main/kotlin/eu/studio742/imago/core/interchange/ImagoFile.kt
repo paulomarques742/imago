@@ -112,6 +112,12 @@ sealed interface ImagoFileContent {
 
     /** Not an IMAGO file, or damaged beyond reading. */
     data object Unreadable : ImagoFileContent
+
+    /** A link that does not exist any more. */
+    data object LinkGone : ImagoFileContent
+
+    /** A link that could not be opened now, which says nothing about the link. */
+    data object LinkFailed : ImagoFileContent
 }
 
 sealed interface ImagoFileEntry {
@@ -227,7 +233,7 @@ private const val MAX_FILL_SIDE = 1024
 private const val CROP_TOLERANCE = 0.001f
 
 /** A file name that every system accepts, or [fallback] when the recipe's name leaves nothing of it. */
-fun imagoFileName(recipeName: String?, fallback: String): String {
+fun imagoFileName(recipeName: String?, fallback: String, extension: String = IMAGO_FILE_EXTENSION): String {
     val stem = recipeName.orEmpty()
         .map { if (it.isISOControl() || it in "\\/:*?\"<>|") '_' else it }
         .joinToString("")
@@ -235,5 +241,5 @@ fun imagoFileName(recipeName: String?, fallback: String): String {
         .take(80)
         .trimEnd { it.isHighSurrogate() }
         .trim(' ', '.')
-    return "${stem.ifEmpty { fallback }}.$IMAGO_FILE_EXTENSION"
+    return "${stem.ifEmpty { fallback }}.$extension"
 }

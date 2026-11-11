@@ -9,6 +9,8 @@ import eu.studio742.imago.core.data.ConfigurationRepository
 import eu.studio742.imago.core.data.SecurePreferences
 import eu.studio742.imago.core.data.db.ImmichRoomDatabase
 import eu.studio742.imago.core.data.db.LibraryLinkEntity
+import eu.studio742.imago.core.interchange.NoRecipeLinks
+import eu.studio742.imago.core.interchange.RecipeLinkService
 import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import javax.inject.Singleton
 
@@ -79,6 +81,9 @@ class AccountRepository(
 
     val isAvailable get() = coordinator.isAvailable
     val session get() = coordinator.session
+
+    val recipeLinks: RecipeLinkService =
+        backend.recipeLinks?.let { links -> RecipeLinkRepository(links) { coordinator.session.value != null } } ?: NoRecipeLinks
     val deviceName get() = coordinator.deviceName
     val passwordRecoveryPending get() = coordinator.passwordRecoveryPending
     val linkState get() = coordinator.linkState

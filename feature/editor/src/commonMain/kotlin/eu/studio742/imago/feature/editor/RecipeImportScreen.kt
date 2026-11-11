@@ -127,7 +127,7 @@ internal fun RecipeImportScreen(
 }
 
 @Composable
-private fun SampleSwitcher(index: Int, onIndex: (Int) -> Unit) {
+internal fun SampleSwitcher(index: Int, onIndex: (Int) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -234,7 +234,7 @@ private fun importGapReasonLabel(reason: ImportGapReason): StringResource = when
 private fun ImportReport(plan: RecipeImportPlan, addFailed: Boolean) {
     val lines = buildList {
         if (addFailed) add(stringResource(Res.string.editor_recipe_import_failed))
-        if (plan.recipes.isEmpty()) add(stringResource(Res.string.editor_recipe_import_nothing))
+        if (plan.recipes.isEmpty() && plan.linksGone == 0 && plan.linksFailed == 0) add(stringResource(Res.string.editor_recipe_import_nothing))
         if (plan.alreadyInLibrary.isNotEmpty()) {
             add(stringResource(Res.string.editor_recipe_import_already, plan.alreadyInLibrary.joinToString()))
         }
@@ -247,6 +247,8 @@ private fun ImportReport(plan: RecipeImportPlan, addFailed: Boolean) {
         plan.gaps.forEach { recipe ->
             add(stringResource(Res.string.editor_recipe_import_gaps, recipe.name, recipe.gaps.map { gapText(it) }.joinToString("; ")))
         }
+        if (plan.linksGone > 0) add(stringResource(Res.string.editor_recipe_link_gone))
+        if (plan.linksFailed > 0) add(stringResource(Res.string.editor_recipe_link_open_failed))
         if (plan.skippedFiles > 0) {
             add(pluralStringResource(Res.plurals.editor_recipe_import_skipped, plan.skippedFiles, plan.skippedFiles))
         }

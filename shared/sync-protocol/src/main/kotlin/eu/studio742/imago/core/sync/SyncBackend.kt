@@ -20,6 +20,7 @@ interface SyncBackend {
 
     /** Available to guests too, but only contacted by an explicit community action. */
     val forum: ForumBackend? get() = null
+    val recipeLinks: RecipeLinkBackend? get() = null
 
     suspend fun signUp(email: String, password: String): SignUpResult
     suspend fun signIn(email: String, password: String)

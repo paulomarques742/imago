@@ -11,6 +11,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import androidx.core.content.IntentCompat
@@ -69,6 +71,9 @@ private fun readLimited(context: Context, uri: Uri): ByteArray? = runCatching {
         out.toByteArray()
     }
 }.getOrNull()
+
+internal actual fun ImageBitmap.encodeToPng(): ByteArray =
+    ByteArrayOutputStream().also { asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
 
 @Composable
 internal actual fun rememberRecipeFileActions(
@@ -133,6 +138,37 @@ internal actual fun rememberRecipeFileActions(
             },
             // Providers do not agree on a type for an unknown extension, so the picker is not narrowed by one.
             open = { openLauncher.launch(arrayOf("*/*")) },
+            shareImage = { fileName, bytes ->
+                scope.launch {
+                    runCatching {
+                        val file = withContext(Dispatchers.IO) { context.shareFolder().resolve(fileName).apply { writeBytes(bytes) } }
+                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.share", file)
+                        context.startActivity(
+                            Intent.createChooser(
+                                Intent(Intent.ACTION_SEND).apply {
+                                    type = "image/png"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                },
+                                currentChooserTitle,
+                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }.onFailure { failed() }
+                }
+            },
+            shareText = { text ->
+                runCatching {
+                    context.startActivity(
+                        Intent.createChooser(
+                            Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, text)
+                            },
+                            currentChooserTitle,
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }.onFailure { failed() }
+            },
         )
     }
 }

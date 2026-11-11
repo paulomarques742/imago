@@ -297,6 +297,7 @@ private fun ImagoAppContent(viewModel: ShellViewModel, onLeaveViewer: (() -> Uni
             onBack = { destination = AppDestination.Library() },
             onNavigate = { destination = it.toAppDestination() },
             onOpenSettings = { destination = AppDestination.Settings },
+            onOpenAccount = { destination = AppDestination.Account() },
             incomingFiles = viewModel.incomingRecipeFiles.value,
             onIncomingFilesTaken = { viewModel.incomingRecipeFiles.value = null },
         )

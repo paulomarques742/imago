@@ -19,6 +19,7 @@ kotlin {
         commonMain.dependencies {
             api(project(":core:data"))
             api(project(":shared:sync-protocol"))
+            api(project(":core:interchange"))
             implementation(project(":core:model"))
             implementation(libs.kotlinx.coroutines.core)
             api(libs.kotlinx.serialization.json)

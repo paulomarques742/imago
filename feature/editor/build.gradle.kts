@@ -27,6 +27,7 @@ kotlin {
             implementation(project(":core:render"))
             implementation(project(":core:designsystem"))
             implementation(project(":core:interchange"))
+            implementation(libs.zxing.core)
             implementation(compose.materialIconsExtended)
             implementation(libs.compose.backhandler)
             implementation(libs.jetbrains.lifecycle.viewmodel.compose)

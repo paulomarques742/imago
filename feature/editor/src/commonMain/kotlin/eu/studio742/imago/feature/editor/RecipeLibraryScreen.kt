@@ -163,6 +163,9 @@ fun RecipeLibraryScreen(
     /** Null where the system has no share menu. With [onSaveRecipes], what lets the person's recipes be selected. */
     onShareRecipes: ((List<RecipeCard>) -> Unit)? = null,
     onSaveRecipes: ((List<RecipeCard>) -> Unit)? = null,
+    /** One recipe's «Share», which has the link too. Without it, the same as [onShareRecipes]. */
+    onShareRecipe: ((RecipeCard) -> Unit)? = null,
+    onSaveXmp: ((RecipeCard) -> Unit)? = null,
     onImport: (() -> Unit)? = null,
     /** A new value shows the person's own recipes, which is where an import just went. */
     showMineSignal: Int = 0,
@@ -327,8 +330,9 @@ fun RecipeLibraryScreen(
                             onToggleFavorite = { onToggleFavorite(card) },
                             onRename = { onRename(card) },
                             onDuplicate = onDuplicate?.let { { it(card) } },
-                            onShare = onShareRecipes?.let { { it(listOf(card)) } },
+                            onShare = onShareRecipe?.let { { it(card) } } ?: onShareRecipes?.let { { it(listOf(card)) } },
                             onSaveAs = onSaveRecipes?.let { { it(listOf(card)) } },
+                            onSaveXmp = onSaveXmp?.let { { it(card) } },
                             onDelete = { onDelete(card) },
                         )
                     }
@@ -352,6 +356,7 @@ private fun RecipeTile(
     onDuplicate: (() -> Unit)?,
     onShare: (() -> Unit)?,
     onSaveAs: (() -> Unit)?,
+    onSaveXmp: (() -> Unit)? = null,
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -484,6 +489,16 @@ private fun RecipeTile(
                                 onClick = {
                                     menuExpanded = false
                                     saveAs()
+                                },
+                            )
+                        }
+                        onSaveXmp?.let { saveXmp ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.editor_save_as_xmp)) },
+                                leadingIcon = { Icon(Icons.Outlined.SaveAlt, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    saveXmp()
                                 },
                             )
                         }
