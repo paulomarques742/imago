@@ -89,4 +89,24 @@
     <string name="detail_raw_developing">A revelar…</string>
     <string name="detail_raw_final_failed">Não foi possível obter o original</string>
     <string name="detail_raw_final_retry">Tentar de novo</string>
+    <string name="detail_video_edit">Rodar ou cortar</string>
+    <string name="detail_video_edit_failed">Não foi possível guardar a edição do vídeo.</string>
+    <string name="detail_video_edit_done">Concluir</string>
+    <string name="detail_video_edit_cancel">Cancelar</string>
+    <string name="detail_video_edit_rotate">Rodar o vídeo</string>
+    <string name="detail_video_edit_reset">Desfazer a edição</string>
+    <string name="detail_video_edit_export">Guardar como vídeo novo</string>
+    <string name="detail_video_trim">Cortar</string>
+    <string name="detail_video_trim_start">Início do vídeo</string>
+    <string name="detail_video_trim_end">Fim do vídeo</string>
+    <string name="detail_video_trim_kept">Fica de %1$s a %2$s</string>
+    <string name="detail_video_trim_note">O corte começa no quadro-chave imediatamente antes do início escolhido, por isso nada do que fica se perde.</string>
+    <string name="detail_preparing_video">A preparar o vídeo editado…</string>
+    <string name="detail_video_send_to_immich">Enviar para o Immich</string>
+    <string name="detail_video_sent">Vídeo enviado para o Immich.</string>
+    <string name="detail_video_export_failed">Não foi possível criar o vídeo novo.</string>
+    <string name="detail_video_step_download">A obter o original…</string>
+    <string name="detail_video_step_cut">A criar o vídeo novo…</string>
+    <string name="detail_video_step_save">A guardar na galeria…</string>
+    <string name="detail_video_step_upload">A enviar para o Immich…</string>
 </resources>

@@ -19,6 +19,8 @@ import eu.studio742.imago.core.model.AssetExif
 import eu.studio742.imago.core.model.AssetReference
 import eu.studio742.imago.core.model.DEVICE_LIBRARY_ID
 import eu.studio742.imago.core.model.EditRecipe
+import eu.studio742.imago.core.model.changesTheVideo
+import eu.studio742.imago.core.model.withVideoRange
 import eu.studio742.imago.core.render.changesTheImage
 import eu.studio742.imago.feature.editor.EditorAsset
 import eu.studio742.imago.feature.editor.EditorExporter
@@ -141,7 +143,15 @@ open class DetailViewModel(
     private val exporter: EditorExporter,
     private val shareDirectory: File,
     private val rotation: eu.studio742.imago.feature.library.PhotoRotation? = null,
+    private val videoExport: VideoEditExport? = null,
+    private val videoUploader: VideoUploader? = null,
 ) : ViewModel() {
+    /** Whether an edited video can go to Immich from here. */
+    val canSendVideoToImmich: Boolean get() = videoUploader != null
+
+    /** Whether a video can be turned and cut here. */
+    val canEditVideo: Boolean get() = videoExport != null
+
     /** Whether photos turn here without the editor. */
     val canRotate: Boolean get() = rotation != null
 
@@ -209,7 +219,7 @@ open class DetailViewModel(
             val recipe = runCatching { recipes.get(asset.id) }
                 .onFailure { LocalDiagnostics.failure(DiagnosticArea.EDITOR, it, DiagnosticOperation.READ_RECIPE) }
                 .getOrNull()
-                ?.takeIf(EditRecipe::changesTheImage)
+                ?.takeIf { it.showsEdit() }
             mutableState.update { current ->
                 if (current.assetId != asset.id) current else current.copy(recipe = recipe)
             }
@@ -249,7 +259,7 @@ open class DetailViewModel(
     private suspend fun loadStack(assetId: String) {
         val known = mutableState.value.stack.takeIf { stack -> stack.any { it.id == assetId } }
         val members = if (known != null) emptyList() else runCatching { library.stackMembers(assetId) }.getOrDefault(emptyList()).map { member ->
-            member.toAssetUiModel(library, runCatching { recipes.get(member.id) }.getOrNull()?.takeIf(EditRecipe::changesTheImage))
+            member.toAssetUiModel(library, runCatching { recipes.get(member.id) }.getOrNull()?.takeIf { it.showsEdit() })
         }
         val stack = known ?: withStaleExports(assetId, members)
         val originalId = runCatching { library.exportOriginal(assetId) }.getOrNull()
@@ -257,7 +267,7 @@ open class DetailViewModel(
         val original = originalId?.let { id ->
             stack.firstOrNull { it.id == id } ?: runCatching {
                 library.assetDetail(id).asset.copy(id = id)
-                    .toAssetUiModel(library, runCatching { recipes.get(id) }.getOrNull()?.takeIf(EditRecipe::changesTheImage))
+                    .toAssetUiModel(library, runCatching { recipes.get(id) }.getOrNull()?.takeIf { it.showsEdit() })
             }.getOrNull()
         }
         mutableState.update { current ->
@@ -285,7 +295,7 @@ open class DetailViewModel(
             if (result.isEmpty()) {
                 val photo = runCatching {
                     library.assetDetail(id).asset.copy(id = id)
-                        .toAssetUiModel(library, recipe.takeIf(EditRecipe::changesTheImage))
+                        .toAssetUiModel(library, recipe.takeIf { it.showsEdit() })
                 }.getOrNull() ?: return@forEach
                 result += photo
             }
@@ -444,12 +454,95 @@ open class DetailViewModel(
             runCatching { turn.rotateClockwise(asset.id, asset.checksum) }
                 .onSuccess { rotated ->
                     mutableState.update { current ->
-                        if (current.assetId != asset.id) current else current.copy(recipe = rotated.takeIf(EditRecipe::changesTheImage))
+                        if (current.assetId != asset.id) current else current.copy(recipe = rotated.takeIf { it.showsEdit() })
                     }
                 }
                 .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(Res.string.detail_rotate_failed, DiagnosticArea.IMAGE, DiagnosticOperation.EDITS)) } }
         }
     }
+
+    /**
+     * Keeps the turn and the cut a person chose on a video, in the recipe a photo's edits live in. The
+     * file is not touched: the player shows the recipe, and exporting is what makes a new video.
+     */
+    fun saveVideoEdit(asset: DetailAsset, rotationDegrees: Int, startMs: Long, endMs: Long, durationMs: Long, export: VideoExportTarget? = null) {
+        viewModelScope.launch {
+            runCatching {
+                val now = java.time.Instant.now().toString()
+                val current = recipes.get(asset.id)
+                    ?: EditRecipe(assetId = asset.id, originalChecksum = asset.checksum, createdAt = now, updatedAt = now)
+                current
+                    .copy(geometry = current.geometry.copy(rotation = rotationDegrees))
+                    .withVideoRange(startMs, endMs, durationMs, now)
+                    .also { recipes.save(it) }
+            }
+                .onSuccess { saved ->
+                    mutableState.update { current ->
+                        if (current.assetId != asset.id) current else current.copy(recipe = saved.takeIf { it.showsEdit() })
+                    }
+                    if (export != null) exportEditedVideo(asset, export)
+                }
+                .onFailure { error -> mutableState.update { it.copy(error = error.toUiText(Res.string.detail_video_edit_failed, DiagnosticArea.EDITOR, DiagnosticOperation.EDITS)) } }
+        }
+    }
+
+    /** The video with its turn and cut as a new file, sent to [target]; the original stays as it was. */
+    fun exportEditedVideo(asset: DetailAsset, target: VideoExportTarget) {
+        val export = videoExport ?: return
+        // Sending to Immich needs the uploader; saving on the device does not.
+        val upload = (target as? VideoExportTarget.Immich)?.let { immich -> (videoUploader ?: return) to immich.libraryId }
+        val current = mutableState.value
+        val recipe = (if (current.assetId == asset.id) current.recipe else asset.recipe)?.takeIf { it.changesTheVideo() } ?: return
+        if (current.isBusy) return
+        mutableState.update { it.copy(isBusy = true, busyLabel = uiText(Res.string.detail_preparing_video)) }
+        viewModelScope.launch {
+            val started = System.currentTimeMillis()
+            runCatching {
+                // Before the download and the export, which take a while: a key that may not upload says so on the tap.
+                upload?.let { (uploader, libraryId) -> stage(DiagnosticOperation.VIDEO_EDIT_UPLOAD) { uploader.checkCanUpload(libraryId) } }
+                val directory = shareDirectory.apply { mkdirs() }
+                val source = File.createTempFile("video-source-", ".mp4", directory)
+                val edited = File.createTempFile("video-edit-", ".mp4", directory)
+                try {
+                    // Each step says itself: a long video takes a while to come down and go up again, and a
+                    // single "preparing" over all of it looked stuck.
+                    step(Res.string.detail_video_step_download)
+                    stage(DiagnosticOperation.VIDEO_EDIT_DOWNLOAD) { library.downloadOriginal(asset.id, source) }
+                    step(Res.string.detail_video_step_cut)
+                    stage(DiagnosticOperation.VIDEO_EDIT_CUT) { export.export(source, recipe, edited, asset.fileCreatedAt) }
+                    step(if (upload != null) Res.string.detail_video_step_upload else Res.string.detail_video_step_save)
+                    stage(if (upload != null) DiagnosticOperation.VIDEO_EDIT_UPLOAD else DiagnosticOperation.VIDEO_EDIT_SAVE) {
+                        if (upload != null) {
+                            val (uploader, libraryId) = upload
+                            uploader.upload(libraryId, edited, editedVideoName(asset.fileName), "video/mp4", asset.fileCreatedAt)
+                            uiText(Res.string.detail_video_sent)
+                        } else {
+                            exporter.saveOriginalToDevice(edited, editedVideoName(asset.fileName), true, asset.fileCreatedAt)
+                        }
+                    }
+                } finally {
+                    source.delete()
+                    edited.delete()
+                }
+            }
+                .onSuccess { message ->
+                    LocalDiagnostics.record(DiagnosticEvent(DiagnosticArea.EXPORT, DiagnosticOutcome.SUCCESS, DiagnosticOperation.VIDEO_EDIT_EXPORT, durationMs = System.currentTimeMillis() - started))
+                    mutableState.update { it.copy(isBusy = false, busyLabel = null, message = message) }
+                }
+                .onFailure { error ->
+                    // The report names the step that failed, and the code it failed in; never the file or the server.
+                    val step = error as? VideoExportStepFailed
+                    val cause = step?.cause ?: error
+                    val operation = step?.operation ?: DiagnosticOperation.VIDEO_EDIT_EXPORT
+                    mutableState.update {
+                        it.copy(isBusy = false, busyLabel = null, error = cause.toUiText(Res.string.detail_video_export_failed, DiagnosticArea.EXPORT, operation))
+                    }
+                }
+        }
+    }
+
+    private fun step(label: org.jetbrains.compose.resources.StringResource) =
+        mutableState.update { it.copy(busyLabel = uiText(label)) }
 
     /** The photo for another app to use as a wallpaper or a contact's picture, as [share] gives it. */
     fun setAs(asset: DetailAsset, edited: Boolean, onReady: (file: File, mimeType: String) -> Unit) =
@@ -501,3 +594,26 @@ data class DetailPerson(val id: String, val name: String, val thumbnailUrl: Stri
 
 /** A file that took another name: [oldId] was its id, [id] is now — the same on a phone. */
 data class RenamedAsset(val oldId: String, val id: String, val fileName: String, val thumbnailUrl: String, val previewUrl: String)
+
+/** Whether the recipe has anything to show on the page: a look for a photo, a turn or a cut for a video. */
+internal fun EditRecipe.showsEdit(): Boolean = changesTheImage() || changesTheVideo()
+
+/** `holiday.mp4` becomes `holiday-edit.mp4`; the original's name stays free. */
+internal fun editedVideoName(fileName: String): String =
+    fileName.substringBeforeLast('.', "").ifBlank { fileName.ifBlank { "IMAGO" } } + "-edit.mp4"
+
+/** A step of the video export that failed, as the report names it; the step's own exception is the cause. */
+private class VideoExportStepFailed(val operation: DiagnosticOperation, cause: Throwable) : Exception(cause)
+
+/**
+ * One step of the export. The failure is left as it is, with its own stack — that is what the support
+ * report keeps — and only cancellation is never taken for one.
+ */
+private suspend fun <T> stage(operation: DiagnosticOperation, block: suspend () -> T): T = try {
+    block()
+} catch (error: kotlinx.coroutines.CancellationException) {
+    throw error
+} catch (error: Throwable) {
+    System.err.println("[ImmichRoom/video-export] ${error::class.java.name}: ${error.message}")
+    throw VideoExportStepFailed(operation, error)
+}

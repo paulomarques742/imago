@@ -272,6 +272,54 @@ class OkHttpImmichApiTest {
     }
 
     @Test
+    fun anOriginalCutHalfwayIsPickedUpWhereItStopped() = runTest {
+        val original = "0123456789".repeat(20_000)
+        var calls = 0
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                calls++
+                val range = request.getHeader("Range")
+                if (range == null) {
+                    return MockResponse().setBody(original).throttleBody(50_000, 0, java.util.concurrent.TimeUnit.MILLISECONDS)
+                        .setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+                }
+                val from = range.removePrefix("bytes=").removeSuffix("-").toInt()
+                assertEquals("identity", request.getHeader("Accept-Encoding"))
+                return MockResponse().setResponseCode(206).setBody(original.substring(from))
+            }
+        }
+        val destination = File.createTempFile("imago-original", ".mp4").apply { deleteOnExit() }
+
+        api.downloadOriginal(connection(), "asset-1", destination)
+
+        assertEquals(2, calls)
+        assertEquals(original, destination.readText())
+    }
+
+    @Test
+    fun aServerThatIgnoresTheRangeHasTheOriginalWrittenAgain() = runTest {
+        val original = "abcdefghij".repeat(20_000)
+        var calls = 0
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                calls++
+                val response = MockResponse().setBody(original)
+                return if (calls == 1) {
+                    response.throttleBody(50_000, 0, java.util.concurrent.TimeUnit.MILLISECONDS)
+                        .setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+                } else {
+                    response
+                }
+            }
+        }
+        val destination = File.createTempFile("imago-original", ".mp4").apply { deleteOnExit() }
+
+        api.downloadOriginal(connection(), "asset-1", destination)
+
+        assertEquals(original, destination.readText())
+    }
+
+    @Test
     fun readsOnlyTheHeadOfAnOriginal() = runTest {
         server.enqueue(MockResponse().setResponseCode(206).setBody("head"))
 

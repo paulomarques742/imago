@@ -246,6 +246,8 @@ data class EditRecipe(
     val rawDevelopment: RawDevelopment? = null,
     /** One of [RAW_PROFILES]; part of the look, so it travels with the recipe. Only a RAW reads it. */
     val profile: String = RAW_PROFILE_COLOR,
+    /** The stretch of a video that is kept; null for a photo and for a video kept whole. */
+    val video: VideoEdit? = null,
 )
 
 /**

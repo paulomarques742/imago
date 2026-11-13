@@ -89,4 +89,24 @@
     <string name="detail_raw_developing">Developing…</string>
     <string name="detail_raw_final_failed">Couldn’t get the original</string>
     <string name="detail_raw_final_retry">Try again</string>
+    <string name="detail_video_edit">Rotate or trim</string>
+    <string name="detail_video_edit_failed">Couldn’t save the video edit.</string>
+    <string name="detail_video_edit_done">Done</string>
+    <string name="detail_video_edit_cancel">Cancel</string>
+    <string name="detail_video_edit_rotate">Rotate the video</string>
+    <string name="detail_video_edit_reset">Undo the edit</string>
+    <string name="detail_video_edit_export">Save as a new video</string>
+    <string name="detail_video_trim">Trim</string>
+    <string name="detail_video_trim_start">Start of the video</string>
+    <string name="detail_video_trim_end">End of the video</string>
+    <string name="detail_video_trim_kept">Keeps %1$s to %2$s</string>
+    <string name="detail_video_trim_note">The cut starts on the keyframe just before your start, so nothing you keep is lost.</string>
+    <string name="detail_preparing_video">Preparing the edited video…</string>
+    <string name="detail_video_send_to_immich">Send to Immich</string>
+    <string name="detail_video_sent">Video sent to Immich.</string>
+    <string name="detail_video_export_failed">Couldn’t make the new video.</string>
+    <string name="detail_video_step_download">Getting the original…</string>
+    <string name="detail_video_step_cut">Making the new video…</string>
+    <string name="detail_video_step_save">Saving to the gallery…</string>
+    <string name="detail_video_step_upload">Sending to Immich…</string>
 </resources>

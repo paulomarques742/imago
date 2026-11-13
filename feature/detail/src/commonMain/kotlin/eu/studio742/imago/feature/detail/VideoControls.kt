@@ -61,6 +61,13 @@ interface VideoPlayback {
      * keyframe. On release, it seeks to the exact place.
      */
     fun seekTo(positionMs: Long, precise: Boolean = true)
+
+    /**
+     * Plays [range] over and over, from its start, or stops doing it with null. Setting it moves the
+     * video: to the start when the start changed, to just before the end when only the end did, so
+     * each edge of a cut is seen as it is moved.
+     */
+    fun loopWithin(range: LongRange?) {}
 }
 
 internal const val VIDEO_SKIP_MS = 10_000L

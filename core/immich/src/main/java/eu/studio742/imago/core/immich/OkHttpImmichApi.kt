@@ -667,13 +667,38 @@ class OkHttpImmichApi(
         destination: File,
     ): Unit = withContext(Dispatchers.IO) {
         val path = ImmichContract.DOWNLOAD_ASSET.replace("{id}", assetId)
-        execute(
-            request = Request.Builder().url(endpoint(connection, path)).get().build(),
-            apiKey = connection.apiKey,
-            permission = ImmichKeyPermissions.DOWNLOAD_ASSET,
-        ).use { response ->
-            val body = checkNotNull(response.body) { "Immich returned an empty original." }
-            destination.outputStream().buffered().use { output -> body.byteStream().copyTo(output) }
+        // A long original — a video above all — was often cut halfway when the phone moved between
+        // Wi-Fi and mobile data, and the whole export failed. The download picks up where it stopped,
+        // asking only for the bytes it does not have yet.
+        destination.outputStream().close()
+        var resumes = 0
+        while (true) {
+            val written = destination.length()
+            val request = Request.Builder().url(endpoint(connection, path)).get().apply {
+                if (written > 0) {
+                    header("Range", "bytes=$written-")
+                    // A compressed answer would not be the file's bytes from that point on.
+                    header("Accept-Encoding", "identity")
+                }
+            }.build()
+            try {
+                execute(request, connection.apiKey, ImmichKeyPermissions.DOWNLOAD_ASSET).use { response ->
+                    val body = checkNotNull(response.body) { "Immich returned an empty original." }
+                    // A server or proxy that ignores the range sends the whole file again: then it is
+                    // written from the start.
+                    val append = written > 0 && response.code == 206
+                    java.io.FileOutputStream(destination, append).buffered().use { output -> body.byteStream().copyTo(output) }
+                }
+                return@withContext
+            } catch (error: Exception) {
+                val interrupted = error is IOException || error is ImmichApiException.Connection &&
+                    error !is ImmichApiException.CertificateRequired && error !is ImmichApiException.CertificateUntrusted
+                if (!interrupted || ++resumes > ORIGINAL_DOWNLOAD_RESUMES) throw error
+                // The request itself is already in the report when it could not be made; a body cut
+                // halfway is not, and it is the case that matters here.
+                if (error is IOException) recordRequest(request, diagnosticOutcome(error), error = error)
+                kotlinx.coroutines.delay(resumes * ORIGINAL_DOWNLOAD_RETRY_MS)
+            }
         }
     }
 
@@ -1526,3 +1551,9 @@ internal fun JsonElement?.toDurationMs(): Long? {
     val seconds = parts[2].toDoubleOrNull() ?: return null
     return ((hours * 3_600 + minutes * 60) * 1_000 + seconds * 1_000).toLong()
 }
+
+/** How many times a download of an original picks up again before giving up. */
+private const val ORIGINAL_DOWNLOAD_RESUMES = 4
+
+/** The wait before each new attempt, times the attempt: the network is often still changing. */
+private const val ORIGINAL_DOWNLOAD_RETRY_MS = 750L

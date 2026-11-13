@@ -92,6 +92,9 @@ enum class DiagnosticOperation {
     GALLERY,
     /** The supporters programme in the settings: the account's support, and a support bought through Google Play. */
     SUPPORTER,
+    /** Turning or cutting a video into a new file, as a whole; the steps below say where one failed. */
+    VIDEO_EDIT_EXPORT,
+    VIDEO_EDIT_DOWNLOAD, VIDEO_EDIT_CUT, VIDEO_EDIT_SAVE, VIDEO_EDIT_UPLOAD,
 }
 
 fun diagnosticOutcome(error: Throwable): DiagnosticOutcome {

@@ -11,7 +11,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
@@ -41,7 +45,15 @@ class HiltDetailViewModel @Inject constructor(
     recipes: RecipeRepository,
     exporter: EditorExporter,
     rotation: eu.studio742.imago.feature.library.PhotoRotation,
-) : DetailViewModel(library, recipes, exporter, File(context.cacheDir, "share"), rotation)
+    media: eu.studio742.imago.core.data.CompositionMediaRepository,
+) : DetailViewModel(library, recipes, exporter, File(context.cacheDir, "share"), rotation, LosslessVideoExport(), MediaVideoUploader(media))
+
+/** Sends the video the way compositions are sent: the repository that already knows each server's key. */
+private class MediaVideoUploader(private val media: eu.studio742.imago.core.data.CompositionMediaRepository) : VideoUploader {
+    override suspend fun checkCanUpload(libraryId: String) = media.checkCanUpload(libraryId)
+    override suspend fun upload(libraryId: String, file: File, fileName: String, mimeType: String, createdAt: String) =
+        media.uploadComposition(libraryId, file, fileName, mimeType, createdAt)
+}
 
 @Composable
 actual fun detailViewModel(): DetailViewModel = hiltViewModel<HiltDetailViewModel>()
@@ -100,7 +112,11 @@ actual fun rememberShareFile(): (File, String) -> Unit {
 // and it only recognises the Java annotation with `markerClass`.
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-actual fun rememberVideoPlayback(url: String?, apiKey: String): VideoPlayback? {
+actual fun rememberVideoPlayback(
+    url: String?,
+    apiKey: String,
+    trim: eu.studio742.imago.core.model.VideoEdit?,
+): VideoPlayback? {
     if (url == null) return null
     val context = LocalContext.current
     val playback = remember(url, apiKey) {
@@ -110,14 +126,15 @@ actual fun rememberVideoPlayback(url: String?, apiKey: String): VideoPlayback? {
             .setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(context, http)))
             .build()
             .apply {
-                setMediaItem(MediaItem.fromUri(url))
+                setMediaItem(mediaItemOf(url, trim))
                 repeatMode = Player.REPEAT_MODE_OFF
                 prepare()
                 playWhenReady = true
             }
-        ExoVideoPlayback(player)
+        ExoVideoPlayback(player, trim)
     }
     DisposableEffect(playback) { onDispose(playback::release) }
+    LaunchedEffect(playback, trim) { playback.trim(url, trim) }
     // ExoPlayer does not say when the position moves, only when the state changes; the bar reads it at
     // this rate, which is enough for the thumb to move without visible jumps.
     LaunchedEffect(playback) {
@@ -213,28 +230,34 @@ actual fun MotionPlayer(
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-actual fun DetailVideoPlayer(playback: VideoPlayback?, url: String, apiKey: String, modifier: Modifier) {
+actual fun DetailVideoPlayer(playback: VideoPlayback?, url: String, apiKey: String, modifier: Modifier, rotationDegrees: Int) {
     val exo = playback as? ExoVideoPlayback ?: return
     val player = exo.player
-    AndroidView(
-        factory = {
-            PlayerView(it).apply {
-                // The controls are the detail's (`VideoControls`); media3's sat under the bottom
-                // strip. Only the buffering indicator stays, which says why the image stopped after a
-                // seek in a server video.
-                useController = false
-                setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                this.player = player
-            }
-        },
-        update = {
-            it.player = player
-            // Watching a video nobody touches the screen; without this it would turn off after the
-            // system's idle timeout in the middle of the video. Paused, it can turn off again.
-            it.keepScreenOn = exo.isPlaying
-        },
-        modifier = modifier,
-    )
+    // The video is turned by turning its view. media3's effects turned the frames themselves, but this
+    // version only takes them before the video is prepared, and turning while editing did nothing.
+    // A quarter turn lays the view out with its sides swapped, so once turned it fills the page.
+    val quarter = rotationDegrees % 180 != 0
+    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+        AndroidView(
+            factory = {
+                // The controls are the detail's (`VideoControls`); media3's sat under the bottom strip.
+                // Only the buffering indicator stays, which says why the image stopped after a seek in
+                // a server video.
+                (android.view.LayoutInflater.from(it).inflate(R.layout.detail_video_player, null) as PlayerView).apply {
+                    this.player = player
+                }
+            },
+            update = {
+                it.player = player
+                // Watching a video nobody touches the screen; without this it would turn off after the
+                // system's idle timeout in the middle of the video. Paused, it can turn off again.
+                it.keepScreenOn = exo.isPlaying
+            },
+            modifier = Modifier
+                .requiredSize(if (quarter) maxHeight else maxWidth, if (quarter) maxWidth else maxHeight)
+                .graphicsLayer { rotationZ = rotationDegrees.toFloat() },
+        )
+    }
 }
 
 /**
@@ -263,7 +286,27 @@ private class EmbeddedMotionDataSource(private val upstream: androidx.media3.dat
     }
 }
 
-private class ExoVideoPlayback(val player: ExoPlayer) : VideoPlayback {
+/** The video, cut to [trim] when there is one. */
+private fun mediaItemOf(url: String, trim: eu.studio742.imago.core.model.VideoEdit?): MediaItem {
+    val item = MediaItem.Builder().setUri(url)
+    if (trim != null && !trim.keepsEverything) {
+        item.setClippingConfiguration(
+            MediaItem.ClippingConfiguration.Builder()
+                .setStartPositionMs(trim.startMs)
+                .setEndPositionMs(trim.endMs ?: C.TIME_END_OF_SOURCE)
+                .build(),
+        )
+    }
+    return item.build()
+}
+
+/** How much of the video before a moved end a cut shows. */
+private const val SHOW_BEFORE_END_MS = 2_000L
+
+private class ExoVideoPlayback(
+    val player: ExoPlayer,
+    private var appliedTrim: eu.studio742.imago.core.model.VideoEdit?,
+) : VideoPlayback {
     override var isPlaying by mutableStateOf(false)
         private set
     override var hasEnded by mutableStateOf(false)
@@ -280,6 +323,37 @@ private class ExoVideoPlayback(val player: ExoPlayer) : VideoPlayback {
                 eu.studio742.imago.core.model.diagnostics.DiagnosticOperation.VIDEO)
         }
         override fun onEvents(player: Player, events: Player.Events) = sync()
+        override fun onPlaybackStateChanged(state: Int) {
+            // A loop that reaches the end of the file has no position left to send its message from.
+            val loop = looping ?: return
+            if (state == Player.STATE_ENDED) {
+                player.seekTo(loop.first)
+                player.play()
+            }
+        }
+    }
+
+    private var looping: LongRange? = null
+
+    // A player message at the end of the stretch was not delivered again after the end moved, and the
+    // video ran on to the end of the file; the position is read at every refresh instead, which already
+    // happens for the bar.
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    override fun loopWithin(range: LongRange?) {
+        val previous = looping
+        looping = range
+        if (range == null) return
+        val onlyTheEndMoved = previous != null && previous.first == range.first && previous.last != range.last
+        // The keyframe before, as the export starts there: what loops is what the new video will be.
+        player.setSeekParameters(SeekParameters.PREVIOUS_SYNC)
+        player.seekTo(if (onlyTheEndMoved) maxOf(range.first, range.last - SHOW_BEFORE_END_MS) else range.first)
+        player.playWhenReady = true
+        sync()
+    }
+
+    private fun keepInLoop() {
+        val loop = looping ?: return
+        if (player.currentPosition >= loop.last) player.seekTo(loop.first)
     }
 
     init {
@@ -287,6 +361,7 @@ private class ExoVideoPlayback(val player: ExoPlayer) : VideoPlayback {
     }
 
     fun sync() {
+        keepInLoop()
         hasEnded = player.playbackState == Player.STATE_ENDED
         // The intention and not ExoPlayer's `isPlaying`: that one drops to false while the stream loads
         // after a seek, and the button flickered to "play" on every seek.
@@ -309,6 +384,17 @@ private class ExoVideoPlayback(val player: ExoPlayer) : VideoPlayback {
     override fun seekTo(positionMs: Long, precise: Boolean) {
         player.setSeekParameters(if (precise) SeekParameters.EXACT else SeekParameters.CLOSEST_SYNC)
         player.seekTo(positionMs)
+        sync()
+    }
+
+    /** Plays the kept stretch from its start; a new cut starts the video over, which is what trying it is for. */
+    fun trim(url: String, trim: eu.studio742.imago.core.model.VideoEdit?) {
+        if (trim == appliedTrim) return
+        appliedTrim = trim
+        val wasPlaying = player.playWhenReady
+        player.setMediaItem(mediaItemOf(url, trim))
+        player.prepare()
+        player.playWhenReady = wasPlaying
         sync()
     }
 

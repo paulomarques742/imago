@@ -75,10 +75,14 @@ actual fun rememberShareFile(): (File, String) -> Unit {
  * folder.
  */
 @Composable
-actual fun rememberVideoPlayback(url: String?, apiKey: String): VideoPlayback? = null
+actual fun rememberVideoPlayback(
+    url: String?,
+    apiKey: String,
+    trim: eu.studio742.imago.core.model.VideoEdit?,
+): VideoPlayback? = null
 
 @Composable
-actual fun DetailVideoPlayer(playback: VideoPlayback?, url: String, apiKey: String, modifier: Modifier) {
+actual fun DetailVideoPlayer(playback: VideoPlayback?, url: String, apiKey: String, modifier: Modifier, rotationDegrees: Int) {
     val scope = rememberCoroutineScope()
     var busy by remember(url) { mutableStateOf(false) }
     var error by remember(url) { mutableStateOf<UiText?>(null) }

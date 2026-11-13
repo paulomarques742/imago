@@ -27,13 +27,29 @@ expect val SaveToDeviceLabel: StringResource
  * The player of the open video, for the detail's controls to drive it; `null` with a null [url], or
  * on a platform without a player of its own. The API key goes in the player's requests: the stream is
  * authenticated.
+ *
+ * [trim] plays only the kept stretch, as the recipe says; positions and the duration are then the
+ * trimmed video's. It changes without the player being made again.
  */
 @Composable
-expect fun rememberVideoPlayback(url: String?, apiKey: String): VideoPlayback?
+expect fun rememberVideoPlayback(
+    url: String?,
+    apiKey: String,
+    trim: eu.studio742.imago.core.model.VideoEdit? = null,
+): VideoPlayback?
 
-/** The open page's video: [playback]'s image, or, without it, whatever the platform does with [url]. */
+/**
+ * The open page's video: [playback]'s image, turned [rotationDegrees] clockwise, or, without a player,
+ * whatever the platform does with [url].
+ */
 @Composable
-expect fun DetailVideoPlayer(playback: VideoPlayback?, url: String, apiKey: String, modifier: Modifier = Modifier)
+expect fun DetailVideoPlayer(
+    playback: VideoPlayback?,
+    url: String,
+    apiKey: String,
+    modifier: Modifier = Modifier,
+    rotationDegrees: Int = 0,
+)
 
 /**
  * Whether a photo's movement plays in the app, held on the photo. Where it does not (desktop, for

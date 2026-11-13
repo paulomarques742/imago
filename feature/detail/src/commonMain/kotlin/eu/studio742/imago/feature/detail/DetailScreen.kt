@@ -152,6 +152,7 @@ import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.model.AssetExif
 import eu.studio742.imago.core.model.EditRecipe
+import eu.studio742.imago.core.model.videoRotationDegrees
 import eu.studio742.imago.core.render.PhotoTransform
 import eu.studio742.imago.core.render.drag
 import eu.studio742.imago.core.render.pinch
@@ -236,6 +237,8 @@ fun DetailRoute(
         onSaveEdited = viewModel::saveEditedToDevice,
         onAlbumResult = viewModel::show,
         onRotate = viewModel::rotate.takeIf { viewModel.canRotate },
+        onEditVideo = viewModel::saveVideoEdit.takeIf { viewModel.canEditVideo },
+        canSendVideoToImmich = viewModel.canSendVideoToImmich,
         onSetAs = viewModel::setAs,
         onShowOnMap = onShowOnMap,
         onShowPerson = onShowPerson,
@@ -277,6 +280,9 @@ private fun DetailScreen(
     onAlbumResult: (UiText, failed: Boolean) -> Unit,
     /** Null where photos do not turn without the editor. */
     onRotate: ((DetailAsset) -> Unit)?,
+    /** Keeps a video's turn and cut, and with `export` makes a new video from them; null where videos are not edited. */
+    onEditVideo: ((asset: DetailAsset, rotationDegrees: Int, startMs: Long, endMs: Long, durationMs: Long, export: VideoExportTarget?) -> Unit)?,
+    canSendVideoToImmich: Boolean,
     onSetAs: (DetailAsset, edited: Boolean, (java.io.File, String) -> Unit) -> Unit,
     /** True archives, false brings back; null where the library has no archive. */
     onArchive: ((archived: Boolean) -> Unit)?,
@@ -321,7 +327,6 @@ private fun DetailScreen(
     // A tap on the photo or the video hides everything on top of it, system bars included, to see it
     // whole; another tap brings it back. It lasts while swiping, as in a gallery.
     var chromeVisible by remember { mutableStateOf(true) }
-    HideSystemBars(hidden = !chromeVisible)
 
     LaunchedEffect(state.message, state.error) {
         val message = state.error ?: state.message ?: return@LaunchedEffect
@@ -342,10 +347,36 @@ private fun DetailScreen(
     // A single player, the settled page's, created here and not inside the page: the controls live in
     // the bottom strip, outside the pager, and need to reach it.
     val settledAsset = assets.getOrNull(pagerState.settledPage)
+    val settledRecipe = settledAsset?.let { if (it.id == state.assetId) state.recipe else it.recipe }
+    // Editing a video: the player shows the whole of it, turned as the draft says, and the bar below
+    // picks what is kept. Nothing is kept until "Done".
+    var editingVideo by remember(settledAsset?.id) { mutableStateOf(false) }
+    var draftDegrees by remember(settledAsset?.id) { mutableStateOf(0) }
+    var draftStartMs by remember(settledAsset?.id) { mutableStateOf(0L) }
+    var draftEndMs by remember(settledAsset?.id) { mutableStateOf<Long?>(null) }
+    // The video export asks where the new video goes.
+    var choosingVideoDestination by remember(settledAsset?.id) { mutableStateOf(false) }
     val playback = rememberVideoPlayback(
         url = settledAsset?.takeIf { it.isVideo }?.videoUrl,
         apiKey = settledAsset?.apiKey.orEmpty(),
+        trim = if (editingVideo) null else settledRecipe?.video,
     )
+    var trimDragging by remember(settledAsset?.id) { mutableStateOf(false) }
+    HideSystemBars(hidden = !chromeVisible || editingVideo)
+    val startVideoEdit = {
+        val recipe = if (state.assetId == asset.id) state.recipe else asset.recipe
+        draftDegrees = recipe?.videoRotationDegrees() ?: 0
+        draftStartMs = recipe?.video?.startMs ?: 0L
+        draftEndMs = recipe?.video?.endMs
+        editingVideo = true
+    }
+    // The kept stretch plays over and over while it is chosen, starting again each time an edge moves.
+    val fullDurationMs = playback?.durationMs ?: 0L
+    LaunchedEffect(playback, editingVideo, draftStartMs, draftEndMs, fullDurationMs) {
+        playback?.loopWithin(
+            if (editingVideo && fullDurationMs > 0L) draftStartMs..(draftEndMs ?: fullDurationMs) else null,
+        )
+    }
     // The settled photo's movement, while it is held or after the bar's button; another photo starts still.
     var motionPlaying by remember(settledAsset?.id) { mutableStateOf(false) }
     val motionFailed = stringResource(Res.string.detail_motion_failed)
@@ -378,18 +409,21 @@ private fun DetailScreen(
                     // decoder open for every video the finger passes by.
                     isCurrent = isCurrent,
                     playback = if (isCurrent) playback else null,
+                    // While the video is edited the turn is the draft's, seen before it is kept.
+                    videoRotationDegrees = if (isCurrent && editingVideo) draftDegrees
+                    else (if (pageAsset.id == state.assetId) state.recipe else pageAsset.recipe)?.videoRotationDegrees() ?: 0,
                     motionPlaying = isCurrent && motionPlaying,
                     onMotionPlayingChange = { if (isCurrent) motionPlaying = it },
                     onMotionFailed = { messages.launch { snackbarHostState.showSnackbar(motionFailed) } },
                     onZoomedChange = { if (isCurrent) zoomed = it },
                     onFavorite = { if (!isOpenedFile) gate.run(onFavorite) },
-                    onToggleChrome = { chromeVisible = !chromeVisible },
+                    onToggleChrome = { if (!editingVideo) chromeVisible = !chromeVisible },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
 
             AnimatedVisibility(
-                visible = chromeVisible,
+                visible = chromeVisible && !editingVideo,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier.align(Alignment.TopCenter),
@@ -562,7 +596,7 @@ private fun DetailScreen(
                     // dark gradient in both. Without the gradient a light sky swallowed the date and the
                     // EXIF line; the rest of the bar goes on the workspace, below.
                     val shade = ImagoUi.colors.imageShade
-                    CompositionLocalProvider(LocalImagoUiPalette provides ImagoDarkPalette) {
+                    if (!editingVideo) CompositionLocalProvider(LocalImagoUiPalette provides ImagoDarkPalette) {
                     Column(
                         Modifier
                             .fillMaxWidth()
@@ -602,31 +636,58 @@ private fun DetailScreen(
                     )
                     }
                     }
-                    Column(Modifier.fillMaxWidth().background(ImagoUi.colors.workspace).navigationBarsPadding()) {
+                    // Editing a video leaves only its bar, and nothing at all while an edge is dragged: the
+                    // video is what is being worked on.
+                    val barShade by androidx.compose.animation.core.animateFloatAsState(if (!editingVideo) 1f else if (trimDragging) 0f else .78f)
+                    Column(Modifier.fillMaxWidth().background(ImagoUi.colors.workspace.copy(alpha = barShade)).navigationBarsPadding()) {
                     // In the middle of a swipe, the player is still the page's we left.
                     if (playback != null && settledAsset?.id == asset.id) {
-                        VideoControls(playback, Modifier.padding(bottom = ImagoSpacing.Sm))
+                        val fullMs = playback.durationMs
+                        if (editingVideo && onEditVideo != null) {
+                            // The full length is known once the player has read the whole video, not the kept stretch.
+                            val endMs = draftEndMs ?: fullMs
+                            if (fullMs > 0L) {
+                                val changes = draftDegrees != 0 || draftStartMs > 0L || endMs < fullMs
+                                VideoEditBar(
+                                    durationMs = fullMs,
+                                    startMs = draftStartMs,
+                                    endMs = endMs,
+                                    positionMs = playback.positionMs,
+                                    onRange = { start, end -> draftStartMs = start; draftEndMs = end.takeIf { it < fullMs } },
+                                    onDraggingChange = { trimDragging = it },
+                                    onRotate = { draftDegrees = (draftDegrees + 90) % 360 },
+                                    onCancel = { editingVideo = false },
+                                    onDone = {
+                                        onEditVideo(asset, draftDegrees, draftStartMs, endMs, fullMs, null)
+                                        editingVideo = false
+                                    },
+                                    onExport = { choosingVideoDestination = true }.takeIf { changes },
+                                    modifier = Modifier.padding(bottom = ImagoSpacing.Sm),
+                                )
+                            }
+                        } else {
+                            VideoControls(playback, Modifier.padding(bottom = ImagoSpacing.Sm))
+                        }
                     }
-                    if (stack.isNotEmpty()) {
+                    if (stack.isNotEmpty() && !editingVideo) {
                         StackStrip(
                             members = stack,
                             shownId = asset.id,
                             onSelect = { member -> if (member.id != asset.id) onOpenStackMember(member) },
                         )
                     }
-                    Filmstrip(
+                    if (!editingVideo) Filmstrip(
                         assets = assets,
                         selectedIndex = selectedIndex,
                         listState = filmstripState,
                         onSelect = onSelectIndex,
                     )
-                    DetailActionBar(
-                        // The editor works on bitmaps: a video has nothing to do there, and a button that
-                        // opened a useless editor would be worse than not being there.
-                        canEdit = !asset.isVideo,
+                    if (!editingVideo) DetailActionBar(
+                        // The photo editor works on bitmaps; a video is edited in place, turned and cut.
+                        canEdit = !asset.isVideo || (onEditVideo != null && playback != null),
                         ownsFile = !isOpenedFile,
                         onShare = { gate.run { if (hasEdit) versionChoice = VersionChoice.SHARE else onShare(asset, false, shareFile) } },
-                        onEdit = { gate.run(onEdit) },
+                        onEdit = { if (asset.isVideo) startVideoEdit() else gate.run(onEdit) },
                         onCompose = { gate.run(onAddToComposition) },
                         onInfo = { showInfo = !showInfo },
                         onDelete = {
@@ -643,7 +704,7 @@ private fun DetailScreen(
             // must not leave this one behind.
             if (listPaneShown != null) {
                 AnimatedVisibility(
-                    visible = chromeVisible,
+                    visible = chromeVisible && !editingVideo,
                     enter = fadeIn(),
                     exit = fadeOut(),
                     modifier = Modifier.align(Alignment.CenterStart),
@@ -732,6 +793,38 @@ private fun DetailScreen(
             onDismiss = { deleteCounterpart = null },
         )
     }
+    if (choosingVideoDestination && onEditVideo != null) {
+        val fullMs = playback?.durationMs ?: 0L
+        val endMs = draftEndMs ?: fullMs
+        var targetLibrary by remember { mutableStateOf<String?>(null) }
+        val send = { target: VideoExportTarget ->
+            onEditVideo(asset, draftDegrees, draftStartMs, endMs, fullMs, target)
+            choosingVideoDestination = false
+            editingVideo = false
+        }
+        AlertDialog(
+            onDismissRequest = { choosingVideoDestination = false },
+            title = { Text(stringResource(Res.string.detail_video_edit_export)) },
+            text = {
+                if (canSendVideoToImmich) {
+                    eu.studio742.imago.feature.library.ExportLibrarySelector(
+                        originId = runCatching { AssetReference.parse(asset.id).libraryId }.getOrNull(),
+                        onSelected = { targetLibrary = it },
+                    )
+                }
+            },
+            confirmButton = {
+                if (canSendVideoToImmich) {
+                    TextButton(enabled = targetLibrary != null, onClick = { targetLibrary?.let { send(VideoExportTarget.Immich(it)) } }) {
+                        Text(stringResource(Res.string.detail_video_send_to_immich))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { gate.run { send(VideoExportTarget.Device) } }) { Text(stringResource(SaveToDeviceLabel)) }
+            },
+        )
+    }
     if (showDeleteConfirmation) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
@@ -773,6 +866,7 @@ private fun DetailPage(
     recipe: EditRecipe?,
     isCurrent: Boolean,
     playback: VideoPlayback?,
+    videoRotationDegrees: Int,
     motionPlaying: Boolean,
     onMotionPlayingChange: (Boolean) -> Unit,
     onMotionFailed: () -> Unit,
@@ -788,6 +882,7 @@ private fun DetailPage(
                 url = asset.videoUrl,
                 apiKey = asset.apiKey,
                 modifier = Modifier.fillMaxSize(),
+                rotationDegrees = videoRotationDegrees,
             )
             // A tap on the video shows or hides what is on top of it, as on a photo; pausing is the
             // controls' button. Only the tap: the drag still belongs to the pager, to move to the next
