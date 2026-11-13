@@ -32,6 +32,7 @@ kotlin {
             implementation(libs.hilt.android)
             implementation(libs.hilt.navigation.compose)
             implementation(libs.kotlinx.coroutines.android)
+            implementation(libs.play.billing.ktx)
         }
         getByName("desktopTest").dependencies { implementation(libs.junit4) }
     }

@@ -93,4 +93,20 @@
         <item quantity="other">%1$d changes to send</item>
     </plurals>
     <string name="account_welcome_prompt">Using IMAGO on more than one device? With an account, your edits, presets and compositions follow you.</string>
+    <string name="support_title">Support IMAGO</string>
+    <string name="support_intro">IMAGO is free and open source, and stays that way. Supporters keep it going and, in return, have a say in where it goes.</string>
+    <string name="support_benefit_roadmap">Vote on what comes next on the roadmap.</string>
+    <string name="support_benefit_gallery">Publish your recipes in the community gallery.</string>
+    <string name="support_benefit_rounds">Choose the recipes that ship in the app for everyone.</string>
+    <string name="support_not_premium">It unlocks nothing in the app: the editor, the composer and the sync are the same for everyone.</string>
+    <string name="support_needs_account">Supporting goes with your IMAGO account, so it shows on the website too.</string>
+    <string name="support_active">You’re a supporter until %1$s. Thank you.</string>
+    <string name="support_ended">Your support ended on %1$s.</string>
+    <string name="support_buy">Support for %1$s a month</string>
+    <string name="support_store_note">Paid through Google Play, and cancelled from your subscriptions there.</string>
+    <string name="support_how">How to support</string>
+    <string name="support_thanks">Thank you. Your support is on your account.</string>
+    <string name="support_other_account">This purchase belongs to another IMAGO account.</string>
+    <string name="support_pending">The payment isn’t complete yet. Your support shows as soon as it is.</string>
+    <string name="support_failed">Your purchase couldn’t be linked to your account yet. It will be tried again the next time you open this.</string>
 </resources>

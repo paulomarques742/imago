@@ -52,6 +52,10 @@ android {
         buildConfigField("String", "SUPABASE_URL", "\"${buildSetting("SUPABASE_URL")}\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${buildSetting("SUPABASE_PUBLISHABLE_KEY")}\"")
         buildConfigField("String", "FORUM_WEBSITE_URL", "\"${buildSetting("FORUM_WEBSITE_URL")}\"")
+        // The supporters programme shows only once it is open (SUPPORTERS_OPEN=1), and the subscription
+        // is sold only with the Play Console product's id (PLAY_SUPPORTER_PRODUCT_ID).
+        buildConfigField("boolean", "SUPPORTERS_OPEN", (buildSetting("SUPPORTERS_OPEN") == "1").toString())
+        buildConfigField("String", "PLAY_SUPPORTER_PRODUCT_ID", "\"${buildSetting("PLAY_SUPPORTER_PRODUCT_ID")}\"")
     }
 
     // The Play Store upload key. It lives outside the repository, and only whoever ships to the

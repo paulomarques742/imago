@@ -15,6 +15,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import eu.studio742.imago.core.interchange.recipeLinkId
 import eu.studio742.imago.feature.editor.LocalRecipeLinks
 import eu.studio742.imago.feature.editor.LocalRecipeGallery
+import eu.studio742.imago.feature.account.LocalSupportStore
+import eu.studio742.imago.feature.account.PlaySupportStore
 import eu.studio742.imago.feature.editor.readRecipeFiles
 import eu.studio742.imago.feature.editor.readRecipeLink
 import eu.studio742.imago.feature.editor.recipeFileUris
@@ -76,11 +78,20 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val indicator = syncEngine.status.map { it.toIndicator() }
         languageSettings.refresh()
+        // The support subscription is sold only with the programme open and the product configured.
+        val supportStore = if (BuildConfig.SUPPORTERS_OPEN && BuildConfig.PLAY_SUPPORTER_PRODUCT_ID.isNotBlank()) {
+            PlaySupportStore(this, BuildConfig.PLAY_SUPPORTER_PRODUCT_ID).also { store ->
+                store.start()
+                lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+                    override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) = store.close()
+                })
+            }
+        } else null
         setContent {
             val preference by languageSettings.preference.collectAsState()
             // The system language comes from the configuration, which on Android 13+ already carries the per-app language.
             val systemLocale = LocalConfiguration.current.locales[0]
-            CompositionLocalProvider(LocalRecipeLinks provides account.recipeLinks, LocalRecipeGallery provides account.recipeGallery, LocalLanguageSettings provides languageSettings, LocalAppearanceSettings provides appearanceSettings) {
+            CompositionLocalProvider(LocalRecipeLinks provides account.recipeLinks, LocalRecipeGallery provides account.recipeGallery, LocalSupportStore provides supportStore, LocalLanguageSettings provides languageSettings, LocalAppearanceSettings provides appearanceSettings) {
                 ProvideAppLanguage(preference, systemLocale) {
                     ImagoTheme { ImagoApp(shell, syncIndicator = indicator) }
                 }

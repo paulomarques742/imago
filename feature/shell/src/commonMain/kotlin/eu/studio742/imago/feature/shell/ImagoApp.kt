@@ -275,7 +275,10 @@ private fun ImagoAppContent(viewModel: ShellViewModel, onLeaveViewer: (() -> Uni
 
         current is AppDestination.Settings -> LibrarySettingsRoute(
             onBack = { destination = AppDestination.Library() },
-            accountSection = { AccountSettingsCard(onOpenAccount = { signUp -> destination = AppDestination.Account(signUp) }) },
+            accountSection = {
+                eu.studio742.imago.feature.account.SupportSettingsCard(onOpenAccount = { signUp -> destination = AppDestination.Account(signUp) })
+                AccountSettingsCard(onOpenAccount = { signUp -> destination = AppDestination.Account(signUp) })
+            },
             aboutSection = { AboutSettingsCard() },
             community = eu.studio742.imago.feature.account.communityRepository(),
         )

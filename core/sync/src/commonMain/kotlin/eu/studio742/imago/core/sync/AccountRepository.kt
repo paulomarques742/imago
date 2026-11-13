@@ -87,6 +87,9 @@ class AccountRepository(
     val recipeGallery: eu.studio742.imago.core.interchange.RecipeGalleryService =
         backend.gallery?.let { gallery -> GalleryRepository(gallery) { coordinator.session.value != null } }
             ?: eu.studio742.imago.core.interchange.NoRecipeGallery
+    val supporters: Supporters =
+        if (backend.gallery == null) NoSupporters
+        else SupporterRepository(backend.gallery, backend.playPurchases, backend.supportersOpen) { coordinator.session.value?.userId }
     val deviceName get() = coordinator.deviceName
     val passwordRecoveryPending get() = coordinator.passwordRecoveryPending
     val linkState get() = coordinator.linkState

@@ -71,7 +71,7 @@ val generateSupabaseSettings by tasks.registering {
         fun setting(name: String) = (properties.getProperty(name) ?: System.getenv(name) ?: "").trim()
         val file = output.get().file("imago-supabase.properties").asFile
         file.parentFile.mkdirs()
-        file.writeText("url=${setting("SUPABASE_URL")}\npublishableKey=${setting("SUPABASE_PUBLISHABLE_KEY")}\nforumWebsiteUrl=${setting("FORUM_WEBSITE_URL")}\n")
+        file.writeText("url=${setting("SUPABASE_URL")}\npublishableKey=${setting("SUPABASE_PUBLISHABLE_KEY")}\nforumWebsiteUrl=${setting("FORUM_WEBSITE_URL")}\nsupportersOpen=${setting("SUPPORTERS_OPEN")}\n")
     }
 }
 sourceSets.main { resources.srcDir(generateSupabaseSettings) }

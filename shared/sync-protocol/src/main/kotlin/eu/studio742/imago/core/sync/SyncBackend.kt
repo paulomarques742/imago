@@ -22,6 +22,10 @@ interface SyncBackend {
     val forum: ForumBackend? get() = null
     val recipeLinks: RecipeLinkBackend? get() = null
     val gallery: GalleryBackend? get() = null
+    val playPurchases: PlayPurchaseBackend? get() = null
+
+    /** Whether this build shows the supporters programme: only once it is open (and its pages published). */
+    val supportersOpen: Boolean get() = false
 
     suspend fun signUp(email: String, password: String): SignUpResult
     suspend fun signIn(email: String, password: String)

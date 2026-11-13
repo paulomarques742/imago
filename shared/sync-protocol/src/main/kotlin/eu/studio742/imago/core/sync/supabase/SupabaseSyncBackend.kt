@@ -62,7 +62,13 @@ import eu.studio742.imago.core.sync.SyncEntity
 import java.io.IOException
 
 /** This build's Supabase project. Incomplete means no account, and nothing leaves the device. */
-data class SupabaseSettings(val url: String, val publishableKey: String, val forumWebsiteUrl: String? = null) {
+data class SupabaseSettings(
+    val url: String,
+    val publishableKey: String,
+    val forumWebsiteUrl: String? = null,
+    /** The supporters programme shows in the app only once it is open, as on the website. */
+    val supportersOpen: Boolean = false,
+) {
     val isComplete: Boolean get() = url.startsWith("http") && publishableKey.isNotBlank()
 }
 
@@ -146,6 +152,15 @@ class SupabaseSyncBackend(
             }
         }
     } }
+
+    override val supportersOpen: Boolean = settings.supportersOpen
+
+    override val playPurchases: eu.studio742.imago.core.sync.PlayPurchaseBackend? by lazy { if (!settings.isComplete) null else
+        SupabasePlayPurchaseBackend(settings, httpClient) {
+            val active = client
+            if (active == null) null else active.withFreshSession { auth.currentSessionOrNull()?.accessToken }
+        }
+    }
 
     override val forum = if (!settings.isComplete) null else SupabaseForumBackend(settings, httpClient) {
         val active = client

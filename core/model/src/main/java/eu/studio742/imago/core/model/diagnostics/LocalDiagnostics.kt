@@ -90,6 +90,8 @@ enum class DiagnosticOperation {
     ACCOUNT_REQUEST, ACCOUNT_LINK, MAP_TILES, RECIPE_LINK,
     /** The supporters' community gallery: whether the account supports IMAGO, and publishing a recipe there. */
     GALLERY,
+    /** The supporters programme in the settings: the account's support, and a support bought through Google Play. */
+    SUPPORTER,
 }
 
 fun diagnosticOutcome(error: Throwable): DiagnosticOutcome {
