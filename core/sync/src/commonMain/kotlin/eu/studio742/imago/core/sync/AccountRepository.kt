@@ -84,6 +84,9 @@ class AccountRepository(
 
     val recipeLinks: RecipeLinkService =
         backend.recipeLinks?.let { links -> RecipeLinkRepository(links) { coordinator.session.value != null } } ?: NoRecipeLinks
+    val recipeGallery: eu.studio742.imago.core.interchange.RecipeGalleryService =
+        backend.gallery?.let { gallery -> GalleryRepository(gallery) { coordinator.session.value != null } }
+            ?: eu.studio742.imago.core.interchange.NoRecipeGallery
     val deviceName get() = coordinator.deviceName
     val passwordRecoveryPending get() = coordinator.passwordRecoveryPending
     val linkState get() = coordinator.linkState

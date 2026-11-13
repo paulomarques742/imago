@@ -29,6 +29,9 @@ fun readRecipeFile(path: Path): RecipeFile = RecipeFile(
 internal actual fun ImageBitmap.encodeToPng(): ByteArray =
     checkNotNull(Image.makeFromBitmap(asSkiaBitmap()).encodeToData(EncodedImageFormat.PNG)).bytes
 
+internal actual fun ImageBitmap.encodeToJpeg(quality: Int): ByteArray =
+    checkNotNull(Image.makeFromBitmap(asSkiaBitmap()).encodeToData(EncodedImageFormat.JPEG, quality)).bytes
+
 @Composable
 internal actual fun rememberRecipeFileActions(
     onOpened: (List<RecipeFile>) -> Unit,

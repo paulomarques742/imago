@@ -129,6 +129,24 @@ class SupabaseSyncBackend(
         }
     } }
 
+    // The gallery lives on the website, like the links; without one it is not offered.
+    override val gallery: eu.studio742.imago.core.sync.GalleryBackend? by lazy { forum?.websiteUrl?.let { website ->
+        SupabaseGalleryBackend(settings, httpClient, website) {
+            val active = client
+            if (active == null) null else try {
+                active.withFreshSession {
+                    val current = auth.currentSessionOrNull()
+                    val user = current?.user?.id
+                    if (current == null || user == null) null else GallerySession(current.accessToken, user)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                throw eu.studio742.imago.core.sync.GalleryBackendException(eu.studio742.imago.core.sync.GalleryBackendException.Reason.NO_ACCOUNT)
+            }
+        }
+    } }
+
     override val forum = if (!settings.isComplete) null else SupabaseForumBackend(settings, httpClient) {
         val active = client
         if (active == null) null else try {

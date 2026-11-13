@@ -606,4 +606,27 @@
     <string name="editor_remove_spots_sensitivity">Sensibilidade</string>
     <string name="editor_remove_show_overlay">Mostrar as correcções</string>
     <string name="editor_history_retouch_extended">Área aumentada</string>
+    <string name="editor_gallery_publish">Publicar na galeria</string>
+    <string name="editor_gallery_in">Esta receita está na galeria da comunidade.</string>
+    <string name="editor_gallery_view">Ver a galeria</string>
+    <string name="editor_gallery_close">Concluído</string>
+    <string name="editor_gallery_intro">A sua receita entra na galeria da comunidade com um antes e um depois. Qualquer pessoa a vê lá e a abre no IMAGO pelo link.</string>
+    <string name="editor_gallery_source_sample">Fotografia modelo</string>
+    <string name="editor_gallery_source_own">Fotografia sua</string>
+    <string name="editor_gallery_choose_photo">Escolher outra fotografia</string>
+    <string name="editor_gallery_own_note">A sua fotografia fica pública na galeria, reduzida e sem metadados, como o sítio onde foi tirada. Continua a ser sua e só aparece lá.</string>
+    <string name="editor_gallery_photo_failed">Não foi possível abrir essa fotografia.</string>
+    <string name="editor_gallery_before">Antes</string>
+    <string name="editor_gallery_after">Depois</string>
+    <string name="editor_gallery_field_title">Título</string>
+    <string name="editor_gallery_field_name">O seu nome, como aparece</string>
+    <string name="editor_gallery_send">Publicar</string>
+    <string name="editor_gallery_done">A sua receita está na galeria.</string>
+    <string name="editor_gallery_invalid_fields">O título leva de 3 a 80 caracteres, e o nome até 40.</string>
+    <string name="editor_gallery_error_not_supporter">Só os apoiantes publicam na galeria.</string>
+    <string name="editor_gallery_error_imported">Esta receita veio de outro formato, por isso não é sua para publicar.</string>
+    <string name="editor_gallery_error_already">Esta receita já está na galeria.</string>
+    <string name="editor_gallery_error_limit">Chegou ao limite de 50 publicações na galeria.</string>
+    <string name="editor_gallery_error_link_gone">O link desta receita já não funciona. Crie-o de novo primeiro.</string>
+    <string name="editor_gallery_error_image">Não foi possível enviar as fotografias. Tente daqui a pouco.</string>
 </resources>

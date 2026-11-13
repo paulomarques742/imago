@@ -88,6 +88,8 @@ enum class DiagnosticOperation {
     OPEN_PHOTO, READ_RECIPE, SAVE_RECIPE, RECIPE_LIBRARY, PHOTO_EXPORT, EDIT_REEL,
     GEOMETRY_MIRROR, RENDER_PHOTO, SUPPORT_REPORT, SUPPORT_EMAIL, OPEN_LINK, COMMUNITY_IMAGES,
     ACCOUNT_REQUEST, ACCOUNT_LINK, MAP_TILES, RECIPE_LINK,
+    /** The supporters' community gallery: whether the account supports IMAGO, and publishing a recipe there. */
+    GALLERY,
 }
 
 fun diagnosticOutcome(error: Throwable): DiagnosticOutcome {

@@ -215,13 +215,7 @@ internal fun recipeLinkErrorText(error: RecipeLinkError): StringResource = when 
 /** The sample with the look of the recipe on it. What is tied to one photo says nothing on another. */
 private suspend fun renderRecipeOnSample(recipe: SavedRecipe, sampleIndex: Int): ImageBitmap {
     val bytes = Res.readBytes(recipeSamplePath(sampleIndex))
-    return withContext(Dispatchers.Default) {
-        val decoded = bytes.decodeToImageBitmap()
-        val source = PixelBuffer(decoded.width, decoded.height, IntArray(decoded.width * decoded.height).also { decoded.readPixels(it) })
-        val look = EditRecipe(assetId = "", originalChecksum = "", processVersion = recipe.recipe.processVersion, createdAt = "", updatedAt = "")
-            .withPartsFrom(recipe.recipe, recipe.appliedParts - PHOTO_BOUND_PARTS)
-        RecipePixels.render(source, look).toImageBitmap()
-    }
+    return withContext(Dispatchers.Default) { renderLook(recipe, bytes.decodeToImageBitmap()) }
 }
 
 /**
@@ -246,6 +240,8 @@ internal fun RecipeLinkDialog(
     val url = links.url
     val measurer = rememberTextMeasurer()
     val scope = rememberCoroutineScope()
+    val gallery = rememberRecipeGalleryController()
+    LaunchedEffect(recipe.id) { gallery.check() }
     val kicker = stringResource(Res.string.editor_recipe_card_kicker)
     val hint = stringResource(if (url != null) Res.string.editor_recipe_card_scan else Res.string.editor_recipe_card_pending)
 
@@ -286,6 +282,7 @@ internal fun RecipeLinkDialog(
                         canUseImage = card != null,
                         onSaveImage = { deliver(onSaveImage) },
                         onShareImage = onShareImage?.let { share -> { deliver(share) } },
+                        gallery = gallery,
                     )
                 }
                 val preview: @Composable (Modifier) -> Unit = { modifier ->
@@ -320,6 +317,10 @@ internal fun RecipeLinkDialog(
                 }
             }
         }
+    }
+    val linked = links.linkId
+    if (gallery.composing && linked != null) {
+        RecipeGalleryDialog(gallery, recipe, linked, sampleIndex, onSampleIndex)
     }
     if (links.askingAccount) {
         AlertDialog(
@@ -387,7 +388,9 @@ private fun LinkControls(
     canUseImage: Boolean,
     onSaveImage: () -> Unit,
     onShareImage: (() -> Unit)?,
+    gallery: RecipeGalleryController? = null,
 ) {
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
     var copied by remember(url) { mutableStateOf(false) }
     val idle = !links.loading && !links.working
@@ -418,6 +421,22 @@ private fun LinkControls(
                     }
                 }
                 Text(stringResource(Res.string.editor_recipe_link_snapshot), style = note, color = ImagoUi.colors.secondaryText)
+                // The gallery is the supporters': to anyone else it is not there at all.
+                val linked = links.linkId
+                if (gallery != null && gallery.supporter && linked != null) {
+                    if (linked in gallery.published) {
+                        Text(stringResource(Res.string.editor_gallery_in), style = body, color = ImagoUi.colors.secondaryText)
+                        gallery.localGalleryUrl()?.let { address ->
+                            OutlinedButton(onClick = { uriHandler.openUri(address) }, modifier = Modifier.fillMaxWidth()) {
+                                Text(stringResource(Res.string.editor_gallery_view))
+                            }
+                        }
+                    } else {
+                        OutlinedButton(onClick = gallery::start, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(Res.string.editor_gallery_publish))
+                        }
+                    }
+                }
             }
             else -> {
                 Text(stringResource(Res.string.editor_recipe_link_intro), style = body, color = ImagoUi.colors.secondaryText)

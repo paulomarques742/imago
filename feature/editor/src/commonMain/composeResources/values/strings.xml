@@ -606,4 +606,27 @@
     <string name="editor_remove_spots_sensitivity">Sensitivity</string>
     <string name="editor_remove_show_overlay">Show the corrections</string>
     <string name="editor_history_retouch_extended">Area extended</string>
+    <string name="editor_gallery_publish">Publish to the gallery</string>
+    <string name="editor_gallery_in">This recipe is in the community gallery.</string>
+    <string name="editor_gallery_view">See the gallery</string>
+    <string name="editor_gallery_close">Done</string>
+    <string name="editor_gallery_intro">Your recipe goes into the community gallery with a before and an after. Anyone can see it there and open it in IMAGO from its link.</string>
+    <string name="editor_gallery_source_sample">Sample photo</string>
+    <string name="editor_gallery_source_own">Your photo</string>
+    <string name="editor_gallery_choose_photo">Choose another photo</string>
+    <string name="editor_gallery_own_note">Your photo becomes public in the gallery, reduced and without its metadata, such as where it was taken. It stays yours, and only shows there.</string>
+    <string name="editor_gallery_photo_failed">That photo couldn’t be opened.</string>
+    <string name="editor_gallery_before">Before</string>
+    <string name="editor_gallery_after">After</string>
+    <string name="editor_gallery_field_title">Title</string>
+    <string name="editor_gallery_field_name">Your name, as it shows</string>
+    <string name="editor_gallery_send">Publish</string>
+    <string name="editor_gallery_done">Your recipe is in the gallery.</string>
+    <string name="editor_gallery_invalid_fields">The title needs 3 to 80 characters, and the name up to 40.</string>
+    <string name="editor_gallery_error_not_supporter">Only supporters publish in the gallery.</string>
+    <string name="editor_gallery_error_imported">This recipe came from another format, so it isn’t yours to publish.</string>
+    <string name="editor_gallery_error_already">This recipe is already in the gallery.</string>
+    <string name="editor_gallery_error_limit">You’ve reached the limit of 50 posts in the gallery.</string>
+    <string name="editor_gallery_error_link_gone">This recipe’s link no longer works. Create it again first.</string>
+    <string name="editor_gallery_error_image">The photos couldn’t be sent. Try again in a little while.</string>
 </resources>

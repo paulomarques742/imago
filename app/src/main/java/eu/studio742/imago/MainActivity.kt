@@ -14,6 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import eu.studio742.imago.core.interchange.recipeLinkId
 import eu.studio742.imago.feature.editor.LocalRecipeLinks
+import eu.studio742.imago.feature.editor.LocalRecipeGallery
 import eu.studio742.imago.feature.editor.readRecipeFiles
 import eu.studio742.imago.feature.editor.readRecipeLink
 import eu.studio742.imago.feature.editor.recipeFileUris
@@ -79,7 +80,7 @@ class MainActivity : ComponentActivity() {
             val preference by languageSettings.preference.collectAsState()
             // The system language comes from the configuration, which on Android 13+ already carries the per-app language.
             val systemLocale = LocalConfiguration.current.locales[0]
-            CompositionLocalProvider(LocalRecipeLinks provides account.recipeLinks, LocalLanguageSettings provides languageSettings, LocalAppearanceSettings provides appearanceSettings) {
+            CompositionLocalProvider(LocalRecipeLinks provides account.recipeLinks, LocalRecipeGallery provides account.recipeGallery, LocalLanguageSettings provides languageSettings, LocalAppearanceSettings provides appearanceSettings) {
                 ProvideAppLanguage(preference, systemLocale) {
                     ImagoTheme { ImagoApp(shell, syncIndicator = indicator) }
                 }

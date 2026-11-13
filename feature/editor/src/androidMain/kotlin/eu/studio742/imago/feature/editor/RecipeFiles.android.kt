@@ -75,6 +75,9 @@ private fun readLimited(context: Context, uri: Uri): ByteArray? = runCatching {
 internal actual fun ImageBitmap.encodeToPng(): ByteArray =
     ByteArrayOutputStream().also { asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
 
+internal actual fun ImageBitmap.encodeToJpeg(quality: Int): ByteArray =
+    ByteArrayOutputStream().also { asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, it) }.toByteArray()
+
 @Composable
 internal actual fun rememberRecipeFileActions(
     onOpened: (List<RecipeFile>) -> Unit,

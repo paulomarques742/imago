@@ -69,6 +69,9 @@ internal class RecipeFileActions(
 
 internal expect fun ImageBitmap.encodeToPng(): ByteArray
 
+/** As JPEG at [quality] (0–100), with no metadata: only the pixels are written. */
+internal expect fun ImageBitmap.encodeToJpeg(quality: Int): ByteArray
+
 @Composable
 internal expect fun rememberRecipeFileActions(
     onOpened: (List<RecipeFile>) -> Unit,
