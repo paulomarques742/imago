@@ -155,4 +155,39 @@ class FrameGeometryTest {
             disagreeing.isEmpty(),
         )
     }
+
+    /**
+     * A crop is a rectangle of the straightened frame, and the frame is scaled to be covered by the
+     * photo. So no corner of any crop may land beyond the photo, whatever the angle, the aspect ratio
+     * and the turns: the black corner seen on a straightened RAW cannot come from this geometry.
+     */
+    @Test
+    fun noCornerOfAnyCropLeavesThePhotoWhenStraightening() {
+        val point = FloatArray(2)
+        val outside = mutableListOf<String>()
+        val sizes = listOf(6000 to 4000, 4000 to 3000, 3000 to 4000, 6240 to 4160, 1000 to 1000)
+        val crops = listOf(
+            floatArrayOf(0f, 0f, 1f, 1f),
+            floatArrayOf(0.12f, 0.12f, 0.76f, 0.76f),
+            floatArrayOf(0f, 0f, 0.5f, 0.5f),
+            floatArrayOf(0.5f, 0.5f, 0.5f, 0.5f),
+        )
+        for ((width, height) in sizes) for (turns in 0..3) for (degrees in -45..45 step 3) {
+            for (crop in crops) {
+                val geometry = FrameGeometry(
+                    sourceWidth = width, sourceHeight = height,
+                    cropX = crop[0], cropY = crop[1], cropWidth = crop[2], cropHeight = crop[3],
+                    straighten = degrees + 0.7f, quarterTurns = turns,
+                )
+                for (u in listOf(0f, 1f)) for (v in listOf(0f, 1f)) {
+                    geometry.imageFromFramed(u, v, point)
+                    val slack = 1e-4f
+                    if (point[0] < -slack || point[0] > 1 + slack || point[1] < -slack || point[1] > 1 + slack) {
+                        outside += "${width}x$height turns=$turns deg=${degrees + 0.7f} crop=${crop.toList()} corner=($u,$v) -> ${point.toList()}"
+                    }
+                }
+            }
+        }
+        assertTrue("Corners beyond the photo: ${outside.size} " + outside.take(8).joinToString(" | "), outside.isEmpty())
+    }
 }
