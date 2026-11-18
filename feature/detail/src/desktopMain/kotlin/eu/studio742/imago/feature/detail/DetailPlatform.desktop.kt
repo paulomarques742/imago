@@ -142,6 +142,25 @@ actual fun MotionPlayer(
 private val http get() = eu.studio742.imago.core.immich.ImmichHttp.client
 
 private fun localVideo(url: String, apiKey: String): File {
+    // A Motion Photo's video is a stretch of the photo's own file: it goes to a file of its own so the
+    // system's player can open it.
+    eu.studio742.imago.core.model.EmbeddedMotion.parse(url)?.let { motion ->
+        val target = File.createTempFile("imago-motion-", ".mp4").apply { deleteOnExit() }
+        java.io.RandomAccessFile(File(URI(motion.fileUrl)), "r").use { source ->
+            source.seek(motion.start)
+            target.outputStream().use { out ->
+                val buffer = ByteArray(64 * 1024)
+                var left = motion.length
+                while (left > 0) {
+                    val read = source.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
+                    check(read > 0) { "The photo ends before its movement does." }
+                    out.write(buffer, 0, read)
+                    left -= read
+                }
+            }
+        }
+        return target
+    }
     if (url.startsWith("file:")) return File(URI(url))
     val target = File.createTempFile("imago-video-", ".mp4").apply { deleteOnExit() }
     val request = Request.Builder().url(url).apply { if (apiKey.isNotBlank()) header(IMMICH_API_KEY_HEADER, apiKey) }.build()

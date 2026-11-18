@@ -19,6 +19,7 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import eu.studio742.imago.core.data.db.AssetEntity
 import eu.studio742.imago.core.data.db.ImmichRoomDatabase
+import eu.studio742.imago.core.data.db.LocalMotionEntity
 import eu.studio742.imago.core.model.AlbumAddition
 import eu.studio742.imago.core.model.AlbumPlace
 import eu.studio742.imago.core.model.AssetExif
@@ -111,9 +112,36 @@ class FolderLibraryRepository(
                     stream.filter { Files.isRegularFile(it) }.forEach { file -> entity(file, favorites)?.let(rows::add) }
                 }
             }
+            // The clip of an Apple Live Photo is part of the photo: it leaves the grid and travels as the
+            // photo's movement, written where a Motion Photo's look is kept so a sync puts it back.
+            val pairs = pairLivePhotosByName(rows.map { PairingEntry(it.id, it.folderId, it.originalFileName, it.type == AssetType.VIDEO.name) })
+            val clips = pairs.values.toSet()
             // A folder that disappeared (a disconnected drive) takes its photos off the grid; the recipes stay.
-            replaceCatalog(rows)
+            replaceCatalog(rows.filterNot { it.id in clips })
+            if (pairs.isNotEmpty()) {
+                val checksums = rows.associate { it.id to it.checksum }
+                database.withTransaction {
+                    database.localMotionDao().upsertAll(pairs.map { (photo, clip) -> LocalMotionEntity(DEVICE_LIBRARY_ID, photo, checksums.getValue(photo), clip) })
+                    database.localMotionDao().restore(DEVICE_LIBRARY_ID, pairs.keys.toList())
+                }
+            }
+            scope.launch { lookForMotions() }
         }
+    }
+
+    /** A Motion Photo's video sits inside the photo's own file; this lets the look read it. */
+    override fun openForMotion(assetId: String): MotionFile? {
+        val path = runCatching { fileOf(assetId) }.getOrNull()?.takeIf { Files.isRegularFile(it) } ?: return null
+        val file = java.io.RandomAccessFile(path.toFile(), "r")
+        val size = file.length()
+        val reader = ByteReader { position, length ->
+            val available = (size - position).coerceIn(0, length.toLong()).toInt()
+            ByteArray(available).also {
+                file.seek(position)
+                file.readFully(it)
+            }
+        }
+        return MotionFile(size, reader) { file.close() }
     }
 
     override suspend fun rowsOf(ids: Collection<String>): List<AssetEntity> = withContext(Dispatchers.IO) {
