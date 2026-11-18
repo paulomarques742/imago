@@ -16,11 +16,10 @@ import okhttp3.OkHttpClient
 @Module
 @InstallIn(SingletonComponent::class)
 object MaskModelsModule {
-    /** Subject, Sky and Background are in debug builds only, while they are being tested. */
     @Provides
     @Singleton
     fun generatedMaskTools(@ApplicationContext context: Context): GeneratedMaskTools = GeneratedMaskTools(
-        if (!BuildConfig.DEBUG) null else HttpModelSource(
+        HttpModelSource(
             File(context.filesDir, "ml-models"),
             BuildConfig.SUPABASE_URL.trimEnd('/') + "/storage/v1/object/public/ml-models/",
             OkHttpClient(),

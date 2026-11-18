@@ -102,5 +102,3 @@ tasks.test {
         providers.gradleProperty(name).orNull?.let { systemProperty(name, it) }
     }
 }
-// Tools still being tested are on only when the app is run from the build, never in what is packaged.
-tasks.withType<JavaExec>().matching { it.name == "run" }.configureEach { systemProperty("imago.debugTools", "true") }

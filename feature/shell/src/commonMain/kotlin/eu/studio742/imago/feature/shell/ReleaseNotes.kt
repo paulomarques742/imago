@@ -2,6 +2,7 @@ package eu.studio742.imago.feature.shell
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.People
@@ -56,10 +57,12 @@ import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_6_body
 import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_7_title
 import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_7_body
 import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_8_title
-import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_8_1
-import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_8_2
-import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_8_3
-import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_8_4
+import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_8_body
+import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_9_title
+import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_9_1
+import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_9_2
+import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_9_3
+import eu.studio742.imago.feature.shell.resources.shell_news_0_50_0_9_4
 import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_1_title
 import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_1_body
 import eu.studio742.imago.feature.shell.resources.shell_news_0_40_0_2_title
@@ -220,20 +223,21 @@ internal val Releases: List<Release> = listOf(
         AppVersion(0, 50, 0),
         pages = listOf(
             NewsPage(Icons.Outlined.Share, Res.string.shell_news_0_50_0_1_title, Res.string.shell_news_0_50_0_1_body, featured = true),
-            NewsPage(Icons.Outlined.Download, Res.string.shell_news_0_50_0_2_title, Res.string.shell_news_0_50_0_2_body),
-            NewsPage(Icons.Outlined.Tune, Res.string.shell_news_0_50_0_3_title, Res.string.shell_news_0_50_0_3_body),
-            NewsPage(Icons.Outlined.ContentCut, Res.string.shell_news_0_50_0_4_title, Res.string.shell_news_0_50_0_4_body),
-            NewsPage(Icons.Outlined.People, Res.string.shell_news_0_50_0_5_title, Res.string.shell_news_0_50_0_5_body),
-            NewsPage(Icons.Outlined.Public, Res.string.shell_news_0_50_0_6_title, Res.string.shell_news_0_50_0_6_body),
-            NewsPage(Icons.Filled.Favorite, Res.string.shell_news_0_50_0_7_title, Res.string.shell_news_0_50_0_7_body, support = true),
+            NewsPage(Icons.Outlined.AutoFixHigh, Res.string.shell_news_0_50_0_2_title, Res.string.shell_news_0_50_0_2_body),
+            NewsPage(Icons.Outlined.Download, Res.string.shell_news_0_50_0_3_title, Res.string.shell_news_0_50_0_3_body),
+            NewsPage(Icons.Outlined.Tune, Res.string.shell_news_0_50_0_4_title, Res.string.shell_news_0_50_0_4_body),
+            NewsPage(Icons.Outlined.ContentCut, Res.string.shell_news_0_50_0_5_title, Res.string.shell_news_0_50_0_5_body),
+            NewsPage(Icons.Outlined.People, Res.string.shell_news_0_50_0_6_title, Res.string.shell_news_0_50_0_6_body),
+            NewsPage(Icons.Outlined.Public, Res.string.shell_news_0_50_0_7_title, Res.string.shell_news_0_50_0_7_body),
+            NewsPage(Icons.Filled.Favorite, Res.string.shell_news_0_50_0_8_title, Res.string.shell_news_0_50_0_8_body, support = true),
             NewsPage(
                 Icons.Outlined.Checklist,
-                Res.string.shell_news_0_50_0_8_title,
+                Res.string.shell_news_0_50_0_9_title,
                 items = listOf(
-                    Res.string.shell_news_0_50_0_8_1,
-                    Res.string.shell_news_0_50_0_8_2,
-                    Res.string.shell_news_0_50_0_8_3,
-                    Res.string.shell_news_0_50_0_8_4,
+                    Res.string.shell_news_0_50_0_9_1,
+                    Res.string.shell_news_0_50_0_9_2,
+                    Res.string.shell_news_0_50_0_9_3,
+                    Res.string.shell_news_0_50_0_9_4,
                 ),
             ),
         ),

@@ -90,9 +90,9 @@ fun main(args: Array<String>) {
     }, 60 * 60 * 1000L, 60 * 60 * 1000L)
 
     val graph = DesktopDataGraph(paths.root)
-    // Subject, Sky and Background only when run from the build (`gradlew :desktop:run`), while they are being tested.
+    // Subject, Sky and Background: the models come from the public bucket of the build's Supabase project.
     val generatedMaskTools = GeneratedMaskTools(
-        if (System.getProperty("imago.debugTools") != "true") null else eu.studio742.imago.core.ml.HttpModelSource(
+        eu.studio742.imago.core.ml.HttpModelSource(
             paths.root.resolve("ml-models").toFile(),
             DesktopAccount.bundledSettings().url.trimEnd('/') + "/storage/v1/object/public/ml-models/",
             okhttp3.OkHttpClient(),
