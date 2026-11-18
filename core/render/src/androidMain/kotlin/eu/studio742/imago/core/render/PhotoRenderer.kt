@@ -98,6 +98,13 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
     /** An aid's map is in [sourceTexture]: encoded 8-bit greys, whatever the photo it stands in for. */
     private var textureHoldsMap = false
     private var toneCurveTexture = 0
+    /**
+     * The LUT as a 3D texture, always a valid one — the shader declares a `sampler3D`, and a unit holding a
+     * 2D texture under it fails the draw even when the LUT is off. Until a LUT arrives it is a 2³ identity.
+     */
+    private var lutTexture = 0
+    /** The table now in [lutTexture]; uploaded again only when the recipe's LUT changes. */
+    private var uploadedLut: FloatArray? = null
     /** The tables now in [toneCurveTexture]; uploaded again only when the curves change. */
     private var uploadedToneCurves: FloatArray? = null
     private val toneCurveTexels = ByteBuffer.allocateDirect(CURVE_SAMPLE_COUNT * 4 * Float.SIZE_BYTES)
@@ -231,6 +238,8 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         halfFloatTargets = true
         sourceTexture = createSourceTexture()
         toneCurveTexture = createToneCurveTexture()
+        lutTexture = createLutTexture()
+        uploadedLut = null
         brushTexture = createBrushTexture()
         brushTextureWidth = 0
         brushTextureHeight = 0
@@ -854,6 +863,7 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         program.float("uClarity", if (detailEnabled) active.clarity / 100f else 0f)
         program.float("uDehaze", if (detailEnabled) active.dehaze / 100f else 0f)
         bindColorGrade(program, active.colorGrade)
+        bindLut(program, active.lutTable)
         program.float("uVignetteAmount", active.vignetteAmount)
         program.float("uVignetteMidpoint", active.vignetteMidpoint)
         program.float("uVignetteRoundness", active.vignetteRoundness)
@@ -930,6 +940,50 @@ internal class PhotoRenderer : GLSurfaceView.Renderer {
         )
         program.float("uGradeBlending", grade.blending)
         program.float("uGradeBalance", grade.balance)
+    }
+
+    /** Step 12b: the table on its own unit, and the two numbers the shader reads it with. */
+    private fun bindLut(program: GlProgram, table: Lut3D?) {
+        if (table != null) uploadLut(table)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + LUT_UNIT)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_3D, lutTexture)
+        program.int("uLut", LUT_UNIT)
+        program.boolean("uLutEnabled", table != null)
+        program.float("uLutSize", (table?.size ?: 2).toFloat())
+        program.float("uLutStrength", table?.strength ?: 0f)
+    }
+
+    /** The texture is trilinear and clamped: 16-bit floats can be filtered in ES 3.0, which is what makes it one read. */
+    private fun createLutTexture(): Int {
+        val ids = IntArray(1)
+        GLES30.glGenTextures(1, ids, 0)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + LUT_UNIT)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_3D, ids[0])
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, GLES30.GL_TEXTURE_WRAP_R, GLES30.GL_CLAMP_TO_EDGE)
+        uploadLutSamples(floatArrayOf(0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f, 1f, 1f, 0f, 0f, 0f, 1f, 1f, 0f, 1f, 0f, 1f, 1f, 1f, 1f, 1f), 2)
+        return ids[0]
+    }
+
+    private fun uploadLut(table: Lut3D) {
+        if (uploadedLut === table.samples) return
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + LUT_UNIT)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_3D, lutTexture)
+        uploadLutSamples(table.samples, table.size)
+        uploadedLut = table.samples
+    }
+
+    /** Red changes fastest in the samples, and it is the texture's width: the order matches without a shuffle. */
+    private fun uploadLutSamples(samples: FloatArray, size: Int) {
+        val texels = ByteBuffer.allocateDirect(samples.size * Float.SIZE_BYTES).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        texels.put(samples).position(0)
+        GLES30.glTexImage3D(
+            GLES30.GL_TEXTURE_3D, 0, GLES30.GL_RGB16F, size, size, size, 0,
+            GLES30.GL_RGB, GLES30.GL_FLOAT, texels,
+        )
     }
 
     /** A target not yet allocated is replaced by the `stage`, so no sampler is left unbound. */
@@ -1064,6 +1118,9 @@ private val IDENTITY_3X3 = floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
 
 /** The stage blurred with the sharpening radius; units 0 to 8 are taken. */
 private const val SHARP_BLUR_UNIT = 9
+
+/** The LUT's 3D texture, read only by the composite; the first unit after the sharpening's. */
+private const val LUT_UNIT = 10
 
 /** A raster's sixteen-bit level as the half float the texture holds, computed once for all 65 536. */
 private val halfOfLevel = ShortArray(65536) { android.util.Half.toHalf(it / 65535f) }

@@ -496,6 +496,8 @@ fun EditorRoute(
                 onResetWheel = viewModel::resetColorGradeWheel,
                 onResetAll = viewModel::resetColorGrading,
                 onGestureFinished = viewModel::finishAdjustment,
+                onLutAmount = viewModel::updateLutAmount,
+                onLutRemove = viewModel::removeLut,
             )
         },
         recipeActions = if (recipeMode) {
@@ -2799,6 +2801,14 @@ private fun AdjustmentPanel(
                                     onToggleShadows = onToggleClippingShadows,
                                     onToggleHighlights = onToggleClippingHighlights,
                                     modifier = Modifier.alpha(if (editingKey == null) 1f else 0f),
+                                )
+                            }
+                            if (state.panel == EditorPanel.COLOR && recipe?.lut != null) {
+                                LutControls(
+                                    lut = recipe.lut!!,
+                                    editingKey = editingKey,
+                                    onEditing = onEditing,
+                                    actions = colorGradeActions,
                                 )
                             }
                             if (state.panel == EditorPanel.LIGHT && state.canUpgradeDevelopment) {

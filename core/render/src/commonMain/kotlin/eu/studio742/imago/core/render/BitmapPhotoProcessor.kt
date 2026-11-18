@@ -88,7 +88,7 @@ object BitmapPhotoProcessor {
         applyTonePass(bitmap, parameters, field, geometry)
         if (parameters.needsDefringe) applyRowPass(bitmap, DefringePass.build(bitmap, parameters)::applyRow)
         if (parameters.needsNoiseStage) applyNoisePass(bitmap, parameters)
-        if (parameters.needsDetailStage || parameters.needsSharpenStage || parameters.needsColorGradingStage || parameters.needsEffectsStage) {
+        if (parameters.needsDetailStage || parameters.needsSharpenStage || parameters.needsColorGradingStage || parameters.needsLutStage || parameters.needsEffectsStage) {
             val pyramid = if (parameters.needsDetailStage) {
                 DetailPyramid.build(bitmap, withDehaze = parameters.needsDehazeStats)
             } else {
@@ -214,6 +214,7 @@ object BitmapPhotoProcessor {
         val grainStep = PhotoEffects.grainCellSize(parameters.grainSize) * max(renderScale, 0.0001f)
         val grainGain = GRAIN_AMPLITUDE * PhotoEffects.grainSizeGain(parameters.grainSize)
         val grade = parameters.colorGrade
+        val lutTable = parameters.lutTable
         val aspect = width.toFloat() / max(height, 1)
         val airlight = pyramid?.airlight ?: 1f
         // The tent reads the row above and the row below as they came out of the first pass. On a
@@ -310,6 +311,17 @@ object BitmapPhotoProcessor {
                         graded[1] = green
                         graded[2] = blue
                         PhotoEffects.applyColorGrading(graded, grade)
+                        red = graded[0]
+                        green = graded[1]
+                        blue = graded[2]
+                    }
+
+                    // Step 12b, the same place in the pipeline as in the shader: after the grading, before the effects.
+                    if (lutTable != null) {
+                        graded[0] = red
+                        graded[1] = green
+                        graded[2] = blue
+                        lutTable.apply(graded)
                         red = graded[0]
                         green = graded[1]
                         blue = graded[2]

@@ -7,7 +7,7 @@ import java.io.InputStream
 import java.util.zip.ZipInputStream
 
 /** The extensions the app offers to open, including a DNG, which only the import button treats as a preset. */
-val RECIPE_FILE_EXTENSIONS = listOf(IMAGO_FILE_EXTENSION, "xmp", "dng", "zip")
+val RECIPE_FILE_EXTENSIONS = listOf(IMAGO_FILE_EXTENSION, "xmp", "lrtemplate", "cube", "dng", "zip")
 
 /** A pack of presets in DNG weighs far more than one recipe file, and this still fits in memory on a phone. */
 const val RECIPE_FILE_MAX_BYTES = 64 * 1024 * 1024
@@ -25,6 +25,8 @@ fun decodeRecipeFile(fileName: String, bytes: ByteArray): ImagoFileContent = run
             decodePreset(bytes, recipeFileStem(fileName), "", RecipeOrigin.XMP)
         bytes.size <= IMAGO_FILE_MAX_BYTES && lrtemplateText(bytes) != null ->
             decodeLrtemplate(bytes, recipeFileStem(fileName), "")
+        bytes.size <= RECIPE_FILE_MAX_BYTES && cubeText(bytes) != null ->
+            ImagoFileContent.Recipes(listOf(cubeEntryOf(bytes, recipeFileStem(fileName), "") ?: ImagoFileEntry.Invalid))
         else -> decodeImagoFile(bytes)
     }
 }.getOrDefault(ImagoFileContent.Unreadable)
@@ -117,6 +119,10 @@ private fun decodeZip(fileName: String, bytes: ByteArray): ImagoFileContent {
                             entries += lrtemplateEntryOf(content, stem, pack) ?: ImagoFileEntry.Invalid
                             continue
                         }
+                        if (extension == "cube") {
+                            entries += cubeEntryOf(content, stem, pack) ?: ImagoFileEntry.Invalid
+                            continue
+                        }
                         val packet = if (extension == "dng") content?.takeIf { it.isTiff() }?.let(::tiffXmp) else content
                         val origin = if (extension == "dng") RecipeOrigin.DNG else RecipeOrigin.XMP
                         entries += presetEntryOf(packet, stem, pack, origin) ?: ImagoFileEntry.Invalid
@@ -132,10 +138,10 @@ private fun decodeZip(fileName: String, bytes: ByteArray): ImagoFileContent {
     return ImagoFileContent.Recipes(entries, skippedFiles = skipped)
 }
 
-private val PRESET_ENTRY_EXTENSIONS = setOf("xmp", "dng")
+private val PRESET_ENTRY_EXTENSIONS = setOf("xmp", "dng", "lrtemplate", "cube")
 
 /** Recipes in a format this version cannot read yet: said out loud, unlike a pack's read-me or its sample photos. */
-private val LATER_FORMATS = setOf("lrtemplate", "cube")
+private val LATER_FORMATS = emptySet<String>()
 
 private val DRIVE_PREFIX = Regex("^[A-Za-z]:.*")
 

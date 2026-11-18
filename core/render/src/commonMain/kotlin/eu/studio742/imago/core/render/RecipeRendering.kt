@@ -24,6 +24,7 @@ import eu.studio742.imago.core.model.RAW_RENDERING_HEADROOM
 import eu.studio742.imago.core.model.Detail
 import eu.studio742.imago.core.model.CALIBRATION_PROCESS_VERSION
 import eu.studio742.imago.core.model.LENS_CORRECTION_PROCESS_VERSION
+import eu.studio742.imago.core.model.LUT_PROCESS_VERSION
 import eu.studio742.imago.core.model.NOISE_REDUCTION_PROCESS_VERSION
 import eu.studio742.imago.core.model.SHARPENING_PROCESS_VERSION
 import eu.studio742.imago.core.model.WIDE_HIGHLIGHTS_PROCESS_VERSION
@@ -97,6 +98,7 @@ fun EditRecipe.toRenderParameters(
     vibrance = presence.vibrance,
     saturation = presence.saturation,
     colorGrade = if (processVersion >= 9) colorGrading.toRenderGrade() else ColorGrade(),
+    lut = if (processVersion >= LUT_PROCESS_VERSION) lut else null,
     texture = presence.texture,
     // The lens' corrections: a half that is off keeps its companion at the default, as the others do.
     lensVignetteAmount = if (correctsLens(processVersion)) lens.vignetteAmount.coerceIn(-100f, 100f) else 0f,

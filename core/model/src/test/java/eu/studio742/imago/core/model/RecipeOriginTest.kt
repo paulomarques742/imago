@@ -15,6 +15,6 @@ class RecipeOriginTest {
     }
 
     @Test fun `a format only a newer app knows still counts as imported`() {
-        assertEquals(RecipeOrigin.OTHER, RecipeOrigin.parse("CUBE"))
+        assertEquals(RecipeOrigin.OTHER, RecipeOrigin.parse("COSTYLE"))
     }
 }

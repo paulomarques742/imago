@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,6 +65,7 @@ import eu.studio742.imago.core.designsystem.ImagoParameterSlider
 import eu.studio742.imago.core.designsystem.ImagoRadii
 import eu.studio742.imago.core.designsystem.ImagoSizes
 import eu.studio742.imago.core.designsystem.ImagoSpacing
+import eu.studio742.imago.core.model.ColorLut
 import eu.studio742.imago.core.model.ColorWheel
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -84,6 +86,9 @@ data class ColorGradeActions(
     val onResetWheel: (ColorGradeWheel) -> Unit,
     val onResetAll: () -> Unit,
     val onGestureFinished: () -> Unit,
+    /** The photo's LUT, when it has one: how much of it is applied, and taking it off. */
+    val onLutAmount: (Float) -> Unit = {},
+    val onLutRemove: () -> Unit = {},
 )
 
 /**
@@ -251,6 +256,51 @@ internal fun ColorGradingPanel(
         }
     }
 }
+
+/**
+ * The LUT of the photo: its name, a way to take it off and how much of it shows. It lives at the top of
+ * the Color panel, which is where someone looks for it, and not inside the grading wheels, which it has
+ * nothing to do with.
+ */
+@Composable
+internal fun LutControls(
+    lut: ColorLut,
+    editingKey: Any?,
+    onEditing: (Any?) -> Unit,
+    actions: ColorGradeActions,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth().alpha(if (editingKey == null) 1f else 0f).padding(top = ImagoSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(Res.string.editor_lut_named, lut.name),
+                style = MaterialTheme.typography.labelLarge,
+                color = ImagoUi.colors.accent,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = actions.onLutRemove) { Text(stringResource(Res.string.editor_lut_remove)) }
+        }
+        ImagoParameterSlider(
+            label = stringResource(Res.string.editor_lut_strength),
+            value = lut.amount,
+            neutral = 100f,
+            range = 0f..100f,
+            pointerKey = LUT_AMOUNT_KEY,
+            editingKey = editingKey,
+            onEditing = onEditing,
+            valueText = { "%.0f".format(it) },
+            onValueChange = actions.onLutAmount,
+            onValueChangeFinished = actions.onGestureFinished,
+            onReset = { actions.onLutAmount(100f) },
+        )
+    }
+}
+
+private const val LUT_AMOUNT_KEY = "lut-amount"
 
 /** Height reserved for the wheel's name and the two values under it. */
 private val WHEEL_CAPTION_HEIGHT = 44.dp

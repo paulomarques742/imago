@@ -220,7 +220,7 @@ internal fun EditRecipe.isSound(): Boolean {
     val curves = listOfNotNull(toneCurve.rgb, toneCurve.red, toneCurve.green, toneCurve.blue)
     val strokes = masks.flatMap { mask -> mask.components.flatMap { it.brush?.strokes.orEmpty() } } + retouches.flatMap { it.strokes }
     val crop = geometry.cropRect
-    return curves.all { curve ->
+    return (lut?.samples() != null || lut == null) && curves.all { curve ->
         curve.isNotEmpty() && curve.all { it.x in 0..255 && it.y in 0..255 } && curve.zipWithNext().all { (a, b) -> a.x < b.x }
     } &&
         strokes.all { it.points.size % 2 == 0 } &&

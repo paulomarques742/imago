@@ -18,7 +18,7 @@ import kotlin.math.roundToInt
 const val XMP_FILE_EXTENSION = "xmp"
 
 /** What a recipe has and a preset file cannot hold, said before the file is written. */
-enum class XmpLeftOut { MASKS, REMOVE, GEOMETRY, DEFRINGE_RANGE }
+enum class XmpLeftOut { MASKS, REMOVE, GEOMETRY, DEFRINGE_RANGE, LUT }
 
 /** [leftOut] is empty when the file says everything the recipe does. */
 class XmpExport(val fileName: String, val bytes: ByteArray, val leftOut: Set<XmpLeftOut>)
@@ -71,6 +71,7 @@ private fun SavedRecipe.leftOutOfXmp(parts: Set<RecipePart>): Set<XmpLeftOut> = 
     if (RecipePart.MASKS in bound) add(XmpLeftOut.MASKS)
     if (RecipePart.REMOVE in bound) add(XmpLeftOut.REMOVE)
     if (bound.any { it in RecipePart.GEOMETRY }) add(XmpLeftOut.GEOMETRY)
+    if (RecipePart.LUT in parts && recipe.lut != null) add(XmpLeftOut.LUT)
     val lens = recipe.lens
     if (RecipePart.DEFRINGE in parts &&
         ((lens.purpleAmount > 0f && lens.purpleRange != NEUTRAL_RANGE) || (lens.greenAmount > 0f && lens.greenRange != NEUTRAL_RANGE))

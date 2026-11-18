@@ -797,6 +797,12 @@ internal object PhotoShaders {
         uniform vec4 uGradeLuminance;
         uniform float uGradeBlending;
         uniform float uGradeBalance;
+        // Step 12b: the LUT as a 3D texture whose first and last texels sit on 0 and 1, and how far
+        // towards it the colour goes. See `Lut3D`, which is the same read on the CPU.
+        uniform highp sampler3D uLut;
+        uniform float uLutSize;
+        uniform float uLutStrength;
+        uniform int uLutEnabled;
         uniform float uVignetteAmount;
         uniform float uVignetteMidpoint;
         uniform float uVignetteRoundness;
@@ -1005,6 +1011,16 @@ internal object PhotoShaders {
             return remapLuminance(graded, clamp(value + offset, 0.0, 1.0));
         }
 
+        // --- passo 12b -----------------------------------------------------------------------
+
+        vec3 applyLut(vec3 color) {
+            vec3 clamped = clamp(color, 0.0, 1.0);
+            // Texel centres: the grid point i of N sits at (i + 0.5) / N, so that 0 and 1 land on the
+            // first and the last, which is what Lut3D.apply reads.
+            vec3 looked = texture(uLut, (clamped * (uLutSize - 1.0) + 0.5) / uLutSize).rgb;
+            return clamp(mix(clamped, looked, uLutStrength), 0.0, 1.0);
+        }
+
         // --- passo 13 ------------------------------------------------------------------------
 
         float vignetteFalloff(vec2 coordinate) {
@@ -1162,6 +1178,9 @@ internal object PhotoShaders {
             // the vignette, where the pipeline places it.
             if (uGradingEnabled == 1) {
                 color = applyColorGrading(color);
+            }
+            if (uLutEnabled == 1) {
+                color = applyLut(color);
             }
             if (uEffectsEnabled == 1) {
                 color = applyVignette(color, screen);

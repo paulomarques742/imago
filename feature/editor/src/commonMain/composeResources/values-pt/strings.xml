@@ -33,6 +33,10 @@
         <item quantity="other">Adicionar %1$d às receitas</item>
     </plurals>
     <string name="editor_save_as_xmp">Guardar como XMP…</string>
+    <string name="editor_save_as_cube">Guardar como LUT .cube…</string>
+    <string name="editor_recipe_cube_left_out_title">Uma LUT só guarda cor</string>
+    <string name="editor_recipe_gap_detail_effects">Textura, clareza, remover neblina, nitidez, redução de ruído, vinheta e grão</string>
+    <string name="editor_recipe_gap_highlights_shadows">Realces e sombras</string>
     <string name="editor_recipe_xmp_left_out_title">Nem tudo cabe num preset</string>
     <string name="editor_recipe_xmp_left_out">Fica de fora do ficheiro: %1$s.</string>
     <string name="editor_recipe_link_title">Partilhar receita</string>
@@ -74,6 +78,7 @@
     <string name="editor_recipe_gap_creative_profile">Perfil criativo</string>
     <string name="editor_recipe_gap_camera_profile">Perfil de câmara</string>
     <string name="editor_recipe_gap_masks">Máscaras</string>
+    <string name="editor_recipe_gap_lut">LUT (.cube)</string>
     <string name="editor_recipe_gap_geometry">Recorte e perspectiva</string>
     <string name="editor_recipe_gap_gray_mixer">Mistura de preto e branco</string>
     <string name="editor_recipe_gap_lens_profile">Perfil da lente</string>
@@ -117,6 +122,11 @@
     <string name="editor_gallery_refused">A galeria recusou a criação da imagem.</string>
     <string name="editor_color_grading">Correção de cores</string>
     <string name="editor_tonal_zones">Zonas tonais</string>
+    <string name="editor_lut">LUT</string>
+    <string name="editor_lut_strength">Intensidade</string>
+    <string name="editor_lut_named">LUT · %1$s</string>
+    <string name="editor_lut_remove">Remover</string>
+    <string name="editor_history_lut_removed">Removida</string>
     <string name="editor_grading_blending">Mistura</string>
     <string name="editor_grading_balance">Equilíbrio</string>
     <string name="editor_hue_value">Matiz %1$s</string>

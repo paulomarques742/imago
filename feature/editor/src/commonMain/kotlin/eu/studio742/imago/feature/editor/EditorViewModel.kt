@@ -97,6 +97,7 @@ import eu.studio742.imago.core.render.solveGuidedUpright
 import kotlin.math.roundToInt
 import kotlin.math.hypot
 import eu.studio742.imago.core.model.ColorGrading
+import eu.studio742.imago.core.model.ColorLut
 import eu.studio742.imago.core.model.ColorWheel
 import eu.studio742.imago.core.model.HslBand
 import eu.studio742.imago.core.model.ToneCurve
@@ -1754,6 +1755,55 @@ open class EditorViewModel(
             processVersion = CURRENT_PROCESS_VERSION,
             geometry = current.geometry.activeAtProcess(current.processVersion),
             colorGrading = grading,
+            updatedAt = Instant.now().toString(),
+        )
+        mutableState.update { it.copy(recipe = updated, isSaving = true) }
+        scheduleSave(updated)
+    }
+
+    /**
+     * How much of the photo's LUT is applied. A single history step per gesture, like a slider: the LUT itself
+     * comes from a recipe, and only how far it goes is the person's to move here.
+     */
+    fun updateLutAmount(value: Float) {
+        val current = state.value.recipe ?: return
+        val lut = current.lut ?: return
+        val clamped = value.coerceIn(0f, 100f).roundToInt().toFloat()
+        if (lut.amount == clamped) return
+        if (editStart == null) {
+            editStart = current
+            pendingChange = PendingChange.Fixed(
+                label = uiText(Res.string.editor_lut),
+                detail = uiText(Res.string.editor_amount),
+                valueText = "${clamped.roundToInt()}".asUiText(),
+                icon = HistoryIcon.GRADE,
+            )
+        }
+        applyLut(current, lut.copy(amount = clamped))
+    }
+
+    /** The LUT off the photo, in one history step. */
+    fun removeLut() {
+        val current = state.value.recipe ?: return
+        if (current.lut == null) return
+        if (editStart == null) {
+            editStart = current
+            pendingChange = PendingChange.Fixed(
+                label = uiText(Res.string.editor_lut),
+                detail = current.lut?.name.orEmpty().asUiText(),
+                valueText = uiText(Res.string.editor_history_lut_removed),
+                icon = HistoryIcon.GRADE,
+            )
+        }
+        applyLut(current, null)
+        finishAdjustment()
+    }
+
+    private fun applyLut(current: EditRecipe, lut: ColorLut?) {
+        val updated = current.copy(
+            processVersion = CURRENT_PROCESS_VERSION,
+            geometry = current.geometry.activeAtProcess(current.processVersion),
+            lut = lut,
             updatedAt = Instant.now().toString(),
         )
         mutableState.update { it.copy(recipe = updated, isSaving = true) }

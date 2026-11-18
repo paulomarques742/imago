@@ -26,6 +26,9 @@ import eu.studio742.imago.core.interchange.XmpLeftOut
 import eu.studio742.imago.core.interchange.encodeXmpPreset
 import eu.studio742.imago.core.interchange.encodeImagoFile
 import eu.studio742.imago.core.interchange.imagoFileName
+import eu.studio742.imago.core.render.CubeExport
+import eu.studio742.imago.core.render.CubeLeftOut
+import eu.studio742.imago.core.render.encodeCubeFile
 import eu.studio742.imago.core.interchange.photoBoundParts
 import eu.studio742.imago.core.model.RecipePart
 import eu.studio742.imago.core.model.SavedRecipe
@@ -54,7 +57,7 @@ suspend fun readRecipeLink(links: RecipeLinkService, linkId: String): RecipeFile
 private const val LINK_FILE_NAME = "IMAGO.$IMAGO_FILE_EXTENSION"
 
 /** A dropped DNG is a photo first; a preset in that format comes in through the import button. */
-fun isRecipeFileName(name: String): Boolean = listOf(IMAGO_FILE_EXTENSION, "xmp", "zip").any { name.endsWith(".$it", ignoreCase = true) }
+fun isRecipeFileName(name: String): Boolean = listOf(IMAGO_FILE_EXTENSION, "xmp", "lrtemplate", "cube", "zip").any { name.endsWith(".$it", ignoreCase = true) }
 
 /** Reaching a file, which is all that differs between the two apps. */
 internal class RecipeFileActions(
@@ -103,7 +106,25 @@ internal class RecipeExporter(
     var askingXmp by mutableStateOf<XmpExport?>(null)
         private set
 
+    /** A LUT about to be saved without something the recipe has, until the person agrees. */
+    var askingCube by mutableStateOf<CubeExport?>(null)
+        private set
+
     val canShare: Boolean get() = actions.share != null
+
+    /** The colour of one recipe as a `.cube` table, made off the main thread: it runs the pipeline over 36 000 colours. */
+    fun startCube(recipe: SavedRecipe) {
+        scope.launch {
+            val export = withContext(Dispatchers.Default) { encodeCubeFile(recipe, packName()) }
+            if (export.leftOut.isEmpty()) actions.saveAs(export.fileName, export.bytes) else askingCube = export
+        }
+    }
+
+    fun confirmCube() {
+        val export = askingCube ?: return
+        askingCube = null
+        actions.saveAs(export.fileName, export.bytes)
+    }
 
     /** One recipe is one preset file. Saved and not shared: it is for going on in another editor. */
     fun startXmp(recipe: SavedRecipe) {
@@ -153,6 +174,7 @@ internal class RecipeExporter(
         asking = null
         askingRights = null
         askingXmp = null
+        askingCube = null
     }
 
     private fun send(recipes: List<SavedRecipe>, chosen: Set<RecipePart>, delivery: RecipeDelivery) {
@@ -189,11 +211,31 @@ private fun xmpLeftOutLabel(item: XmpLeftOut): StringResource = when (item) {
     XmpLeftOut.REMOVE -> Res.string.editor_tool_remove
     XmpLeftOut.GEOMETRY -> Res.string.editor_recipe_gap_geometry
     XmpLeftOut.DEFRINGE_RANGE -> Res.string.editor_recipe_gap_defringe_hue
+    XmpLeftOut.LUT -> Res.string.editor_recipe_gap_lut
+}
+
+private fun cubeLeftOutLabel(item: CubeLeftOut): StringResource = when (item) {
+    CubeLeftOut.DETAIL_AND_EFFECTS -> Res.string.editor_recipe_gap_detail_effects
+    CubeLeftOut.HIGHLIGHTS_AND_SHADOWS -> Res.string.editor_recipe_gap_highlights_shadows
+    CubeLeftOut.MASKS -> Res.string.editor_recipe_gap_masks
+    CubeLeftOut.REMOVE -> Res.string.editor_tool_remove
+    CubeLeftOut.GEOMETRY -> Res.string.editor_recipe_gap_geometry
 }
 
 /** The boxes of the parts, with what is tied to one photo left off until the person ticks it. */
 @Composable
 internal fun RecipeExportDialog(exporter: RecipeExporter) {
+    exporter.askingCube?.let { export ->
+        val names = export.leftOut.map { stringResource(cubeLeftOutLabel(it)) }.joinToString()
+        AlertDialog(
+            onDismissRequest = exporter::cancel,
+            title = { Text(stringResource(Res.string.editor_recipe_cube_left_out_title)) },
+            text = { Text(stringResource(Res.string.editor_recipe_xmp_left_out, names)) },
+            confirmButton = { TextButton(onClick = exporter::confirmCube) { Text(stringResource(Res.string.editor_recipe_save_file)) } },
+            dismissButton = { TextButton(onClick = exporter::cancel) { Text(stringResource(Res.string.editor_cancel)) } },
+        )
+        return
+    }
     exporter.askingXmp?.let { export ->
         val names = export.leftOut.map { stringResource(xmpLeftOutLabel(it)) }.joinToString()
         AlertDialog(

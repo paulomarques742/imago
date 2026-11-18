@@ -5,6 +5,10 @@ import kotlinx.serialization.Serializable
 /**
  * The pipeline's semantics, not the JSON's shape.
  *
+ * 26 activates [lut], a 3D colour lookup table applied after colour grading (step 12) and before the
+ * effects: the look of a `.cube` file. An app at 25 would draw such a recipe without it, so it has to ask
+ * to be updated instead.
+ *
  * 24 reduces a RAW's noise before the tone, against the noise measured on the photo, in four bands and with
  * a colour reduction that no longer takes the noise for colour edges (`RawNoiseReduction`). The same six
  * sliders do much more at high ISO, so an app at 23 would draw a new recipe noisy: it asks to be updated.
@@ -85,7 +89,7 @@ import kotlinx.serialization.Serializable
  * or 270°, and in those cases the file came out flipped on the wrong axis. There is no old path to
  * keep: the stage has always defined the framing, and it is the export that now agrees with it.
  */
-const val CURRENT_PROCESS_VERSION = 24
+const val CURRENT_PROCESS_VERSION = LUT_PROCESS_VERSION
 
 /** Process 24 reduces a RAW's noise on its linear development ([Detail]'s six noise sliders). */
 const val RAW_NOISE_REDUCTION_PROCESS_VERSION = 24
@@ -240,6 +244,8 @@ data class EditRecipe(
     val toneCurve: ToneCurve = ToneCurve(),
     val hsl: Hsl = Hsl(),
     val colorGrading: ColorGrading = ColorGrading(),
+    /** A look from a `.cube` file, from process 26; null for none, which is how every recipe starts. */
+    val lut: ColorLut? = null,
     val detail: Detail = Detail(),
     val effects: Effects = Effects(),
     val calibration: Calibration = Calibration(),

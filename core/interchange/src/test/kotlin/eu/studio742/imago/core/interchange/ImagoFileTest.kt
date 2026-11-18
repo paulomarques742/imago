@@ -110,7 +110,7 @@ class ImagoFileTest {
             bytesOf("""{"format":"imago","version":1,"kind":"recipes","recipes":[{"name":"A","processVersion":24,"recipe":{},"origin":$value}]}"""),
         ).single().origin
 
-        assertEquals(RecipeOrigin.OTHER, originIn("\"CUBE\""))
+        assertEquals(RecipeOrigin.OTHER, originIn("\"COSTYLE\""))
         assertEquals(RecipeOrigin.OTHER, originIn("5"))
         assertEquals(null, originIn("null"))
     }

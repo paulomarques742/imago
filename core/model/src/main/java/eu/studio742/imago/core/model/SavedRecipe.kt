@@ -41,6 +41,8 @@ enum class RecipeOrigin {
     XMP,
     DNG,
     LRTEMPLATE,
+    CUBE,
+
 
     /** A format only a newer app knows, or a value nobody wrote. The mark must survive either. */
     OTHER,

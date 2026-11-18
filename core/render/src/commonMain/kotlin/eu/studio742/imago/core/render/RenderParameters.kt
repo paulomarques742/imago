@@ -6,6 +6,7 @@ import kotlin.math.sin
 import kotlin.math.sign
 import eu.studio742.imago.core.model.LocalAdjustments
 import eu.studio742.imago.core.model.BrushStroke
+import eu.studio742.imago.core.model.ColorLut
 import eu.studio742.imago.core.model.ColorRange
 import eu.studio742.imago.core.model.GeneratedWeights
 import eu.studio742.imago.core.model.LuminanceRange
@@ -51,6 +52,11 @@ data class RenderParameters(
     val vibrance: Float = 0f,
     val saturation: Float = 0f,
     val colorGrade: ColorGrade = ColorGrade(),
+    /**
+     * Step 12b, from process 26: a 3D look after the grading. A constructor property for the same reason as
+     * [masks]: a photo whose only edit is a LUT is not neutral.
+     */
+    val lut: ColorLut? = null,
     val texture: Float = 0f,
     /** Step 11, from process 21: [Sharpening]. Amount 0 is off, and the other three then say nothing. */
     /** Step 10, from process 21: [NoiseReduction]. Amounts at 0 are off, and what goes with them says nothing. */
@@ -267,6 +273,16 @@ data class RenderParameters(
     /** True when step 12 has work. Colour grading is not local. */
     val needsColorGradingStage: Boolean
         get() = colorGrade.isActive
+
+    /**
+     * The LUT decoded, or null when there is none to draw. Made once per set of parameters, outside the
+     * equality: the export reads it for every pixel.
+     */
+    val lutTable: Lut3D? by lazy { Lut3D.of(lut) }
+
+    /** True when step 12b has work. A LUT is not local either. */
+    val needsLutStage: Boolean
+        get() = lutTable != null
 
     /** True when step 13 has work. Vignette and grain are not local. */
     val needsEffectsStage: Boolean

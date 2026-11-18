@@ -296,6 +296,7 @@ fun RecipeLibraryRoute(
             onShareRecipe = if (links.available) { card -> savedOf(listOf(card)).singleOrNull()?.let(links::open) } else null,
             onSaveRecipes = { cards -> exporter.start(savedOf(cards), RecipeDelivery.SAVE) },
             onSaveXmp = { card -> savedOf(listOf(card)).singleOrNull()?.let(exporter::startXmp) },
+            onSaveCube = { card -> savedOf(listOf(card)).singleOrNull()?.let(exporter::startCube) },
             onImport = recipeFiles.open,
             showMineSignal = state.importsAdded,
             onCreate = { editingKey = RecipeSource.New().key },

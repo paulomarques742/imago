@@ -15,6 +15,8 @@ enum class RecipePart {
     TEXTURE, CLARITY, DEHAZE,
     SHARPENING, LUMINANCE_NOISE_REDUCTION, COLOR_NOISE_REDUCTION,
     CALIBRATION,
+    /** A `.cube` look, from process 26. Recipes saved before have none to write over the photo's. */
+    LUT,
     LENS_VIGNETTE, DEFRINGE,
     VIGNETTE, GRAIN,
     MASKS,
@@ -44,13 +46,13 @@ enum class RecipePart {
          * and applying it cropped and tilted every photo it touched; its masks were there on purpose.
          * It never chose a profile: there were none.
          */
-        val LEGACY: Set<RecipePart> = entries.toSet() - GEOMETRY - PROFILE - REMOVE - FINISHING
+        val LEGACY: Set<RecipePart> = entries.toSet() - GEOMETRY - PROFILE - REMOVE - FINISHING - LUT
 
         /**
          * What the app's filters write: a look made on top of whichever profile the photo has. They say
          * nothing about sharpening or noise, and writing their neutral values would wipe the photo's.
          */
-        val BUILT_IN: Set<RecipePart> = LOOK - PROFILE - FINISHING
+        val BUILT_IN: Set<RecipePart> = LOOK - PROFILE - FINISHING - LUT
 
         /** A stored list back as a set. Names from a newer app are skipped, not fatal. */
         fun parse(names: Iterable<String>): Set<RecipePart> =
@@ -126,6 +128,7 @@ fun EditRecipe.withPartsFrom(source: EditRecipe, parts: Set<RecipePart>): EditRe
         toneCurve = pick(RecipePart.TONE_CURVE, source.toneCurve, toneCurve),
         hsl = pick(RecipePart.COLOR_MIXER, source.hsl, hsl),
         colorGrading = pick(RecipePart.COLOR_GRADING, source.colorGrading, colorGrading),
+        lut = pick(RecipePart.LUT, source.lut, lut),
         detail = detail,
         calibration = pick(RecipePart.CALIBRATION, source.calibration, calibration),
         lens = lens,

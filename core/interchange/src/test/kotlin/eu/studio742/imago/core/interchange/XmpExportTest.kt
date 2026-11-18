@@ -84,8 +84,10 @@ class XmpExportTest {
         val export = export(saved(full, RecipePart.LOOK))
         val back = reread(export)
 
-        assertEquals(blank.withPartsFrom(full, RecipePart.LOOK), back.recipe)
-        assertEquals(RecipePart.LOOK, back.parts)
+        // A LUT is data that a preset file has no field for: it is said out loud and not written.
+        val inAFile = RecipePart.LOOK - RecipePart.LUT
+        assertEquals(blank.withPartsFrom(full, inAFile), back.recipe)
+        assertEquals(inAFile, back.parts)
         assertEquals("Warm", back.name)
         assertEquals("Summer", back.collection)
         assertEquals(emptyList<ImportGap>(), back.gaps)
