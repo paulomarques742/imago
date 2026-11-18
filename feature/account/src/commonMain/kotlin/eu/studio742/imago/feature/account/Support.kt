@@ -39,9 +39,9 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Support bought through the store the app was installed from. Only the Google Play build has one: the
- * Play payments policy wants its billing for anything paid inside the app, and the app never links
- * to another way of paying.
+ * Support bought through the store the app was installed from. Only a copy installed by Google Play has
+ * one: the Play payments policy wants its billing for anything paid inside that copy, and it never
+ * links to another way of paying. Every other copy shows the programme's page instead.
  */
 interface SupportStore {
     /** The monthly subscription's price as the store shows it; null until known, or when it is not sold here. */
@@ -57,7 +57,7 @@ interface SupportStore {
     suspend fun owned(): List<String>
 }
 
-/** Provided by the Android app built for Google Play; absent elsewhere. */
+/** Provided by the Android app when Google Play installed it; absent elsewhere. */
 val LocalSupportStore = staticCompositionLocalOf<SupportStore?> { null }
 
 /** The day the support ends or ended, in the app's language. */
@@ -168,7 +168,7 @@ fun SupportSettingsCard(onOpenAccount: (signUp: Boolean) -> Unit, viewModel: Acc
                     Button(onClick = support::buy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(Res.string.support_buy, price)) }
                     Text(stringResource(Res.string.support_store_note), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
                 }
-                // Outside Google Play the programme's page says how to support, Buy Me a Coffee included.
+                // Outside a Google Play install the programme's page says how to support, Buy Me a Coffee included.
                 store == null && !active -> supporters.programmeUrl(Locale.current.language == "pt")?.let { url ->
                     OutlinedButton(onClick = { uriHandler.openUri(url) }, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(Res.string.support_how))

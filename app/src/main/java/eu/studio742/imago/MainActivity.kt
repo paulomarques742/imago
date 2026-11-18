@@ -78,8 +78,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val indicator = syncEngine.status.map { it.toIndicator() }
         languageSettings.refresh()
-        // The support subscription is sold only with the programme open and the product configured.
-        val supportStore = if (BuildConfig.SUPPORTERS_OPEN && BuildConfig.PLAY_SUPPORTER_PRODUCT_ID.isNotBlank()) {
+        // Without a store, the support card links to the programme's page instead.
+        val supportStore = if (sellsSupportThroughPlay(BuildConfig.SUPPORTERS_OPEN, BuildConfig.PLAY_SUPPORTER_PRODUCT_ID, installerPackage())) {
             PlaySupportStore(this, BuildConfig.PLAY_SUPPORTER_PRODUCT_ID).also { store ->
                 store.start()
                 lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
