@@ -48,6 +48,9 @@ const val BRUSH_MASKS_PROCESS_VERSION = 16
 /** The process from which a mask component can be a [MaskShape.LUMINANCE] or a [MaskShape.COLOR]. */
 const val RANGE_MASKS_PROCESS_VERSION = 17
 
+/** The process from which a mask component can be a [MaskShape.SUBJECT], [MaskShape.SKY] or [MaskShape.BACKGROUND]. */
+const val GENERATED_MASKS_PROCESS_VERSION = 25
+
 /** Lightroom's limit on a Color Range: five samples, added with Shift. */
 const val MAX_COLOR_SAMPLES = 5
 
@@ -77,10 +80,22 @@ enum class MaskShape {
 
     /** Lightroom's Color Range: the pixels close to the colours sampled on the photo. */
     COLOR,
+
+    /** Lightroom's Select Subject: the photo's most salient object, found by a model. */
+    SUBJECT,
+
+    /** Lightroom's Select Sky, found by a model. */
+    SKY,
+
+    /** Lightroom's Select Background: everything but the subject, from the same model as [SUBJECT]. */
+    BACKGROUND,
     ;
 
     /** A range selects by what the photo holds, not by where: it has no outline on the stage. */
     val isRange: Boolean get() = this == LUMINANCE || this == COLOR
+
+    /** Found by a model on the photo, once; see [GeneratedWeights]. It has no outline on the stage either. */
+    val isGenerated: Boolean get() = this == SUBJECT || this == SKY || this == BACKGROUND
 }
 
 /** How a component combines with the ones before it in the same mask. */
@@ -137,6 +152,8 @@ data class MaskComponent(
     val brush: BrushMask? = null,
     val luminance: LuminanceRange? = null,
     val color: ColorRange? = null,
+    /** For a generated shape: what the model found on this photo, or null until it has run here. */
+    val generated: GeneratedWeights? = null,
 )
 
 /**
@@ -253,6 +270,49 @@ data class ColorSample(
     val b: Float,
     val spread: Float = 0f,
 )
+
+/**
+ * What a model found on one photo: its raw output, at the model's own resolution, as an 8-bit greyscale PNG
+ * in Base64.
+ *
+ * It is kept and not recomputed, so that a newer model or runtime never changes a photo already edited;
+ * [model] and [version] say which weights produced it. The renderer refines it to the photo's resolution
+ * against the original every time it draws. A [MaskShape.BACKGROUND] stores the subject model's output and
+ * the renderer inverts it.
+ *
+ * It belongs to the photo it was made on: a recipe leaving that photo — copied, saved for other photos,
+ * shared — loses it ([withoutGeneratedWeights]), and the mask is generated again wherever it lands.
+ */
+@Serializable
+data class GeneratedWeights(
+    val model: String,
+    val version: Int,
+    val width: Int,
+    val height: Int,
+    val png: String,
+) {
+    /** The weights, row by row from 0 to 255; null if the PNG does not decode to [width] × [height]. */
+    fun pixels(): ByteArray? {
+        val bytes = runCatching { java.util.Base64.getDecoder().decode(png) }.getOrNull() ?: return null
+        val (w, h, pixels) = GrayPng.decode(bytes) ?: return null
+        return pixels.takeIf { w == width && h == height }
+    }
+
+    companion object {
+        fun of(model: String, version: Int, width: Int, height: Int, pixels: ByteArray) = GeneratedWeights(
+            model = model,
+            version = version,
+            width = width,
+            height = height,
+            png = java.util.Base64.getEncoder().encodeToString(GrayPng.encode(width, height, pixels)),
+        )
+    }
+}
+
+/** These masks without what a model found on the photo they were made on: the shapes stay, to be generated again. */
+fun List<LocalMask>.withoutGeneratedWeights(): List<LocalMask> =
+    if (none { mask -> mask.components.any { it.generated != null } }) this
+    else map { mask -> mask.copy(components = mask.components.map { if (it.generated != null) it.copy(generated = null) else it }) }
 
 /**
  * The adjustments that can vary by region.

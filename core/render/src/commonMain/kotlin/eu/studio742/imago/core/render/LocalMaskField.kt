@@ -198,7 +198,8 @@ internal class LocalMaskField private constructor(
                         roundness = component.roundness,
                         aspect = aspect,
                     )
-                    MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR ->
+                    MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR,
+                    MaskShape.SUBJECT, MaskShape.SKY, MaskShape.BACKGROUND ->
                         brushes[component.brushIndex]?.sample(x, y) ?: 0f
                 }
                 if (component.inverted) weight = 1f - weight

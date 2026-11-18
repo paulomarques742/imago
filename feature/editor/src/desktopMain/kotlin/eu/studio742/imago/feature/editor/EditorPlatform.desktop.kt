@@ -92,9 +92,10 @@ class DesktopEditorExporter(private val library: LibraryRepository) : EditorExpo
 @Composable
 actual fun editorViewModel(): EditorViewModel {
     val graph = LocalDesktopDataGraph.current
+    val generatedMaskTools = LocalGeneratedMaskTools.current
     return viewModel {
         EditorViewModel(PlatformContext.INSTANCE, graph.recipes, graph.savedRecipes, graph.derivedAssets,
-            graph.configuration, graph.api, DesktopEditorExporter(graph.library), graph.library)
+            graph.configuration, graph.api, DesktopEditorExporter(graph.library), graph.library, generatedMaskTools)
     }
 }
 

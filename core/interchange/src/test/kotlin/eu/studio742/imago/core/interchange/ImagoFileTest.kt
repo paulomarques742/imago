@@ -9,6 +9,9 @@ import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.Geometry
 import eu.studio742.imago.core.model.KelvinTint
 import eu.studio742.imago.core.model.LocalMask
+import eu.studio742.imago.core.model.GeneratedWeights
+import eu.studio742.imago.core.model.MaskComponent
+import eu.studio742.imago.core.model.MaskShape
 import eu.studio742.imago.core.model.RawDevelopment
 import eu.studio742.imago.core.model.RecipeOrigin
 import eu.studio742.imago.core.model.RecipePart
@@ -22,6 +25,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -74,6 +78,18 @@ class ImagoFileTest {
 
         assertEquals(balance, ready(export(saved(edit = edit), parts = setOf(RecipePart.WHITE_BALANCE))).single().recipe.whiteBalance)
         assertEquals(WhiteBalance(), ready(export(saved(edit = edit), parts = setOf(RecipePart.EXPOSURE))).single().recipe.whiteBalance)
+    }
+
+    @Test
+    fun `a generated mask goes into the file as its shape, without what the model found on the photo`() {
+        val weights = GeneratedWeights.of("ppmobileseg-base-ade20k-sky", 1, 2, 2, byteArrayOf(0, 64, -128, -1))
+        val sky = LocalMask(id = "m", components = listOf(MaskComponent(shape = MaskShape.SKY, generated = weights)))
+        val bytes = export(saved(edit = recipe(masks = listOf(sky))), parts = RecipePart.LOOK + RecipePart.MASKS)
+
+        assertFalse(bytes.decodeToString().contains(weights.png))
+        val component = ready(bytes).single().recipe.masks.single().components.single()
+        assertEquals(MaskShape.SKY, component.shape)
+        assertNull(component.generated)
     }
 
     @Test

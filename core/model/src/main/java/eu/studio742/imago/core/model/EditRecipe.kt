@@ -32,6 +32,10 @@ import kotlinx.serialization.Serializable
  *
  * 19 adds a versioned RAW development stage; older apps must not render its recipes on JPEG previews.
  *
+ * 25 activates generated mask components (`MaskShape.SUBJECT`, `SKY` and `BACKGROUND`), whose model output
+ * travels in the recipe ([GeneratedWeights]). No earlier app knows the three shapes, so none can decode such
+ * a recipe and sync skips it; the version is raised anyway, as for every new shape.
+ *
  * 17 activates range mask components (`MaskShape.LUMINANCE` and `MaskShape.COLOR`). No earlier app
  * knows the two shapes, so none can decode such a recipe and sync skips it; the version is raised anyway,
  * as for every new shape, so that the gate in `RecipeRendering` is checked and not assumed.

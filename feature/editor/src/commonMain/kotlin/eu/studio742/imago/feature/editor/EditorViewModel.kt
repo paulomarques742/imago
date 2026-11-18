@@ -5,6 +5,12 @@ import eu.studio742.imago.core.designsystem.i18n.appString
 import eu.studio742.imago.core.designsystem.i18n.uiText
 import eu.studio742.imago.core.designsystem.i18n.asUiText
 import eu.studio742.imago.core.designsystem.i18n.toUiText
+import eu.studio742.imago.core.designsystem.i18n.text
+import eu.studio742.imago.core.ml.MaskGenerator
+import eu.studio742.imago.core.ml.MaskModel
+import eu.studio742.imago.core.model.GeneratedWeights
+import eu.studio742.imago.core.model.UserMessageException
+import eu.studio742.imago.core.model.withoutGeneratedWeights
 import eu.studio742.imago.core.model.diagnostics.DiagnosticArea
 import eu.studio742.imago.core.model.diagnostics.DiagnosticOperation
 import eu.studio742.imago.core.model.diagnostics.LocalDiagnostics
@@ -607,6 +613,10 @@ data class EditorUiState(
      */
     val extendableRetouchId: String? = null,
     val maskNotice: UiText? = null,
+    /** Whether this build offers Subject, Sky and Background ([GeneratedMaskTools]). */
+    val generatedMasksAvailable: Boolean = false,
+    /** A generated mask on its way: the model downloading, then at work on the photo. */
+    val maskGeneration: MaskGeneration? = null,
     /** An automatic Upright mode is looking for the photo's lines. */
     val isDetectingUpright: Boolean = false,
     /** Said when an automatic mode found no lines to work on; cleared by the next mode. */
@@ -775,9 +785,16 @@ open class EditorViewModel(
     private val exporter: EditorExporter,
     /** Told when an export changes a stack, so the grid shows the new cover; tests leave it out. */
     private val library: eu.studio742.imago.core.data.LibraryRepository? = null,
+    /** Where the mask models come from; without a source, Subject, Sky and Background are left out. */
+    generatedMaskTools: GeneratedMaskTools = GeneratedMaskTools(null),
 ) : ViewModel() {
+    private val maskModels = generatedMaskTools.source?.takeIf { MaskGenerator.isAvailable }
     private val mutableState = MutableStateFlow(
-        EditorUiState(brushTool = BrushTool.decode(configuration.brushTool), retouchTool = RetouchTool.decode(configuration.retouchTool)),
+        EditorUiState(
+            brushTool = BrushTool.decode(configuration.brushTool),
+            retouchTool = RetouchTool.decode(configuration.retouchTool),
+            generatedMasksAvailable = maskModels != null,
+        ),
     )
     val state = mutableState.asStateFlow()
     private val exportOriginChecker = ExportOriginChecker(viewModelScope) { assetId ->
@@ -929,6 +946,8 @@ open class EditorViewModel(
             // The brushes are the device's, not the photo's: the next photo finds them as they were left.
             brushTool = retained.brushTool,
             retouchTool = retained.retouchTool,
+            // What this build offers is the build's, not the photo's.
+            generatedMasksAvailable = maskModels != null,
         )
         if (target is PhotoEditTarget.Asset) {
             viewModelScope.launch {
@@ -1036,6 +1055,9 @@ open class EditorViewModel(
                     conflictsJob = viewModelScope.launch {
                         recipes.conflicts(asset.id).collect { versions -> mutableState.update { it.copy(conflicts = versions) } }
                     }
+                    // A recipe applied to this photo from elsewhere, before it was opened, brings its
+                    // generated shapes empty: they are generated now, on the photo they belong to.
+                    if (!needsNewerApp) generateMissingMasks()
                 }
             }.onFailure { error ->
                 mutableState.update {
@@ -1082,6 +1104,7 @@ open class EditorViewModel(
                 recipeParts = it.recipeParts,
                 brushTool = it.brushTool,
                 retouchTool = it.retouchTool,
+                generatedMasksAvailable = maskModels != null,
             )
         }
     }
@@ -2209,7 +2232,8 @@ open class EditorViewModel(
     fun consumeRecipeNotice() = mutableState.update { it.copy(recipeNotice = null) }
 
     /** The open photo's recipe on its way to other photos: only here is its camera known. */
-    private fun EditRecipe.leavingThePhoto(): EditRecipe = copy(whiteBalance = whiteBalance.withLightOf(state.value.cameraLight))
+    private fun EditRecipe.leavingThePhoto(): EditRecipe =
+        copy(whiteBalance = whiteBalance.withLightOf(state.value.cameraLight), masks = masks.withoutGeneratedWeights())
 
     private fun rememberRecipeParts(parts: Set<RecipePart>) {
         configuration.rememberRecipeParts(parts)
@@ -2561,9 +2585,80 @@ open class EditorViewModel(
             ),
         )
         mutableState.update { it.copy(recipeNotice = message) }
+        if (state.value.recipeEdit == null) generateMissingMasks()
     }
 
     // --- masks ---------------------------------------------------------------------------------
+
+    /** A new mask or shape, opened on its sliders with the red on, as [addMask] and [addMaskComponent] do. */
+    private fun openNewMask(maskId: String, component: Int) = mutableState.update {
+        it.copy(
+            selectedMaskId = maskId,
+            selectedMaskComponent = component,
+            sheet = EditorSheet.MASK_ADJUSTMENTS,
+            maskOverlayPinned = true,
+        )
+    }
+
+    private var generationJob: Job? = null
+
+    /**
+     * Runs [models] on the open photo, downloading what is not on the device yet, and hands what they found
+     * to [onFound] on the main thread, if the photo is still the one open. One generation at a time: a model
+     * takes hundreds of MB.
+     */
+    private fun generateMasks(models: Set<MaskModel>, shape: MaskShape, onFound: (Map<MaskModel, GeneratedWeights>) -> Unit) {
+        val source = maskModels ?: return
+        val bitmap = state.value.bitmap ?: return
+        if (models.isEmpty() || generationJob?.isActive == true) return
+        mutableState.update { it.copy(maskGeneration = MaskGeneration(shape, downloaded = null), maskNotice = null) }
+        generationJob = viewModelScope.launch {
+            try {
+                val paths = withContext(Dispatchers.IO) {
+                    models.associateWith { model ->
+                        source.localPath(model) ?: source.download(model) { received, total ->
+                            val fraction = if (total > 0) received.toFloat() / total else 0f
+                            mutableState.update { it.copy(maskGeneration = MaskGeneration(shape, fraction)) }
+                        }
+                    }
+                }
+                mutableState.update { it.copy(maskGeneration = MaskGeneration(shape, downloaded = null)) }
+                val found = withContext(Dispatchers.Default) {
+                    val image = bitmap.toPixelBuffer().toRgbImage()
+                    paths.mapValues { (model, path) -> MaskGenerator.generate(model, path, image).toWeights() }
+                }
+                if (state.value.bitmap === bitmap) onFound(found)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: UserMessageException) {
+                // The download already went into the diagnostics, with what is safe to keep of it.
+                mutableState.update { it.copy(maskNotice = error.userMessage.text(error.args)) }
+            } catch (error: Throwable) {
+                val text = error.toUiText(Res.string.editor_mask_generation_failed, DiagnosticArea.EDITOR, DiagnosticOperation.MASK_MODEL)
+                mutableState.update { it.copy(maskNotice = text) }
+            } finally {
+                mutableState.update { it.copy(maskGeneration = null) }
+            }
+        }
+    }
+
+    /**
+     * Generates the shapes the recipe holds without weights — those that came with a recipe from another
+     * photo — as one history entry. Where this device cannot, it says so: those shapes weigh nothing.
+     */
+    private fun generateMissingMasks() {
+        val missing = state.value.recipe?.missingMaskModels.orEmpty()
+        if (missing.isEmpty()) return
+        if (maskModels == null) {
+            mutableState.update { it.copy(maskNotice = uiText(Res.string.editor_masks_generated_unavailable)) }
+            return
+        }
+        val shape = if (MaskModel.SKY in missing && missing.size == 1) MaskShape.SKY else MaskShape.SUBJECT
+        generateMasks(missing, shape) { found ->
+            val latest = state.value.recipe ?: return@generateMasks
+            commitMask(latest.withGeneratedWeights(found), detail = uiText(Res.string.editor_history_mask_generated), valueText = null)
+        }
+    }
 
     fun selectMask(maskId: String?) = selectMaskComponent(maskId, 0)
 
@@ -2603,6 +2698,19 @@ open class EditorViewModel(
             }
             return
         }
+        if (shape.isGenerated) {
+            // The model runs first and the mask is created with what it found: one history entry, and no
+            // empty mask in between.
+            val model = shape.maskModel ?: return
+            generateMasks(setOf(model), shape) { found ->
+                val latest = state.value.recipe ?: return@generateMasks
+                val (created, createdId) = latest.withNewMask(shape, name, placement)
+                if (createdId == null) return@generateMasks
+                commitMask(created.withGeneratedWeights(found), detail = uiText(Res.string.editor_history_mask_created), valueText = name.asUiText())
+                openNewMask(createdId, 0)
+            }
+            return
+        }
         commitMask(updated, detail = uiText(Res.string.editor_history_mask_created), valueText = name.asUiText())
         mutableState.update {
             it.copy(
@@ -2636,6 +2744,17 @@ open class EditorViewModel(
             MaskOp.ADD -> Res.string.editor_history_mask_shape_added
             MaskOp.SUBTRACT -> Res.string.editor_history_mask_shape_subtracted
             MaskOp.INTERSECT -> Res.string.editor_history_mask_shape_intersected
+        }
+        if (shape.isGenerated) {
+            val model = shape.maskModel ?: return
+            generateMasks(setOf(model), shape) { found ->
+                val latest = state.value.recipe ?: return@generateMasks
+                val (added, addedIndex) = latest.withNewMaskComponent(maskId, shape, op, placement)
+                if (addedIndex == null) return@generateMasks
+                commitMask(added.withGeneratedWeights(found), detail = uiText(detail), valueText = latest.mask(maskId)?.name?.asUiText())
+                openNewMask(maskId, addedIndex)
+            }
+            return
         }
         commitMask(updated, detail = uiText(detail), valueText = current.mask(maskId)?.name?.asUiText())
         mutableState.update {

@@ -1,5 +1,6 @@
 package eu.studio742.imago.core.interchange
 
+import eu.studio742.imago.core.model.withoutGeneratedWeights
 import eu.studio742.imago.core.model.CURRENT_PROCESS_VERSION
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.RecipeOrigin
@@ -72,7 +73,10 @@ fun SavedRecipe.photoBoundParts(): Set<RecipePart> {
 
 /** This recipe as a file holds it: [parts] with their values and every other part neutral. */
 internal fun SavedRecipe.portableRecipe(parts: Set<RecipePart>): EditRecipe =
-    emptyRecipe(recipe.processVersion).withPartsFrom(recipe, parts).copy(schemaVersion = recipe.schemaVersion)
+    emptyRecipe(recipe.processVersion).withPartsFrom(recipe, parts).let {
+        // What a model found belongs to the photo it ran on: the file carries the shapes, to be generated again.
+        it.copy(schemaVersion = recipe.schemaVersion, masks = it.masks.withoutGeneratedWeights())
+    }
 
 /** A recipe on its way into a file, and the parts it takes. */
 data class RecipeExport(val recipe: SavedRecipe, val parts: Set<RecipePart>)

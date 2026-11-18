@@ -11,6 +11,7 @@ import eu.studio742.imago.core.model.COMBINED_MASKS_PROCESS_VERSION
 import eu.studio742.imago.core.model.MAX_BRUSH_COMPONENTS
 import eu.studio742.imago.core.model.MAX_COLOR_SAMPLES
 import eu.studio742.imago.core.model.RANGE_MASKS_PROCESS_VERSION
+import eu.studio742.imago.core.model.GENERATED_MASKS_PROCESS_VERSION
 import eu.studio742.imago.core.model.MAX_MASK_COMPONENTS
 import eu.studio742.imago.core.model.maxLocalMasks
 import eu.studio742.imago.core.model.MaskComponent
@@ -235,6 +236,10 @@ private fun List<LocalMask>.toRenderSpecs(processVersion: Int, showMask: String?
  * range in a recipe from before they existed.
  */
 private fun MaskComponent.toRenderComponent(processVersion: Int): MaskRenderComponent? = when (shape) {
+    // Not generated yet on this photo, it stays in the mask weighing zero, as an unsampled Color Range does.
+    MaskShape.SUBJECT, MaskShape.SKY, MaskShape.BACKGROUND -> takeIf { processVersion >= GENERATED_MASKS_PROCESS_VERSION }?.let {
+        MaskRenderComponent(shape = shape, op = op, inverted = inverted, generated = generated)
+    }
     MaskShape.LUMINANCE -> luminance?.takeIf { processVersion >= RANGE_MASKS_PROCESS_VERSION }?.let {
         MaskRenderComponent(shape = MaskShape.LUMINANCE, op = op, inverted = inverted, luminance = it)
     }

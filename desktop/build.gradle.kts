@@ -30,6 +30,7 @@ sourceSets.main { resources.srcDir(generateDiagnosticVersion) }
 
 dependencies {
     implementation(project(":core:render"))
+    implementation(project(":core:ml"))
     implementation(project(":feature:shell"))
     implementation(project(":core:data"))
     implementation(project(":core:immich"))
@@ -101,3 +102,5 @@ tasks.test {
         providers.gradleProperty(name).orNull?.let { systemProperty(name, it) }
     }
 }
+// Tools still being tested are on only when the app is run from the build, never in what is packaged.
+tasks.withType<JavaExec>().matching { it.name == "run" }.configureEach { systemProperty("imago.debugTools", "true") }

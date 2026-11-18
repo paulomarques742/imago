@@ -21,6 +21,7 @@ include(
     ":core:model",
     ":core:render",
     ":core:raw",
+    ":core:ml",
     ":core:immich",
     ":core:data",
     ":core:designsystem",

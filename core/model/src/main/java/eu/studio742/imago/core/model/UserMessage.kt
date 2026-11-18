@@ -164,6 +164,9 @@ enum class UserMessage {
 
     /** Photos to stack that are not two on the phone, nor two on the server. */
     STACK_APART,
+
+    /** A mask model could not be downloaded, or what arrived was not the model the manifest describes. */
+    MASK_MODEL_DOWNLOAD_FAILED,
 }
 
 /** A sentence for the person that is not a failure — a state, a summary. [args] go in, in order. */

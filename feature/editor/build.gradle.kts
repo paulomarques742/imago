@@ -25,6 +25,7 @@ kotlin {
             implementation(project(":core:data"))
             implementation(project(":core:immich"))
             implementation(project(":core:render"))
+            implementation(project(":core:ml"))
             implementation(project(":core:designsystem"))
             implementation(project(":core:interchange"))
             implementation(libs.zxing.core)

@@ -348,9 +348,9 @@ class BrushRasters internal constructor(private val rasters: List<BrushRaster?>)
         val NONE = BrushRasters(emptyList())
 
         /**
-         * The rasters of [parameters]' brushes and ranges, painted from scratch. [source] is the photo in
-         * image space, before crop and rotation; it is only read when a stroke has the Auto Mask on or a
-         * mask has a range.
+         * The rasters of [parameters]' brushes, ranges and generated shapes, painted from scratch. [source]
+         * is the photo in image space, before crop and rotation; it is only read when a stroke has the Auto
+         * Mask on or a mask has a range or a generated shape.
          */
         fun of(parameters: RenderParameters, source: PixelSurface): BrushRasters {
             if (!parameters.hasBrushes) return NONE
@@ -372,7 +372,7 @@ class BrushRasterCache {
         val raster: BrushRaster,
         var strokes: List<BrushStroke>,
         var lastStrokeDabs: Int,
-        /** The range painted in this raster, or null when it holds strokes. */
+        /** The range or generated weights painted in this raster, or null when it holds strokes. */
         var range: Any? = null,
     )
 
@@ -400,7 +400,9 @@ class BrushRasterCache {
         val brushes = parameters.masks.flatMap { it.components }.filter { it.brushIndex >= 0 }
         if (brushes.isEmpty()) return BrushRasters.NONE
         val (width, height) = brushRasterSize(imageAspect)
-        val needsReference = brushes.any { component -> component.shape.isRange || component.strokes.any { it.autoMask } }
+        val needsReference = brushes.any { component ->
+            component.shape.isRange || component.shape.isGenerated || component.strokes.any { it.autoMask }
+        }
         val colours = if (needsReference) reference ?: referenceOf().also { reference = it } else null
         val rasters = arrayOfNulls<BrushRaster>(brushes.maxOf { it.brushIndex } + 1)
         for (component in brushes) {
@@ -409,6 +411,8 @@ class BrushRasterCache {
                 ?: Entry(BrushRaster(width, height), emptyList(), 0).also { entries[component.brushIndex] = it }
             if (component.shape.isRange) {
                 updateRange(entry, component, colours!!)
+            } else if (component.shape.isGenerated) {
+                updateGenerated(entry, component, colours!!)
             } else {
                 if (entry.range != null) {
                     entry.range = null
@@ -440,6 +444,16 @@ class BrushRasterCache {
             for (stroke in strokes) entry.lastStrokeDabs = BrushRasterizer.paint(entry.raster, stroke, 0, reference)
         }
         entry.strokes = strokes
+    }
+
+    private fun updateGenerated(entry: Entry, component: MaskRenderComponent, reference: BrushReference) {
+        // The shape is part of the key: a Background is the subject's weights inverted.
+        val generated: Any = component.shape to component.generated
+        if (generated == entry.range) return
+        GeneratedMasks.paint(entry.raster, component, reference)
+        entry.range = generated
+        entry.strokes = emptyList()
+        entry.lastStrokeDabs = 0
     }
 
     private fun updateRange(entry: Entry, component: MaskRenderComponent, reference: BrushReference) {

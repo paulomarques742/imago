@@ -74,6 +74,7 @@ private fun UserMessage.resource(): StringResource = when (this) {
     UserMessage.FOLDERS_ONE -> Res.string.message_folders_one
     UserMessage.FOLDERS_MANY -> error("FOLDERS_MANY is a plural: it comes out of text()")
     UserMessage.STACK_APART -> Res.string.message_stack_apart
+    UserMessage.MASK_MODEL_DOWNLOAD_FAILED -> Res.string.message_mask_model_download_failed
 }
 
 /** A state coming from the data layer, ready for the screen. */

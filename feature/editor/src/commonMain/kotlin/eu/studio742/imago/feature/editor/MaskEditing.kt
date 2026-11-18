@@ -151,9 +151,9 @@ val EditRecipe.brushComponentCount: Int
 fun EditRecipe.canAddMaskComponent(shape: MaskShape): Boolean =
     canAddMaskComponent && (!shape.usesRasterLayer || brushComponentCount < MAX_BRUSH_COMPONENTS)
 
-/** A brush or a range: what takes a layer of the brush texture. */
+/** A brush, a range or a generated shape: what takes a layer of the brush texture. */
 val MaskShape.usesRasterLayer: Boolean
-    get() = this == MaskShape.BRUSH || isRange
+    get() = this == MaskShape.BRUSH || isRange || isGenerated
 
 /**
  * Where a new shape goes: the centre of the part of the photo that is on screen, and that part's
@@ -204,6 +204,8 @@ internal fun newMaskComponent(
         // a Color Range with no sample, which selects nothing until the first tap.
         MaskShape.LUMINANCE -> MaskComponent(shape = MaskShape.LUMINANCE, op = op, luminance = LuminanceRange())
         MaskShape.COLOR -> MaskComponent(shape = MaskShape.COLOR, op = op, color = ColorRange())
+        // Generated on the photo once the component exists; until then it weighs nothing.
+        MaskShape.SUBJECT, MaskShape.SKY, MaskShape.BACKGROUND -> MaskComponent(shape = shape, op = op)
     }
 }
 
@@ -322,9 +324,10 @@ fun EditRecipe.withMaskMoved(maskId: String, deltaX: Float, deltaY: Float, compo
                     ),
                 )
             } ?: shape
-            // A painted stroke is where it was painted; moving it would be a different stroke. A range
-            // selects by what the photo holds, and has nowhere to move.
-            MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR -> shape
+            // A painted stroke is where it was painted; moving it would be a different stroke. A range or a
+            // generated shape selects by what the photo holds, and has nowhere to move.
+            MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR,
+            MaskShape.SUBJECT, MaskShape.SKY, MaskShape.BACKGROUND -> shape
         }
     }
 
@@ -400,7 +403,8 @@ fun EditRecipe.withMaskRotation(maskId: String, degrees: Float, component: Int =
         when (shape.shape) {
             MaskShape.LINEAR -> shape.linear?.let { shape.copy(linear = it.copy(angle = normalised)) } ?: shape
             MaskShape.RADIAL -> shape.radial?.let { shape.copy(radial = it.copy(angle = normalised)) } ?: shape
-            MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR -> shape
+            MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR,
+            MaskShape.SUBJECT, MaskShape.SKY, MaskShape.BACKGROUND -> shape
         }
     }
 
@@ -454,6 +458,9 @@ fun defaultMaskName(shape: MaskShape, existing: List<LocalMask>): String {
         MaskShape.BRUSH -> "Brush"
         MaskShape.LUMINANCE -> "Luminance"
         MaskShape.COLOR -> "Color"
+        MaskShape.SUBJECT -> "Subject"
+        MaskShape.SKY -> "Sky"
+        MaskShape.BACKGROUND -> "Background"
     }
     val used = existing.count { it.name.startsWith(prefix) }
     return "$prefix ${used + 1}"

@@ -7,6 +7,7 @@ import kotlin.math.sign
 import eu.studio742.imago.core.model.LocalAdjustments
 import eu.studio742.imago.core.model.BrushStroke
 import eu.studio742.imago.core.model.ColorRange
+import eu.studio742.imago.core.model.GeneratedWeights
 import eu.studio742.imago.core.model.LuminanceRange
 import eu.studio742.imago.core.model.MaskOp
 import eu.studio742.imago.core.model.MaskShape
@@ -357,10 +358,12 @@ data class MaskRenderComponent(
     val luminance: LuminanceRange? = null,
     /** A Color Range's samples and Refine, for whoever paints its raster. */
     val colorRange: ColorRange? = null,
+    /** What a model found on the photo, for whoever paints a generated shape's raster. */
+    val generated: GeneratedWeights? = null,
 ) {
-    /** A brush or a range: the field reads it from a raster layer, not from maths of its own. */
+    /** A brush, a range or a generated shape: the field reads it from a raster layer, not from maths of its own. */
     val usesRaster: Boolean
-        get() = shape == MaskShape.BRUSH || shape.isRange
+        get() = shape == MaskShape.BRUSH || shape.isRange || shape.isGenerated
 
     /** True when there is something to paint in its raster, and so it deserves a layer. */
     val hasRasterContent: Boolean
@@ -368,6 +371,7 @@ data class MaskRenderComponent(
             MaskShape.BRUSH -> strokes.isNotEmpty()
             MaskShape.LUMINANCE -> luminance != null
             MaskShape.COLOR -> colorRange?.samples?.isNotEmpty() == true
+            MaskShape.SUBJECT, MaskShape.SKY, MaskShape.BACKGROUND -> generated != null
             MaskShape.LINEAR, MaskShape.RADIAL -> false
         }
 

@@ -112,7 +112,8 @@ class HiltEditorViewModel @Inject constructor(
     immichApi: ImmichApi,
     exporter: EditorExporter,
     library: LibraryRepository,
-) : EditorViewModel(context, recipes, savedRecipes, derivedAssets, configuration, immichApi, exporter, library)
+    generatedMaskTools: GeneratedMaskTools,
+) : EditorViewModel(context, recipes, savedRecipes, derivedAssets, configuration, immichApi, exporter, library, generatedMaskTools)
 
 @HiltViewModel
 class HiltRecipeLibraryViewModel @Inject constructor(savedRecipes: SavedRecipeRepository) : RecipeLibraryViewModel(savedRecipes)

@@ -168,8 +168,10 @@ fun maskHandlesOf(component: MaskComponent, projection: MaskProjection, rotateGa
                 rotate = projection.handleAt(linear.x, linear.y, linear.angle, gapAt(linear.x, linear.y), 0f),
             )
         }
-        // A brush has no handles: it is painted, not dragged. A range has none either: it is sampled.
-        MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR -> null
+        // A brush has no handles: it is painted, not dragged. A range has none either: it is sampled. A
+        // generated shape is what a model found.
+        MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR,
+        MaskShape.SUBJECT, MaskShape.SKY, MaskShape.BACKGROUND -> null
     }
 }
 
@@ -348,7 +350,7 @@ private fun DrawScope.drawComponentOutline(ink: OverlayInk, component: MaskCompo
         }
         // What a brush or a Luminance Range covers is shown by the red, which comes from the pipeline
         // itself; a Color Range also shows where its samples were taken.
-        MaskShape.BRUSH, MaskShape.LUMINANCE -> Unit
+        MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.SUBJECT, MaskShape.SKY, MaskShape.BACKGROUND -> Unit
         MaskShape.COLOR -> drawColorSamples(ink, component, projection, alpha)
     }
 }
@@ -466,7 +468,8 @@ fun maskAngleFrom(
 fun MaskShape.rotateHandleOffset(): Float = when (this) {
     MaskShape.RADIAL -> 180f
     MaskShape.LINEAR -> 0f
-    MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR -> 0f
+    MaskShape.BRUSH, MaskShape.LUMINANCE, MaskShape.COLOR,
+    MaskShape.SUBJECT, MaskShape.SKY, MaskShape.BACKGROUND -> 0f
 }
 
 private const val ELLIPSE_STEPS = 64

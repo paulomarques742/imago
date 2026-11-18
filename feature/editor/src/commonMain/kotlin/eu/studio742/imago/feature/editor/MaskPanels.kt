@@ -26,16 +26,20 @@ import androidx.compose.material.icons.outlined.Adjust
 import androidx.compose.material.icons.outlined.AutoFixOff
 import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Contrast
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Gradient
 import androidx.compose.material.icons.outlined.InvertColors
 import androidx.compose.material.icons.outlined.JoinInner
+import androidx.compose.material.icons.outlined.Landscape
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -146,6 +150,10 @@ internal fun MaskListPanel(
     notice: UiText?,
     actions: MaskActions,
     modifier: Modifier = Modifier,
+    /** Whether this build offers Subject, Sky and Background. */
+    generatedMasks: Boolean = false,
+    /** A generated mask on its way, if any: one at a time, since a model takes hundreds of MB. */
+    generation: MaskGeneration? = null,
 ) {
     val canAddComponent = masks.sumOf { it.components.size } < MAX_MASK_COMPONENTS
     // A brush and a range each take a layer of the brush texture: they share its limit.
@@ -199,6 +207,24 @@ internal fun MaskListPanel(
                 )
             }
         }
+        // Lightroom's Select Subject, Sky and Background, found by a model on the photo.
+        if (generatedMasks) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+            ) {
+                GENERATED_SHAPES.forEach { shape ->
+                    MaskCreateButton(
+                        label = shape.label(),
+                        icon = shape.icon(),
+                        enabled = masks.size < MAX_LOCAL_MASKS && canAddBrush && generation == null,
+                        onClick = { actions.onAdd(shape, actions.newShapePlacement()) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+        generation?.let { MaskGenerationRow(it) }
 
         notice?.let { text ->
             Text(
@@ -230,7 +256,13 @@ internal fun MaskListPanel(
                 mask.components.forEachIndexed { index, component ->
                     MaskComponentRow(mask = mask, index = index, component = component, actions = actions)
                 }
-                MaskCombineRow(mask = mask, enabled = canAddComponent, canAddBrush = canAddBrush, actions = actions)
+                MaskCombineRow(
+                    mask = mask,
+                    enabled = canAddComponent,
+                    canAddBrush = canAddBrush,
+                    generatedMasks = generatedMasks && generation == null,
+                    actions = actions,
+                )
             }
         }
     }
@@ -399,7 +431,7 @@ private fun MaskComponentRow(mask: LocalMask, index: Int, component: MaskCompone
 
 /** Add, Subtract and Intersect, each asking for the shape to combine with. */
 @Composable
-private fun MaskCombineRow(mask: LocalMask, enabled: Boolean, canAddBrush: Boolean, actions: MaskActions) {
+private fun MaskCombineRow(mask: LocalMask, enabled: Boolean, canAddBrush: Boolean, generatedMasks: Boolean, actions: MaskActions) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -417,6 +449,7 @@ private fun MaskCombineRow(mask: LocalMask, enabled: Boolean, canAddBrush: Boole
                 description = stringResource(description, mask.name),
                 enabled = enabled,
                 canAddBrush = canAddBrush,
+                generatedMasks = generatedMasks,
                 onPick = { shape -> actions.onAddComponent(mask.id, shape, op, actions.newShapePlacement()) },
                 modifier = Modifier.weight(1f),
             )
@@ -431,6 +464,7 @@ private fun MaskCombineButton(
     description: String,
     enabled: Boolean,
     canAddBrush: Boolean,
+    generatedMasks: Boolean,
     onPick: (MaskShape) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -458,7 +492,7 @@ private fun MaskCombineButton(
             )
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            MaskShape.entries.forEach { shape ->
+            MaskShape.entries.filter { !it.isGenerated || generatedMasks }.forEach { shape ->
                 DropdownMenuItem(
                     text = { Text(shape.label()) },
                     leadingIcon = { Icon(shape.icon(), contentDescription = null) },
@@ -543,6 +577,9 @@ private fun MaskShape.label(): String = when (this) {
     MaskShape.BRUSH -> stringResource(Res.string.editor_mask_brush)
     MaskShape.LUMINANCE -> stringResource(Res.string.editor_mask_luminance)
     MaskShape.COLOR -> stringResource(Res.string.editor_mask_color)
+    MaskShape.SUBJECT -> stringResource(Res.string.editor_mask_subject)
+    MaskShape.SKY -> stringResource(Res.string.editor_mask_sky)
+    MaskShape.BACKGROUND -> stringResource(Res.string.editor_mask_background)
 }
 
 private fun MaskShape.icon(): ImageVector = when (this) {
@@ -551,6 +588,34 @@ private fun MaskShape.icon(): ImageVector = when (this) {
     MaskShape.BRUSH -> Icons.Outlined.Brush
     MaskShape.LUMINANCE -> Icons.Outlined.Contrast
     MaskShape.COLOR -> Icons.Outlined.Palette
+    MaskShape.SUBJECT -> Icons.Outlined.Person
+    MaskShape.SKY -> Icons.Outlined.Cloud
+    MaskShape.BACKGROUND -> Icons.Outlined.Landscape
+}
+
+private val GENERATED_SHAPES = listOf(MaskShape.SUBJECT, MaskShape.SKY, MaskShape.BACKGROUND)
+
+/** A generated mask on its way: the model's download, then the model at work on the photo. */
+@Composable
+private fun MaskGenerationRow(generation: MaskGeneration) {
+    val downloaded = generation.downloaded
+    val text = when {
+        downloaded != null -> stringResource(Res.string.editor_mask_model_downloading, "${(downloaded * 100).toInt()}%")
+        generation.shape == MaskShape.SKY -> stringResource(Res.string.editor_mask_finding_sky)
+        else -> stringResource(Res.string.editor_mask_finding_subject)
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = ImagoSpacing.Sm),
+        horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (downloaded != null) {
+            CircularProgressIndicator(progress = { downloaded }, color = ImagoUi.colors.accent, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+        } else {
+            CircularProgressIndicator(color = ImagoUi.colors.accent, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+        }
+        Text(text = text, style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)
+    }
 }
 
 /**
@@ -786,7 +851,8 @@ internal fun RangeToolPanel(
                 )
             }
         }
-        MaskShape.LINEAR, MaskShape.RADIAL, MaskShape.BRUSH -> Unit
+        MaskShape.LINEAR, MaskShape.RADIAL, MaskShape.BRUSH,
+        MaskShape.SUBJECT, MaskShape.SKY, MaskShape.BACKGROUND -> Unit
     }
 }
 

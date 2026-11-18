@@ -43,6 +43,8 @@ import eu.studio742.imago.feature.account.LocalSyncEngine
 import eu.studio742.imago.feature.account.toIndicator
 import eu.studio742.imago.feature.editor.LocalRecipeLinks
 import eu.studio742.imago.feature.editor.LocalRecipeGallery
+import eu.studio742.imago.feature.editor.GeneratedMaskTools
+import eu.studio742.imago.feature.editor.LocalGeneratedMaskTools
 import eu.studio742.imago.feature.editor.isRecipeFileName
 import eu.studio742.imago.feature.editor.readRecipeFile
 import eu.studio742.imago.feature.shell.ImagoApp
@@ -88,6 +90,14 @@ fun main(args: Array<String>) {
     }, 60 * 60 * 1000L, 60 * 60 * 1000L)
 
     val graph = DesktopDataGraph(paths.root)
+    // Subject, Sky and Background only when run from the build (`gradlew :desktop:run`), while they are being tested.
+    val generatedMaskTools = GeneratedMaskTools(
+        if (System.getProperty("imago.debugTools") != "true") null else eu.studio742.imago.core.ml.HttpModelSource(
+            paths.root.resolve("ml-models").toFile(),
+            DesktopAccount.bundledSettings().url.trimEnd('/') + "/storage/v1/object/public/ml-models/",
+            okhttp3.OkHttpClient(),
+        ),
+    )
     coil3.SingletonImageLoader.setSafe { context ->
         coil3.ImageLoader.Builder(context).components {
             add(eu.studio742.imago.core.render.DiagnosticImageInterceptor())
@@ -151,6 +161,7 @@ fun main(args: Array<String>) {
                 LocalDesktopDataGraph provides graph,
                 LocalRecipeLinks provides account.recipeLinks,
                 LocalRecipeGallery provides account.recipeGallery,
+                LocalGeneratedMaskTools provides generatedMaskTools,
                 LocalAccountRepository provides account,
                 LocalSyncEngine provides sync,
                 LocalLanguageSettings provides languageSettings,

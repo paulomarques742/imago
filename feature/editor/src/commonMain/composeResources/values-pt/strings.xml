@@ -436,6 +436,15 @@
     <string name="editor_history_mask_erased">Apagada</string>
     <string name="editor_mask_luminance">Intervalo de luminância</string>
     <string name="editor_mask_color">Intervalo de cor</string>
+    <string name="editor_mask_subject">Sujeito</string>
+    <string name="editor_mask_sky">Céu</string>
+    <string name="editor_mask_background">Fundo</string>
+    <string name="editor_mask_finding_subject">A procurar o sujeito…</string>
+    <string name="editor_mask_finding_sky">A procurar o céu…</string>
+    <string name="editor_mask_model_downloading">A descarregar o modelo… %1$s</string>
+    <string name="editor_history_mask_generated">Gerada</string>
+    <string name="editor_mask_generation_failed">Não foi possível gerar esta máscara.</string>
+    <string name="editor_masks_generated_unavailable">As máscaras de sujeito, céu e fundo não podem ser geradas neste aparelho, por isso não têm efeito.</string>
     <string name="editor_range_color_hint">Toque na fotografia para escolher uma cor, ou arraste sobre uma área para escolher as cores dela.</string>
     <string name="editor_range_luminance_hint">Toque na fotografia para escolher um brilho, ou arraste sobre uma área para escolher o intervalo dela.</string>
     <string name="editor_range_add_samples">Juntar amostras</string>

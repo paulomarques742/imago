@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "runtime": "onnxruntime-1.32.0, operators in core/ml/tools/required_operators.config",
+  "models": [
+    {
+      "id": "u2netp",
+      "version": 1,
+      "kind": "subject",
+      "file": "u2netp/1/u2netp.onnx",
+      "format": "onnx",
+      "sha256": "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8",
+      "size": 4574861,
+      "input": { "layout": "NCHW", "width": 320, "height": 320, "normalization": "imagenet" },
+      "output": { "channels": 1, "scale": 1, "meaning": "saliency, stretched to 0..1 per photo" },
+      "license": "Apache-2.0",
+      "source": "U-2-Net (u2netp), https://github.com/xuebinqin/U-2-Net"
+    },
+    {
+      "id": "ppmobileseg-base-ade20k-sky",
+      "version": 1,
+      "kind": "sky",
+      "file": "ppmobileseg-base-ade20k-sky/1/sky_base.onnx",
+      "format": "onnx",
+      "sha256": "ee0abea9d0742d03b9a93582db5006dff89acd074c5c668825db8d3c03df16aa",
+      "size": 24224241,
+      "input": { "layout": "NCHW", "shortSide": 768, "multipleOf": 32, "normalization": "imagenet" },
+      "output": { "channels": 1, "scale": 0.125, "meaning": "sky probability" },
+      "license": "Apache-2.0",
+      "source": "PP-MobileSeg Base, ADE20K, https://github.com/PaddlePaddle/PaddleSeg"
+    }
+  ]
+}

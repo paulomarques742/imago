@@ -2892,6 +2892,8 @@ private fun AdjustmentPanel(
                         masks = state.masks,
                         notice = state.maskNotice,
                         actions = maskActions,
+                        generatedMasks = state.generatedMasksAvailable,
+                        generation = state.maskGeneration,
                     )
                 }
                 // The same `SliderPanel` as the global categories, with the groups filtered. A second
@@ -2903,6 +2905,8 @@ private fun AdjustmentPanel(
                             masks = state.masks,
                             notice = state.maskNotice,
                             actions = maskActions,
+                            generatedMasks = state.generatedMasksAvailable,
+                            generation = state.maskGeneration,
                         )
                     } else {
                         MaskAdjustmentsHeader(

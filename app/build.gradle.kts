@@ -138,6 +138,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(project(":core:model"))
     implementation(project(":core:render"))
+    implementation(project(":core:ml"))
     implementation(project(":core:data"))
     implementation(project(":core:immich"))
     implementation(project(":core:designsystem"))

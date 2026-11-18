@@ -436,6 +436,15 @@
     <string name="editor_history_mask_erased">Erased</string>
     <string name="editor_mask_luminance">Luminance range</string>
     <string name="editor_mask_color">Color range</string>
+    <string name="editor_mask_subject">Subject</string>
+    <string name="editor_mask_sky">Sky</string>
+    <string name="editor_mask_background">Background</string>
+    <string name="editor_mask_finding_subject">Finding the subject…</string>
+    <string name="editor_mask_finding_sky">Finding the sky…</string>
+    <string name="editor_mask_model_downloading">Downloading the model… %1$s</string>
+    <string name="editor_history_mask_generated">Generated</string>
+    <string name="editor_mask_generation_failed">Couldn’t generate this mask.</string>
+    <string name="editor_masks_generated_unavailable">Subject, sky and background masks can’t be generated on this device, so they have no effect.</string>
     <string name="editor_range_color_hint">Tap the photo to pick a color, or drag over an area to pick its colors.</string>
     <string name="editor_range_luminance_hint">Tap the photo to pick a brightness, or drag over an area to pick its range.</string>
     <string name="editor_range_add_samples">Add samples</string>
