@@ -12,8 +12,8 @@
     <string name="editor_recipe_export_parts_title">What goes in the file</string>
     <string name="editor_recipe_share_rights_title">Can you share this?</string>
     <plurals name="editor_recipe_share_rights">
-        <item quantity="one">This includes a recipe that came from another app’s file. Many presets are paid or licensed: share it only if you’re allowed to.</item>
-        <item quantity="other">This includes %1$d recipes that came from other apps’ files. Many presets are paid or licensed: share them only if you’re allowed to.</item>
+        <item quantity="one">This includes a recipe you didn’t make — from another app’s file or from the community. Many presets are paid or licensed: share it only if you’re allowed to.</item>
+        <item quantity="other">This includes %1$d recipes you didn’t make — from other apps’ files or from the community. Many presets are paid or licensed: share them only if you’re allowed to.</item>
     </plurals>
     <string name="editor_recipe_import_title">Import recipes</string>
     <string name="editor_recipe_import_failed">Couldn’t add the recipes. Try again.</string>
@@ -480,6 +480,30 @@
     <string name="editor_tab_imago">IMAGO</string>
     <string name="editor_tab_favorites">Favorites</string>
     <string name="editor_tab_recent">Recent</string>
+    <string name="editor_tab_community">Community</string>
+    <string name="editor_community_top">Most liked</string>
+    <string name="editor_community_new">Newest</string>
+    <string name="editor_community_retry">Try again</string>
+    <string name="editor_community_empty">There are no recipes in the community gallery yet.</string>
+    <string name="editor_community_failed">The community gallery couldn’t be read.</string>
+    <string name="editor_community_gone">This recipe is no longer in the gallery.</string>
+    <string name="editor_community_by">by %1$s</string>
+    <string name="editor_community_on_your_photo">On your photo</string>
+    <string name="editor_community_on_sample">On a sample photo</string>
+    <string name="editor_community_preview">The recipe on the photo</string>
+    <string name="editor_community_open_failed">This recipe couldn’t be opened.</string>
+    <string name="editor_community_copy">Copy to my recipes</string>
+    <string name="editor_community_copied">In your recipes</string>
+    <string name="editor_community_copy_failed">The recipe couldn’t be copied.</string>
+    <string name="editor_community_copy_note">The copy goes to “Mine”, in the “Community” collection, with the author’s name. It’s yours to use; sharing it asks first, because it’s someone else’s work.</string>
+    <string name="editor_community_copy_name">%1$s by %2$s</string>
+    <string name="editor_community_collection">Community</string>
+    <string name="editor_community_like">Like</string>
+    <string name="editor_community_unlike">Take back the like</string>
+    <plurals name="editor_community_likes">
+        <item quantity="one">%1$d like</item>
+        <item quantity="other">%1$d likes</item>
+    </plurals>
     <string name="editor_empty_saved">You haven’t saved any recipes yet.</string>
     <string name="editor_empty_filters">No filters available.</string>
     <string name="editor_empty_favorites">You haven’t marked any recipe as a favorite yet.</string>
@@ -635,6 +659,7 @@
     <string name="editor_gallery_source_sample">Sample photo</string>
     <string name="editor_gallery_source_own">Your photo</string>
     <string name="editor_gallery_choose_photo">Choose another photo</string>
+    <string name="editor_gallery_pick_title">Choose a photo</string>
     <string name="editor_gallery_own_note">Your photo becomes public in the gallery, reduced and without its metadata, such as where it was taken. It stays yours, and only shows there.</string>
     <string name="editor_gallery_photo_failed">That photo couldn’t be opened.</string>
     <string name="editor_gallery_before">Before</string>
@@ -650,4 +675,12 @@
     <string name="editor_gallery_error_limit">You’ve reached the limit of 50 posts in the gallery.</string>
     <string name="editor_gallery_error_link_gone">This recipe’s link no longer works. Create it again first.</string>
     <string name="editor_gallery_error_image">The photos couldn’t be sent. Try again in a little while.</string>
+    <string name="editor_recipe_link_images_intro">Show the photo before and after the recipe on the link’s page. It goes up reduced and without its metadata, and anyone with the link can see it and report it.</string>
+    <string name="editor_recipe_link_images_own">Your photo becomes public on the link’s page. It stays yours, and only shows there.</string>
+    <string name="editor_recipe_link_images_add">Show before and after on the page</string>
+    <string name="editor_recipe_link_images_update">Use this photo on the page</string>
+    <string name="editor_recipe_link_images_remove">Remove the images from the page</string>
+    <string name="editor_recipe_link_images_on">The link’s page shows a before and an after.</string>
+    <string name="editor_recipe_link_images_hidden">The images on the link’s page were hidden after reports. Sending new ones shows them again, unless they were hidden for good.</string>
+    <string name="editor_gallery_error_images_blocked">The images of this link were hidden and can’t be replaced.</string>
 </resources>

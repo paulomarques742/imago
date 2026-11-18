@@ -2,6 +2,8 @@ package eu.studio742.imago.feature.editor
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -59,6 +62,14 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.compose.LocalPlatformContext
+import coil3.request.CachePolicy
+import coil3.request.ErrorResult
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.toBitmap
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.interchange.NoRecipeGallery
@@ -67,12 +78,21 @@ import eu.studio742.imago.core.interchange.RecipeGalleryError
 import eu.studio742.imago.core.interchange.RecipeGalleryException
 import eu.studio742.imago.core.interchange.RecipeGalleryLimits
 import eu.studio742.imago.core.interchange.RecipeGalleryService
+import eu.studio742.imago.core.interchange.RecipeLinkImages
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.withPartsFrom
+import eu.studio742.imago.core.model.diagnostics.DiagnosticArea
+import eu.studio742.imago.core.model.diagnostics.DiagnosticOperation
+import eu.studio742.imago.core.model.diagnostics.LocalDiagnostics
 import eu.studio742.imago.core.render.PixelBuffer
 import eu.studio742.imago.core.render.RecipePixels
+import eu.studio742.imago.core.render.libraryAuth
+import eu.studio742.imago.core.render.softwareBitmap
 import eu.studio742.imago.core.render.toImageBitmap
+import eu.studio742.imago.core.render.toPixelBuffer
+import eu.studio742.imago.feature.library.AssetUiModel
+import eu.studio742.imago.feature.library.LibraryPickerRoute
 import eu.studio742.imago.feature.editor.resources.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -107,6 +127,12 @@ internal class RecipeGalleryController(
         private set
     var done by mutableStateOf(false)
         private set
+    var linkImages by mutableStateOf(RecipeLinkImages.NONE)
+        private set
+    var imagesWorking by mutableStateOf(false)
+        private set
+    var imagesDone by mutableStateOf(false)
+        private set
 
     fun galleryUrl(portuguese: Boolean): String? = service.galleryUrl(portuguese)
 
@@ -119,6 +145,52 @@ internal class RecipeGalleryController(
             supporter = service.isSupporter()
             if (supporter) published = service.publishedLinks()
         }
+    }
+
+    /** What the link's page shows now; asked again after every change, because the server can hide them on its own. */
+    fun loadImages(linkId: String?) {
+        linkImages = RecipeLinkImages.NONE
+        imagesDone = false
+        if (linkId == null || !supporter) return
+        scope.launch { linkImages = service.linkImages(linkId) }
+    }
+
+    fun setImages(linkId: String, before: ByteArray, after: ByteArray) {
+        imagesWorking = true
+        imagesDone = false
+        error = null
+        scope.launch {
+            try {
+                service.setLinkImages(linkId, before, after)
+                linkImages = RecipeLinkImages.SHOWN
+                imagesDone = true
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: RecipeGalleryException) {
+                error = failure.error
+            } finally {
+                imagesWorking = false
+            }
+        }
+    }
+
+    fun clearImages(linkId: String) {
+        imagesWorking = true
+        imagesDone = false
+        error = null
+        scope.launch {
+            try {
+                service.clearLinkImages(linkId)
+                linkImages = RecipeLinkImages.NONE
+            } finally {
+                imagesWorking = false
+            }
+        }
+    }
+
+    /** Before a link is revoked: its images would stay in the bucket otherwise. */
+    suspend fun clearImagesQuietly(linkId: String) {
+        if (supporter && linkImages != RecipeLinkImages.NONE) service.clearLinkImages(linkId)
     }
 
     fun start() {
@@ -171,6 +243,7 @@ internal fun recipeGalleryErrorText(error: RecipeGalleryError): StringResource =
     RecipeGalleryError.LIMIT -> Res.string.editor_gallery_error_limit
     RecipeGalleryError.LINK_GONE -> Res.string.editor_gallery_error_link_gone
     RecipeGalleryError.IMAGE_UPLOAD -> Res.string.editor_gallery_error_image
+    RecipeGalleryError.IMAGES_BLOCKED -> Res.string.editor_gallery_error_images_blocked
     RecipeGalleryError.OFFLINE -> Res.string.editor_recipe_link_offline
     RecipeGalleryError.FAILED -> Res.string.editor_recipe_link_failed
 }
@@ -204,11 +277,103 @@ internal fun ImageBitmap.encodeForGallery(): ByteArray =
     listOf(88, 80, 70, 60, 50).firstNotNullOfOrNull { quality -> encodeToJpeg(quality).takeIf { it.size <= RecipeGalleryLimits.PHOTO_MAX_BYTES } }
         ?: error("The photo does not fit the gallery's limit")
 
-/** A photo of the person's own, oriented, sRGB and no larger than the gallery's side; null when none was chosen or it could not be read. */
-@Composable
-internal expect fun rememberGalleryPhotoPicker(onPicked: (ImageBitmap?) -> Unit): () -> Unit
+/**
+ * A photo of the person's own, chosen in IMAGO's library — the same picker the composer uses — and not
+ * in the system's: the photos someone edits with a recipe are the ones in here, server ones included.
+ *
+ * Invoking it opens the picker; [Overlay] has to be composed on top of the dialog that asks, since a
+ * dialog's window covers anything drawn outside it.
+ */
+@Stable
+internal class GalleryPhotoPicker(
+    private val scope: CoroutineScope,
+    private val load: suspend (AssetUiModel) -> ImageBitmap?,
+    private val onPicked: () -> (ImageBitmap?) -> Unit,
+) : () -> Unit {
+    var open by mutableStateOf(false)
+        private set
+    var loading by mutableStateOf(false)
+        private set
 
-private enum class GallerySource { SAMPLE, OWN }
+    override fun invoke() {
+        if (!loading) open = true
+    }
+
+    fun cancel() {
+        open = false
+    }
+
+    fun choose(asset: AssetUiModel) {
+        open = false
+        loading = true
+        scope.launch {
+            val photo = try { load(asset) } finally { loading = false }
+            onPicked()(photo)
+        }
+    }
+}
+
+/** [onPicked] gets the photo oriented, sRGB and no larger than the gallery's side, or null when it could not be read. */
+@Composable
+internal fun rememberGalleryPhotoPicker(onPicked: (ImageBitmap?) -> Unit): GalleryPhotoPicker {
+    val context = LocalPlatformContext.current
+    val scope = rememberCoroutineScope()
+    val picked by rememberUpdatedState(onPicked)
+    return remember(context, scope) { GalleryPhotoPicker(scope, { loadGalleryPhoto(context, it) }, { picked }) }
+}
+
+/** The library over the whole dialog, photos only, one at a time: tapping one decides. */
+@Composable
+internal fun GalleryPhotoPicker.Overlay() {
+    if (!open) return
+    Surface(
+        color = ImagoUi.colors.background,
+        modifier = Modifier
+            .fillMaxSize()
+            // Opaque is not enough: the touches falling outside the grid would reach the dialog underneath.
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
+    ) {
+        LibraryPickerRoute(
+            title = stringResource(Res.string.editor_gallery_pick_title),
+            allowsVideo = false,
+            multiple = false,
+            onConfirm = { chosen -> chosen.firstOrNull()?.let(::choose) ?: cancel() },
+            onCancel = ::cancel,
+        )
+    }
+}
+
+/**
+ * The photo as it came from the camera, not with the recipe it may have in IMAGO: the look being shared is
+ * laid over it. Decoding and drawing it again keeps none of the file's metadata.
+ */
+private suspend fun loadGalleryPhoto(context: PlatformContext, asset: AssetUiModel): ImageBitmap? = try {
+    val result = SingletonImageLoader.get(context).execute(
+        ImageRequest.Builder(context)
+            .data(asset.previewUrl)
+            .libraryAuth(asset.apiKey)
+            .size(RecipeGalleryLimits.PHOTO_SIDE)
+            .softwareBitmap()
+            .memoryCachePolicy(CachePolicy.READ_ONLY)
+            .build(),
+    )
+    when (result) {
+        is SuccessResult -> withContext(Dispatchers.Default) {
+            result.image.toBitmap().toPixelBuffer().toImageBitmap().fittedTo(RecipeGalleryLimits.PHOTO_SIDE)
+        }
+        is ErrorResult -> {
+            LocalDiagnostics.failure(DiagnosticArea.IMAGE, result.throwable, DiagnosticOperation.GALLERY)
+            null
+        }
+    }
+} catch (cancelled: CancellationException) {
+    throw cancelled
+} catch (error: Exception) {
+    LocalDiagnostics.failure(DiagnosticArea.IMAGE, error, DiagnosticOperation.GALLERY)
+    null
+}
+
+internal enum class GallerySource { SAMPLE, OWN }
 
 /**
  * Publishing [recipe]'s link in the gallery: the before and the after on one of the app's sample photos
@@ -258,7 +423,7 @@ internal fun RecipeGalleryDialog(
     }
 
     val fieldsValid = title.trim().length in RecipeGalleryLimits.TITLE && author.trim().length in RecipeGalleryLimits.AUTHOR
-    val busy = gallery.working || preparing
+    val busy = gallery.working || preparing || pick.loading
 
     fun send() {
         val first = before ?: return
@@ -322,8 +487,8 @@ internal fun RecipeGalleryDialog(
                             ) { Text(stringResource(Res.string.editor_gallery_source_own)) }
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
-                            GalleryPhoto(before, stringResource(Res.string.editor_gallery_before), Modifier.weight(1f))
-                            GalleryPhoto(after, stringResource(Res.string.editor_gallery_after), Modifier.weight(1f))
+                            GalleryPhoto(before.takeUnless { pick.loading }, stringResource(Res.string.editor_gallery_before), Modifier.weight(1f))
+                            GalleryPhoto(after.takeUnless { pick.loading }, stringResource(Res.string.editor_gallery_after), Modifier.weight(1f))
                         }
                         when (source) {
                             GallerySource.SAMPLE -> SampleSwitcher(sampleIndex, onSampleIndex)
@@ -363,6 +528,7 @@ internal fun RecipeGalleryDialog(
                     }
                 }
             }
+            pick.Overlay()
         }
     }
 }

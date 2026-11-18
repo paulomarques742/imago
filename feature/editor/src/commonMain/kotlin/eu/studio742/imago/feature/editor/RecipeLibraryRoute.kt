@@ -124,6 +124,12 @@ open class RecipeLibraryViewModel(
         }
     }
 
+    /** A recipe copied from the community gallery; a failure is the caller's to say. */
+    suspend fun addCopied(recipe: SavedRecipe) {
+        savedRecipes.save(recipe)
+        refresh()
+    }
+
     fun delete(id: String) {
         viewModelScope.launch {
             runCatching { savedRecipes.delete(id) }
@@ -214,6 +220,7 @@ fun RecipeLibraryRoute(
     val recipeFiles = rememberRecipeFileActions(onOpened = { viewModel.openFiles(it, importedCollection) }, onFailed = { fileFailed = true })
     val links = rememberRecipeLinkController()
     val exporter = rememberRecipeExporter(recipeFiles, onFailed = { fileFailed = true }, onLink = links::publish)
+    val community = rememberCommunityRecipesController()
 
     LaunchedEffect(incomingFiles) {
         if (incomingFiles != null) {
@@ -302,6 +309,7 @@ fun RecipeLibraryRoute(
             onCreate = { editingKey = RecipeSource.New().key },
             createLabel = stringResource(Res.string.editor_new_recipe),
             createHint = stringResource(Res.string.editor_new_recipe_hint),
+            community = if (community.available) { modifier -> CommunityRecipesTab(community, modifier) } else null,
             bottomBar = {
                 LibraryNavBar(
                     selected = LibraryNavDestination.RECIPES,
@@ -324,6 +332,7 @@ fun RecipeLibraryRoute(
         onSampleIndex = { sampleIndex = it },
     )
     RecipeExportDialog(exporter)
+    CommunityRecipeDialog(community, sampleAssetId, onOwnPhoto = false, library = state.recipes, save = viewModel::addCopied)
     renaming?.let { recipe ->
         RecipeDetailsDialog(
             title = stringResource(Res.string.editor_organize_recipe),

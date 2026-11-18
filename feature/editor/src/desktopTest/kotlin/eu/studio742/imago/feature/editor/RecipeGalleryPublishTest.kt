@@ -3,6 +3,9 @@ package eu.studio742.imago.feature.editor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
@@ -10,6 +13,7 @@ import eu.studio742.imago.core.interchange.RecipeGalleryError
 import eu.studio742.imago.core.interchange.RecipeGalleryException
 import eu.studio742.imago.core.interchange.RecipeGalleryLimits
 import eu.studio742.imago.core.interchange.RecipeGalleryService
+import eu.studio742.imago.core.interchange.RecipeLinkImages
 import eu.studio742.imago.core.interchange.RecipeLinkService
 import eu.studio742.imago.core.model.EditRecipe
 import eu.studio742.imago.core.model.RecipePart
@@ -149,8 +153,9 @@ class RecipeGalleryPublishTest {
             }
         }
         onNodeWithText("Publish to the gallery").performClick()
-        onNodeWithText("Sample photo").assertExists()
-        onNodeWithText("Your photo").assertExists()
+        // The choice of photo is also on the link's own dialog, behind this one.
+        onAllNodesWithText("Sample photo").assertCountEquals(2)
+        onAllNodesWithText("Your photo").assertCountEquals(2)
         onNodeWithText("Your name, as it shows").assertExists()
     }
 
@@ -177,5 +182,109 @@ class RecipeGalleryPublishTest {
         }
         onNodeWithText("Update link").assertExists()
         onNodeWithText("Publish to the gallery").assertDoesNotExist()
+        onNodeWithText("Show before and after on the page").assertDoesNotExist()
     }
+
+    @Test
+    fun `the card takes a photo of the persons own from a supporter, and only the samples from anyone else`() {
+        runComposeUiTest {
+            val links = linkController().apply { open(recipe) }
+            setContent {
+                CompositionLocalProvider(LocalRecipeGallery provides FakeGallery(supporter = true)) {
+                    RecipeLinkDialog(links, onPublish = {}, onSendFile = null, onSendLink = null, onOpenAccount = {})
+                }
+            }
+            onNodeWithText("Your photo").assertExists()
+        }
+        runComposeUiTest {
+            val links = linkController().apply { open(recipe) }
+            setContent {
+                CompositionLocalProvider(LocalRecipeGallery provides FakeGallery(supporter = false)) {
+                    RecipeLinkDialog(links, onPublish = {}, onSendFile = null, onSendLink = null, onOpenAccount = {})
+                }
+            }
+            onNodeWithText("Your photo").assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun `a supporter can put the before and the after on the links page, and take them off`() = runComposeUiTest {
+        val links = linkController().apply { open(recipe) }
+        val service = ImageGallery()
+        setContent {
+            CompositionLocalProvider(LocalRecipeGallery provides service) {
+                RecipeLinkDialog(links, onPublish = {}, onSendFile = null, onSendLink = null, onOpenAccount = {})
+            }
+        }
+        waitUntil(timeoutMillis = 15_000) { runCatching { onNodeWithText("Show before and after on the page").assertIsEnabled() }.isSuccess }
+        onNodeWithText("Show before and after on the page").performClick()
+        waitUntil(timeoutMillis = 15_000) { service.set != null }
+        assertTrue(service.set!!.first > 0 && service.set!!.second > 0)
+        waitUntil(timeoutMillis = 15_000) { runCatching { onNodeWithText("Remove the images from the page").assertExists() }.isSuccess }
+        onNodeWithText("Remove the images from the page").performClick()
+        waitUntil(timeoutMillis = 15_000) { service.cleared }
+    }
+
+    @Test
+    fun `the page images hidden after reports are announced`() = runComposeUiTest {
+        val links = linkController().apply { open(recipe) }
+        setContent {
+            CompositionLocalProvider(LocalRecipeGallery provides ImageGallery(RecipeLinkImages.HIDDEN)) {
+                RecipeLinkDialog(links, onPublish = {}, onSendFile = null, onSendLink = null, onOpenAccount = {})
+            }
+        }
+        waitUntil(timeoutMillis = 15_000) { runCatching { onNodeWithText("were hidden after reports", substring = true).assertExists() }.isSuccess }
+    }
+
+    private class ImageGallery(var state: RecipeLinkImages = RecipeLinkImages.NONE) : RecipeGalleryService {
+        var set: Pair<Int, Int>? = null
+        var cleared = false
+        override fun galleryUrl(portuguese: Boolean) = "https://site.example/gallery/"
+        override suspend fun isSupporter() = true
+        override suspend fun publishedLinks() = emptySet<String>()
+        override suspend fun publish(linkId: String, title: String, authorName: String, before: ByteArray, after: ByteArray) = Unit
+        override suspend fun linkImages(linkId: String) = state
+        override suspend fun setLinkImages(linkId: String, before: ByteArray, after: ByteArray) {
+            set = before.size to after.size
+            state = RecipeLinkImages.SHOWN
+        }
+        override suspend fun clearLinkImages(linkId: String) {
+            cleared = true
+            state = RecipeLinkImages.NONE
+        }
+    }
+
+    @Test
+    fun ownPhotoComesFromTheLibraryPickerAndIsHandedOverOnceLoaded() {
+        val loaded = ImageBitmap(4, 3)
+        var received: ImageBitmap? = null
+        var asked: String? = null
+        val picker = GalleryPhotoPicker(
+            CoroutineScope(Dispatchers.Unconfined),
+            load = { asset -> asked = asset.id; loaded },
+            onPicked = { { photo -> received = photo } },
+        )
+        picker()
+        assertTrue(picker.open)
+        picker.choose(libraryPhoto("photo-1"))
+        assertFalse(picker.open)
+        assertFalse(picker.loading)
+        assertEquals("photo-1", asked)
+        assertTrue(received === loaded)
+    }
+
+    @Test
+    fun cancellingTheLibraryPickerHandsNothingOver() {
+        var called = false
+        val picker = GalleryPhotoPicker(CoroutineScope(Dispatchers.Unconfined), load = { null }, onPicked = { { called = true } })
+        picker()
+        picker.cancel()
+        assertFalse(picker.open)
+        assertFalse(called)
+    }
+
+    private fun libraryPhoto(id: String) = eu.studio742.imago.feature.library.AssetUiModel(
+        id = id, checksum = "", fileName = "$id.jpg", date = "", fileCreatedAt = "", width = 4, height = 3,
+        isFavorite = false, isEdited = false, hasLocalRecipe = false, thumbnailUrl = "", previewUrl = "", apiKey = "",
+    )
 }

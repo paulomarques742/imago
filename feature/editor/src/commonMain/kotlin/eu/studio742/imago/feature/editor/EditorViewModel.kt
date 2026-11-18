@@ -2267,6 +2267,12 @@ open class EditorViewModel(
         }
     }
 
+    /** A recipe copied from the community gallery; a failure is the caller's to say. */
+    suspend fun addCopiedRecipe(recipe: SavedRecipe) {
+        savedRecipes.save(recipe)
+        refreshSavedRecipes()
+    }
+
     fun deleteSavedRecipe(id: String) {
         val name = state.value.savedRecipes.firstOrNull { it.id == id }?.name ?: return
         viewModelScope.launch {

@@ -18,7 +18,7 @@ data class SavedRecipe(
      * still has its values. Null in a recipe saved before the choice existed.
      */
     val parts: Set<RecipePart>? = null,
-    /** The format it was imported from; null in one made in IMAGO. Sharing such a recipe is asked about. */
+    /** Where it came from — a format, or the community gallery; null in one made here. Sharing such a recipe is asked about. */
     val origin: RecipeOrigin? = null,
 ) {
     /**
@@ -43,6 +43,11 @@ enum class RecipeOrigin {
     LRTEMPLATE,
     CUBE,
 
+    /**
+     * Copied from the community gallery: someone else's work, so sharing it asks first and the gallery
+     * refuses it as the copier's own.
+     */
+    COMMUNITY,
 
     /** A format only a newer app knows, or a value nobody wrote. The mark must survive either. */
     OTHER,

@@ -59,6 +59,12 @@ import androidx.compose.ui.window.DialogProperties
 import eu.studio742.imago.core.designsystem.ImagoSpacing
 import eu.studio742.imago.core.designsystem.ImagoUi
 import eu.studio742.imago.core.interchange.NoRecipeLinks
+import eu.studio742.imago.core.interchange.RecipeLinkImages
+import eu.studio742.imago.core.interchange.RecipeGalleryLimits
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SegmentedButton
 import eu.studio742.imago.core.interchange.PHOTO_BOUND_PARTS
 import eu.studio742.imago.core.interchange.RecipeLinkError
 import eu.studio742.imago.core.interchange.RecipeLinkException
@@ -212,12 +218,6 @@ internal fun recipeLinkErrorText(error: RecipeLinkError): StringResource = when 
     RecipeLinkError.NO_ACCOUNT, RecipeLinkError.FAILED -> Res.string.editor_recipe_link_failed
 }
 
-/** The sample with the look of the recipe on it. What is tied to one photo says nothing on another. */
-private suspend fun renderRecipeOnSample(recipe: SavedRecipe, sampleIndex: Int): ImageBitmap {
-    val bytes = Res.readBytes(recipeSamplePath(sampleIndex))
-    return withContext(Dispatchers.Default) { renderLook(recipe, bytes.decodeToImageBitmap()) }
-}
-
 /**
  * «Share» for one recipe, in the layout of «Show your edit»: the image as it will come out, and what can be done
  * with it. [onPublish] goes through the exporter, so that an imported recipe asks first and what is tied to one
@@ -245,13 +245,58 @@ internal fun RecipeLinkDialog(
     val kicker = stringResource(Res.string.editor_recipe_card_kicker)
     val hint = stringResource(if (url != null) Res.string.editor_recipe_card_scan else Res.string.editor_recipe_card_pending)
 
-    var photo by remember(recipe.id, sampleIndex) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(recipe, sampleIndex) { photo = renderRecipeOnSample(recipe, sampleIndex) }
+    // The card is made on one of the app's samples or on a photo of the person's own, which never leaves the
+    // device unless they put it on the link's page. What is tied to one photo says nothing on another.
+    var source by remember(recipe.id) { mutableStateOf(GallerySource.SAMPLE) }
+    var own by remember(recipe.id) { mutableStateOf<ImageBitmap?>(null) }
+    var unreadable by remember { mutableStateOf(false) }
+    val pick = rememberGalleryPhotoPicker { picked ->
+        if (picked == null) {
+            unreadable = own == null
+        } else {
+            own = picked
+            unreadable = false
+            source = GallerySource.OWN
+        }
+    }
+    var before by remember(recipe.id) { mutableStateOf<ImageBitmap?>(null) }
+    var photo by remember(recipe.id) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(recipe, sampleIndex, source, own) {
+        before = null
+        photo = null
+        val base = when (source) {
+            GallerySource.SAMPLE -> Res.readBytes(recipeSamplePath(sampleIndex)).let { bytes ->
+                withContext(Dispatchers.Default) { bytes.decodeToImageBitmap().fittedTo(RecipeGalleryLimits.PHOTO_SIDE) }
+            }
+            GallerySource.OWN -> own ?: return@LaunchedEffect
+        }
+        before = base
+        photo = withContext(Dispatchers.Default) { renderLook(recipe, base) }
+    }
+    LaunchedEffect(links.linkId, gallery.supporter) { gallery.loadImages(links.linkId) }
+    // A person who stopped being a supporter goes back to the samples.
+    LaunchedEffect(gallery.supporter) { if (!gallery.supporter) source = GallerySource.SAMPLE }
     var card by remember(recipe.id) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(photo, url, hint) {
         val base = photo ?: return@LaunchedEffect
         card = withContext(Dispatchers.Default) {
             paintRecipeCard(base, RecipeCardTexts(recipe.name, kicker, hint), url?.let(::RecipeQrCode), measurer)
+        }
+    }
+
+    fun sendImages() {
+        val first = before ?: return
+        val second = photo ?: return
+        val id = links.linkId ?: return
+        scope.launch {
+            val encoded = try {
+                withContext(Dispatchers.Default) { first.encodeForGallery() to second.encodeForGallery() }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (encoded == null) gallery.failPreparing() else gallery.setImages(id, encoded.first, encoded.second)
         }
     }
 
@@ -283,12 +328,15 @@ internal fun RecipeLinkDialog(
                         onSaveImage = { deliver(onSaveImage) },
                         onShareImage = onShareImage?.let { share -> { deliver(share) } },
                         gallery = gallery,
+                        ownPhoto = source == GallerySource.OWN,
+                        canSendImages = before != null && photo != null,
+                        onSendImages = ::sendImages,
                     )
                 }
                 val preview: @Composable (Modifier) -> Unit = { modifier ->
                     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-                        RecipeCardPreview(card, Modifier.weight(1f).fillMaxWidth())
-                        SampleSwitcher(sampleIndex, onSampleIndex)
+                        RecipeCardPreview(card.takeUnless { pick.loading }, Modifier.weight(1f).fillMaxWidth())
+                        CardPhotoChoice(gallery.supporter, source, { source = it }, own != null, pick, unreadable, sampleIndex, onSampleIndex)
                     }
                 }
                 Column(Modifier.fillMaxSize()) {
@@ -316,6 +364,7 @@ internal fun RecipeLinkDialog(
                     }
                 }
             }
+            pick.Overlay()
         }
     }
     val linked = links.linkId
@@ -337,7 +386,11 @@ internal fun RecipeLinkDialog(
             onDismissRequest = links::dismissStop,
             title = { Text(stringResource(Res.string.editor_recipe_link_stop_title)) },
             text = { Text(stringResource(Res.string.editor_recipe_link_stop_text)) },
-            confirmButton = { TextButton(onClick = links::stop) { Text(stringResource(Res.string.editor_recipe_link_stop), color = ImagoUi.colors.danger) } },
+            confirmButton = {
+                TextButton(onClick = { links.dismissStop(); links.linkId?.let { id -> scope.launch { gallery.clearImagesQuietly(id); links.stop() } } }) {
+                    Text(stringResource(Res.string.editor_recipe_link_stop), color = ImagoUi.colors.danger)
+                }
+            },
             dismissButton = { TextButton(onClick = links::dismissStop) { Text(stringResource(Res.string.editor_cancel)) } },
         )
     }
@@ -389,6 +442,9 @@ private fun LinkControls(
     onSaveImage: () -> Unit,
     onShareImage: (() -> Unit)?,
     gallery: RecipeGalleryController? = null,
+    ownPhoto: Boolean = false,
+    canSendImages: Boolean = false,
+    onSendImages: () -> Unit = {},
 ) {
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
@@ -436,6 +492,7 @@ private fun LinkControls(
                             Text(stringResource(Res.string.editor_gallery_publish))
                         }
                     }
+                    PageImages(gallery, ownPhoto, canSendImages, onSendImages) { gallery.clearImages(linked) }
                 }
             }
             else -> {
@@ -483,5 +540,82 @@ private fun LinkField(url: String, onCopy: () -> Unit) {
         IconButton(onClick = onCopy) {
             Icon(Icons.Outlined.ContentCopy, contentDescription = stringResource(Res.string.editor_recipe_link_copy), tint = ImagoUi.colors.secondaryText)
         }
+    }
+}
+
+/** The before and the after on the link's page: supporters only, and the page says when they were hidden. */
+@Composable
+private fun PageImages(
+    gallery: RecipeGalleryController,
+    ownPhoto: Boolean,
+    canSend: Boolean,
+    onSend: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val note = MaterialTheme.typography.bodySmall
+    val body = MaterialTheme.typography.bodyMedium
+    val shown = gallery.linkImages != RecipeLinkImages.NONE
+    Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
+        Text(stringResource(Res.string.editor_recipe_link_images_intro), style = note, color = ImagoUi.colors.secondaryText)
+        if (ownPhoto) Text(stringResource(Res.string.editor_recipe_link_images_own), style = note, color = ImagoUi.colors.secondaryText)
+        when (gallery.linkImages) {
+            RecipeLinkImages.SHOWN -> Text(stringResource(Res.string.editor_recipe_link_images_on), style = body, color = ImagoUi.colors.secondaryText)
+            RecipeLinkImages.HIDDEN -> Text(stringResource(Res.string.editor_recipe_link_images_hidden), style = body, color = ImagoUi.colors.error)
+            RecipeLinkImages.NONE -> Unit
+        }
+        gallery.error?.let { error -> Text(stringResource(recipeGalleryErrorText(error)), style = body, color = ImagoUi.colors.error) }
+        if (gallery.imagesWorking) {
+            Box(Modifier.fillMaxWidth().padding(ImagoSpacing.Sm), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = ImagoUi.colors.emphasis)
+            }
+        } else {
+            OutlinedButton(onClick = onSend, enabled = canSend, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(if (shown) Res.string.editor_recipe_link_images_update else Res.string.editor_recipe_link_images_add))
+            }
+            if (shown) {
+                TextButton(onClick = onRemove) {
+                    Text(stringResource(Res.string.editor_recipe_link_images_remove), color = ImagoUi.colors.danger)
+                }
+            }
+        }
+    }
+}
+
+/** A sample, or a photo of the person's own, for the card: the second is the supporters', who are also the ones who can put it on the link's page. */
+@Composable
+private fun CardPhotoChoice(
+    supporter: Boolean,
+    source: GallerySource,
+    onSource: (GallerySource) -> Unit,
+    hasOwn: Boolean,
+    pick: () -> Unit,
+    unreadable: Boolean,
+    sampleIndex: Int,
+    onSampleIndex: (Int) -> Unit,
+) {
+    if (!supporter) {
+        SampleSwitcher(sampleIndex, onSampleIndex)
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs)) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().widthIn(max = 420.dp)) {
+            SegmentedButton(
+                selected = source == GallerySource.SAMPLE,
+                onClick = { onSource(GallerySource.SAMPLE) },
+                shape = SegmentedButtonDefaults.itemShape(0, 2),
+            ) { Text(stringResource(Res.string.editor_gallery_source_sample)) }
+            SegmentedButton(
+                selected = source == GallerySource.OWN,
+                onClick = { if (hasOwn) onSource(GallerySource.OWN) else pick() },
+                shape = SegmentedButtonDefaults.itemShape(1, 2),
+            ) { Text(stringResource(Res.string.editor_gallery_source_own)) }
+        }
+        when (source) {
+            GallerySource.SAMPLE -> SampleSwitcher(sampleIndex, onSampleIndex)
+            GallerySource.OWN -> OutlinedButton(onClick = pick, modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp)) {
+                Text(stringResource(Res.string.editor_gallery_choose_photo))
+            }
+        }
+        if (unreadable) Text(stringResource(Res.string.editor_gallery_photo_failed), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.error)
     }
 }

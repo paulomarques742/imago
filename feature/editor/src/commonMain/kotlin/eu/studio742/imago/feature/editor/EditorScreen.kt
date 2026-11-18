@@ -397,6 +397,7 @@ fun EditorRoute(
         onToggleBuiltInRecipeFavorite = viewModel::toggleBuiltInRecipeFavorite,
         onUpdateSavedRecipe = viewModel::updateSavedRecipe,
         onDeleteSavedRecipe = viewModel::deleteSavedRecipe,
+        onAddCopiedRecipe = viewModel::addCopiedRecipe,
         onConsumeRecipeNotice = viewModel::consumeRecipeNotice,
         onExportGallery = viewModel::exportToGallery,
         onExportImmich = viewModel::exportToImmich,
@@ -646,6 +647,7 @@ private fun EditorScreen(
     onToggleBuiltInRecipeFavorite: (String) -> Unit,
     onUpdateSavedRecipe: (String, String, String, Set<RecipePart>) -> Unit,
     onDeleteSavedRecipe: (String) -> Unit,
+    onAddCopiedRecipe: suspend (SavedRecipe) -> Unit = {},
     onConsumeRecipeNotice: () -> Unit,
     onExportGallery: () -> Unit,
     onExportImmich: (String) -> Unit,
@@ -2505,6 +2507,7 @@ private fun EditorScreen(
             initialParts = saved.appliedParts,
         )
     }
+    val community = rememberCommunityRecipesController()
     if (showRecipeLibrary) {
         // With the photo open, each recipe shows already applied to it — the difference between
         // choosing by name and choosing by result.
@@ -2533,7 +2536,9 @@ private fun EditorScreen(
                 showRecipeLibrary = false
                 showSaveRecipeDialog = true
             },
+            community = if (community.available) { modifier -> CommunityRecipesTab(community, modifier) } else null,
         )
+        CommunityRecipeDialog(community, state.asset?.id, onOwnPhoto = true, library = state.savedRecipes, save = onAddCopiedRecipe)
     }
     deletingSavedRecipe?.let { saved ->
         AlertDialog(

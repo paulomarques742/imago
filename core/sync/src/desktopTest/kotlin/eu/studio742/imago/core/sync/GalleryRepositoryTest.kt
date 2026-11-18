@@ -115,4 +115,27 @@ class GalleryRepositoryTest {
             directory.deleteRecursively()
         }
     }
+
+    @Test fun theCommunityPageComesFromTheBackendAndAFailureIsSaid() = runBlocking {
+        val post = GalleryPost("p", "Golden", "Ana", linkId, "https://a", "https://b", likes = 2, liked = true, mine = false)
+        val backend = object : GalleryBackend {
+            override val websiteUrl = "https://site.example"
+            var offline = false
+            override suspend fun supporter() = SupporterState(true, null)
+            override suspend fun publishedLinks() = emptySet<String>()
+            override suspend fun publish(linkId: String, title: String, authorName: String, before: GalleryImage, after: GalleryImage) = "post"
+            override suspend fun posts(sort: GallerySort, offset: Int, limit: Int): List<GalleryPost> {
+                if (offline) throw GalleryBackendException(Reason.OFFLINE)
+                return listOf(post)
+            }
+            override suspend fun like(postId: String, like: Boolean): Int = throw GalleryBackendException(Reason.NOT_SUPPORTER, 403)
+        }
+        val gallery = GalleryRepository(backend) { false }
+        val page = gallery.communityRecipes(eu.studio742.imago.core.interchange.CommunitySort.TOP, 0)
+        assertEquals(listOf("Golden"), page.map { it.title })
+        assertTrue(page.single().liked)
+        assertEquals(RecipeGalleryError.NOT_SUPPORTER, errorOf { gallery.like("p", true) })
+        backend.offline = true
+        assertEquals(RecipeGalleryError.OFFLINE, errorOf { gallery.communityRecipes(eu.studio742.imago.core.interchange.CommunitySort.NEW, 0) })
+    }
 }

@@ -12,8 +12,8 @@
     <string name="editor_recipe_export_parts_title">O que vai no ficheiro</string>
     <string name="editor_recipe_share_rights_title">Pode partilhar isto?</string>
     <plurals name="editor_recipe_share_rights">
-        <item quantity="one">Isto inclui uma receita que veio de um ficheiro de outra app. Muitos presets são pagos ou têm licença: partilhe-a só se puder fazê-lo.</item>
-        <item quantity="other">Isto inclui %1$d receitas que vieram de ficheiros de outras apps. Muitos presets são pagos ou têm licença: partilhe-as só se puder fazê-lo.</item>
+        <item quantity="one">Isto inclui uma receita que não foi feita por si — de um ficheiro de outra app ou da comunidade. Muitos presets são pagos ou têm licença: partilhe-a só se puder fazê-lo.</item>
+        <item quantity="other">Isto inclui %1$d receitas que não foram feitas por si — de ficheiros de outras apps ou da comunidade. Muitos presets são pagos ou têm licença: partilhe-as só se puder fazê-lo.</item>
     </plurals>
     <string name="editor_recipe_import_title">Importar receitas</string>
     <string name="editor_recipe_import_failed">Não foi possível adicionar as receitas. Tente outra vez.</string>
@@ -480,6 +480,30 @@
     <string name="editor_tab_imago">IMAGO</string>
     <string name="editor_tab_favorites">Favoritas</string>
     <string name="editor_tab_recent">Recentes</string>
+    <string name="editor_tab_community">Comunidade</string>
+    <string name="editor_community_top">Mais gostadas</string>
+    <string name="editor_community_new">Recentes</string>
+    <string name="editor_community_retry">Tentar outra vez</string>
+    <string name="editor_community_empty">Ainda não há receitas na galeria da comunidade.</string>
+    <string name="editor_community_failed">Não foi possível ler a galeria da comunidade.</string>
+    <string name="editor_community_gone">Esta receita já não está na galeria.</string>
+    <string name="editor_community_by">de %1$s</string>
+    <string name="editor_community_on_your_photo">Na sua fotografia</string>
+    <string name="editor_community_on_sample">Numa fotografia de exemplo</string>
+    <string name="editor_community_preview">A receita na fotografia</string>
+    <string name="editor_community_open_failed">Não foi possível abrir esta receita.</string>
+    <string name="editor_community_copy">Copiar para as minhas</string>
+    <string name="editor_community_copied">Já está nas suas receitas</string>
+    <string name="editor_community_copy_failed">Não foi possível copiar a receita.</string>
+    <string name="editor_community_copy_note">A cópia vai para «Minhas», na coleção «Comunidade», com o nome do autor. É sua para usar; partilhá-la pede confirmação, porque é obra de outra pessoa.</string>
+    <string name="editor_community_copy_name">%1$s, de %2$s</string>
+    <string name="editor_community_collection">Comunidade</string>
+    <string name="editor_community_like">Gosto</string>
+    <string name="editor_community_unlike">Retirar o gosto</string>
+    <plurals name="editor_community_likes">
+        <item quantity="one">%1$d gosto</item>
+        <item quantity="other">%1$d gostos</item>
+    </plurals>
     <string name="editor_empty_saved">Ainda não guardou nenhuma receita.</string>
     <string name="editor_empty_filters">Não há filtros disponíveis.</string>
     <string name="editor_empty_favorites">Ainda não marcou nenhuma receita como favorita.</string>
@@ -635,6 +659,7 @@
     <string name="editor_gallery_source_sample">Fotografia modelo</string>
     <string name="editor_gallery_source_own">Fotografia sua</string>
     <string name="editor_gallery_choose_photo">Escolher outra fotografia</string>
+    <string name="editor_gallery_pick_title">Escolher uma fotografia</string>
     <string name="editor_gallery_own_note">A sua fotografia fica pública na galeria, reduzida e sem metadados, como o sítio onde foi tirada. Continua a ser sua e só aparece lá.</string>
     <string name="editor_gallery_photo_failed">Não foi possível abrir essa fotografia.</string>
     <string name="editor_gallery_before">Antes</string>
@@ -650,4 +675,12 @@
     <string name="editor_gallery_error_limit">Chegou ao limite de 50 publicações na galeria.</string>
     <string name="editor_gallery_error_link_gone">O link desta receita já não funciona. Crie-o de novo primeiro.</string>
     <string name="editor_gallery_error_image">Não foi possível enviar as fotografias. Tente daqui a pouco.</string>
+    <string name="editor_recipe_link_images_intro">Mostre a fotografia antes e depois da receita na página do link. Sobe reduzida e sem metadados, e quem tiver o link pode vê-la e denunciá-la.</string>
+    <string name="editor_recipe_link_images_own">A sua fotografia fica pública na página do link. Continua a ser sua, e só aparece lá.</string>
+    <string name="editor_recipe_link_images_add">Mostrar antes e depois na página</string>
+    <string name="editor_recipe_link_images_update">Usar esta fotografia na página</string>
+    <string name="editor_recipe_link_images_remove">Tirar as imagens da página</string>
+    <string name="editor_recipe_link_images_on">A página do link mostra um antes e um depois.</string>
+    <string name="editor_recipe_link_images_hidden">As imagens da página do link foram escondidas depois de denúncias. Enviar novas volta a mostrá-las, a não ser que tenham sido escondidas em definitivo.</string>
+    <string name="editor_gallery_error_images_blocked">As imagens deste link foram escondidas e não se podem substituir.</string>
 </resources>

@@ -97,7 +97,7 @@ data class RecipeCard(
  * Where a recipe comes from — the person's own, or the app's — and then the two views that mix both:
  * a heart and a last use mean the same on either.
  */
-enum class RecipeTab { MINE, IMAGO, FAVORITES, RECENT }
+enum class RecipeTab { MINE, IMAGO, FAVORITES, RECENT, COMMUNITY }
 
 /** The "all" chip is not a group: it is the absence of a filter. A collection never has an empty name. */
 private const val ALL_GROUPS = ""
@@ -166,9 +166,12 @@ fun RecipeLibraryScreen(
     /** One recipe's «Share», which has the link too. Without it, the same as [onShareRecipes]. */
     onShareRecipe: ((RecipeCard) -> Unit)? = null,
     onSaveXmp: ((RecipeCard) -> Unit)? = null,
+    onSaveCube: ((RecipeCard) -> Unit)? = null,
     onImport: (() -> Unit)? = null,
     /** A new value shows the person's own recipes, which is where an import just went. */
     showMineSignal: Int = 0,
+    /** The community gallery's tab; null in a build without the gallery, which then has no such tab. */
+    community: (@Composable (Modifier) -> Unit)? = null,
     bottomBar: @Composable () -> Unit = {},
 ) {
     // Saveable, so that coming back from editing a recipe finds the same tab and the same filter.
@@ -197,12 +200,15 @@ fun RecipeLibraryScreen(
     }
     BackHandler(enabled = selecting, onBack = ::clearSelection)
 
+    // A tab saved while the gallery was there, opened now in a build without it.
+    if (tab == RecipeTab.COMMUNITY && community == null) tab = RecipeTab.MINE
     val visible = when (tab) {
         RecipeTab.MINE -> saved
         RecipeTab.IMAGO -> builtIn
         RecipeTab.FAVORITES -> (saved + builtIn).filter { it.isFavorite }
         // Without `usedAt` the recipe was never applied and has no place in "Recent".
         RecipeTab.RECENT -> (saved + builtIn).filter { it.usedAt != null }.sortedByDescending { it.usedAt }
+        RecipeTab.COMMUNITY -> emptyList()
     }
     val groups = listOf(ALL_GROUPS) + visible.map(RecipeCard::group).distinct().sorted()
     val filtered = if (group == ALL_GROUPS) visible else visible.filter { it.group == group }
@@ -274,12 +280,16 @@ fun RecipeLibraryScreen(
                 }
             }
             ImagoTabRow(
-                options = RecipeTab.entries,
+                options = if (community != null) RecipeTab.entries else RecipeTab.entries - RecipeTab.COMMUNITY,
                 selected = tab,
                 label = RecipeTab::label,
                 onSelect = { tab = it },
                 modifier = Modifier.padding(bottom = ImagoSpacing.Md),
             )
+            if (tab == RecipeTab.COMMUNITY && community != null) {
+                community(Modifier.weight(1f))
+                return@Column
+            }
             // A row with a single chip filters nothing — it would only take up space.
             if (groups.size > 1) {
                 ImagoChipRow(
@@ -333,6 +343,7 @@ fun RecipeLibraryScreen(
                             onShare = onShareRecipe?.let { { it(card) } } ?: onShareRecipes?.let { { it(listOf(card)) } },
                             onSaveAs = onSaveRecipes?.let { { it(listOf(card)) } },
                             onSaveXmp = onSaveXmp?.let { { it(card) } },
+                            onSaveCube = onSaveCube?.let { { it(card) } },
                             onDelete = { onDelete(card) },
                         )
                     }
@@ -357,6 +368,7 @@ private fun RecipeTile(
     onShare: (() -> Unit)?,
     onSaveAs: (() -> Unit)?,
     onSaveXmp: (() -> Unit)? = null,
+    onSaveCube: (() -> Unit)? = null,
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -383,13 +395,32 @@ private fun RecipeTile(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            if (selected) {
-                Icon(
-                    Icons.Filled.CheckCircle,
-                    contentDescription = null,
-                    tint = ImagoUi.colors.emphasis,
-                    modifier = Modifier.align(Alignment.TopStart).padding(ImagoSpacing.Sm).size(ImagoSizes.IconDefault),
-                )
+            Row(
+                modifier = Modifier.align(Alignment.TopStart).padding(ImagoSpacing.Sm),
+                horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (selected) {
+                    Icon(
+                        Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = ImagoUi.colors.emphasis,
+                        modifier = Modifier.size(ImagoSizes.IconDefault),
+                    )
+                }
+                // A LUT is a table of colours with one strength, not a set of sliders: the badge says so
+                // before it is opened.
+                if (card.recipe.lut != null) {
+                    Text(
+                        text = stringResource(Res.string.editor_lut),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ImagoUi.colors.onImage,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(ImagoRadii.Small))
+                            .background(ImagoUi.colors.imageShade.copy(alpha = 0.6f))
+                            .padding(horizontal = ImagoSpacing.Sm, vertical = ImagoSpacing.Xs),
+                    )
+                }
             }
             Box(
                 modifier = Modifier
@@ -502,6 +533,16 @@ private fun RecipeTile(
                                 },
                             )
                         }
+                        onSaveCube?.let { saveCube ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(Res.string.editor_save_as_cube)) },
+                                leadingIcon = { Icon(Icons.Outlined.SaveAlt, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    saveCube()
+                                },
+                            )
+                        }
                         onStartSelecting?.let { select ->
                             DropdownMenuItem(
                                 text = { Text(stringResource(Res.string.editor_recipe_select)) },
@@ -574,6 +615,7 @@ private fun RecipeTab.label() = when (this) {
     RecipeTab.IMAGO -> stringResource(Res.string.editor_tab_imago)
     RecipeTab.FAVORITES -> stringResource(Res.string.editor_tab_favorites)
     RecipeTab.RECENT -> stringResource(Res.string.editor_tab_recent)
+    RecipeTab.COMMUNITY -> stringResource(Res.string.editor_tab_community)
 }
 
 @Composable
@@ -582,4 +624,5 @@ private fun RecipeTab.emptyMessage() = when (this) {
     RecipeTab.IMAGO -> stringResource(Res.string.editor_empty_filters)
     RecipeTab.FAVORITES -> stringResource(Res.string.editor_empty_favorites)
     RecipeTab.RECENT -> stringResource(Res.string.editor_empty_recent)
+    RecipeTab.COMMUNITY -> stringResource(Res.string.editor_community_empty)
 }
