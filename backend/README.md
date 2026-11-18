@@ -65,11 +65,19 @@ PKCE flow, so the link has to be opened on the device where it was requested.
 
 ### Account emails
 
-The templates live in `supabase/templates/` and are the source: the dashboard holds a copy. In
-**Authentication → Email Templates → Confirm signup**, the subject is `Confirm your IMAGO account`
-and the body is the content of `templates/confirmation.html`, pasted as is. `config.toml` points to
-the same file, but `supabase config push` is not used to send it: it would also push `site_url` and
-the rest of the local configuration.
+The templates live in `supabase/templates/` and are the source: the dashboard holds a copy. Each
+body is pasted as is into its page of **Authentication → Email Templates** (the last one is under
+**Notifications**), with the subject below. `config.toml` points to the same files, but
+`supabase config push` is not used to send them: it would also push `site_url` and the rest of the
+local configuration.
+
+| Dashboard page | Subject | File |
+| --- | --- | --- |
+| Confirm signup | `Confirm your IMAGO account` | `confirmation.html` |
+| Reset password | `Reset your IMAGO password` | `recovery.html` |
+| Change email address | `Confirm your new IMAGO email` | `email_change.html` |
+| Reauthentication | `Your IMAGO verification code` | `reauthentication.html` |
+| Password changed (notification) | `Your IMAGO password was changed` | `password_changed_notification.html` |
 
 They are HTML for email clients — tables, inline styles, hex colours — and the symbol is made of
 table cells, because Gmail shows neither SVG nor embedded images. Opening the file in a browser
