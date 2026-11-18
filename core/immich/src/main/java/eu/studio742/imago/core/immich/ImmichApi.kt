@@ -263,7 +263,25 @@ data class ImmichExportResult(
     val status: String,
     val stackedWithOriginal: Boolean,
     val stackingFailed: Boolean,
+    /** Why the stack was not made, when the upload went through and it was not. A closed set: no text from the server. */
+    val stackingFailure: StackingFailure? = null,
 )
+
+/** What kept an uploaded export from being stacked with its original. */
+enum class StackingFailure {
+    /** The key lacks `stack.create`, or the server no longer accepts it. */
+    PERMISSION,
+
+    /** The server answered 4xx: typically the two photos are not the same account's. */
+    REJECTED,
+
+    /** The server answered 5xx. */
+    SERVER,
+
+    /** Nothing answered, or a proxy answered in its place. */
+    UNREACHABLE,
+    OTHER,
+}
 
 object ImmichCompatibility {
     val minimum = ServerVersion(2, 6, 0)

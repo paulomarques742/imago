@@ -360,7 +360,9 @@
     <string name="editor_export_untitled">photo</string>
     <string name="editor_export_duplicate">This export was already in Immich.</string>
     <string name="editor_export_stacked">Export sent and stacked with the original in Immich.</string>
-    <string name="editor_export_not_stacked">Export sent, but it couldn’t be stacked with the original.</string>
+    <string name="editor_export_not_stacked">Export sent as “%1$s”, but it couldn’t be stacked with the original. Search for that name in Immich to find it.</string>
+    <string name="editor_export_not_stacked_permission">Export sent as “%1$s”, but the API key isn’t allowed to create stacks. Search for that name in Immich to find it.</string>
+    <string name="editor_export_not_stacked_rejected">Export sent as “%1$s”, but Immich refused to stack it with the original. It may belong to another account. Search for that name in Immich to find it.</string>
     <string name="editor_export_sent">Export sent to Immich.</string>
     <string name="editor_export_checking_origin">Checking the photo’s library…</string>
     <string name="editor_export_external_library">This photo is in an external library. The edit will be uploaded to Immich’s managed storage, outside the original folder. Folder or album views may show the two files separately even when stacked.</string>

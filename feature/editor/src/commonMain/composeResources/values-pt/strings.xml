@@ -360,7 +360,9 @@
     <string name="editor_export_untitled">fotografia</string>
     <string name="editor_export_duplicate">Esta exportação já existia no Immich.</string>
     <string name="editor_export_stacked">Exportação enviada e agrupada com o original no Immich.</string>
-    <string name="editor_export_not_stacked">Exportação enviada, mas não foi possível agrupá-la com o original.</string>
+    <string name="editor_export_not_stacked">Exportação enviada como “%1$s”, mas não foi possível agrupá-la com o original. Procura esse nome no Immich para a encontrar.</string>
+    <string name="editor_export_not_stacked_permission">Exportação enviada como “%1$s”, mas a chave API não tem permissão para criar stacks. Procura esse nome no Immich para a encontrar.</string>
+    <string name="editor_export_not_stacked_rejected">Exportação enviada como “%1$s”, mas o Immich recusou agrupá-la com o original. Pode pertencer a outra conta. Procura esse nome no Immich para a encontrar.</string>
     <string name="editor_export_sent">Exportação enviada para o Immich.</string>
     <string name="editor_export_checking_origin">A verificar a biblioteca da fotografia…</string>
     <string name="editor_export_external_library">Esta fotografia pertence a uma biblioteca externa. A edição será enviada para o armazenamento gerido pelo Immich, fora da pasta do original. Nas vistas de pastas ou álbuns, os dois ficheiros podem aparecer separados mesmo quando estão agrupados.</string>

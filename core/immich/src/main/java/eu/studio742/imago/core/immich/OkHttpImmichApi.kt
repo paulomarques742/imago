@@ -759,24 +759,36 @@ class OkHttpImmichApi(
             apiKey = connection.apiKey,
             permission = ImmichKeyPermissions.UPLOAD_ASSET,
         )
-        val canStack = uploaded.status != "duplicate" && uploaded.id != originalAssetId
+        // A duplicate is an earlier upload of the same bytes, and the stacking of that attempt may be
+        // what failed: it gets another try instead of being skipped.
+        val duplicate = uploaded.status == "duplicate"
+        val canStack = uploaded.id != originalAssetId
+        var failure: StackingFailure? = null
         val stacked = if (canStack) {
             runCatching {
                 // The edit goes first, so it is the cover. Immich merges a stack only when its cover
                 // is in the list: with the original's stack's cover there — the original itself when
                 // it is in none, or the previous export — that whole stack comes under the edit,
                 // instead of the original being pulled out into a new one.
+                // A failure to read a cover is not "no stack": it throws, and the export reports the
+                // stacking as failed instead of building a stack that drops the existing members.
                 val cover = coverOfStackOf(connection, originalAssetId)
-                val body = json.encodeToString(StackCreateDto(listOf(uploaded.id, cover).distinct()))
-                    .toRequestBody(JSON_MEDIA_TYPE)
-                execute(
-                    request = Request.Builder()
-                        .url(endpoint(connection, ImmichContract.CREATE_STACK))
-                        .post(body)
-                        .build(),
-                    apiKey = connection.apiKey,
-                    permission = ImmichKeyPermissions.CREATE_STACK,
-                ).close()
+                val editCover = if (duplicate) coverOfStackOf(connection, uploaded.id) else uploaded.id
+                if (editCover != cover) {
+                    val body = json.encodeToString(StackCreateDto(listOf(editCover, cover).distinct()))
+                        .toRequestBody(JSON_MEDIA_TYPE)
+                    execute(
+                        request = Request.Builder()
+                            .url(endpoint(connection, ImmichContract.CREATE_STACK))
+                            .post(body)
+                            .build(),
+                        apiKey = connection.apiKey,
+                        permission = ImmichKeyPermissions.CREATE_STACK,
+                    ).close()
+                }
+            }.onFailure { error ->
+                if (error is kotlin.coroutines.cancellation.CancellationException) throw error
+                failure = stackingFailureOf(error)
             }.isSuccess
         } else {
             false
@@ -786,6 +798,7 @@ class OkHttpImmichApi(
             status = uploaded.status,
             stackedWithOriginal = stacked,
             stackingFailed = canStack && !stacked,
+            stackingFailure = failure,
         )
     }
 
@@ -834,14 +847,23 @@ class OkHttpImmichApi(
             ).close()
         }
 
-    /** The cover of the stack [assetId] is in, or [assetId] itself when it is in none. */
-    private fun coverOfStackOf(connection: ImmichConnection, assetId: String): String = runCatching {
+    private fun stackingFailureOf(error: Throwable): StackingFailure = when (error) {
+        is ImmichApiException.MissingPermission, is ImmichApiException.Authentication -> StackingFailure.PERMISSION
+        is ImmichApiException.Server -> if (error.status in 400..499) StackingFailure.REJECTED else StackingFailure.SERVER
+        is ImmichApiException.Connection, is ImmichApiException.Protected -> StackingFailure.UNREACHABLE
+        else -> StackingFailure.OTHER
+    }
+
+    /**
+     * The cover of the stack [assetId] is in, or [assetId] itself when it is in none. A failed read
+     * throws: treating it as "in no stack" would build a stack that leaves the existing members out.
+     */
+    private fun coverOfStackOf(connection: ImmichConnection, assetId: String): String =
         executeJson<AssetStackOnlyDto>(
             request = Request.Builder().url(endpoint(connection, ImmichContract.GET_ASSET_INFO.replace("{id}", assetId))).get().build(),
             apiKey = connection.apiKey,
             permission = ImmichKeyPermissions.GET_ASSET_INFO,
-        ).stack?.primaryAssetId
-    }.getOrNull() ?: assetId
+        ).stack?.primaryAssetId ?: assetId
 
     override suspend fun uploadAsset(
         connection: ImmichConnection,

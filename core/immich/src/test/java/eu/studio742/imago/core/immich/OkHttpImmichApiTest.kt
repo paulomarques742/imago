@@ -193,10 +193,13 @@ class OkHttpImmichApiTest {
     }
 
     @Test
-    fun exportOnImmich3OmitsLegacyFieldsAndDoesNotStackDuplicate() = runTest {
+    fun exportOnImmich3OmitsLegacyFieldsAndLeavesAnAlreadyStackedDuplicateAlone() = runTest {
         server.enqueue(MockResponse().setBody("""{"major":3,"minor":1,"patch":0}"""))
         server.enqueue(MockResponse().setBody("{}"))
         server.enqueue(MockResponse().setBody("""{"id":"existing-1","status":"duplicate"}"""))
+        // The original is under that very export: the stack is already as it should be.
+        server.enqueue(MockResponse().setBody("""{"id":"original-1","stack":{"id":"stack-1","primaryAssetId":"existing-1","assetCount":2}}"""))
+        server.enqueue(MockResponse().setBody("""{"id":"existing-1","stack":{"id":"stack-1","primaryAssetId":"existing-1","assetCount":2}}"""))
 
         val result = api.exportEditedAsset(
             connection(),
@@ -212,9 +215,104 @@ class OkHttpImmichApiTest {
         assertFalse(multipart.contains("name=\"deviceAssetId\""))
         assertFalse(multipart.contains("name=\"deviceId\""))
         assertEquals("duplicate", result.status)
-        assertFalse(result.stackedWithOriginal)
-        assertEquals(3, server.requestCount)
+        assertTrue(result.stackedWithOriginal)
+        assertFalse(result.stackingFailed)
+        // Version, key check, upload and the two reads: no stack is created.
+        assertEquals(5, server.requestCount)
     }
+
+    @Test
+    fun aDuplicateWhoseStackingFailedBeforeIsStackedOnTheRetry() = runTest {
+        server.enqueue(MockResponse().setBody("""{"major":3,"minor":1,"patch":0}"""))
+        server.enqueue(MockResponse().setBody("{}"))
+        server.enqueue(MockResponse().setBody("""{"id":"existing-1","status":"duplicate"}"""))
+        // The original is under an older export; the duplicate is in no stack.
+        server.enqueue(MockResponse().setBody("""{"id":"original-1","stack":{"id":"stack-1","primaryAssetId":"older-1","assetCount":2}}"""))
+        server.enqueue(MockResponse().setBody("""{"id":"existing-1","stack":null}"""))
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"stack-2","primaryAssetId":"existing-1","assets":[]}"""))
+
+        val result = api.exportEditedAsset(
+            connection(),
+            originalAssetId = "original-1",
+            jpeg = jpegFile(),
+            fileName = "photo_ImmichRoom.jpg",
+            fileCreatedAt = "2026-01-01T10:00:00Z",
+        )
+
+        repeat(3) { server.takeRequest() }
+        assertEquals("/api/assets/original-1", server.takeRequest().path)
+        assertEquals("/api/assets/existing-1", server.takeRequest().path)
+        // The older stack's cover goes along, so no member is lost.
+        assertEquals("""{"assetIds":["existing-1","older-1"]}""", server.takeRequest().body.readUtf8())
+        assertEquals("existing-1", result.assetId)
+        assertTrue(result.stackedWithOriginal)
+        assertFalse(result.stackingFailed)
+    }
+
+    @Test
+    fun aFailedCoverReadIsAStackingFailureAndNotAnAbsentStack() = runTest {
+        server.enqueue(MockResponse().setBody("""{"major":3,"minor":1,"patch":0}"""))
+        server.enqueue(MockResponse().setBody("{}"))
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"derived-2","status":"created"}"""))
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        val result = api.exportEditedAsset(
+            connection(),
+            originalAssetId = "original-1",
+            jpeg = jpegFile(),
+            fileName = "photo_ImmichRoom.jpg",
+            fileCreatedAt = "2026-01-01T10:00:00Z",
+        )
+
+        // The upload is kept and reported, and no stack is built over a guess.
+        assertEquals("derived-2", result.assetId)
+        assertFalse(result.stackedWithOriginal)
+        assertTrue(result.stackingFailed)
+        assertEquals(4, server.requestCount)
+    }
+
+    @Test
+    fun aStackRefusedWithA403NamesThePermissionAndKeepsTheUpload() = runTest {
+        stackingFailsWith(403)
+        val result = exportAfterStackingFailed()
+        assertEquals("derived-3", result.assetId)
+        assertTrue(result.stackingFailed)
+        assertEquals(StackingFailure.PERMISSION, result.stackingFailure)
+    }
+
+    @Test
+    fun aStackRefusedWithA400IsRejectedAndOneThatFailsWith500IsAServerError() = runTest {
+        stackingFailsWith(400)
+        assertEquals(StackingFailure.REJECTED, exportAfterStackingFailed().stackingFailure)
+        stackingFailsWith(500)
+        assertEquals(StackingFailure.SERVER, exportAfterStackingFailed().stackingFailure)
+    }
+
+    @Test
+    fun aStackThatWorksReportsNoFailure() = runTest {
+        server.enqueue(MockResponse().setBody("""{"major":3,"minor":1,"patch":0}"""))
+        server.enqueue(MockResponse().setBody("{}"))
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"derived-3","status":"created"}"""))
+        server.enqueue(MockResponse().setBody("""{"id":"original-1","stack":null}"""))
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"stack-3","primaryAssetId":"derived-3","assets":[]}"""))
+        assertNull(exportAfterStackingFailed().stackingFailure)
+    }
+
+    private fun stackingFailsWith(code: Int) {
+        server.enqueue(MockResponse().setBody("""{"major":3,"minor":1,"patch":0}"""))
+        server.enqueue(MockResponse().setBody("{}"))
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"derived-3","status":"created"}"""))
+        server.enqueue(MockResponse().setBody("""{"id":"original-1","stack":null}"""))
+        server.enqueue(MockResponse().setResponseCode(code).setBody("""{"message":"nope"}"""))
+    }
+
+    private suspend fun exportAfterStackingFailed() = api.exportEditedAsset(
+        connection(),
+        originalAssetId = "original-1",
+        jpeg = jpegFile(),
+        fileName = "photo_ImmichRoom.jpg",
+        fileCreatedAt = "2026-01-01T10:00:00Z",
+    )
 
     @Test
     fun uploadSendsTheFileWithItsOwnTypeAndReportsDuplicates() = runTest {

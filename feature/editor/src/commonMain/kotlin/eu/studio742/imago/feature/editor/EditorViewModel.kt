@@ -99,6 +99,7 @@ import eu.studio742.imago.core.model.SavedRecipe
 import eu.studio742.imago.core.model.storedForParts
 import eu.studio742.imago.core.model.withPartsFrom
 import eu.studio742.imago.core.immich.ImmichApi
+import eu.studio742.imago.core.immich.StackingFailure
 import eu.studio742.imago.core.immich.generated.ImmichKeyPermissions
 import eu.studio742.imago.core.immich.requirePermission
 import eu.studio742.imago.core.render.RenderParameters
@@ -2396,9 +2397,20 @@ open class EditorViewModel(
             mutableState.update { it.copy(recipe = saved, isSaving = false) }
         }
         when {
+            // A duplicate that could not be stacked says so: "already there" would hide a failure the
+            // next export can still recover from.
+            result.stackingFailed -> {
+                // The copy lives in the server's managed storage, under this name: it is what the
+                // person searches for when it is not stacked and so not beside the original.
+                val name = exportFileName(asset)
+                when (result.stackingFailure) {
+                    StackingFailure.PERMISSION -> uiText(Res.string.editor_export_not_stacked_permission, name)
+                    StackingFailure.REJECTED -> uiText(Res.string.editor_export_not_stacked_rejected, name)
+                    else -> uiText(Res.string.editor_export_not_stacked, name)
+                }
+            }
             result.status == "duplicate" -> uiText(Res.string.editor_export_duplicate)
             result.stackedWithOriginal -> uiText(Res.string.editor_export_stacked)
-            result.stackingFailed -> uiText(Res.string.editor_export_not_stacked)
             else -> uiText(Res.string.editor_export_sent)
         }
     }

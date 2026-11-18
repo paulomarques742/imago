@@ -258,6 +258,11 @@ class FullResolutionExporter @Inject constructor(
             "LightSource",
             "Make",
             "Model",
+            // The zone the capture time was written in. Without these the server reads the local time
+            // as UTC and the copy lands hours away from its original in the timeline.
+            "OffsetTime",
+            "OffsetTimeDigitized",
+            "OffsetTimeOriginal",
             "Software",
             "SubSecTime",
             "SubSecTimeDigitized",
