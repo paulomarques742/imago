@@ -1,5 +1,6 @@
 package eu.studio742.imago.core.designsystem
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -12,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -30,11 +32,19 @@ fun CollapsibleSettingsCard(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    iconTint: Color = ImagoUi.colors.emphasis,
+    /** Outlines the card and colours its title, for the one card that has to stand out from the list. */
+    highlight: Color? = null,
     summary: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val stateLabel = stringResource(if (expanded) Res.string.settings_category_expanded else Res.string.settings_category_collapsed)
-    Surface(color = ImagoUi.colors.elevated, shape = RoundedCornerShape(ImagoRadii.Medium), modifier = modifier.fillMaxWidth()) {
+    Surface(
+        color = ImagoUi.colors.elevated,
+        shape = RoundedCornerShape(ImagoRadii.Medium),
+        border = highlight?.let { BorderStroke(1.dp, it) },
+        modifier = modifier.fillMaxWidth(),
+    ) {
         Column {
             Row(
                 Modifier.fillMaxWidth().clickable(role = Role.Button) { onExpandedChange(!expanded) }
@@ -43,8 +53,8 @@ fun CollapsibleSettingsCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Md),
             ) {
-                Icon(icon, null, tint = ImagoUi.colors.emphasis)
-                Text(title, style = MaterialTheme.typography.titleMedium, color = ImagoUi.colors.text, modifier = Modifier.weight(1f))
+                Icon(icon, null, tint = iconTint)
+                Text(title, style = MaterialTheme.typography.titleMedium, color = highlight ?: ImagoUi.colors.text, modifier = Modifier.weight(1f))
                 val chevronColor = ImagoUi.colors.secondaryText
                 Canvas(Modifier.size(24.dp).rotate(if (expanded) 180f else 0f)) {
                     val chevron = Path().apply {

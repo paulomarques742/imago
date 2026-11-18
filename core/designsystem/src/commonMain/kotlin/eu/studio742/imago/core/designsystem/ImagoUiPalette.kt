@@ -38,6 +38,8 @@ data class ImagoUiPalette(
     val strongBorder: Color = ImagoColors.BorderStrong,
     val accent: Color = ImagoColors.Gold,
     val onAccent: Color = ImagoColors.BrandBlack,
+    /** The heart of "Support IMAGO": gold where the theme is dark, red on light surfaces, where the gold turns brown. */
+    val supportHeart: Color = ImagoColors.Gold,
     val error: Color = ImagoColors.Error,
     val danger: Color = ImagoColors.Danger,
     /** The red as a fill, for where red alone would not read, as on the workspace. Deeper than [danger], which is text. */
@@ -84,6 +86,7 @@ val ImagoLightPalette = ImagoUiPalette(
     // The gold of the dark theme is 1.9:1 on these surfaces: as text it would not read.
     accent = Color(0xFF7F6400),
     onAccent = ImagoColors.BrandWhite,
+    supportHeart = Color(0xFFC4201F),
     error = Color(0xFFB3261E),
     danger = Color(0xFFC4201F),
     dangerFill = Color(0xFFC4201F),

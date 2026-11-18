@@ -98,7 +98,8 @@
     <string name="support_benefit_roadmap">Votar no que vem a seguir no roadmap.</string>
     <string name="support_benefit_gallery">Publicar as suas receitas na galeria da comunidade.</string>
     <string name="support_benefit_rounds">Escolher as receitas que passam a vir na app para toda a gente.</string>
-    <string name="support_not_premium">Não desbloqueia nada na app: o editor, o compositor e a sincronização são iguais para toda a gente.</string>
+    <string name="support_benefit_own_photos">Partilhar as suas receitas com as suas próprias fotografias, e não só com as de exemplo.</string>
+    <string name="support_not_premium">O editor, o compositor e a sincronização continuam iguais para toda a gente.</string>
     <string name="support_needs_account">O apoio fica na sua conta IMAGO, para contar também no site.</string>
     <string name="support_active">É apoiante até %1$s. Obrigado.</string>
     <string name="support_ended">O seu apoio terminou a %1$s.</string>

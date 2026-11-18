@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -137,10 +137,13 @@ fun SupportSettingsCard(onOpenAccount: (signUp: Boolean) -> Unit, viewModel: Acc
     var expanded by rememberSaveable { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     val body = MaterialTheme.typography.bodyMedium
-    CollapsibleSettingsCard(stringResource(Res.string.support_title), Icons.Outlined.FavoriteBorder, expanded, { expanded = it }) {
+    CollapsibleSettingsCard(
+        stringResource(Res.string.support_title), Icons.Filled.Favorite, expanded, { expanded = it },
+        iconTint = ImagoUi.colors.supportHeart, highlight = ImagoUi.colors.accent,
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm)) {
             Text(stringResource(Res.string.support_intro), style = body, color = ImagoUi.colors.text)
-            for (benefit in listOf(Res.string.support_benefit_roadmap, Res.string.support_benefit_gallery, Res.string.support_benefit_rounds)) {
+            for (benefit in listOf(Res.string.support_benefit_roadmap, Res.string.support_benefit_gallery, Res.string.support_benefit_rounds, Res.string.support_benefit_own_photos)) {
                 Text("· " + stringResource(benefit), style = body, color = ImagoUi.colors.secondaryText)
             }
             Text(stringResource(Res.string.support_not_premium), style = MaterialTheme.typography.bodySmall, color = ImagoUi.colors.secondaryText)

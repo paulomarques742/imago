@@ -55,6 +55,8 @@ class ImagoPaletteTest {
             assertTrue("emphasis ${palette.isLight}", contrast(palette.emphasis, surface) >= 4.5)
             assertTrue("error ${palette.isLight}", contrast(palette.error, surface) >= 4.5)
             assertTrue("danger ${palette.isLight}", contrast(palette.danger, surface) >= 4.5)
+            // An icon, not text: the 3:1 of a graphic is what it needs.
+            assertTrue("support heart ${palette.isLight}", contrast(palette.supportHeart, surface) >= 3.0)
         }
     }
 
