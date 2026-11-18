@@ -33,6 +33,12 @@ data class ImagoNewsPalette(
     val featuredTitle: Color = ImagoColors.Gold,
     val featuredBadge: List<Color> = listOf(Color(0xFFF2D77A), ImagoColors.Gold, Color(0xFF9C7A1C)),
     val featuredBadgeEdge: Color = Color(0xCCFFECAA),
+    /**
+     * The «Support IMAGO» page, apart from the lead's gold: a warm glow, a frame and a large heart that
+     * runs from gold to red, as the heart in the settings is gold on dark and red on light.
+     */
+    val support: Color = Color(0xFFE5484D),
+    val supportHeart: List<Color> = listOf(ImagoColors.Gold, Color(0xFFE5484D)),
 ) {
     init { require(backdrop.size == 12) { "The colour field has twelve glows." } }
 }
@@ -83,4 +89,6 @@ val ImagoNewsLight = ImagoNewsPalette(
     onAction = ImagoColors.BrandWhite,
     dot = ImagoColors.BrandBlack.copy(alpha = 0.25f),
     featuredTitle = Color(0xFF6B5400),
+    support = Color(0xFFC4201F),
+    supportHeart = listOf(Color(0xFF9C7A1C), Color(0xFFC4201F)),
 )

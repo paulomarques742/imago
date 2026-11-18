@@ -39,6 +39,8 @@ class ImagoNewsPaletteTest {
         for (palette in listOf(ImagoNewsDark, ImagoNewsLight)) {
             assertTrue(contrast(palette.onAction, palette.action) >= 7.0)
             assertTrue(contrast(palette.onFeatured, palette.featured) >= 4.5)
+            // The heart is a graphic, not text: 3:1 is what it needs, at both ends of its gradient.
+            for (colour in palette.supportHeart + palette.support) assertTrue("support ${palette.isLight}", contrast(colour, palette.background) >= 3.0)
         }
     }
 

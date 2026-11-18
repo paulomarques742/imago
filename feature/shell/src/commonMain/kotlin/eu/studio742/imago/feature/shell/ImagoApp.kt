@@ -214,6 +214,15 @@ fun ImagoApp(
 private fun ImagoAppContent(viewModel: ShellViewModel, onLeaveViewer: (() -> Unit)?) {
     // The state lives in the ViewModel to survive rotation; this is just the delegate that reads and writes it.
     var destination by viewModel.destinationState
+    // The news' support page opens the settings with the support card open, once the programme is.
+    var supportRequested by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    val supportersOpen = eu.studio742.imago.feature.account.accountViewModel().supporters.available
+    val openSupport: (() -> Unit)? = if (supportersOpen) {
+        {
+            supportRequested = true
+            destination = AppDestination.Settings
+        }
+    } else null
     val selectedLibrary by viewModel.selectedLibrary.collectAsStateWithLifecycle()
     LaunchedEffect(selectedLibrary) {
         viewModel.libraryChanged(selectedLibrary)
@@ -276,10 +285,14 @@ private fun ImagoAppContent(viewModel: ShellViewModel, onLeaveViewer: (() -> Uni
         current is AppDestination.Settings -> LibrarySettingsRoute(
             onBack = { destination = AppDestination.Library() },
             accountSection = {
-                eu.studio742.imago.feature.account.SupportSettingsCard(onOpenAccount = { signUp -> destination = AppDestination.Account(signUp) })
+                eu.studio742.imago.feature.account.SupportSettingsCard(
+                    onOpenAccount = { signUp -> destination = AppDestination.Account(signUp) },
+                    openRequested = supportRequested,
+                    onOpened = { supportRequested = false },
+                )
                 AccountSettingsCard(onOpenAccount = { signUp -> destination = AppDestination.Account(signUp) })
             },
-            aboutSection = { AboutSettingsCard() },
+            aboutSection = { AboutSettingsCard(onSupport = openSupport) },
             community = eu.studio742.imago.feature.account.communityRepository(),
         )
 
@@ -354,7 +367,13 @@ private fun ImagoAppContent(viewModel: ShellViewModel, onLeaveViewer: (() -> Uni
 
     val news by viewModel.newsState
     // A viewer is a moment inside another app; the news wait for the app itself.
-    if (news.isNotEmpty() && onLeaveViewer == null) WhatsNewDialog(news, onDismiss = viewModel::newsSeen)
+    if (news.isNotEmpty() && onLeaveViewer == null) {
+        WhatsNewDialog(
+            news,
+            onDismiss = viewModel::newsSeen,
+            onSupport = openSupport?.let { open -> { viewModel.newsSeen(); open() } },
+        )
+    }
 
     // The sheet is composed here, not inside each screen, because the library and the detail make
     // the same request of it and it is at this level that we know where to go next: choosing the

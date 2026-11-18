@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -62,6 +64,7 @@ class WhatsNewCardsTest {
                                     onDone = {},
                                     initialPage = page,
                                     animate = false,
+                                    onSupport = {},
                                     modifier = Modifier.padding(16.dp).widthIn(max = 440.dp).fillMaxWidth(),
                                 )
                             }
@@ -69,7 +72,8 @@ class WhatsNewCardsTest {
                     }
                 }
                 val title = runBlocking { getString(release.pages[page].title) }
-                onNodeWithText(title).fetchSemanticsNode()
+                // The support page's button says the same as its title.
+                onAllNodesWithText(title).onFirst().fetchSemanticsNode()
                 // A page of items shows each of them.
                 release.pages[page].items.forEach { item -> onNodeWithText(runBlocking { getString(item) }).fetchSemanticsNode() }
                 // Semantics can be ready before every graphics layer reaches the captured frame.
@@ -107,8 +111,9 @@ class WhatsNewCardsTest {
      */
     @Test fun theLightModeCardTurnsTheDeckLight() {
         Locale.setDefault(Locale.ENGLISH)
+        val release = Releases.first { candidate -> candidate.pages.any { it.turnsLight } }
         val light = release.pages.indexOfFirst { it.turnsLight }
-        assertTrue("the latest release announces the light mode", light > 0)
+        assertTrue("a release announces the light mode after its first page", light > 0)
         val folder = System.getenv("IMAGO_SCREENSHOTS")?.let(::File)?.also { it.mkdirs() }
         runDesktopComposeUiTest(width = 1082, height = 2402) {
             setContent {
@@ -162,5 +167,36 @@ class WhatsNewCardsTest {
             onNodeWithText("Get started").performClick()
         }
         assertEquals(1, done)
+    }
+
+    /** The support page opens the settings' support card, and is left out where the programme is closed. */
+    @Test fun theSupportPageAsksOnlyWhereTheProgrammeIsOpen() {
+        Locale.setDefault(Locale.ENGLISH)
+        val support = release.pages.indexOfFirst { it.support }
+        assertTrue("the latest release has a support page", support >= 0)
+        assertTrue("the support page comes before the list of smaller things", support < release.pages.lastIndex)
+        val title = runBlocking { getString(release.pages[support].title) }
+        var asked = 0
+        runDesktopComposeUiTest(width = 1082, height = 2402) {
+            setContent {
+                ImmichRoomTheme {
+                    WhatsNewCards(release, emptyList(), onDone = {}, initialPage = support, animate = false, onSupport = { asked++ })
+                }
+            }
+            onAllNodesWithText(title).onFirst().fetchSemanticsNode()
+            onNodeWithTag("news-support").performClick()
+        }
+        assertEquals(1, asked)
+
+        runDesktopComposeUiTest(width = 1082, height = 2402) {
+            setContent {
+                ImmichRoomTheme {
+                    // Without the programme, the deck is one page shorter and the support page never comes.
+                    WhatsNewCards(release, emptyList(), onDone = {}, initialPage = support, animate = false)
+                }
+            }
+            onNodeWithText(title).assertDoesNotExist()
+            onNodeWithTag("news-support").assertDoesNotExist()
+        }
     }
 }

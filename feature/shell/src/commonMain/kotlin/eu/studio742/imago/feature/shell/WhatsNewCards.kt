@@ -7,6 +7,21 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.text.style.TextAlign
+import eu.studio742.imago.core.designsystem.LocalReducedMotion
+import eu.studio742.imago.feature.shell.resources.shell_news_support_action
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -82,6 +97,9 @@ import org.jetbrains.compose.resources.stringResource
  * opens the light deck in a circle from that page's badge, as the app's own change of theme does, and
  * it stays light to the end. Going back before it closes it again.
  *
+ * A [NewsPage.support] page shows only with [onSupport], which takes the person to the support card in
+ * the settings: where the supporters programme is not open, the page is left out.
+ *
  * @param animate false keeps the backdrop still — for tests and screenshots, where an endless
  *   animation never lets the clock settle.
  */
@@ -93,14 +111,19 @@ internal fun WhatsNewCards(
     modifier: Modifier = Modifier,
     initialPage: Int = 0,
     animate: Boolean = true,
+    onSupport: (() -> Unit)? = null,
 ) {
-    val listed = if (release.pages.isEmpty()) listOf(release) + older else older
-    val count = release.pages.size + if (listed.isEmpty()) 0 else 1
+    val deck = remember(release, onSupport != null) {
+        if (onSupport != null) release else Release(release.version, release.notes, release.pages.filterNot { it.support })
+    }
+    val listed = if (deck.pages.isEmpty()) listOf(deck) + older else older
+    val count = deck.pages.size + if (listed.isEmpty()) 0 else 1
     val pager = rememberPagerState(initialPage = initialPage.coerceIn(0, count - 1)) { count }
     val scope = rememberCoroutineScope()
     val last = pager.currentPage == count - 1
-    val featured = release.pages.getOrNull(pager.currentPage)?.featured == true
-    val lightFrom = release.pages.indexOfFirst { it.turnsLight }
+    val featured = deck.pages.getOrNull(pager.currentPage)?.featured == true
+    val supporting = deck.pages.getOrNull(pager.currentPage)?.support == true
+    val lightFrom = deck.pages.indexOfFirst { it.turnsLight }
     fun lightAt(page: Int) = lightFrom >= 0 && page >= lightFrom
     var light by remember { mutableStateOf(lightAt(pager.currentPage)) }
     val colors = if (light) ImagoNewsLight else ImagoNewsDark
@@ -129,7 +152,15 @@ internal fun WhatsNewCards(
             Modifier
                 .matchParentSize()
                 .background(colors.background)
-                .border(1.dp, if (featured) colors.featured.copy(alpha = 0.55f) else colors.border, RoundedCornerShape(28.dp)),
+                .border(
+                    1.dp,
+                    when {
+                        featured -> colors.featured.copy(alpha = 0.55f)
+                        supporting -> colors.support.copy(alpha = 0.6f)
+                        else -> colors.border
+                    },
+                    RoundedCornerShape(28.dp),
+                ),
         )
         NewsBackdrop(colors, animate, Modifier.matchParentSize())
         // The lead page glows gold from the lower corner, under the text and the buttons alike.
@@ -144,10 +175,24 @@ internal fun WhatsNewCards(
                 ),
             )
         }
+        // The support page glows warm from behind its heart.
+        if (supporting) {
+            Box(
+                Modifier.matchParentSize().drawBehind {
+                    drawRect(
+                        Brush.radialGradient(
+                            listOf(colors.support.copy(alpha = 0.30f), colors.support.copy(alpha = 0f)),
+                            center = Offset(size.width / 2f, size.height * 0.3f),
+                            radius = size.width * 0.9f,
+                        ),
+                    )
+                },
+            )
+        }
         Column(Modifier.fillMaxWidth()) {
             Text(
                 text = (stringResource(Res.string.shell_news_title) + " · " +
-                    stringResource(Res.string.shell_news_version, release.version.toString())).uppercase(),
+                    stringResource(Res.string.shell_news_version, deck.version.toString())).uppercase(),
                 fontFamily = FontFamily.Monospace,
                 fontSize = 12.sp,
                 letterSpacing = 0.96.sp,
@@ -156,15 +201,19 @@ internal fun WhatsNewCards(
             )
             // One height for every card, so that the buttons do not move from page to page.
             HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth().height(CARD_HEIGHT)) { page ->
-                if (page < release.pages.size) {
-                    val news = release.pages[page]
-                    NewsPageCard(
-                        news,
-                        colors,
-                        onBadge = if (news.turnsLight) ({ badgeInRoot = it }) else null,
-                    )
+                if (page < deck.pages.size) {
+                    val news = deck.pages[page]
+                    if (news.support && onSupport != null) {
+                        SupportPageCard(news, colors, active = pager.settledPage == page, animate = animate, onSupport = onSupport)
+                    } else {
+                        NewsPageCard(
+                            news,
+                            colors,
+                            onBadge = if (news.turnsLight) ({ badgeInRoot = it }) else null,
+                        )
+                    }
                 } else {
-                    ReleaseLinesCard(listed, newest = release, colors)
+                    ReleaseLinesCard(listed, newest = deck, colors)
                 }
             }
             PageDots(count = count, current = pager.currentPage, colors = colors, modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -267,6 +316,88 @@ private fun NewsPageCard(page: NewsPage, colors: ImagoNewsPalette, onBadge: ((Of
                 }
             }
         }
+    }
+}
+
+/**
+ * The page that asks for support: a large heart in the middle that fills from the bottom and beats once
+ * when the page settles, the title and text centred under it, and a button to the support card in the
+ * settings. With Reduce Motion, or without animation, the heart is already full.
+ */
+@Composable
+private fun SupportPageCard(page: NewsPage, colors: ImagoNewsPalette, active: Boolean, animate: Boolean, onSupport: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        SupportHeart(colors, active, still = !animate || LocalReducedMotion.current)
+        Spacer(Modifier.height(ImagoSpacing.Lg))
+        Text(
+            stringResource(page.title),
+            style = MaterialTheme.typography.headlineSmall,
+            color = colors.title,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(ImagoSpacing.Md))
+        page.body?.let { body ->
+            Text(stringResource(body), style = MaterialTheme.typography.bodyLarge, color = colors.body, textAlign = TextAlign.Center)
+        }
+        Spacer(Modifier.height(ImagoSpacing.Lg))
+        OutlinedButton(
+            onClick = onSupport,
+            border = BorderStroke(1.dp, colors.support),
+            shape = RoundedCornerShape(999.dp),
+            modifier = Modifier.heightIn(min = 48.dp).testTag("news-support"),
+        ) {
+            Icon(Icons.Filled.Favorite, contentDescription = null, tint = colors.support, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(ImagoSpacing.Sm))
+            Text(stringResource(Res.string.shell_news_support_action), color = colors.title)
+        }
+    }
+}
+
+@Composable
+private fun SupportHeart(colors: ImagoNewsPalette, active: Boolean, still: Boolean) {
+    val fill = remember { Animatable(if (still) 1f else 0f) }
+    val beat = remember { Animatable(1f) }
+    LaunchedEffect(active, still) {
+        when {
+            still -> fill.snapTo(1f)
+            // Away from the page it empties again, to fill the next time it is reached.
+            !active -> {
+                fill.snapTo(0f)
+                beat.snapTo(1f)
+            }
+            else -> {
+                fill.animateTo(1f, tween(700, easing = FastOutSlowInEasing))
+                beat.animateTo(1.14f, tween(140))
+                beat.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 300f))
+            }
+        }
+    }
+    Box(
+        Modifier.size(96.dp).graphicsLayer {
+            scaleX = beat.value
+            scaleY = beat.value
+        },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Outlined.FavoriteBorder, contentDescription = null, tint = colors.support, modifier = Modifier.fillMaxSize())
+        Icon(
+            Icons.Filled.Favorite,
+            contentDescription = null,
+            tint = colors.support,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .drawWithContent {
+                    clipRect(top = size.height * (1f - fill.value)) {
+                        this@drawWithContent.drawContent()
+                        drawRect(Brush.verticalGradient(colors.supportHeart), blendMode = BlendMode.SrcIn)
+                    }
+                },
+        )
     }
 }
 

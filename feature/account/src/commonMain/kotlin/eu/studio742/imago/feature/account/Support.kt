@@ -121,7 +121,13 @@ class SupportController(
  * has the subscription to sell, or for someone who already supports.
  */
 @Composable
-fun SupportSettingsCard(onOpenAccount: (signUp: Boolean) -> Unit, viewModel: AccountViewModel = accountViewModel()) {
+fun SupportSettingsCard(
+    onOpenAccount: (signUp: Boolean) -> Unit,
+    viewModel: AccountViewModel = accountViewModel(),
+    /** Asked from elsewhere, as the news' support page does: the card opens, then [onOpened] clears it. */
+    openRequested: Boolean = false,
+    onOpened: () -> Unit = {},
+) {
     val supporters = viewModel.supporters
     if (!supporters.available) return
     val store = LocalSupportStore.current
@@ -135,6 +141,12 @@ fun SupportSettingsCard(onOpenAccount: (signUp: Boolean) -> Unit, viewModel: Acc
     if (store != null && price == null && !active) return
 
     var expanded by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(openRequested) {
+        if (openRequested) {
+            expanded = true
+            onOpened()
+        }
+    }
     val uriHandler = LocalUriHandler.current
     val body = MaterialTheme.typography.bodyMedium
     CollapsibleSettingsCard(

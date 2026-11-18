@@ -39,13 +39,14 @@ import org.jetbrains.compose.resources.stringResource
  * agrees to it.
  */
 @Composable
-internal fun WhatsNewDialog(releases: List<Release>, onDismiss: () -> Unit) {
+internal fun WhatsNewDialog(releases: List<Release>, onDismiss: () -> Unit, onSupport: (() -> Unit)? = null) {
     val newest = releases.firstOrNull() ?: return
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         WhatsNewCards(
             release = newest,
             older = releases.drop(1),
             onDone = onDismiss,
+            onSupport = onSupport,
             modifier = Modifier
                 .padding(ImagoSpacing.Lg)
                 .widthIn(max = 440.dp)
@@ -54,9 +55,12 @@ internal fun WhatsNewDialog(releases: List<Release>, onDismiss: () -> Unit) {
     }
 }
 
-/** The installed version in the settings, with the way back to what changed in it. */
+/**
+ * The installed version in the settings, with the way back to what changed in it. [onSupport], when the
+ * supporters programme is open, is what the support page's button does here.
+ */
 @Composable
-internal fun AboutSettingsCard() {
+internal fun AboutSettingsCard(onSupport: (() -> Unit)? = null) {
     val release = remember { currentRelease() }
     var showingNews by remember { mutableStateOf(false) }
     var expanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
@@ -71,5 +75,11 @@ internal fun AboutSettingsCard() {
                 TextButton(onClick = { showingNews = true }) { Text(stringResource(Res.string.shell_news_title)) }
             }
     }
-    if (showingNews && release != null) WhatsNewDialog(listOf(release)) { showingNews = false }
+    if (showingNews && release != null) {
+        WhatsNewDialog(
+            listOf(release),
+            onDismiss = { showingNews = false },
+            onSupport = onSupport?.let { open -> { showingNews = false; open() } },
+        )
+    }
 }
