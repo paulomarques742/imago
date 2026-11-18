@@ -193,7 +193,7 @@ class ImmichGeometryMirrorTest {
             month: String?,
             albumId: String?,
             query: String?,
-            personId: String?,
+            personIds: List<String>,
         ): AssetPage = unused()
         override suspend fun searchMedia(
             connection: ImmichConnection,

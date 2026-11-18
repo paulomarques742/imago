@@ -136,12 +136,12 @@ class OkHttpImmichApi(
         month: String?,
         albumId: String?,
         query: String?,
-        personId: String?,
+        personIds: List<String>,
     ): AssetPage = search(
         connection, page, pageSize, filter, month, albumId, query,
         // The library shows photos and videos; the request does not filter by type so that
         // Immich's `nextPage` keeps counting the same pages the grid goes through.
-        requestedType = null, allowedTypes = setOf(AssetType.IMAGE, AssetType.VIDEO), personId = personId,
+        requestedType = null, allowedTypes = setOf(AssetType.IMAGE, AssetType.VIDEO), personIds = personIds,
         // Left unsaid, the visibility is "timeline" up to v2 and "not locked" from v3, which brings
         // in the archive and the hidden movement of every Live Photo. An album keeps what it holds,
         // archive included, so it is the one search that does not narrow it.
@@ -169,7 +169,7 @@ class OkHttpImmichApi(
         query: String?,
         requestedType: String?,
         allowedTypes: Set<AssetType>,
-        personId: String? = null,
+        personIds: List<String> = emptyList(),
         visibility: String? = null,
     ): AssetPage = withContext(Dispatchers.IO) {
         val monthStart = month?.let(LocalDate::parse)?.withDayOfMonth(1)
@@ -186,7 +186,7 @@ class OkHttpImmichApi(
             takenBefore = monthStart?.plusMonths(1)?.let { "${it}T00:00:00.000Z" },
             originalFileName = query?.takeIf(String::isNotBlank),
             type = requestedType,
-            personIds = personId?.let(::listOf),
+            personIds = personIds.takeIf { it.isNotEmpty() },
             visibility = visibility,
         )
         val body = json.encodeToString(payload).toRequestBody(JSON_MEDIA_TYPE)
@@ -240,6 +240,7 @@ class OkHttpImmichApi(
         takenAfter: String?,
         takenBefore: String?,
         language: String?,
+        personIds: List<String>,
     ): AssetPage = withContext(Dispatchers.IO) {
         val payload = SmartSearchDto(
             query = query,
@@ -250,6 +251,7 @@ class OkHttpImmichApi(
             takenAfter = takenAfter,
             takenBefore = takenBefore,
             language = language,
+            personIds = personIds.takeIf { it.isNotEmpty() },
             visibility = VISIBILITY_TIMELINE.takeIf { albumId == null },
         )
         val response = executeJson<SearchResponseDto>(
@@ -1209,6 +1211,7 @@ private data class SmartSearchDto(
     val takenBefore: String? = null,
     val language: String? = null,
     val withExif: Boolean? = null,
+    val personIds: List<String>? = null,
     val visibility: String? = null,
 )
 

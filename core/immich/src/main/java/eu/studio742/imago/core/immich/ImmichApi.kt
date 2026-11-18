@@ -47,7 +47,8 @@ interface ImmichApi {
         month: String? = null,
         albumId: String? = null,
         query: String? = null,
-        personId: String? = null,
+        /** Only the photos where every one of these people is. */
+        personIds: List<String> = emptyList(),
     ): AssetPage
 
     /**
@@ -137,6 +138,8 @@ interface ImmichApi {
         takenAfter: String? = null,
         takenBefore: String? = null,
         language: String? = null,
+        /** Only the photos where every one of these people is. */
+        personIds: List<String> = emptyList(),
     ): AssetPage = error("This server cannot search by content here")
 
     /** Whether the server has searching by content on; false when it cannot be asked. */

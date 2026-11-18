@@ -132,6 +132,32 @@ internal fun peopleMatching(people: List<PersonUiModel>, query: String): List<Pe
     return people.filter { person -> person.name.folded().let { name -> words.all(name::contains) } }
 }
 
+private val connectorWords = setOf("e", "and", "com", "with", "y", "et", "und", "con")
+
+/**
+ * The people to suggest while the last word of [query] is being typed: the named ones with a name
+ * word that starts with it, ignoring case and accents, and not yet in the search. "Andr" offers
+ * "Andreia Silva"; a trailing space ends the word and offers nothing.
+ */
+internal fun personSuggestions(people: List<PersonUiModel>, query: String, chosen: List<PersonUiModel>, limit: Int = 6): List<PersonUiModel> {
+    if (query.isEmpty() || query.last().isWhitespace()) return emptyList()
+    val word = query.folded().trim().split(Regex("""\s+""")).lastOrNull().orEmpty()
+    if (word.length < 1 || word in connectorWords) return emptyList()
+    val taken = chosen.map(PersonUiModel::id).toSet()
+    return people.asSequence()
+        .filter { it.name.isNotBlank() && it.id !in taken }
+        .filter { person -> person.name.folded().split(Regex("""\s+""")).any { it.startsWith(word) } }
+        .take(limit)
+        .toList()
+}
+
+/** [query] without the word being typed, and without the "and" that led into it: "ela e Pa" -> "ela". */
+internal fun queryWithoutLastWord(query: String): String {
+    val words = query.trim().split(Regex("""\s+""")).filter(String::isNotEmpty).dropLast(1)
+    val trimmed = if (words.lastOrNull()?.folded() in connectorWords) words.dropLast(1) else words
+    return trimmed.joinToString(" ").let { if (it.isEmpty()) "" else "$it " }
+}
+
 private fun String.folded(): String =
     java.text.Normalizer.normalize(this, java.text.Normalizer.Form.NFD).replace(Regex("""\p{M}+"""), "").lowercase()
 

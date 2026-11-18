@@ -200,9 +200,16 @@ interface LibraryRepository {
 
     /**
      * Photos and videos by what is in them ("beach"), the closest first, within the grid's slice:
-     * the chip, the month, the album. Empty where the library cannot.
+     * the chip, the month, the album. With [personIds] only the photos where all of them are, and
+     * a blank [query] then lists those photos. Empty where the library cannot.
      */
-    fun searchByContent(query: String, filter: LibraryFilter, month: String? = null, albumId: String? = null): Flow<PagingData<ImmichAsset>> =
+    fun searchByContent(
+        query: String,
+        filter: LibraryFilter,
+        month: String? = null,
+        albumId: String? = null,
+        personIds: List<String> = emptyList(),
+    ): Flow<PagingData<ImmichAsset>> =
         kotlinx.coroutines.flow.flowOf(PagingData.empty())
 
     /** The photos of [today] in earlier years, one memory per year, the most recent year first. */

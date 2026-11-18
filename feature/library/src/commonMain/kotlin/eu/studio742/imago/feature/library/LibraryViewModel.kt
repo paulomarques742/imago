@@ -183,6 +183,8 @@ data class LibraryUiState(
     val isLoadingNavigation: Boolean = false,
     val navigationError: UiText? = null,
     val query: String = "",
+    /** The people added to the content search: only photos where all of them are. */
+    val searchPeople: List<PersonUiModel> = emptyList(),
     val isSearching: Boolean = false,
     val searchMode: SearchMode = SearchMode.CONTENT,
     /** The open library searches by content: a server with it on. Until it says, by name. */
@@ -289,6 +291,7 @@ open class LibraryViewModel(
         val query: String,
         val source: eu.studio742.imago.core.model.LibrarySource,
         val byContent: Boolean,
+        val personIds: List<String>,
     )
 
     val assets: StateFlow<Flow<PagingData<AssetUiModel>>> = combine(
@@ -301,15 +304,17 @@ open class LibraryViewModel(
         uiState.map { it.selectedMonth },
         uiState.map { it.selectedAlbum }.distinctAlbumContents(),
         uiState.map { it.query.trim() }.distinctUntilChanged().debounce { if (it.isEmpty()) 0 else SEARCH_DEBOUNCE_MS },
-        uiState.map { it.contentSearchAvailable && it.searchMode == SearchMode.CONTENT }.distinctUntilChanged(),
-    ) { chips, month, album, query, byContent ->
+        uiState.map { state ->
+            (state.contentSearchAvailable && state.searchMode == SearchMode.CONTENT) to state.searchPeople.map(PersonUiModel::id)
+        }.distinctUntilChanged(),
+    ) { chips, month, album, query, (byContent, personIds) ->
         // Only the chip of the view being shown reaches the query, so choosing one in an album does
         // not reload the timeline behind it, and the reverse.
         val (activeFilter, activeType) = if (album != null) chips.second else chips.first
-        AssetQuery(activeFilter, activeType, month, album, query, chips.third, byContent)
+        AssetQuery(activeFilter, activeType, month, album, query, chips.third, byContent, personIds)
     }
         .distinctUntilChanged()
-        .pagingForEachQuery(viewModelScope) { (activeFilter, activeType, month, album, query, source, byContent) ->
+        .pagingForEachQuery(viewModelScope) { (activeFilter, activeType, month, album, query, source, byContent, personIds) ->
             val albumId = album?.let { gridAlbumId(it, source.id) }
             val pages = if (album?.isPerson == true) {
                 library.personAssets(album.id, activeFilter)
@@ -317,8 +322,8 @@ open class LibraryViewModel(
                 library.assetsWithIds(album.placeAssetIds)
             } else if (album?.isArchive == true) {
                 library.archivedAssets()
-            } else if (byContent && query.isNotEmpty()) {
-                library.searchByContent(query, activeFilter, month.takeIf { album == null }, albumId)
+            } else if (byContent && (query.isNotEmpty() || personIds.isNotEmpty())) {
+                library.searchByContent(query, activeFilter, month.takeIf { album == null }, albumId, personIds)
             } else {
                 library.assets(
                     filter = activeFilter,
@@ -646,11 +651,26 @@ open class LibraryViewModel(
 
     fun updateQuery(value: String) = uiState.update { it.copy(query = value) }
 
-    fun openSearch() = uiState.update { it.copy(isSearching = true) }
+    fun openSearch() {
+        uiState.update { it.copy(isSearching = true) }
+        // The faces the suggestions come from; read once, on the first search.
+        val state = uiState.value
+        if (state.hasPeople && state.people.isEmpty() && !state.isLoadingPeople) loadPeople()
+    }
+
+    /** Adds [person] to the content search, in place of the name being typed. */
+    fun addSearchPerson(person: PersonUiModel) = uiState.update { state ->
+        if (state.searchPeople.any { it.id == person.id }) state
+        else state.copy(searchPeople = state.searchPeople + person, query = queryWithoutLastWord(state.query))
+    }
+
+    fun removeSearchPerson(person: PersonUiModel) = uiState.update { state ->
+        state.copy(searchPeople = state.searchPeople.filterNot { it.id == person.id })
+    }
 
     fun selectSearchMode(mode: SearchMode) = uiState.update { it.copy(searchMode = mode) }
 
-    fun closeSearch() = uiState.update { it.copy(isSearching = false, query = "") }
+    fun closeSearch() = uiState.update { it.copy(isSearching = false, query = "", searchPeople = emptyList()) }
 
     fun consumeActionError() = uiState.update { it.copy(actionError = null, actionMessage = null) }
 

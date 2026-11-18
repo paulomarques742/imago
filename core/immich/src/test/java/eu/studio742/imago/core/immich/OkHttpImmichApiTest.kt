@@ -1132,7 +1132,7 @@ class OkHttpImmichApiTest {
     fun aPersonsPhotosComeFromTheSearch() = runTest {
         server.enqueue(MockResponse().setBody(EMPTY_SEARCH_RESPONSE))
 
-        api.searchAssets(connection(), page = 1, pageSize = 100, filter = LibraryFilter.ALL, personId = "p2")
+        api.searchAssets(connection(), page = 1, pageSize = 100, filter = LibraryFilter.ALL, personIds = listOf("p2"))
 
         val body = server.takeRequest().body.readUtf8()
         assertTrue(body, body.contains("\"personIds\":[\"p2\"]"))
@@ -1279,7 +1279,7 @@ class OkHttpImmichApiTest {
         server.enqueue(MockResponse().setBody(EMPTY_SEARCH_RESPONSE))
         server.enqueue(MockResponse().setBody(EMPTY_SEARCH_RESPONSE))
 
-        api.searchAssets(connection(), 1, 100, LibraryFilter.ALL, personId = "p2")
+        api.searchAssets(connection(), 1, 100, LibraryFilter.ALL, personIds = listOf("p2"))
         api.searchAssets(connection(), 1, 100, LibraryFilter.ALL, query = "IMG_1")
         api.searchMedia(connection(), 1, 100, setOf(AssetType.IMAGE))
 
@@ -1319,6 +1319,16 @@ class OkHttpImmichApiTest {
         val body = server.takeRequest().body.readUtf8()
         assertTrue(body, body.contains("\"visibility\":\"timeline\""))
         assertTrue(page.items.isEmpty())
+    }
+
+    @Test
+    fun theContentSearchCarriesEveryPersonChosen() = runTest {
+        server.enqueue(MockResponse().setBody(EMPTY_SEARCH_RESPONSE))
+
+        api.smartSearch(connection(), page = 1, pageSize = 100, query = "praia", personIds = listOf("a", "b"))
+
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body, body.contains("\"personIds\":[\"a\",\"b\"]"))
     }
 
     @Test

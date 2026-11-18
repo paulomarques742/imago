@@ -254,10 +254,10 @@ class UnifiedLibrary(
     override suspend fun contentSearchAvailable(): Boolean = server.contentSearchAvailable()
 
     /** Only the server searches by content: what it finds is its own photos. */
-    override fun searchByContent(query: String, filter: LibraryFilter, month: String?, albumId: String?): Flow<PagingData<ImmichAsset>> {
+    override fun searchByContent(query: String, filter: LibraryFilter, month: String?, albumId: String?, personIds: List<String>): Flow<PagingData<ImmichAsset>> {
         val album = albumId?.let(AssetReference::parse)
         if (album != null && album.libraryId != serverId) return emptyFlow()
-        return server.searchByContent(query, filter, month, album?.localId)
+        return server.searchByContent(query, filter, month, album?.localId, personIds.map { AssetReference.parse(it).localId })
             .map { page -> page.map { it.inLibrary(serverId).copy(isOnServer = true) } }
     }
 

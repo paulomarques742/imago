@@ -104,10 +104,10 @@ class SourceLibraryRepository @Inject constructor(
     override suspend fun contentSearchAvailable(): Boolean =
         runCatching { provider(configuration.selectedLibraryId.value).contentSearchAvailable() }.getOrDefault(false)
 
-    override fun searchByContent(query: String, filter: LibraryFilter, month: String?, albumId: String?): Flow<PagingData<ImmichAsset>> {
+    override fun searchByContent(query: String, filter: LibraryFilter, month: String?, albumId: String?, personIds: List<String>): Flow<PagingData<ImmichAsset>> {
         val id = configuration.selectedLibraryId.value
-        if (id == UNIFIED_LIBRARY_ID) return unified().searchByContent(query, filter, month, albumId)
-        return provider(id).searchByContent(query, filter, month, albumId?.let { AssetReference.parse(it).localId })
+        if (id == UNIFIED_LIBRARY_ID) return unified().searchByContent(query, filter, month, albumId, personIds)
+        return provider(id).searchByContent(query, filter, month, albumId?.let { AssetReference.parse(it).localId }, personIds.map { AssetReference.parse(it).localId })
             .map { page -> page.map { it.inLibrary(id) } }
     }
 

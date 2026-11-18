@@ -151,6 +151,24 @@ class AlbumActionsTest {
     }
 
     @Test
+    fun theWordBeingTypedSuggestsTheNamedPeopleNotYetInTheSearch() {
+        val people = listOf("Andreia Silva", "Paulo Marques", "André Costa", "").mapIndexed { i, n -> PersonUiModel("p$i", n, "", "") }
+
+        assertEquals(listOf("Andreia Silva", "André Costa"), personSuggestions(people, "andr", emptyList()).map { it.name })
+        assertEquals(listOf("Paulo Marques"), personSuggestions(people, "praia e mar", emptyList()).map { it.name })
+        assertEquals(listOf("André Costa"), personSuggestions(people, "andr", listOf(people[0])).map { it.name })
+        assertTrue(personSuggestions(people, "andreia ", emptyList()).isEmpty())
+        assertTrue(personSuggestions(people, "praia e", emptyList()).isEmpty())
+    }
+
+    @Test
+    fun addingAPersonTakesTheirNameAndTheAndBeforeItOutOfTheQuery() {
+        assertEquals("", queryWithoutLastWord("Andr"))
+        assertEquals("", queryWithoutLastWord("e Pau"))
+        assertEquals("sunset ", queryWithoutLastWord("sunset and Pau"))
+    }
+
+    @Test
     fun theUnifiedLibraryOpensThePhonesAlbumsAndTheServers() {
         val phoneFolder = album(canEditContent = true, isFolder = true).copy(id = eu.studio742.imago.core.model.AssetReference(DEVICE_LIBRARY_ID, "f1").encode())
         val serverAlbum = album(canEditContent = true).copy(id = eu.studio742.imago.core.model.AssetReference("home", "a1").encode())

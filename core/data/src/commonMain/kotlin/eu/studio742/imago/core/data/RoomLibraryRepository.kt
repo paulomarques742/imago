@@ -165,13 +165,13 @@ class RoomLibraryRepository @Inject constructor(
 
     override suspend fun contentSearchAvailable(): Boolean = api.smartSearchAvailable(requireConnection())
 
-    override fun searchByContent(query: String, filter: LibraryFilter, month: String?, albumId: String?): Flow<PagingData<ImmichAsset>> {
+    override fun searchByContent(query: String, filter: LibraryFilter, month: String?, albumId: String?, personIds: List<String>): Flow<PagingData<ImmichAsset>> {
         val connection = requireConnection()
         val libraryKey = connection.libraryId ?: libraryKeyOf(connection.serverUrl)
         return Pager(
             config = PagingConfig(pageSize = PAGE_SIZE, initialLoadSize = PAGE_SIZE, prefetchDistance = 30, enablePlaceholders = false),
             pagingSourceFactory = {
-                SmartSearchPagingSource(database, api, derivedAssets, connection, libraryKey, query.trim(), filter, month, albumId)
+                SmartSearchPagingSource(database, api, derivedAssets, connection, libraryKey, query.trim(), filter, month, albumId, personIds)
             },
         ).flow
     }
@@ -991,23 +991,39 @@ private class SmartSearchPagingSource(
     private val filter: LibraryFilter,
     private val month: String?,
     private val albumId: String?,
+    private val personIds: List<String> = emptyList(),
 ) : PagingSource<Int, ImmichAsset>() {
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, ImmichAsset> {
         val page = params.key ?: 1
         return try {
             val monthStart = month?.let { LocalDate.parse(it).withDayOfMonth(1) }
             val recentStart = LocalDate.now().minusDays(RECENT_FILTER_DAYS).takeIf { filter == LibraryFilter.RECENT && monthStart == null }
-            val result = api.smartSearch(
-                connection = connection,
-                page = page,
-                pageSize = params.loadSize.coerceAtMost(100),
-                query = query,
-                albumId = albumId,
-                favoritesOnly = filter == LibraryFilter.FAVORITES,
-                takenAfter = (monthStart ?: recentStart)?.let { "${it}T00:00:00.000Z" },
-                takenBefore = monthStart?.plusMonths(1)?.let { "${it}T00:00:00.000Z" },
-                language = java.util.Locale.getDefault().language,
-            )
+            // Immich refuses an empty content query: people alone are a plain search by person.
+            val result = if (query.isBlank()) {
+                api.searchAssets(
+                    connection = connection,
+                    page = page,
+                    pageSize = params.loadSize.coerceAtMost(100),
+                    filter = filter,
+                    month = month,
+                    albumId = albumId,
+                    query = null,
+                    personIds = personIds,
+                )
+            } else {
+                api.smartSearch(
+                    connection = connection,
+                    page = page,
+                    pageSize = params.loadSize.coerceAtMost(100),
+                    query = query,
+                    albumId = albumId,
+                    favoritesOnly = filter == LibraryFilter.FAVORITES,
+                    takenAfter = (monthStart ?: recentStart)?.let { "${it}T00:00:00.000Z" },
+                    takenBefore = monthStart?.plusMonths(1)?.let { "${it}T00:00:00.000Z" },
+                    language = java.util.Locale.getDefault().language,
+                    personIds = personIds,
+                )
+            }
             val derivedIds = derivedAssets.derivedIds()
             val visible = result.items
             val stacked = database.withTransaction {
@@ -1052,7 +1068,7 @@ private class AlbumAssetPagingSource(
                 filter = filter,
                 albumId = albumId,
                 query = query,
-                personId = personId,
+                personIds = listOfNotNull(personId),
             )
             val derivedIds = derivedAssets.derivedIds()
             val visible = result.items

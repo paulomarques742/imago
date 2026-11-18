@@ -445,6 +445,7 @@
     </plurals>
     <string name="library_search_content">Conteúdo</string>
     <string name="library_search_file_name">Nome do ficheiro</string>
+    <string name="library_search_person_remove">Tirar %1$s da pesquisa</string>
     <string name="library_search_content_hint">O que está na fotografia</string>
     <string name="library_selection_rotate">Rodar</string>
     <string name="library_selection_rotate_failed">Não foi possível rodar todas as fotografias.</string>

@@ -23,6 +23,8 @@ import coil3.request.crossfade
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -512,6 +514,8 @@ private fun LibraryHost(
             onCloseSearch = viewModel::closeSearch,
             onQueryChange = viewModel::updateQuery,
             onSearchModeChange = viewModel::selectSearchMode,
+            onAddSearchPerson = viewModel::addSearchPerson,
+            onRemoveSearchPerson = viewModel::removeSearchPerson,
             onJumpToDate = viewModel::jumpToDate,
             onConsumePendingScroll = viewModel::consumePendingScroll,
             onConsumeActionError = viewModel::consumeActionError,
@@ -575,6 +579,8 @@ private fun LibraryScreen(
     onCloseSearch: () -> Unit,
     onQueryChange: (String) -> Unit,
     onSearchModeChange: (SearchMode) -> Unit,
+    onAddSearchPerson: (PersonUiModel) -> Unit,
+    onRemoveSearchPerson: (PersonUiModel) -> Unit,
     onJumpToDate: (LocalDate) -> Unit,
     onConsumePendingScroll: () -> Unit,
     onConsumeActionError: () -> Unit,
@@ -653,6 +659,7 @@ private fun LibraryScreen(
     // scrolling goes back to measuring itself by what is loaded.
     val describesTheGrid = filter == LibraryFilter.ALL &&
         uiState.query.isBlank() &&
+        uiState.searchPeople.isEmpty() &&
         uiState.selectedAlbum == null
     val timeline = remember(uiState.months, describesTheGrid) {
         LibraryTimeline(if (describesTheGrid) uiState.months else emptyList())
@@ -716,6 +723,16 @@ private fun LibraryScreen(
                         onSelect = onSearchModeChange,
                         modifier = Modifier.padding(bottom = ImagoSpacing.Sm),
                     )
+                    if (uiState.searchMode == SearchMode.CONTENT && uiState.hasPeople) {
+                        SearchPeople(
+                            chosen = uiState.searchPeople,
+                            suggestions = remember(uiState.people, uiState.query, uiState.searchPeople) {
+                                personSuggestions(uiState.people, uiState.query, uiState.searchPeople)
+                            },
+                            onAdd = onAddSearchPerson,
+                            onRemove = onRemoveSearchPerson,
+                        )
+                    }
                 }
                 // The chips slice the timeline, and an album the same way. The album list has nothing
                 // to act on, and neither has an album that is not a list of photos of its own — a
@@ -1703,6 +1720,81 @@ private fun AlbumBrowser(
             onDismiss = { naming = false },
         )
     }
+}
+
+/**
+ * The people in a content search: the ones already added, as chips with their face, and under them
+ * the ones the word being typed could be, so that "Andreia and Paulo at the beach" is a name, a
+ * name and a few words.
+ */
+@Composable
+private fun SearchPeople(
+    chosen: List<PersonUiModel>,
+    suggestions: List<PersonUiModel>,
+    onAdd: (PersonUiModel) -> Unit,
+    onRemove: (PersonUiModel) -> Unit,
+) {
+    if (chosen.isNotEmpty()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = ImagoSpacing.Lg)
+                .padding(bottom = ImagoSpacing.Sm),
+            horizontalArrangement = Arrangement.spacedBy(ImagoSpacing.Sm),
+        ) {
+            chosen.forEach { person ->
+                val remove = stringResource(Res.string.library_search_person_remove, person.name)
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(ImagoUi.colors.elevated)
+                        .clickable(role = Role.Button, onClickLabel = remove) { onRemove(person) }
+                        .padding(start = ImagoSpacing.Xs, end = ImagoSpacing.Md, top = ImagoSpacing.Xs, bottom = ImagoSpacing.Xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PersonFace(person, Modifier.size(28.dp))
+                    Text(
+                        person.name,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = ImagoUi.colors.text,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = ImagoSpacing.Sm),
+                    )
+                    Icon(Icons.Outlined.Close, contentDescription = null, tint = ImagoUi.colors.secondaryText, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+    suggestions.forEach { person ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button, onClickLabel = person.name) { onAdd(person) }
+                .padding(horizontal = ImagoSpacing.Lg, vertical = ImagoSpacing.Xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PersonFace(person, Modifier.size(40.dp))
+            Text(
+                person.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = ImagoUi.colors.text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = ImagoSpacing.Md),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PersonFace(person: PersonUiModel, modifier: Modifier = Modifier) {
+    AsyncImage(
+        model = ImageRequest.Builder(LocalPlatformContext.current).data(person.thumbnailUrl).libraryAuth(person.apiKey).crossfade(true).build(),
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = modifier.clip(CircleShape).background(ImagoUi.colors.elevated),
+    )
 }
 
 /**
