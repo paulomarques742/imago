@@ -55,6 +55,12 @@ data class ImagoUiPalette(
     val imageShade: Color = Color.Black,
     /** The accent on a photo: the gold reads there in every theme, where the light theme's darker one would not. */
     val imageAccent: Color = ImagoColors.Gold,
+    /**
+     * The two greys of the checkerboard behind a translucent colour. They say "nothing here", and have
+     * to read the same against any colour a person picks, so they are the same in every theme.
+     */
+    val transparencyLight: Color = Color(0xFF8E8E8B),
+    val transparencyDark: Color = Color(0xFF636360),
     val outsidePageContentAlpha: Float = .4f,
     val alignmentGuide: Color = ImagoColors.Gold,
     val spacingGuide: Color = ImagoColors.Gold,

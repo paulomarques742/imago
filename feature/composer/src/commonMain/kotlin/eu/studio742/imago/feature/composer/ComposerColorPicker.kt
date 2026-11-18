@@ -163,7 +163,7 @@ internal fun ColorPickerDialog(
                 ChannelSlider(
                     label = stringResource(Res.string.composer_brightness),
                     fraction = hsva.value,
-                    brush = Brush.horizontalGradient(listOf(Color.Black, opaque)),
+                    brush = Brush.horizontalGradient(listOf(Color(Hsva(hsva.hue, hsva.saturation, 0f).toArgb()), opaque)),
                 ) { update(hsva.copy(value = it)) }
                 ChannelSlider(
                     label = stringResource(Res.string.composer_opacity),
@@ -236,7 +236,7 @@ private fun ChannelSlider(
                 .weight(1f)
                 .height(28.dp)
                 .clip(shape)
-                .checkerboard()
+                .checkerboard(ImagoUi.colors.transparencyLight, ImagoUi.colors.transparencyDark)
                 .background(brush)
                 .border(1.dp, ImagoUi.colors.border, shape)
                 .semantics { contentDescription = label }
@@ -261,7 +261,7 @@ private fun ChannelSlider(
                     val radius = size.height * .32f
                     // Two rings, light inside and dark outside: a single one disappeared against the end
                     // of the track with the same lightness.
-                    drawCircle(Color.White, radius, centre, style = Stroke(2.5f))
+                    drawCircle(uiColors.onImage, radius, centre, style = Stroke(2.5f))
                     drawCircle(uiColors.imageShade.copy(alpha = .55f), radius + 2f, centre, style = Stroke(1.5f))
                 },
         )
@@ -281,7 +281,7 @@ private fun ColorSwatch(argb: Long, corner: Dp, modifier: Modifier = Modifier, l
     Box(
         modifier
             .clip(shape)
-            .checkerboard()
+            .checkerboard(ImagoUi.colors.transparencyLight, ImagoUi.colors.transparencyDark)
             .background(Color(argb))
             .border(1.dp, ImagoUi.colors.strongBorder, shape)
             .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier),
@@ -289,15 +289,15 @@ private fun ColorSwatch(argb: Long, corner: Dp, modifier: Modifier = Modifier, l
 }
 
 /** The transparency checkerboard, drawn and not composed — there are dozens of squares per swatch. */
-private fun Modifier.checkerboard(cell: Float = 9f) = drawBehind {
-    drawRect(Color(0xFF8E8E8B))
+private fun Modifier.checkerboard(light: Color, dark: Color, cell: Float = 9f) = drawBehind {
+    drawRect(light)
     var y = 0f
     var row = 0
     while (y < size.height) {
         var x = if (row % 2 == 0) 0f else cell
         while (x < size.width) {
             drawRect(
-                Color(0xFF636360),
+                dark,
                 topLeft = Offset(x, y),
                 size = Size(minOf(cell, size.width - x), minOf(cell, size.height - y)),
             )

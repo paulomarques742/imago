@@ -89,5 +89,7 @@ class ImagoPaletteTest {
     fun `what is drawn on a photo is the same in every theme`() {
         assertEquals(ImagoDarkPalette.onImage, ImagoLightPalette.onImage)
         assertEquals(ImagoDarkPalette.imageShade, ImagoLightPalette.imageShade)
+        assertEquals(ImagoDarkPalette.transparencyLight, ImagoLightPalette.transparencyLight)
+        assertEquals(ImagoDarkPalette.transparencyDark, ImagoLightPalette.transparencyDark)
     }
 }
