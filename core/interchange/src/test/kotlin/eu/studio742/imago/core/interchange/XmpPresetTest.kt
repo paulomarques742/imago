@@ -319,21 +319,23 @@ class XmpPresetTest {
     }
 
     @Test
-    fun `a zip enters as one collection and says what it could not read yet`() {
+    fun `a zip enters as one collection and names what it could not read`() {
         val content = decodeRecipeFile(
             "Summer Pack.zip",
             zipOf(
                 "Pack/Green Landscape.xmp" to fixture("Green Landscape"),
                 "Pack/Mobile/DJI.dng" to dngWith(fixture("DJI city")),
-                "Pack/Old.lrtemplate" to "s = {}".encodeToByteArray(),
+                "Pack/Look.cube" to "LUT_3D_SIZE 2".encodeToByteArray(),
                 "Pack/read me.txt" to "hello".encodeToByteArray(),
                 "__MACOSX/Pack/._Green Landscape.xmp" to byteArrayOf(0, 5, 22, 7),
             ),
         ) as ImagoFileContent.Recipes
-        assertEquals(2, content.entries.size)
-        assertEquals(1, content.skippedFiles)
-        content.entries.forEach { assertEquals("Summer Pack", (it as ImagoFileEntry.Ready).collection) }
+        // The .cube is an incomplete one: it is read as a LUT and found damaged, which is not the same as skipped.
+        assertEquals(3, content.entries.size)
+        assertEquals(0, content.skippedFiles)
+        content.entries.filterIsInstance<ImagoFileEntry.Ready>().forEach { assertEquals("Summer Pack", it.collection) }
         assertEquals(RecipeOrigin.DNG, (content.entries[1] as ImagoFileEntry.Ready).origin)
+        assertEquals(ImagoFileEntry.Invalid, content.entries[2])
     }
 
     @Test

@@ -23,6 +23,8 @@ fun decodeRecipeFile(fileName: String, bytes: ByteArray): ImagoFileContent = run
         bytes.isTiff() -> decodePreset(tiffXmp(bytes), recipeFileStem(fileName), "", RecipeOrigin.DNG)
         bytes.size <= IMAGO_FILE_MAX_BYTES && xmpText(bytes) != null ->
             decodePreset(bytes, recipeFileStem(fileName), "", RecipeOrigin.XMP)
+        bytes.size <= IMAGO_FILE_MAX_BYTES && lrtemplateText(bytes) != null ->
+            decodeLrtemplate(bytes, recipeFileStem(fileName), "")
         else -> decodeImagoFile(bytes)
     }
 }.getOrDefault(ImagoFileContent.Unreadable)
@@ -36,6 +38,16 @@ fun recipeFileStem(fileName: String): String {
 private fun decodePreset(packet: ByteArray?, name: String, collection: String, origin: RecipeOrigin): ImagoFileContent {
     val entry = presetEntryOf(packet, name, collection, origin) ?: return ImagoFileContent.Unreadable
     return ImagoFileContent.Recipes(listOf(entry))
+}
+
+private fun decodeLrtemplate(packet: ByteArray?, name: String, collection: String): ImagoFileContent {
+    val entry = lrtemplateEntryOf(packet, name, collection) ?: return ImagoFileContent.Unreadable
+    return ImagoFileContent.Recipes(listOf(entry))
+}
+
+private fun lrtemplateEntryOf(packet: ByteArray?, name: String, collection: String): ImagoFileEntry? {
+    val fields = packet?.let(::lrtemplateText)?.let(::readLrtemplateFields) ?: return null
+    return presetEntry(fields, name, collection, RecipeOrigin.LRTEMPLATE)
 }
 
 private fun presetEntryOf(packet: ByteArray?, name: String, collection: String, origin: RecipeOrigin): ImagoFileEntry? {
@@ -101,6 +113,10 @@ private fun decodeZip(fileName: String, bytes: ByteArray): ImagoFileContent {
                 when {
                     wanted -> {
                         val stem = leaf.substringBeforeLast('.')
+                        if (extension == "lrtemplate") {
+                            entries += lrtemplateEntryOf(content, stem, pack) ?: ImagoFileEntry.Invalid
+                            continue
+                        }
                         val packet = if (extension == "dng") content?.takeIf { it.isTiff() }?.let(::tiffXmp) else content
                         val origin = if (extension == "dng") RecipeOrigin.DNG else RecipeOrigin.XMP
                         entries += presetEntryOf(packet, stem, pack, origin) ?: ImagoFileEntry.Invalid
