@@ -18,7 +18,9 @@ ORT_VERSION=1.32.0
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PREBUILT="$HERE/../prebuilt"
 WORK="${ORT_WORK:-/c/tmp/ort}"
-ANDROID_SDK="${ANDROID_SDK:-C:/tmp/ImmichRoom-toolchain/android-sdk}"
+# Absolute path of your Android SDK (the folder that holds ndk/ and platform-tools/), for example
+# ANDROID_SDK=C:/Android/Sdk. There is no default: it differs on every machine.
+: "${ANDROID_SDK:?Set ANDROID_SDK to the path of your Android SDK}"
 ANDROID_NDK="${ANDROID_NDK:-$ANDROID_SDK/ndk/29.0.14206865}"
 PYTHON="${PYTHON:-python}"
 VS_CMAKE="${VS_CMAKE:-/c/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake}"
